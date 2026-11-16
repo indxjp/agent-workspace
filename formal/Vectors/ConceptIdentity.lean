@@ -39,7 +39,10 @@ def enumVectors : List Vector :=
   let members : List Vector := [
     { id := "enum/role", input := Json.mkObj [("enum", "role")],
       expected := Json.mkObj [("members", strs (WireEnum.wires Role))],
-      witnesses := [wf "role_wires_match_contract", wf "role_checks_hold_the_four_roles"] },
+      witnesses := [wf "role_wires_match_contract", wf "role_checks_hold_the_roles"] },
+    { id := "enum/role-conferrable", input := Json.mkObj [("enum", "role-conferrable")],
+      expected := Json.mkObj [("members", strs conferrableWires)],
+      witnesses := [wf "role_checks_hold_the_roles"] },
     { id := "enum/principal-kind/wire", input := Json.mkObj [("enum", "principal-kind-wire")],
       expected := Json.mkObj [("members", strs (WireEnum.wires Kind))],
       witnesses := [wf "principal_kind_wires_match_contract"] },

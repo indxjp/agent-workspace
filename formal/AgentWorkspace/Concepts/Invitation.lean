@@ -45,10 +45,12 @@ structure Invitation where
   updatedAt : Instant
   deriving DecidableEq, Repr
 
-/-- The checks of `invitations` as a predicate on the concept. -/
+/-- The checks of `invitations` as a predicate on the concept; the role is conferrable
+(`invitations_role_valid` holds it to the four `CONFERRABLE_ROLES`, never `guest`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/invitations.ts#invitations")]
 def Invitation.valid (i : Invitation) : Bool :=
-  lowercase i.email && emailShape i.email && notBlank i.tokenHash && i.createdAt < i.expiresAt &&
+  lowercase i.email && emailShape i.email && notBlank i.tokenHash && i.role.isConferrable &&
+    i.createdAt < i.expiresAt &&
     i.acceptedAt.all (i.createdAt ≤ ·) && i.revokedAt.all (i.createdAt ≤ ·) &&
     (i.acceptedAt.isNone || i.revokedAt.isNone)
 

@@ -3,6 +3,39 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts` and
 `@indx-workspace/sdk`, with the same version; the deprecation rule is theirs.
 
+## 0.6.13 — unreleased
+
+### Added
+
+- `ApprovalPrompt` shows the tool call a run paused on (ADR-0145) with Approve and Reject and an
+  optional comment, in English and Japanese. `approvalProblemMessage` in `run-model` words the
+  three approval refusals for the reader.
+- `AttachmentChips` and `ToolTrace`, with `AttachmentChipsProps` and `ToolTraceProps`: the
+  attachment chips and the tool trace `<Chat/>` draws, exported as parts so another chat draws the
+  same ones. `AttachmentChips` takes `{ id, name }` items and a remove callback, draws no wrapper,
+  and takes class names, a glyph and a title for a host's own look. `<Chat/>`'s markup is
+  unchanged.
+- `prepareAttachment(file)` is exported: it shrinks a large photo before an upload, as the hosted
+  chat does, so an app's channel composer (issue #1519) uploads the same files.
+- `sendsOnEnter(event)` is exported: whether a composer's keydown should send, as `<Chat/>` decides
+  it (Enter sends, Shift+Enter adds a new line, an Enter that confirms IME input never sends), so
+  another chat's composer behaves the same.
+- `Run.blocked` and `withBlockedTool` in `@indx-workspace/react/run-model`, with the `BlockedTool`
+  type: the tool calls an engine refused without asking anyone, each recorded once by its call id.
+  `beginRun` starts it empty.
+
+### Changed
+
+- `ApprovalPrompt` shows a `Bash` call whose only arguments are `command` and `description` as the
+  command alone, with the full canonical call in a closed `<details>` (class
+  `aw-approval-full-call`). Any other call is pretty-printed in full; text that is not this tool's
+  canonical call is shown as it arrived. `ApprovalPromptStrings.approvalFullCall` labels the
+  disclosure and is optional ("Full call" when left out); `surfaceStrings` has it in English and
+  Japanese.
+- `AttachmentChips` draws a read-only row when it is given no `onRemove`: each chip is its name
+  alone, with no remove button. `onRemove` and `removeLabel` are now optional, and a remove button
+  is drawn only when both are given. Existing callers, which pass both, render unchanged.
+
 ## 0.6.12 — unreleased
 
 No changes to this package. Released in lock-step with the 0.6.12 storage proof release.

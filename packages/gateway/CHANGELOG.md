@@ -5,6 +5,14 @@ deployer or a test author can observe.
 
 ## Unreleased
 
+### Changed
+
+- `createProviderRegistry()` no longer reads `AW_SCRIPTED_MODELS_DIR` itself: scripted models are
+  off unless the caller passes `scripted`, for example `scriptedModelsFromEnv(env)`, now exported
+  from `@agent-workspace/gateway/providers/registry` with `createScriptedModels`. The gateway entry
+  reads the variable at start-up, before the database opens, so a relative or non-local setting
+  stops start-up before any connection.
+
 ### Fixed
 
 - `POST /v1/tool-sandbox/mcp` appends `/mcp` to the run's tool sandbox origin instead of resolving
@@ -39,3 +47,8 @@ deployer or a test author can observe.
   `scripted:` model with `400 scripted_model_protocol_unsupported`, and `/v1/messages/count_tokens`
   answers with the local estimate, so a `scripted:` id never reaches the provider (only when
   scripted models are enabled).
+
+### Security
+
+- The gateway now refuses a run token whose own claims give it a lifetime longer than one hour,
+  the same cap that minting already enforced.

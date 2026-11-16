@@ -1,0 +1,16 @@
+# The Agent Workspace project file: what `aw dev` runs, and where.
+# No secret belongs in this file; it is meant to be committed.
+# `aw dev` reads the model key from ANTHROPIC_API_KEY in its own environment.
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: crm
+# The email connector the sales assistant names: point it at your own email MCP server. The
+# placeholder answers nothing, and nothing in the app needs it (the recipe does not send email).
+connectors:
+  email:
+    url: https://email.example.invalid/mcp
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

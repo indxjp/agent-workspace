@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic';
 export default async function SurfaceTryPage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
   const requestHeaders = await headers();
-  const page = await readTryPage(name, requestHeaders, process.env);
+  const page = await readTryPage(name, requestHeaders);
   if (page === null) notFound();
   const protocol = requestHeaders.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
   const host = requestHeaders.get('host') ?? '';

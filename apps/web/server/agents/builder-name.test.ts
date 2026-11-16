@@ -16,7 +16,7 @@ import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { ROLES, type Role } from '../rbac/roles';
+import { ROLES, type Role } from '../rbac/core/roles';
 import { recordingCeilingFor } from '../policy-ceiling/fixtures';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import type { AgentStoreProvider } from './store';

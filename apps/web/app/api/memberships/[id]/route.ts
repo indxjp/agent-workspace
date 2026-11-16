@@ -14,7 +14,10 @@
  * ownership would answer a question about a row's existence to a caller who is not allowed to ask.
  */
 import { refusingLocalRuntimeKey } from '../../../../server/cli-auth/local-runtime-key-guard';
-import { changeMembershipRole, deleteMembership } from '../../../../server/rbac/handlers';
+import {
+  changeMembershipRole,
+  deleteMembership,
+} from '../../../../server/rbac/membership-handlers';
 import { readJsonBody } from '../../../../server/http/result';
 import { authorise, readIdParam, toResponse } from '../../../../server/rbac/http';
 

@@ -38,6 +38,7 @@ inductive Provider where
   | openai
   | azureOpenai
   | openaiCompatible
+  | vertex
   deriving DecidableEq, Repr, Inhabited
 
 /-- The wire and column spelling of a provider. -/
@@ -47,9 +48,10 @@ def Provider.toWire : Provider → String
   | .openai => "openai"
   | .azureOpenai => "azure-openai"
   | .openaiCompatible => "openai-compatible"
+  | .vertex => "vertex"
 
 instance : WireEnum Provider where
-  all := [.anthropic, .anthropicCompatible, .openai, .azureOpenai, .openaiCompatible]
+  all := [.anthropic, .anthropicCompatible, .openai, .azureOpenai, .openaiCompatible, .vertex]
   toWire := Provider.toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -61,6 +63,8 @@ inductive ConfigField where
   | baseUrl
   | deployment
   | apiVersion
+  | projectId
+  | location
   deriving DecidableEq, Repr, Inhabited
 
 /-- The wire spelling of a config field. -/
@@ -68,30 +72,48 @@ def ConfigField.toWire : ConfigField → String
   | .baseUrl => "baseUrl"
   | .deployment => "deployment"
   | .apiVersion => "apiVersion"
+  | .projectId => "projectId"
+  | .location => "location"
 
 instance : WireEnum ConfigField where
-  all := [.baseUrl, .deployment, .apiVersion]
+  all := [.baseUrl, .deployment, .apiVersion, .projectId, .location]
   toWire := ConfigField.toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
   toWire_injective := by intro a b; cases a <;> cases b <;> decide
 
-/-- One provider's config rule: the fields it accepts and the fields it requires. -/
+/-- How a provider's connection authenticates (`ModelProviderConfigRule.credential`): a write-only
+API key, or the workload identity the gateway runs as (no stored credential). -/
+@[aw_spec (ts := "packages/contracts/src/models.ts#ModelProviderConfigRule")]
+inductive CredentialKind where
+  | apiKey
+  | workloadIdentity
+  deriving DecidableEq, Repr, Inhabited
+
+/-- One provider's config rule: the fields it accepts, the fields it requires and how it
+authenticates. -/
 structure ConfigRule where
   allowed : List ConfigField
   required : List ConfigField
+  credential : CredentialKind := .apiKey
   deriving DecidableEq, Repr
 
 /-- `MODEL_PROVIDER_CONFIG_RULES`: the Anthropic providers and OpenAI take an optional `baseUrl`,
-OpenAI-compatible requires it, and Azure OpenAI requires all three fields. -/
+OpenAI-compatible requires it, Azure OpenAI requires all three fields, and Vertex AI is keyless
+(workload identity) and requires `projectId`, with an optional `location`. -/
 @[aw_spec (ts := "packages/contracts/src/models.ts#MODEL_PROVIDER_CONFIG_RULES")
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def rule : Provider → ConfigRule
-  | .anthropic => ⟨[.baseUrl], []⟩
-  | .anthropicCompatible => ⟨[.baseUrl], []⟩
-  | .openai => ⟨[.baseUrl], []⟩
-  | .openaiCompatible => ⟨[.baseUrl], [.baseUrl]⟩
-  | .azureOpenai => ⟨[.baseUrl, .apiVersion, .deployment], [.baseUrl, .apiVersion, .deployment]⟩
+  | .anthropic => { allowed := [.baseUrl], required := [] }
+  | .anthropicCompatible => { allowed := [.baseUrl], required := [] }
+  | .openai => { allowed := [.baseUrl], required := [] }
+  | .openaiCompatible => { allowed := [.baseUrl], required := [.baseUrl] }
+  | .azureOpenai =>
+    { allowed := [.baseUrl, .apiVersion, .deployment],
+      required := [.baseUrl, .apiVersion, .deployment] }
+  | .vertex =>
+    { allowed := [.projectId, .location], required := [.projectId],
+      credential := .workloadIdentity }
 
 /-! ## Config values -/
 
@@ -102,6 +124,8 @@ structure Config where
   baseUrl : Option String := none
   deployment : Option String := none
   apiVersion : Option String := none
+  projectId : Option String := none
+  location : Option String := none
   deriving DecidableEq, Repr, Inhabited
 
 /-- The value of one field. -/
@@ -109,6 +133,8 @@ def Config.get (c : Config) : ConfigField → Option String
   | .baseUrl => c.baseUrl
   | .deployment => c.deployment
   | .apiVersion => c.apiVersion
+  | .projectId => c.projectId
+  | .location => c.location
 
 /-- The fields a config carries, in `MODEL_CONNECTION_CONFIG_FIELDS` order. -/
 def Config.present (c : Config) : List ConfigField :=
@@ -118,7 +144,9 @@ def Config.present (c : Config) : List ConfigField :=
 def Config.ofFields (fs : List ConfigField) : Config :=
   { baseUrl := if fs.contains .baseUrl then some "https://models.example.com" else none,
     deployment := if fs.contains .deployment then some "prod" else none,
-    apiVersion := if fs.contains .apiVersion then some "2024-10-21" else none }
+    apiVersion := if fs.contains .apiVersion then some "2024-10-21" else none,
+    projectId := if fs.contains .projectId then some "my-agents-123" else none,
+    location := if fs.contains .location then some "global" else none }
 
 /-- A code point `String.prototype.trim` strips: ECMAScript's *WhiteSpace* (TAB, VT, FF, ZWNBSP and
 every `Zs` space separator: SP, NBSP, U+1680, U+2000–U+200A, U+202F, U+205F, U+3000) and
@@ -172,15 +200,21 @@ inductive Readiness where
   | incompleteConfig
   deriving DecidableEq, Repr, Inhabited
 
-/-- `ready = hasCredential && isModelConnectionConfigComplete(provider, config)`. -/
+/-- The provider stores no credential and authenticates with the workload identity
+(`isKeylessProvider`). -/
+@[aw_spec (ts := "packages/contracts/src/models.ts#isKeylessProvider")]
+def isKeyless (p : Provider) : Bool := (rule p).credential == .workloadIdentity
+
+/-- `ready = (hasCredential || isKeylessProvider(provider)) && isModelConnectionConfigComplete(provider, config)`. -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#toModelConnectionResource")
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def ready (hasCredential : Bool) (p : Provider) (c : Config) : Bool :=
-  hasCredential && isComplete p c
+  (hasCredential || isKeyless p) && isComplete p c
 
-/-- The readiness state; a missing credential is reported before an incomplete config. -/
+/-- The readiness state; a missing credential (on a provider that stores one) is reported before an
+incomplete config. -/
 def readiness (hasCredential : Bool) (p : Provider) (c : Config) : Readiness :=
-  if !hasCredential then .noCredential
+  if !hasCredential && !isKeyless p then .noCredential
   else if isComplete p c then .ready
   else .incompleteConfig
 

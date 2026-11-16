@@ -10,7 +10,7 @@ description: "The @indx-workspace/contracts/invitations exports, sorted alphabet
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `workspaceId` | `string` | Yes |  |
-| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "builder" \| "owner" \| "admin" \| "viewer"; createdAt: string; }` | Yes |  |
+| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "builder" \| "owner" \| "admin" \| "viewer" \| "guest"; createdAt: string; }` | Yes |  |
 
 ## AcceptedInvitationResponseSchema
 
@@ -22,7 +22,7 @@ same-origin browser client receives.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `workspaceId` | `string` | Yes |  |
-| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "builder" \| "owner" \| "admin" \| "viewer"; createdAt: string; }` | Yes |  |
+| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "builder" \| "owner" \| "admin" \| "viewer" \| "guest"; createdAt: string; }` | Yes |  |
 
 ## AcceptInvitationInput
 

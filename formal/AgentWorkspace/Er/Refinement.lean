@@ -346,8 +346,10 @@ def load : List Current.Stmt :=
     .endpointClientAgents, .endpointClientApiKeys, .oauthTokens, .projects, .projectFiles,
     .projectMcpServers, .sessions, .surfaceSessionKeys, .sessionTranscripts, .sessionMessages, .sessionStateStreams, .sessionStateEntries, .sessionStateBlobs, .runs,
     .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .builderToolCalls, .auditEvents, .shares, .shareViews,
-    .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns,
-    .workspaceFeatures].flatMap fun t =>
+    .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns, .loginTokens,
+    .demoRunAdmissions, .demoDailyCosts, .demoEntryStates, .storeLeads,
+    .workspaceFeatures, .webhooks, .webhookDeliveries, .agentTeams, .agentTeamVersions,
+    .agentTeamVersionMembers].flatMap fun t =>
       (base t).map (.insert t)
 
 end TargetCells

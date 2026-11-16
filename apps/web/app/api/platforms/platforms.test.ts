@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PlatformListResponseSchema } from '@indx-workspace/contracts/platforms';
 import { PLATFORM_TARGETS } from '@indx-workspace/platforms';
 
-import { ROLES, type Role } from '../../../server/rbac/roles';
+import { ROLES, isConferrable, type Role } from '../../../server/rbac/core/roles';
 import {
   installRbacHarness,
   TEST_WORKSPACE_ID,
@@ -38,7 +38,9 @@ function harness(): RbacHarness {
 }
 
 describe('GET /api/platforms', () => {
-  it.each(ROLES.map((role) => [role] as const))(
+  // Every role but `guest`: the guest row refuses every resource it does not name (spec §21,
+  // "The guest role"), and the platform targets are not one of them. The guest's 403 is below.
+  it.each(ROLES.filter(isConferrable).map((role) => [role] as const))(
     'lets a %s read every target, as the published contract',
     async (role: Role) => {
       const built = harness();
@@ -58,6 +60,19 @@ describe('GET /api/platforms', () => {
       expect(response.headers.get('cache-control')).toBe('no-store');
     },
   );
+
+  it('refuses a guest (403) and serves no target', async () => {
+    const built = harness();
+
+    const response = await built.call(GET, {
+      method: 'GET',
+      path: '/api/platforms',
+      as: { email: 'guest@example.test' },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.text).not.toContain('copilot-studio');
+  });
 
   it('answers 401 and serves nothing without a usable credential', async () => {
     const built = harness();

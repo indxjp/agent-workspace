@@ -171,7 +171,6 @@ const REFUSAL_MARKERS: Readonly<Record<string, string>> = {
   policy: 'policy arm',
   skills: 'skills: false',
   fork: 'fork: false',
-  maxBudget: 'maxBudget from a provisional price table',
   gateway: 'gateway connection',
   wireProtocols: 'speaks',
   model: 'no default model',
@@ -192,7 +191,6 @@ describe('engine-openai-agents: compile', () => {
         connection: compiled.connection,
         connectors: compiled.mcpServers.map((server) => server.name),
         maxTurns: compiled.limits.maxTurns,
-        budgetCap: compiled.limits.budget !== null,
         grants: compiled.workspace.grants.map((grant) => ({
           directory: grant.kind === 'directory',
           path: grant.path,
@@ -205,7 +203,6 @@ describe('engine-openai-agents: compile', () => {
         connection: expected['connection'],
         connectors: expected['connectors'],
         maxTurns: expected['maxTurns'],
-        budgetCap: expected['budgetCap'],
         grants: expected['grants'],
         tracingDisabled: expected['tracingDisabled'],
       });

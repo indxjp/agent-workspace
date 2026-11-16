@@ -50,7 +50,7 @@ import {
 } from './memory-directory';
 import { Principal } from './principal';
 import { presentedKeyText, readBearerApiKeyAttempt } from './api-key';
-import type { Role } from './roles';
+import type { Role } from './core/roles';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 
@@ -175,6 +175,7 @@ export function installRbacHarness(
     linkIdentity: (issuer: string, subject: string, userId: string) =>
       directory.linkIdentity(issuer, subject, userId),
     membershipsForUser: (userId: string) => directory.membershipsForUser(userId),
+    bindGuestWorkspace: (input) => directory.bindGuestWorkspace(input),
     acceptInvitation: (id, token, identity) => directory.acceptInvitation(id, token, identity),
   };
 

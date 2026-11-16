@@ -1,13 +1,13 @@
 /**
  * Differential conformance for the `concept-identity` family: the Lean model of workspaces,
- * users, memberships, principals, API keys, invitations and browser tokens
+ * users, memberships, principals, API keys, invitations, login tokens and browser tokens
  * (formal/AgentWorkspace/Concepts/*.lean, Er/Current/Identity.lean) replayed against the REAL
  * TypeScript:
  *
  *   - the enumerations against the contracts, the Drizzle schema and the server's own lists, and
  *     `parseRole` / `wireKind`;
- *   - the 36 refined checks against the CHECK bodies `drizzle-kit` recorded in
- *     `migrations/meta/0051_snapshot.json`, and the pattern checks' boundary rows against the
+ *   - the 46 refined checks against the CHECK bodies `drizzle-kit` recorded in
+ *     `migrations/meta/0107_snapshot.json`, and the pattern checks' boundary rows against the
  *     snapshot's own regular expressions;
  *   - every foreign key and unique key of the cluster against the live Drizzle table objects
  *     (columns, target, `ON DELETE`, and the multiplicities the model derives);
@@ -35,6 +35,7 @@ import {
   InvitationResourceSchema,
 } from '@indx-workspace/contracts/invitations';
 import {
+  CONFERRABLE_ROLES,
   MEMBERSHIP_ROLES,
   MeResponseSchema,
   PRINCIPAL_KINDS as WIRE_PRINCIPAL_KINDS,
@@ -72,7 +73,7 @@ import {
   BROWSER_TOKEN_SECRET_LENGTH as SERVER_BROWSER_TOKEN_SECRET_LENGTH,
   parsePresentedBrowserToken,
 } from '../server/rbac/browser-token';
-import { readMe, wireKind } from '../server/rbac/handlers';
+import { readMe, wireKind } from '../server/rbac/me';
 import {
   PRINCIPAL_KINDS,
   Principal,
@@ -80,7 +81,7 @@ import {
   type PrincipalKind,
   type TokenScope,
 } from '../server/rbac/principal';
-import { parseRole, ROLES, type Role } from '../server/rbac/roles';
+import { isConferrable, parseRole, ROLES, type Role } from '../server/rbac/core/roles';
 import { asRecord, asString, loadVectors, type FormalVector } from '../../../tests/formal/vectors';
 
 const FAMILY = 'concept-identity';
@@ -237,7 +238,7 @@ function tableShape(name: string): TableShape {
 }
 
 const snapshot: unknown = JSON.parse(
-  readFileSync(path.join(REPO_ROOT, 'migrations/meta/0051_snapshot.json'), 'utf8'),
+  readFileSync(path.join(REPO_ROOT, 'migrations/meta/0107_snapshot.json'), 'utf8'),
 );
 
 function snapshotCheck(table: string, check: string): string {
@@ -263,7 +264,7 @@ function checkRegExp(body: string): RegExp {
   return new RegExp(match[1].replaceAll('[:space:]', ' \\t\\n\\v\\f\\r'), 'u');
 }
 
-/** The fourteen tables of the cluster, as the model lists them. */
+/** The eighteen tables of the cluster, as the model lists them. */
 const clusterTables: readonly string[] = (() => {
   const vector = loadVectors(FAMILY, 'constants.json').find((v) => v.id === 'tables');
   if (vector === undefined) throw new Error('no cluster table list');
@@ -284,6 +285,13 @@ describe('concept-identity: enumerations', () => {
     expect(members('role')).toEqual([...MEMBERSHIP_ROLES]);
     expect(members('role')).toEqual([...schema.membershipRoles]);
     expect(members('role')).toEqual([...ROLES]);
+  });
+
+  it('conferrable roles are CONFERRABLE_ROLES, the schema conferrableRoles and the roles isConferrable admits', () => {
+    expect(members('role-conferrable')).toEqual([...CONFERRABLE_ROLES]);
+    expect(members('role-conferrable')).toEqual([...schema.conferrableRoles]);
+    expect(members('role-conferrable')).toEqual(ROLES.filter(isConferrable));
+    expect(members('role-conferrable')).not.toContain('guest');
   });
 
   it('principal kinds: the wire spelling and the storage spelling', () => {
@@ -355,7 +363,7 @@ describe('concept-identity: the refined checks', () => {
     }
   });
 
-  it('covers exactly the non-closed-set checks of the fourteen identity tables', () => {
+  it('covers exactly the non-closed-set checks of the nineteen identity tables', () => {
     const identityTables = new Set(clusterTables);
     const modelled = new Set(vectors.map((v) => asString(field(v.input, 'check', v.id), v.id)));
     const snapshotChecks = Object.values(
@@ -370,7 +378,7 @@ describe('concept-identity: the refined checks', () => {
       )
       .filter((c) => !/^"[a-z_]+"\."[a-z_]+" in \(/u.test(c.value))
       .map((c) => c.name);
-    expect(identityTables.size).toBe(14);
+    expect(identityTables.size).toBe(19);
     for (const table of identityTables) tableShape(table);
     expect([...modelled].sort()).toEqual([...snapshotChecks].sort());
   });
@@ -396,14 +404,14 @@ describe('concept-identity: relationships and keys', () => {
     expect(childIsKey ? 'at-most-one' : 'many').toBe(asString(expected['child'], vector.id));
   });
 
-  it('the model lists every foreign key of the fourteen tables', () => {
+  it('the model lists every foreign key of the eighteen tables', () => {
     const live = clusterTables.flatMap((t) => [...tableShape(t).foreignKeys.keys()]);
     const modelled = relationships.map((v) => asString(field(v.input, 'foreignKey', v.id), v.id));
     expect(modelled.sort()).toEqual(live.sort());
   });
 
   const uniques = loadVectors(FAMILY, 'uniques.json');
-  it('the model lists every total unique key of the fourteen tables', () => {
+  it('the model lists every total unique key of the eighteen tables', () => {
     const live = clusterTables.flatMap((t) => [...tableShape(t).uniques.keys()]);
     const modelled = uniques.map((v) => asString(field(v.input, 'unique', v.id), v.id));
     expect(modelled.sort()).toEqual(live.sort());

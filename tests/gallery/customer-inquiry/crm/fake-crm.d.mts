@@ -12,8 +12,11 @@ export interface FakeCrm {
 export function startFakeCrm(options: {
   /** The connector's credential, expected as `Authorization: Bearer`. */
   readonly token: string;
-  /** The key the identity assertions are signed with (the connector's `identity` secret). */
-  readonly key: string;
+  /**
+   * The key the identity assertions are signed with (the connector's `identity` secret); a list
+   * while the secret rotates.
+   */
+  readonly key: string | readonly string[];
   /** The id of the connector the assertions are signed for. */
   readonly connectorId: string;
   readonly workspace: string;

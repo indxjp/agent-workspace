@@ -1,4 +1,4 @@
-import type { OwnershipResolver } from '../rbac/http';
+import type { OwnershipResolver } from '../identity';
 import { readLegacyPendingSkillDelete } from './pending-delete';
 import { applicationContext } from '../application-context';
 

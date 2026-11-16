@@ -35,11 +35,11 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const HANDLERS_FILE = fileURLToPath(new URL('./handlers.ts', import.meta.url));
+const PATCH_FILE = fileURLToPath(new URL('./skill-patch.ts', import.meta.url));
 const VALIDATE_FILE = fileURLToPath(new URL('./validate.ts', import.meta.url));
 
 interface CallSite {
@@ -50,15 +50,9 @@ interface CallSite {
 /** Every `writer.put(<first>, …)` / `writer.remove(<first>)` call in `handlers.ts` — the only way a
  * relative path reaches a store key or a catalog row — with `<first>`'s exact source text, not its
  * value, since most expected spellings are variables, not literals. */
-function skillFileKeyCallSites(): readonly CallSite[] {
-  const text = readFileSync(HANDLERS_FILE, 'utf8');
-  const source = ts.createSourceFile(
-    HANDLERS_FILE,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
+function skillFileKeyCallSitesIn(file: string): readonly CallSite[] {
+  const text = readFileSync(file, 'utf8');
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const sites: CallSite[] = [];
   const walk = (node: ts.Node): void => {
     if (
@@ -84,12 +78,13 @@ function skillFileKeyCallSites(): readonly CallSite[] {
     ts.forEachChild(node, walk);
   };
   walk(source);
-  if (sites.length === 0) {
-    throw new Error(
-      'found zero writer.put/remove call sites in handlers.ts — this gate has nothing to assert ' +
-        'coverage against, which is indistinguishable from every site being covered (ADR-0015).',
-    );
-  }
+  return sites;
+}
+
+function skillFileKeyCallSites(): readonly CallSite[] {
+  const sites = [HANDLERS_FILE, PATCH_FILE].flatMap(skillFileKeyCallSitesIn);
+  if (sites.length === 0)
+    throw new Error('found zero writer.put/remove call sites in skill handlers');
   return sites;
 }
 
@@ -132,7 +127,7 @@ const expectedArgumentCounts: ReadonlyMap<string, number> = new Map([
 ]);
 
 describe('B2-PATCH enumeration gate (ADR-0048)', () => {
-  it('finds exactly the enumerated writer.put/remove call sites in handlers.ts, by argument spelling', () => {
+  it('finds exactly the enumerated writer.put/remove call sites in skill handlers, by argument spelling', () => {
     const sites = skillFileKeyCallSites();
     const actual = countsByArgumentText(sites);
 
@@ -168,7 +163,7 @@ describe('B2-PATCH enumeration gate (ADR-0048)', () => {
     }
   });
 
-  it('handlers.ts calls the shared case-fold guard exactly at the two caller-controlled write sites', () => {
+  it('skill handlers call the shared case-fold guard exactly at the two caller-controlled write sites', () => {
     // Ties the enumeration above to the actual guard, so removing the guard call while leaving the
     // writer.put(file.path, …) call untouched still fails this gate. Counted via the compiler
     // for the same ADR-0030 reason as skillFileKeyCallSites, not grepped.
@@ -187,7 +182,7 @@ describe('B2-PATCH enumeration gate (ADR-0048)', () => {
       }
       ts.forEachChild(node, walk);
     };
-    for (const file of [HANDLERS_FILE, VALIDATE_FILE]) {
+    for (const file of [HANDLERS_FILE, PATCH_FILE, VALIDATE_FILE]) {
       walk(
         ts.createSourceFile(
           file,
@@ -198,17 +193,18 @@ describe('B2-PATCH enumeration gate (ADR-0048)', () => {
         ),
       );
     }
-    // One call in validate.ts's validateImportBody (seeded []), one in handlers.ts's patchSkill
+    // One call in validate.ts's validateImportBody (seeded []), one in skill handlers's patchSkill
     // (seeded from the existing directory) — exactly the two 'file.path' sites the enumeration
     // above counted.
-    expect(guardCalls, 'createCaseFoldGuard(...) call sites in handlers.ts and validate.ts').toBe(
-      2,
-    );
+    expect(
+      guardCalls,
+      'createCaseFoldGuard(...) call sites in skill handlers and validate.ts',
+    ).toBe(2);
     // At least a declaration and a use — proves the identifier was not deleted while its call site
     // (writer.remove(relativePath)) was left standing unguarded.
     expect(
       removesSkillMdByNameDeclarations,
-      'occurrences of the identifier removesSkillMdByName in handlers.ts',
+      'occurrences of the identifier removesSkillMdByName in skill handlers',
     ).toBeGreaterThanOrEqual(2);
   });
 });

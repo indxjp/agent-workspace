@@ -21,8 +21,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { resolveMigrationsDir, runMigrations } from '../migrate.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
-import { workspaces } from '../schema/workspaces.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { insertPriorWorkspaces } from './prior-workspaces.test-support.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -66,7 +66,7 @@ const statementKind = (statement: string): 'update' | 'validate' | 'other' => {
 describe('0024 engine CHECK constraints', () => {
   it('keeps both hand-edited NOT VALID clauses', async () => {
     const source = await readFile(
-      path.join(resolveMigrationsDir(), `${FIRST_ENGINE_MIGRATION}.sql`),
+      path.join(resolveMigrationsDir(process.env), `${FIRST_ENGINE_MIGRATION}.sql`),
       'utf8',
     );
     expect(source).toMatch(/ADD CONSTRAINT "runs_engine_valid" CHECK \([^;]*\) NOT VALID;/);
@@ -89,7 +89,7 @@ describe.skipIf(!hasDatabase)('0024/0025 engine identity rename and backfill', (
   const historicRunId = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-engine-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 
@@ -116,7 +116,7 @@ describe.skipIf(!hasDatabase)('0024/0025 engine identity rename and backfill', (
       databaseUrl,
       priorMigrationsDir,
     );
-    await isolated.db.insert(workspaces).values({
+    await insertPriorWorkspaces(isolated.db, {
       id: workspaceId,
       slug: 'engine-rename',
       name: 'Engine Rename',
@@ -309,7 +309,7 @@ describe.skipIf(!hasDatabase)('0024/0025 engine identity rename and backfill', (
     });
     const before = await snapshot();
     const statements = (
-      await readFile(path.join(resolveMigrationsDir(), `${DATA_MIGRATION}.sql`), 'utf8')
+      await readFile(path.join(resolveMigrationsDir(process.env), `${DATA_MIGRATION}.sql`), 'utf8')
     )
       .split('--> statement-breakpoint')
       .map((statement) => statement.trim())

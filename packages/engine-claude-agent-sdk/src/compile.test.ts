@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { RunRequest } from '@agent-workspace/run-protocol';
-import { AGENT_TOOL_PERMISSION_MODES } from '@indx-workspace/contracts/agents';
 
 import {
   A11_IDENTITY_ENV_VARS,
@@ -9,67 +8,17 @@ import {
   PLATFORM_SETTING_SOURCES,
   PLATFORM_STRICT_MCP_CONFIG,
   SESSION_SCOPE_ENV_VARS,
-  SubagentToolRemovedError,
   compileRunRequest,
 } from './compile.js';
+import {
+  canonicalAgent,
+  canonicalPolicy,
+  canonicalRunRequest,
+  compileCanonical,
+  request,
+} from './compile.test-support.js';
 import { COMPILED_SDK_OPTION_KEYS_ARE_EXHAUSTIVE, compiledSdkOptionKeys } from './options.js';
 import { CLAUDE_PRESET_TOOLS } from './tools.js';
-
-/**
- * The canonical fixtures, restated here rather than imported from `schemas.test.ts`.
- *
- * Importing one test module from another executes its `describe` blocks a second time, so every
- * assertion in `schemas.test.ts` would be collected and run twice — once under its own name and
- * once under this file's. A duplicated test is not a stronger test; it is a slower run and a
- * confusing report. Two explicit fixtures cost twenty lines and keep each file self-contained.
- */
-const canonicalAgent = {
-  name: 'Customer Support Agent',
-  instructions: 'You help employees answer questions...',
-  model: 'claude-sonnet-4-5',
-  permissions: {
-    readFiles: true,
-    writeFiles: true,
-    runCommands: false,
-    unrestrictedNetwork: false,
-  },
-  skills: { mode: 'allowlist', names: ['customer-support'] },
-  mcpServers: {
-    jira: {
-      type: 'http',
-      url: 'https://jira.example.com/mcp',
-      headers: { Authorization: 'Bearer x' },
-    },
-    search: { command: '/usr/bin/search-mcp', args: ['--stdio'] },
-  },
-  limits: { maxTurns: 20, maxBudgetUsd: 5 },
-} as const;
-
-/** The engine arm as compose composes it for an agent with a stored policy. */
-const canonicalPolicy = {
-  tools: {
-    base: ['Read', 'Grep', 'mcp__jira__get_issue'],
-    autoApprove: ['Read', 'mcp__jira__get_*'],
-    deny: ['Bash', 'mcp__*'],
-    permissionMode: 'dontAsk',
-    allowDangerouslySkipPermissions: false,
-  },
-  fileGrantDeny: [],
-} as const;
-
-const canonicalRunRequest = {
-  runId: '6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b',
-  sessionId: '2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e',
-  cwd: '/run/claude',
-  prompt: 'Summarise the open Jira issues.',
-  projectKey: 'tenant-a',
-  portable: canonicalAgent,
-  policy: canonicalPolicy,
-  session: { kind: 'fresh', sessionId: 'c101d922-3c4b-4a12-9b1e-0a1b2c3d4e5f' },
-  env: { PATH: '/usr/bin', HOME: '/home/agent' },
-} as const;
-
-const request = RunRequest.parse(canonicalRunRequest);
 
 describe('the compile step of spec §5', () => {
   it('emits only keys it declared, so the surface gate can check every one of them', () => {
@@ -95,7 +44,9 @@ describe('the compile step of spec §5', () => {
     expect(options.strictMcpConfig).toBe(PLATFORM_STRICT_MCP_CONFIG);
     expect(options.strictMcpConfig).toBe(true);
   });
+});
 
+describe('the compile step of spec §5: tool lists', () => {
   it('maps the three tool lists separately, because allowedTools does not restrict', () => {
     const options = compileRunRequest(request);
     // The stored arm's own lists, plus the permission floor this agent's two `false` switches
@@ -117,17 +68,16 @@ describe('the compile step of spec §5', () => {
     // Not set unless the mode is bypassPermissions — and the schema will not let it be.
     expect(options.allowDangerouslySkipPermissions).toBeUndefined();
   });
+});
 
+describe('the compile step of spec §5: the preset base becomes an allow-list', () => {
   it("maps 'claude_code_preset' onto an allow-list, never the SDK's whole preset (BH061-010)", () => {
-    const options = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        policy: {
-          ...canonicalPolicy,
-          tools: { ...canonicalPolicy.tools, base: 'claude_code_preset' },
-        },
-      }),
-    );
+    const options = compileCanonical({
+      policy: {
+        ...canonicalPolicy,
+        tools: { ...canonicalPolicy.tools, base: 'claude_code_preset' },
+      },
+    });
     expect(options.tools).toEqual([
       'Read',
       'Glob',
@@ -149,24 +99,21 @@ describe('the compile step of spec §5', () => {
   });
 
   it('offers an agent with every permission off no privileged built-in tool (BH061-010)', () => {
-    const options = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        portable: {
-          ...canonicalAgent,
-          permissions: {
-            readFiles: false,
-            writeFiles: false,
-            runCommands: false,
-            unrestrictedNetwork: false,
-          },
+    const options = compileCanonical({
+      portable: {
+        ...canonicalAgent,
+        permissions: {
+          readFiles: false,
+          writeFiles: false,
+          runCommands: false,
+          unrestrictedNetwork: false,
         },
-        policy: {
-          ...canonicalPolicy,
-          tools: { ...canonicalPolicy.tools, base: 'claude_code_preset' },
-        },
-      }),
-    );
+      },
+      policy: {
+        ...canonicalPolicy,
+        tools: { ...canonicalPolicy.tools, base: 'claude_code_preset' },
+      },
+    });
     expect(options.tools).toEqual(CLAUDE_PRESET_TOOLS);
     const usable = CLAUDE_PRESET_TOOLS.filter((tool) => !options.disallowedTools.includes(tool));
     expect(usable).toEqual([
@@ -177,22 +124,18 @@ describe('the compile step of spec §5', () => {
       'ReadMcpResourceTool',
     ]);
   });
+});
 
+describe('the compile step of spec §5: skills, instructions and limits', () => {
   it('carries the skill policy onto the skills option', () => {
     expect(compileRunRequest(request).skills).toEqual(['customer-support']);
-    const all = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        portable: { ...canonicalAgent, skills: { mode: 'all' } },
-      }),
-    );
+    const all = compileCanonical({
+      portable: { ...canonicalAgent, skills: { mode: 'all' } },
+    });
     expect(all.skills).toBe('all');
-    const none = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        portable: { ...canonicalAgent, skills: { mode: 'allowlist', names: [] } },
-      }),
-    );
+    const none = compileCanonical({
+      portable: { ...canonicalAgent, skills: { mode: 'allowlist', names: [] } },
+    });
     expect(none.skills).toEqual([]);
   });
 
@@ -205,26 +148,20 @@ describe('the compile step of spec §5', () => {
   });
 
   it('emits no systemPrompt at all when the instructions field is empty', () => {
-    const options = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        portable: { ...canonicalAgent, instructions: '   ' },
-      }),
-    );
+    const options = compileCanonical({
+      portable: { ...canonicalAgent, instructions: '   ' },
+    });
     expect('systemPrompt' in options).toBe(false);
   });
 
   it('omits model and the limits rather than sending a null the SDK would reject', () => {
-    const options = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        portable: {
-          ...canonicalAgent,
-          model: null,
-          limits: { maxTurns: null, maxBudgetUsd: null },
-        },
-      }),
-    );
+    const options = compileCanonical({
+      portable: {
+        ...canonicalAgent,
+        model: null,
+        limits: { maxTurns: null, maxBudgetUsd: null },
+      },
+    });
     expect('model' in options).toBe(false);
     expect('maxTurns' in options).toBe(false);
     expect('maxBudgetUsd' in options).toBe(false);
@@ -238,6 +175,9 @@ describe('the session scope reaches the subprocess as env, and only from one pla
       ENABLE_TOOL_SEARCH: 'false',
       PATH: '/usr/bin',
       HOME: '/home/agent',
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      DISABLE_TELEMETRY: '1',
+      DISABLE_ERROR_REPORTING: '1',
       CLAUDE_CONFIG_DIR: '/run/claude/.claude',
       CLAUDE_CODE_PROJECT_DIR_NAME: 'tenant-a',
       AGENT_WORKSPACE_RUN_ID: canonicalRunRequest.runId,
@@ -251,6 +191,31 @@ describe('the session scope reaches the subprocess as env, and only from one pla
     }
   });
 
+  it('always compiles the three quiet flags to 1, whatever the request env says (D-13)', () => {
+    const quiet = [
+      'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+      'DISABLE_TELEMETRY',
+      'DISABLE_ERROR_REPORTING',
+    ];
+    const omitted = compileRunRequest(request);
+    const disabled = compileCanonical({
+      env: {
+        ...canonicalRunRequest.env,
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '',
+        DISABLE_TELEMETRY: '',
+        DISABLE_ERROR_REPORTING: '',
+      },
+    });
+    const zeroed = compileCanonical({
+      env: { ...canonicalRunRequest.env, DISABLE_TELEMETRY: '0' },
+    });
+    for (const options of [omitted, disabled, zeroed]) {
+      for (const key of quiet) expect(options.env[key]).toBe('1');
+    }
+  });
+});
+
+describe('the session scope: reserved variables and refusals', () => {
   it('refuses reserved variables case-insensitively for Windows environment semantics', () => {
     for (const reserved of [
       'CLAUDE_CONFIG_DIR',
@@ -261,22 +226,19 @@ describe('the session scope reaches the subprocess as env, and only from one pla
       'Agent_Workspace_Session_Id',
     ]) {
       expect(() =>
-        compileRunRequest(
-          RunRequest.parse({
-            ...canonicalRunRequest,
-            env: { ...canonicalRunRequest.env, [reserved]: '/somewhere/else' },
-          }),
-        ),
+        compileCanonical({
+          env: { ...canonicalRunRequest.env, [reserved]: '/somewhere/else' },
+        }),
       ).toThrow();
     }
   });
+});
 
+describe('the session scope: identity variables and environment refusals', () => {
   it("derives AGENT_WORKSPACE_RUN_ID / AGENT_WORKSPACE_SESSION_ID from this request's own ids, not from env", () => {
     const otherRunId = '11111111-1111-4111-8111-111111111111';
     const otherSessionId = '22222222-2222-4222-8222-222222222222';
-    const options = compileRunRequest(
-      RunRequest.parse({ ...canonicalRunRequest, runId: otherRunId, sessionId: otherSessionId }),
-    );
+    const options = compileCanonical({ runId: otherRunId, sessionId: otherSessionId });
     expect(options.env['AGENT_WORKSPACE_RUN_ID']).toBe(otherRunId);
     expect(options.env['AGENT_WORKSPACE_SESSION_ID']).toBe(otherSessionId);
   });
@@ -284,12 +246,9 @@ describe('the session scope reaches the subprocess as env, and only from one pla
   it('refuses to compile a run whose environment carries the provider master credential (spec A.11)', () => {
     for (const name of [ANTHROPIC_API_KEY_ENV, 'anthropic_api_key', 'Anthropic_Api_Key']) {
       expect(() =>
-        compileRunRequest(
-          RunRequest.parse({
-            ...canonicalRunRequest,
-            env: { ...canonicalRunRequest.env, [name]: 'sk-ant-stolen' },
-          }),
-        ),
+        compileCanonical({
+          env: { ...canonicalRunRequest.env, [name]: 'sk-ant-stolen' },
+        }),
       ).toThrow(/ANTHROPIC_API_KEY|provider master credentials/u);
     }
   });
@@ -338,28 +297,22 @@ describe('the three session modes are the three legal option combinations (R-01 
   });
 
   it('a resume passes resume alone', () => {
-    const options = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        session: { kind: 'resume', resume: canonicalRunRequest.session.sessionId },
-      }),
-    );
+    const options = compileCanonical({
+      session: { kind: 'resume', resume: canonicalRunRequest.session.sessionId },
+    });
     expect(options.resume).toBe(canonicalRunRequest.session.sessionId);
     expect('sessionId' in options).toBe(false);
     expect('forkSession' in options).toBe(false);
   });
 
   it('a fork is the only shape that carries both, and it sets forkSession', () => {
-    const options = compileRunRequest(
-      RunRequest.parse({
-        ...canonicalRunRequest,
-        session: {
-          kind: 'fork',
-          resume: canonicalRunRequest.session.sessionId,
-          sessionId: canonicalRunRequest.sessionId,
-        },
-      }),
-    );
+    const options = compileCanonical({
+      session: {
+        kind: 'fork',
+        resume: canonicalRunRequest.session.sessionId,
+        sessionId: canonicalRunRequest.sessionId,
+      },
+    });
     expect(options.resume).toBe(canonicalRunRequest.session.sessionId);
     expect(options.sessionId).toBe(canonicalRunRequest.sessionId);
     expect(options.forkSession).toBe(true);
@@ -390,159 +343,3 @@ describe('a gateway tool connector entry', () => {
 });
 
 // #974 (ADR-0133 D14): a subagent compiles to an `agents` entry the model reaches through `Agent`.
-describe('subagents', () => {
-  const subagent = {
-    name: 'billing-specialist',
-    description: 'Answers billing questions.',
-    instructions: 'You answer billing questions.',
-    model: 'claude-haiku-4-5',
-    permissions: {
-      readFiles: true,
-      writeFiles: false,
-      runCommands: false,
-      unrestrictedNetwork: true,
-    },
-  } as const;
-  const withSubagents = (policy: unknown, subagents: readonly unknown[] = [subagent]) =>
-    RunRequest.parse({
-      ...canonicalRunRequest,
-      portable: { ...canonicalAgent, subagents },
-      policy,
-    });
-  const preset = { tools: null, fileGrantDeny: [] };
-
-  it('emits no agents key without subagents', () => {
-    expect('agents' in compileRunRequest(request)).toBe(false);
-  });
-
-  it('maps a subagent to an agents entry, denying only what its permissions add to the parent', () => {
-    const options = compileRunRequest(withSubagents(preset));
-    expect(options.disallowedTools).toContain('Bash');
-    expect(options.agents).toEqual({
-      'billing-specialist': {
-        description: 'Answers billing questions.',
-        prompt: 'You answer billing questions.',
-        model: 'claude-haiku-4-5',
-        disallowedTools: ['Write', 'Edit', 'NotebookEdit'],
-      },
-    });
-  });
-
-  it('leaves model and disallowedTools out when the subagent sets none', () => {
-    const open = {
-      readFiles: true,
-      writeFiles: true,
-      runCommands: true,
-      unrestrictedNetwork: true,
-    };
-    const parentOpen = RunRequest.parse({
-      ...canonicalRunRequest,
-      portable: {
-        ...canonicalAgent,
-        permissions: open,
-        subagents: [{ ...subagent, model: null, permissions: open }],
-      },
-      policy: preset,
-    });
-    expect(compileRunRequest(parentOpen).agents).toEqual({
-      'billing-specialist': {
-        description: 'Answers billing questions.',
-        prompt: 'You answer billing questions.',
-      },
-    });
-  });
-
-  it('throws the typed error when the tool policy removes Agent', () => {
-    const denied = { tools: { ...canonicalPolicy.tools, deny: ['Agent'] }, fileGrantDeny: [] };
-    expect(() => compileRunRequest(withSubagents(denied))).toThrow(SubagentToolRemovedError);
-    expect(() => compileRunRequest(withSubagents(canonicalPolicy))).toThrow(
-      SubagentToolRemovedError,
-    );
-    expect(() => compileRunRequest(withSubagents(canonicalPolicy, []))).not.toThrow();
-  });
-});
-
-describe('handoff (ADR-0145 D4)', () => {
-  const compileWith = (handoff: boolean): ReturnType<typeof compileRunRequest> =>
-    compileRunRequest(
-      RunRequest.parse({ ...canonicalRunRequest, policy: { tools: null, handoff } }),
-    );
-
-  it('auto-approves handoff_to_person and carries the flag only when on', () => {
-    const on = compileWith(true);
-    expect(on.allowedTools).toContain('mcp__agent-workspace__handoff_to_person');
-    expect(on.handoff).toBe(true);
-    const off = compileWith(false);
-    expect(off.allowedTools).not.toContain('mcp__agent-workspace__handoff_to_person');
-    expect('handoff' in off).toBe(false);
-  });
-});
-
-describe('requireApproval (ADR-0145)', () => {
-  const withTools = (
-    tools: Record<string, unknown>,
-    policy: Record<string, unknown>,
-  ): ReturnType<typeof compileRunRequest> =>
-    compileRunRequest(RunRequest.parse({ ...canonicalRunRequest, policy: { tools, ...policy } }));
-  const defaultTools = {
-    base: ['Read', 'mcp__gh__push'],
-    autoApprove: ['Read', 'mcp__gh__*'],
-    deny: [],
-    permissionMode: 'default',
-    allowDangerouslySkipPermissions: false,
-  };
-
-  it('carries no gate without requireApproval, so existing compiles are unchanged', () => {
-    const compiled = withTools(defaultTools, {});
-    expect('approval' in compiled).toBe(false);
-    expect(compiled.allowedTools).toEqual(['Read', 'mcp__gh__*', 'mcp__jira__*', 'mcp__search__*']);
-  });
-
-  it('moves rules that could approve a gated tool out of allowedTools and into the gate', () => {
-    const compiled = withTools(defaultTools, {
-      requireApproval: ['mcp__gh__push'],
-      approvedToolCalls: ['{"input":{},"name":"mcp__gh__push"}'],
-    });
-    expect(compiled.allowedTools).toEqual(['Read', 'mcp__jira__*', 'mcp__search__*']);
-    expect(compiled.approval).toEqual({
-      requireApproval: ['mcp__gh__push'],
-      deferred: ['mcp__gh__*'],
-      approvedToolCalls: ['{"input":{},"name":"mcp__gh__push"}'],
-    });
-  });
-
-  it.each(AGENT_TOOL_PERMISSION_MODES.filter((mode) => mode !== 'default'))(
-    'refuses permissionMode %s, which would not ask',
-    (permissionMode) => {
-      const allowDangerouslySkipPermissions = permissionMode === 'bypassPermissions';
-      expect(() =>
-        withTools(
-          { ...defaultTools, permissionMode, allowDangerouslySkipPermissions },
-          { requireApproval: ['Write'] },
-        ),
-      ).toThrow("permissionMode 'default'");
-    },
-  );
-
-  it.each(['Read', 'Glob', 'Grep', 'Agent', 'TodoWrite'])(
-    'refuses gating %s, which canUseTool is never asked about',
-    (tool) => {
-      expect(() => withTools(defaultTools, { requireApproval: [tool] })).toThrow(
-        `requireApproval cannot gate ${JSON.stringify(tool)}`,
-      );
-    },
-  );
-
-  it.each(['Bash', 'WebFetch', 'mcp__jira__*', 'mcp__gh__push'])(
-    'compiles a gate on %s',
-    (tool) => {
-      expect(
-        withTools(defaultTools, { requireApproval: [tool] }).approval?.requireApproval,
-      ).toEqual([tool]);
-    },
-  );
-
-  it('allows any permissionMode when nothing requires approval', () => {
-    expect(() => compileRunRequest(request)).not.toThrow();
-  });
-});

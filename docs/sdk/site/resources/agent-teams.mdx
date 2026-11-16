@@ -1,0 +1,225 @@
+---
+title: "Agent teams"
+description: "Group a lead agent and up to eight member agents it calls as tools, pinned to exact versions."
+---
+
+<Info>
+**Resource guide** · [the chapter map](/path/build)
+
+- **You will:** create an agent team, save a version that pins its lead and members, list its versions, and run it.
+- **You will learn:** what a team version pins, how a member is named, and who may change a team.
+- **You need:** an API key for the workspace with the Builder role or above, and two saved agents.
+
+</Info>
+
+`aw.agentTeams` manages the agent teams of a workspace. An agent team is a published unit with a
+lead agent and up to eight member agents of the same workspace. In `handoff` mode, the only mode,
+the lead sees each member as the tool `agent__<member name>` (the Claude engine shows it as
+`mcp__agent__<member name>`). It wraps `/api/agent-teams/**` (ADR-0104). Source:
+`packages/sdk/src/resources/agentTeams.ts`, contract: `packages/contracts/src/agent-teams.ts`.
+
+"Team" alone means the people of a workspace (`aw.team`). This resource is always an _agent_ team.
+
+**What you can do**
+
+- [Create a team](#create), with its first version if you like
+- [List and read teams](#list), each with its newest version
+- [Save a version](#versions-create) that pins the lead and the members
+- [List a team's versions](#versions-list)
+- [Remove a team](#remove)
+- [Run a team](#run): the lead calls each member, and every member call is a child run
+
+```ts title="illustrative" claim="illustrative"
+interface AgentTeamResource {
+  id: string;
+  workspaceId: string;
+  name: string; // unique among the workspace's live teams
+  description: string | null;
+  latestVersion: AgentTeamVersion | null; // null until the first version is saved
+  ownerPrincipalId: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AgentTeamVersion {
+  id: string;
+  teamId: string;
+  workspaceId: string;
+  version: number; // 1, 2, … per team
+  mode: 'handoff';
+  lead: { agentId: string; agentVersionId: string };
+  members: { name: string; agentId: string; agentVersionId: string }[]; // 1 to 8, by name
+  createdBy: string | null;
+  createdAt: string;
+}
+```
+
+## What a version pins
+
+A team version is immutable. It pins `(agentId, agentVersionId)` for the lead and for each member,
+so the same team version always runs the same agent versions. A member's `name` is a slug
+(`[a-z0-9][a-z0-9_-]*`) of at most 52 characters; it defaults to the agent's name when that is
+one. A version is refused with `422 agent_team_member_invalid` when a pin is not a version of an
+agent of this workspace, the lead is also listed as a member, an agent is listed twice, or a
+member name is not a valid slug or repeats.
+
+## Who may change a team
+
+The routes are authorised as agents are. Every role reads teams. A Builder creates teams, and
+versions and removes the ones it owns; Owner and Admin change any. A team of another workspace
+answers `404 agent_team_not_found`, exactly like an id that never existed. Every change is in the
+audit trail as an agent change that names the team.
+
+## `create`
+
+Create a team owned by you. With `version`, version 1 is saved in the same write.
+
+**Route:** `POST /api/agent-teams` — `201`
+
+```ts title="illustrative" claim="illustrative"
+const team = await aw.agentTeams.create({
+  name: 'Research',
+  version: {
+    lead: { agentId: leadId, agentVersionId: leadVersionId },
+    members: [{ agentId: researcherId, agentVersionId: researcherVersionId }],
+  },
+});
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agent-teams create Research --lead planner --member researcher@3 --member web=browser
+```
+
+</CodeGroup>
+
+On the command line an agent is named by its name or id, `@<n>` pins version `n`, and without it
+the version `local` points at is pinned (the newest when there is none). `<name>=` in front of a
+member names it in the team. `409 agent_team_name_taken` when a live team already has the name.
+
+## `list`
+
+The workspace's live teams, newest first, each with its newest version. Pass `nextCursor` back as
+`cursor` for the next page, or walk every page with `listAll`.
+
+**Route:** `GET /api/agent-teams` — `?limit=1..200&cursor=…`
+
+```ts title="illustrative" claim="illustrative"
+for await (const team of aw.agentTeams.listAll()) console.log(team.name);
+const one = await aw.agentTeams.get(teamId);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agent-teams list
+aw agent-teams get Research --json
+```
+
+</CodeGroup>
+
+## `versions.create`
+
+Save the team's next version. The number is assigned by the server, one after the newest, even
+when two saves race.
+
+**Route:** `POST /api/agent-teams/:id/versions` — `201`
+
+```ts title="illustrative" claim="illustrative"
+const version = await aw.agentTeams.versions.create(team.id, {
+  lead: { agentId: leadId, agentVersionId: leadVersionId },
+  members: [{ name: 'web', agentId: browserId, agentVersionId: browserVersionId }],
+});
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agent-teams versions create Research --member researcher@4 --member web=browser
+```
+
+</CodeGroup>
+
+`aw agent-teams versions create` keeps the team's current lead unless `--lead` names another.
+
+## `versions.list`
+
+The team's versions, newest first, cursor paged like the team list.
+
+**Route:** `GET /api/agent-teams/:id/versions`
+
+```ts title="illustrative" claim="illustrative"
+const { items, nextCursor } = await aw.agentTeams.versions.list(team.id, { limit: 20 });
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agent-teams versions list Research
+```
+
+</CodeGroup>
+
+## `remove`
+
+Delete the team. Its name is free again. The answer is a `204` with no body.
+
+**Route:** `DELETE /api/agent-teams/:id` — `204`
+
+```ts title="illustrative" claim="illustrative"
+await aw.agentTeams.remove(team.id);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agent-teams remove Research
+```
+
+</CodeGroup>
+
+## `run`
+
+Run the team's newest version. Its lead starts on a session of the lead agent, pinned to the lead's
+version, and sees one tool per member, `agent__<member name>`. A member call starts a child run of
+that member's pinned version, with its own instructions, tools and permissions met with the
+deployment's ceiling, never the lead's; the lead waits for it and gets its answer as the tool
+result. The answer is the `202` of `aw.runs.start`, with the lead's run; follow it as any run.
+
+**Route:** `POST /api/agent-teams/:id/runs` — `202`
+
+```ts title="illustrative" claim="illustrative"
+const { run } = await aw.agentTeams.run(team.id, {
+  prompt: 'Draft and review the launch note.',
+  idempotencyKey: 'launch-note-1',
+});
+const settled = await aw.runs.waitForOutcome(run.id);
+const tree = await aw.runs.get(run.id); // tree.children, tree.treeCost
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agent-teams run Research "Draft and review the launch note." --wait
+```
+
+</CodeGroup>
+
+The body is a run start's, without `version`: the team version pins the lead's. A team with no
+version is `409 agent_team_has_no_version`, and running it needs the right to run its lead agent.
+A scoped token (a surface session, an A2A or an app-backend key) cannot run a team
+(`403 token_out_of_scope`). A member call the lead makes past 16 child runs, for a member the person
+may not run, or whose run fails, is a tool error the lead reads and answers without: its `code` is
+one of `AGENT_TEAM_TOOL_ERROR_CODES`, and a failed member carries its public failure code, never
+the provider's text. Interrupting the lead's run interrupts every member run still going. The lead
+reaches its members at the deployment's public origin (`AW_PUBLIC_URL`); without it a team run
+fails at launch with `agent_team_members_unreachable`.
+
+## Run trees
+
+A run started by a team member is a child of the lead's run. Every run carries `parentRunId`:
+`null` for a root, the lead run's id for a child. Only the read of one run, `aw.runs.get(id)`, adds
+`children` (at most 16, oldest first) and `treeCost`, the exact sum of `cost` over the run and its
+children. Lists never carry either.

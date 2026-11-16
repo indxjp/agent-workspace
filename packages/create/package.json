@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/create",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "description": "npm create @indx-workspace <directory>: generate an Agent Workspace project (a v2 aw dev project by default, or a deployment project with --cloud) with @indx-workspace/cli's create-agent-workspace.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -57,7 +57,7 @@
     "@indx-workspace/cli": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.6",
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "5.0.5"

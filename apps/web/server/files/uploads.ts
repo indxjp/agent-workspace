@@ -11,6 +11,7 @@ import {
 } from '@indx-workspace/contracts/files';
 
 import { applicationContext } from '../application-context';
+import { systemClock, type Clock } from '../clock';
 import { perMinuteLimiter } from '../http/rate-limit';
 import type { StorageContext, StorageService } from '../storage/service';
 import type { CatalogFile } from '../storage/store';
@@ -49,6 +50,7 @@ export async function reserveCatalogUpload(
   input: PresignUploadInput,
   /** Decides on the ready file the reservation would replace, as it read it under its lock. */
   recheck: (replaced: CatalogFile) => Promise<FileResult | null>,
+  clock: Clock = systemClock,
 ): Promise<FileResult> {
   const limit = signedUploadMaxBytes();
   if (input.sizeBytes > limit) {
@@ -61,7 +63,7 @@ export async function reserveCatalogUpload(
   const reserved = reservedFileWriteRefusal(path);
   if (reserved !== null) return reserved;
   const refusal: { denied: FileResult | null } = { denied: null };
-  const now = new Date();
+  const now = clock.now();
   let outcome;
   try {
     outcome = await storage.reserveUpload(ctx, {
@@ -133,7 +135,10 @@ function catalogFailure(error: unknown): FileResult {
 const linkRequests = perMinuteLimiter(LINK_REQUESTS_PER_MINUTE_PER_WORKSPACE);
 
 /** `429 link_rate_limited` with `retry-after` once the workspace used its link allowance, else `null`. */
-export function refuseLinkRequest(workspaceId: string, nowMs = Date.now()): Response | null {
+export function refuseLinkRequest(
+  workspaceId: string,
+  nowMs = systemClock.now().getTime(),
+): Response | null {
   const verdict = linkRequests.admit(workspaceId, nowMs);
   if (verdict.admitted) return null;
   const response = toPresignedResponse(

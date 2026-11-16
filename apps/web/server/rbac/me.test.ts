@@ -22,7 +22,7 @@ import {
   type VerifiedSessionClaims,
 } from '../auth/session';
 
-import { readMe } from './handlers';
+import { readMe } from './me';
 import { Principal } from './principal';
 
 const SECRET = 'a-me-serializer-test-session-secret-long-enough';

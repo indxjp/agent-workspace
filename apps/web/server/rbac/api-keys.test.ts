@@ -42,11 +42,11 @@ import {
   readBearerApiKeyAttempt,
   SECRET_LENGTH,
 } from './api-key';
-import { conferredBy, type ConferredRole } from './conferral';
+import { conferredBy, type ConferredRole } from './core/conferral';
 import type { ApiKeySummary, RevokeApiKeyOutcome, WorkspaceDirectory } from './directory';
 import { revokeApiKey } from './handlers';
 import { createMemoryDirectory } from './memory-directory';
-import type { Role } from './roles';
+import type { Role } from './core/roles';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import type { ToolEndpointEnvironment } from '../tool-endpoint/env';

@@ -46,6 +46,11 @@ export interface OriginCheckInput {
   readonly hostHeader?: unknown;
   /** The `X-Forwarded-Host` header, if a proxy set one. */
   readonly forwardedHost?: unknown;
+  /**
+   * Full origins (`scheme://host[:port]`) accepted besides this host: the Agent Store's, where a
+   * caller has decided it may call this route (`store-origin.ts`). An exact match, never a host one.
+   */
+  readonly allowedOrigins?: readonly string[];
 }
 
 export type OriginVerdict =
@@ -117,6 +122,11 @@ export function checkRequestOrigin(input: OriginCheckInput): OriginVerdict {
   // host and must not be treated as "same origin because it is not a different one".
   if (input.origin.trim() === 'null') {
     return { ok: false, reason: `${method} carries Origin: null, which matches no host` };
+  }
+
+  const allowed = input.allowedOrigins?.find((origin) => origin === input.origin);
+  if (typeof allowed === 'string') {
+    return { ok: true, reason: `Origin "${allowed}" is an origin this route allows` };
   }
 
   const originHost = hostOf(input.origin);

@@ -8,7 +8,7 @@
  * pre-check of the host the gateway will call (never fetched here).
  */
 import { checkEgress, loadEgressPolicyFromEnv } from '@agent-workspace/core';
-import type { ToolConnectorKind } from '@agent-workspace/core/db';
+import type { ToolConnectorKind } from '@indx-workspace/contracts/tool-connectors';
 import type { ConnectorIdentity } from '@indx-workspace/contracts/identity-assertion';
 import {
   CreateToolConnectorRequestSchema,

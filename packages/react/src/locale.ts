@@ -77,6 +77,24 @@ export interface SurfaceStrings {
   readonly unreachable: string;
   /** Shown once the agent has handed the conversation to a person (`agent.handoff`). */
   readonly handedOff: string;
+  /** The approval prompt's heading and accessible name, naming the tool the run paused on. */
+  readonly approvalNeeded: (toolName: string) => string;
+  /** The approval prompt's button that lets the paused call run (ADR-0145). */
+  readonly approve: string;
+  /** The approval prompt's button that refuses the paused call. */
+  readonly reject: string;
+  /** The label of the optional comment sent with a decision. */
+  readonly approvalComment: string;
+  /** Opens the full call under a shell command the approval prompt shows on its own. */
+  readonly approvalFullCall: string;
+  /** `409 approval_expired`: the pause is too old to decide. */
+  readonly approvalExpired: string;
+  /** `409 approval_already_decided`: someone decided first. */
+  readonly approvalAlreadyDecided: string;
+  /** `409 run_not_awaiting_approval`: the run is no longer paused. */
+  readonly approvalNotAwaiting: string;
+  /** The decision did not reach the server, or its answer could not be read. */
+  readonly approvalFailed: string;
 }
 
 const EN: SurfaceStrings = {
@@ -121,6 +139,15 @@ const EN: SurfaceStrings = {
   unavailable: 'The assistant is not available right now. Please try again later.',
   unreachable: 'The assistant could not be reached. Please try again later.',
   handedOff: 'This conversation has been handed to a person.',
+  approvalNeeded: (toolName) => `The agent is waiting for your approval to use ${toolName}`,
+  approve: 'Approve',
+  reject: 'Reject',
+  approvalComment: 'Comment (optional)',
+  approvalFullCall: 'Full call',
+  approvalExpired: 'This request has expired, so it can no longer be decided.',
+  approvalAlreadyDecided: 'This request has already been decided.',
+  approvalNotAwaiting: 'This run is no longer waiting for approval.',
+  approvalFailed: 'The decision could not be sent. Try again.',
 };
 
 const JA: SurfaceStrings = {
@@ -164,6 +191,15 @@ const JA: SurfaceStrings = {
     'ただいまアシスタントをご利用いただけません。しばらくしてからもう一度お試しください。',
   unreachable: 'アシスタントに接続できませんでした。しばらくしてからもう一度お試しください。',
   handedOff: '担当者におつなぎします。',
+  approvalNeeded: (toolName) => `エージェントが ${toolName} の使用について承認を待っています`,
+  approve: '承認',
+  reject: '却下',
+  approvalComment: 'コメント（任意）',
+  approvalFullCall: '呼び出しの全文',
+  approvalExpired: 'この依頼は期限が切れているため、判断できません。',
+  approvalAlreadyDecided: 'この依頼はすでに判断されています。',
+  approvalNotAwaiting: 'この実行はもう承認待ちではありません。',
+  approvalFailed: '判断を送信できませんでした。もう一度お試しください。',
 };
 
 const STRINGS: Readonly<Record<SurfaceLocale, SurfaceStrings>> = { en: EN, ja: JA };

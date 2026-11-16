@@ -1,3 +1,7 @@
+import {
+  ProjectPolicyLimitsSchema,
+  type ProjectPolicyLimits,
+} from '@indx-workspace/contracts/policy-ceiling';
 import { and, sql, type SQL } from 'drizzle-orm';
 
 import { agentVersions } from '../../schema/agent-versions.js';
@@ -26,33 +30,8 @@ export function isTerminalRunStatus(status: RunStatus): boolean {
   return TERMINAL.has(status);
 }
 
-/**
- * The statuses a run may move to `to` from — the one owner of the transition rule, used as the
- * `where status in (…)` of every conditional update, so a lost race is a no-op and not an overwrite.
- *
- * A paused run (`awaiting_approval`) never goes back to `running`: the continuation is a new run in
- * the same session (ADR-0145 D1). `failed` is not reachable from it either — a decision resolves a
- * pause to `completed` or `cancelled`.
- */
-export function runStatusesThatMayMoveTo(to: RunStatus): readonly RunStatus[] {
-  switch (to) {
-    case 'running':
-      return ['queued'];
-    case 'awaiting_approval':
-      return ['running'];
-    case 'completed':
-    case 'cancelled':
-      return ['queued', 'running', 'awaiting_approval'];
-    case 'failed':
-      return ['queued', 'running'];
-    case 'queued':
-      return [];
-    default: {
-      const unreachable: never = to;
-      throw new Error(`unhandled run status ${String(unreachable)}`);
-    }
-  }
-}
+/** The one transition rule, shared with the in-memory run store (part 09 step 1). */
+export { runStatusesThatMayMoveTo } from '../../../runs/transitions.js';
 
 /** The canonical textual UUID, the only form a `uuid` parameter is bound in. */
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -163,6 +142,7 @@ export const RUN_COLUMNS = {
   cacheCreationInputTokens: runs.cacheCreationInputTokens,
   toolCalls: runs.toolCalls,
   costUsd: runs.costUsd,
+  spendCeilingUsd: runs.spendCeilingUsd,
   costCurrency: runs.costCurrency,
   priceTableVersion: runs.priceTableVersion,
   error: runs.error,
@@ -177,6 +157,7 @@ export const RUN_COLUMNS = {
   // NULL for a legacy session that pins none. Never copied onto `runs`, where it could disagree.
   agentVersion: agentVersions.number,
   output: runs.output,
+  parentRunId: runs.parentRunId,
 } as const;
 
 /**
@@ -248,6 +229,14 @@ function parseOutputSchema(value: unknown): Readonly<Record<string, unknown>> | 
   throw new Error('runs.output_schema holds a value that is not a JSON Schema object');
 }
 
+/** `runs.limits_override` is persisted JSON: null or a lower-only limits object; anything else throws. */
+function parseLimitsOverride(value: unknown): ProjectPolicyLimits | null {
+  if (value === null) return null;
+  const parsed = ProjectPolicyLimitsSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new Error('runs.limits_override holds a value that is not a lower-only limits object');
+}
+
 export function toRunRecord(row: {
   id: string;
   workspaceId: string;
@@ -275,6 +264,7 @@ export function toRunRecord(row: {
   cacheCreationInputTokens: number;
   toolCalls: number;
   costUsd: string;
+  spendCeilingUsd: string | null;
   costCurrency: string;
   priceTableVersion: string | null;
   error: string | null;
@@ -284,9 +274,12 @@ export function toRunRecord(row: {
   initiatingUserId: string | null;
   agentVersion: number | null;
   output: unknown;
+  parentRunId: string | null;
   outputSchema?: unknown;
   prompt?: string | null;
   subject?: string | null;
+  limitsOverride?: unknown;
+  agentTeamVersionId?: string | null;
 }): RunRecord {
   if (row.costCurrency !== 'USD') {
     throw new Error(
@@ -320,6 +313,7 @@ export function toRunRecord(row: {
     cacheCreationInputTokens: row.cacheCreationInputTokens,
     toolCalls: row.toolCalls,
     costUsd: row.costUsd,
+    spendCeilingUsd: row.spendCeilingUsd,
     costCurrency: row.costCurrency,
     priceTableVersion: row.priceTableVersion,
     error: row.error,
@@ -329,11 +323,16 @@ export function toRunRecord(row: {
     initiatingUserId: row.initiatingUserId,
     agentVersion: row.agentVersion,
     output: parseRunOutput(row.output),
+    parentRunId: row.parentRunId,
     ...(row.outputSchema === undefined
       ? {}
       : { outputSchema: parseOutputSchema(row.outputSchema) }),
     ...(row.prompt === undefined ? {} : { prompt: row.prompt }),
     ...(row.subject === undefined ? {} : { subject: row.subject }),
+    ...(row.limitsOverride === undefined
+      ? {}
+      : { limitsOverride: parseLimitsOverride(row.limitsOverride) }),
+    ...(row.agentTeamVersionId === undefined ? {} : { agentTeamVersionId: row.agentTeamVersionId }),
   };
 }
 

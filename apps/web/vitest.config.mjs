@@ -21,12 +21,13 @@
  *
  * So this process is given the one image `compose.yaml` gives a developer, and it is the *same*
  * value: `agent-workspace/runtime:dev`. A suite that is asking about the map — the `engine-images`
- * replay, `server/engines/images.test.ts`, the uninstalled-engine refusal in `server/runs/api.test.ts`
+ * replay, `server/engines/images.test.ts`, the uninstalled-engine refusal in `server/runs/api.engines.test.ts`
  * — installs its own with `configureEngineImagesForTests` and says so, rather than inheriting one
  * silently. That is the ADR-0029 shape: the default is what a working deployment has, and the
  * counter-example is written down where it is tested.
  *
- * Nothing else is set. The root `vitest.config.ts` supplies the project list; a project config
+ * `vitest.setup.ts` makes the sign-in settings follow each test's environment (refactoring part 03,
+ * step 3). Nothing else is set. The root `vitest.config.ts` supplies the project list; a project config
  * that redeclared it would be a second place for collection rules to disagree.
  *
  * The extension is `.mjs` and not `.ts` on purpose: `apps/web/package.json` has no `"type":
@@ -39,5 +40,7 @@ export default defineConfig({
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
     env: { AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: 'agent-workspace/runtime:dev' },
+    // The sign-in settings, read from the test's environment on each call (vitest.setup.ts).
+    setupFiles: ['./vitest.setup.ts'],
   },
 });

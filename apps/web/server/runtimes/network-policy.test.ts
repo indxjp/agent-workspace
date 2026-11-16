@@ -26,6 +26,7 @@ import {
   NONE_MEANING,
   networkPolicyIds,
   networkPolicyMapping,
+  egressProxyConfiguredFromEnv,
   restrictedUnenforceableReason,
   type NetworkPolicyId,
 } from './network-policy';
@@ -257,7 +258,8 @@ describe('§15.2\'s rule: `none` always means "the gateway and nothing else"', (
 });
 
 describe('restrictedUnenforceableReason: whether a driver enforces allowed domains (#1018)', () => {
-  it('is null only for docker and kubernetes with the egress proxy', () => {
+  it('is null only for docker, kubernetes and cloud-run-service with the egress proxy', () => {
+    expect(restrictedUnenforceableReason('cloud-run-service', true)).toBeNull();
     expect(restrictedUnenforceableReason('docker', true)).toBeNull();
     expect(restrictedUnenforceableReason('kubernetes', true)).toBeNull();
     expect(restrictedUnenforceableReason('docker', false)).toContain(
@@ -265,8 +267,35 @@ describe('restrictedUnenforceableReason: whether a driver enforces allowed domai
     );
   });
 
+  it('names gcp.sandboxInternet for cloud-run-service without a proxy', () => {
+    const reason = restrictedUnenforceableReason('cloud-run-service', false);
+    expect(reason).toContain('gcp.sandboxInternet');
+    expect(reason).not.toContain('AGENT_WORKSPACE_EGRESS_PROXY_IMAGE');
+  });
+
   it('refuses external (E2B) with or without the proxy, until the E7 live lane proves the ranges', () => {
     expect(restrictedUnenforceableReason('external', true)).not.toBeNull();
     expect(restrictedUnenforceableReason('external', false)).not.toBeNull();
+  });
+});
+
+describe('egressProxyConfiguredFromEnv', () => {
+  it('is true for either the proxy image or the proxy URL', () => {
+    expect(egressProxyConfiguredFromEnv({ AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: 'proxy:1' })).toBe(
+      true,
+    );
+    expect(
+      egressProxyConfiguredFromEnv({ RUNTIME_EGRESS_PROXY_URL: 'http://10.10.0.60:3128' }),
+    ).toBe(true);
+  });
+
+  it('is false when both are unset or blank', () => {
+    expect(egressProxyConfiguredFromEnv({})).toBe(false);
+    expect(
+      egressProxyConfiguredFromEnv({
+        AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: '  ',
+        RUNTIME_EGRESS_PROXY_URL: '',
+      }),
+    ).toBe(false);
   });
 });

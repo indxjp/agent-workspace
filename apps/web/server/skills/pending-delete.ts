@@ -8,16 +8,11 @@
  * mark exists the sync never answers with the skill, so nothing brings it back between the two
  * steps, and the mark records the owner, so the owning Builder can finish an interrupted delete.
  */
-import {
-  parsePendingSkillDelete,
-  type CatalogSkill,
-  type PendingSkillDelete,
-  type ResourceCatalogRepository,
-} from '@agent-workspace/core/db';
-
 import { SKILL_DELETE_PREFIX, skillDeleteMarkerKey, skillMetaKey } from './keys';
-import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
-import type { SkillObjects } from '../storage/store';
+import type { PendingSkillDelete, SkillCatalog, SkillRow, SkillRowInput } from './ports';
+import { parsePendingSkillDelete } from './store';
+import { listAll, readWhole } from '../storage/objects';
+import type { SkillObjects } from '../storage-and-sharing';
 
 /**
  * The marker object an earlier release wrote for a pending delete, or `null` when there is none.
@@ -55,22 +50,24 @@ export async function clearLegacyPendingSkillDelete(
  */
 export async function pendingSkillDelete(
   store: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   name: string,
 ): Promise<PendingSkillDelete | null> {
-  const row = (await catalog.listSkills()).find((skill) => skill.name === name);
+  // Read by name: a sync or an adopt asks this once per skill, so listing every row here would
+  // make a pass over n skills read the whole table n times (#1925 item 5).
+  const row = await catalog.getSkill(name);
   const marked = row?.pendingDelete ?? null;
   if (marked !== null) return marked;
   const legacy = await readLegacyPendingSkillDelete(store, name);
-  if (legacy === null || row === undefined) return legacy;
+  if (legacy === null || row === null) return legacy;
   return (await catalog.backfillSkillPendingDelete(name, legacy)) ? legacy : null;
 }
 
 /** The names of every skill with a delete pending in this workspace. */
 async function pendingSkillDeleteNames(
   store: SkillObjects,
-  catalog: ResourceCatalogRepository,
-  existing: readonly CatalogSkill[],
+  catalog: SkillCatalog,
+  existing: readonly SkillRow[],
 ): Promise<ReadonlySet<string>> {
   const names = new Set(
     existing.filter((row) => row.pendingDelete !== null).map((row) => row.name),
@@ -93,17 +90,17 @@ async function pendingSkillDeleteNames(
 }
 
 /** What a read route would write to the catalog for one listed skill. */
-export type SkillCatalogSyncInput = Parameters<ResourceCatalogRepository['putSkill']>[0];
+export type SkillCatalogSyncInput = SkillRowInput;
 
 /** What {@link syncSkillCatalogRow} needs to know, read once per request. */
 export interface SkillSyncContext {
-  readonly existing: readonly CatalogSkill[];
+  readonly existing: readonly SkillRow[];
   readonly pendingDeletes: ReadonlySet<string>;
 }
 
 export async function skillSyncContext(
   store: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
 ): Promise<SkillSyncContext> {
   const existing = await catalog.listSkills();
   return { existing, pendingDeletes: await pendingSkillDeleteNames(store, catalog, existing) };
@@ -121,7 +118,7 @@ export async function skillSyncContext(
  */
 export async function syncSkillCatalogRow(
   store: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   input: SkillCatalogSyncInput,
   context: SkillSyncContext,
 ): Promise<string | null> {

@@ -21,7 +21,12 @@
       "partialNotNullColumns": [],
       "name": "shares_token_key",
       "kind": "constraint",
-      "columns": ["token"]}],
+      "columns": ["token"]},
+     {"partialNullColumns": [],
+      "partialNotNullColumns": [],
+      "name": "shares_token_hash_key",
+      "kind": "constraint",
+      "columns": ["token_hash"]}],
     "primaryKey": ["id"],
     "foreignKeys":
     [{"refTable": "workspaces",
@@ -55,7 +60,8 @@
     "columns":
     [{"type": "uuid", "notNull": true, "name": "id"},
      {"type": "uuid", "notNull": true, "name": "workspace_id"},
-     {"type": "text", "notNull": true, "name": "token"},
+     {"type": "text", "notNull": false, "name": "token"},
+     {"type": "text", "notNull": true, "name": "token_hash"},
      {"type": "text", "notNull": true, "name": "subject_type"},
      {"type": "text", "notNull": true, "name": "subject_id"},
      {"type": "text", "notNull": true, "name": "subject_label"},

@@ -9,7 +9,7 @@ import { z } from 'zod';
 // @public
 export interface CreateModelConnectionInput {
     // (undocumented)
-    readonly apiKey: string;
+    readonly apiKey?: string;
     // (undocumented)
     readonly config?: ModelConnectionConfigInput;
     // (undocumented)
@@ -106,13 +106,19 @@ export const DiscoveredModelsResponseSchema: z.ZodReadonly<z.ZodObject<{
 }, z.core.$strict>>;
 
 // @public
-export const MODEL_CONNECTION_CONFIG_FIELDS: readonly ["baseUrl", "deployment", "apiVersion"];
+export const GCP_PROJECT_ID_PATTERN: RegExp;
+
+// @public
+export function isKeylessProvider(provider: ModelProvider): boolean;
+
+// @public
+export const MODEL_CONNECTION_CONFIG_FIELDS: readonly ["baseUrl", "deployment", "apiVersion", "projectId", "location"];
 
 // @public
 export const MODEL_PROVIDER_CONFIG_RULES: Readonly<Record<ModelProvider, ModelProviderConfigRule>>;
 
 // @public
-const MODEL_PROVIDERS: readonly ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"];
+const MODEL_PROVIDERS: readonly ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"];
 
 // @public (undocumented)
 export type ModelConnectionConfig = z.infer<typeof ModelConnectionConfigSchema>;
@@ -128,6 +134,8 @@ export interface ModelConnectionConfigInput {
     readonly baseUrl?: string;
     // (undocumented)
     readonly deployment?: string;
+    readonly location?: VertexLocation;
+    readonly projectId?: string;
 }
 
 // @public
@@ -135,6 +143,12 @@ export const ModelConnectionConfigSchema: z.ZodReadonly<z.ZodObject<{
     baseUrl: z.ZodOptional<z.ZodURL>;
     deployment: z.ZodOptional<z.ZodString>;
     apiVersion: z.ZodOptional<z.ZodString>;
+    projectId: z.ZodOptional<z.ZodString>;
+    location: z.ZodOptional<z.ZodEnum<{
+        global: "global";
+        us: "us";
+        eu: "eu";
+    }>>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -151,11 +165,18 @@ export const ModelConnectionListResponseSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>;
         config: z.ZodReadonly<z.ZodObject<{
             baseUrl: z.ZodOptional<z.ZodURL>;
             deployment: z.ZodOptional<z.ZodString>;
             apiVersion: z.ZodOptional<z.ZodString>;
+            projectId: z.ZodOptional<z.ZodString>;
+            location: z.ZodOptional<z.ZodEnum<{
+                global: "global";
+                us: "us";
+                eu: "eu";
+            }>>;
         }, z.core.$strict>>;
         hasCredential: z.ZodBoolean;
         ready: z.ZodBoolean;
@@ -177,11 +198,18 @@ export const ModelConnectionResourceSchema: z.ZodReadonly<z.ZodObject<{
         openai: "openai";
         "azure-openai": "azure-openai";
         "openai-compatible": "openai-compatible";
+        vertex: "vertex";
     }>;
     config: z.ZodReadonly<z.ZodObject<{
         baseUrl: z.ZodOptional<z.ZodURL>;
         deployment: z.ZodOptional<z.ZodString>;
         apiVersion: z.ZodOptional<z.ZodString>;
+        projectId: z.ZodOptional<z.ZodString>;
+        location: z.ZodOptional<z.ZodEnum<{
+            global: "global";
+            us: "us";
+            eu: "eu";
+        }>>;
     }, z.core.$strict>>;
     hasCredential: z.ZodBoolean;
     ready: z.ZodBoolean;
@@ -213,6 +241,7 @@ type ModelProvider = (typeof MODEL_PROVIDERS)[number];
 // @public (undocumented)
 export interface ModelProviderConfigRule {
     readonly allowed: readonly ModelConnectionConfigField[];
+    readonly credential: 'api-key' | 'workload-identity';
     readonly required: readonly ModelConnectionConfigField[];
 }
 
@@ -287,6 +316,30 @@ export interface UpdateModelConnectionPatch {
     // (undocumented)
     readonly name?: string;
 }
+
+// @public
+export const VERTEX_CLAUDE_MODELS: readonly [{
+    readonly id: "claude-opus-5-5";
+    readonly displayName: "Claude Opus 5.5";
+}, {
+    readonly id: "claude-sonnet-5-5";
+    readonly displayName: "Claude Sonnet 5.5";
+}, {
+    readonly id: "claude-haiku-5-5";
+    readonly displayName: "Claude Haiku 5.5";
+}, {
+    readonly id: "claude-fable-5-1";
+    readonly displayName: "Claude Fable 5.1";
+}];
+
+// @public
+export const VERTEX_DEFAULT_MODEL = "claude-sonnet-5-5";
+
+// @public
+export const VERTEX_LOCATIONS: readonly ["global", "us", "eu"];
+
+// @public (undocumented)
+export type VertexLocation = (typeof VERTEX_LOCATIONS)[number];
 
 // (No @packageDocumentation comment for this package)
 

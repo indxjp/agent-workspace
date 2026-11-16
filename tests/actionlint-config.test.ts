@@ -58,6 +58,28 @@ function runsOnValues(workflow: string): string[] {
   });
 }
 
+/**
+ * The literals of an expression's quoted strings. A runner group object,
+ * `fromJSON('{"group":…,"labels":[…]}')`, gives its `labels` only: its keys and the group name are not
+ * labels (actionlint reads no group).
+ */
+function expressionLabels(value: string): string[] {
+  const object = /fromJSON\('(\{.*?\})'\)/u.exec(value)?.[1];
+  const rest = object === undefined ? value : value.replace(object, '');
+  const parsed: unknown = object === undefined ? undefined : JSON.parse(object);
+  const labels =
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'labels' in parsed &&
+    Array.isArray(parsed.labels)
+      ? parsed.labels.map(String)
+      : [];
+  return [
+    ...labels,
+    ...Array.from(rest.matchAll(/["']([a-z0-9][a-z0-9.-]*)["']/gu), (match) => match[1] ?? ''),
+  ];
+}
+
 /** The literal runner labels in a workflow's `runs-on` values, the hosted ones left out. */
 function customLabels(workflow: string): string[] {
   const labels = new Set<string>();
@@ -65,7 +87,7 @@ function customLabels(workflow: string): string[] {
     const literals = value.startsWith('[')
       ? value.replace(/[[\]]/gu, '').split(',')
       : value.startsWith('${{')
-        ? Array.from(value.matchAll(/["']([a-z0-9][a-z0-9.-]*)["']/gu), (match) => match[1] ?? '')
+        ? expressionLabels(value)
         : [value];
     for (const label of literals.map((literal) => literal.trim())) {
       if (label !== '' && label !== 'self-hosted' && !HOSTED.test(label) && !label.includes('$')) {

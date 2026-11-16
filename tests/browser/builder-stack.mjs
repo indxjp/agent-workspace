@@ -12,14 +12,18 @@
  *    Builder is pinned to `claude-sonnet-5-5` (`builder_model_unavailable` refuses any other
  *    model), so the gateway never takes its own `scripted:` branch for it; the gateway reaches
  *    this upstream through the `default` connection's base URL and gets the same replay, turn rule
- *    included, from the gateway's provider registry, which takes `AW_SCRIPTED_MODELS_DIR` in the
- *    `local` posture (`playwright.config.ts` sets both for this process).
+ *    included, from the gateway's provider registry, given the scripted models
+ *    `AW_SCRIPTED_MODELS_DIR` names in the `local` posture (`playwright.config.ts` sets both for this
+ *    process).
  */
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import path from 'node:path';
 
-import { createProviderRegistry } from '@agent-workspace/gateway/providers/registry';
+import {
+  createProviderRegistry,
+  scriptedModelsFromEnv,
+} from '@agent-workspace/gateway/providers/registry';
 import pg from 'pg';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
@@ -61,7 +65,9 @@ for (const script of ['migrate.js', 'seed.js']) {
 
 const SCRIPTED_MODEL = 'scripted:expense-refunds-happy';
 const BUILDER_MODEL = 'claude-sonnet-5-5';
-const [anthropic] = createProviderRegistry();
+const [anthropic] = createProviderRegistry({
+  scripted: scriptedModelsFromEnv(process.env) ?? null,
+});
 if (anthropic === undefined) throw new Error('the gateway registers no provider');
 // What first-run setup's discovery finds: the model it seeds the wizard's agent with.
 const SETUP_MODEL = 'claude-sonnet-4-5';
@@ -85,8 +91,13 @@ const upstream = createServer((request, response) => {
   request.on('end', () => {
     void (async () => {
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      // An agent whose instructions name a script (`[scripted:<name>]`) is answered from it, and
+      // keeps its own model name; every other request replays the Builder journey's script.
+      const named = /\[scripted:([a-z0-9-]+)\]/u.exec(JSON.stringify(body.system ?? ''));
+      const script = named === null ? SCRIPTED_MODEL : `scripted:${named[1]}`;
+      const ownModel = named === null ? BUILDER_MODEL : String(body.model);
       const answer = await anthropic.createMessage(
-        { ...body, model: SCRIPTED_MODEL },
+        { ...body, model: script },
         {
           providerId: anthropic.id,
           credential: 'scripted',
@@ -97,7 +108,7 @@ const upstream = createServer((request, response) => {
       );
       // The reply names the model it answers as. The session records that name and the next turn
       // asks for it, so it has to be the Builder's own model, not the script's.
-      const reply = (await answer.text()).replaceAll(SCRIPTED_MODEL, BUILDER_MODEL);
+      const reply = (await answer.text()).replaceAll(script, ownModel);
       const headers = Object.fromEntries(answer.headers);
       delete headers['content-length'];
       response.writeHead(answer.status, headers);

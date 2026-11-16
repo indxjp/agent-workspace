@@ -1,0 +1,42 @@
+[
+  {
+    "id": "c0000000-0000-4000-8000-000000000001",
+    "name": "Sample Aoba Seiki Co.",
+    "domain": "aoba-seiki.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000002",
+    "name": "Sample Hokusei Industries Co.",
+    "domain": "hokusei-kogyo.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000003",
+    "name": "Mihon Logistics Inc.",
+    "domain": "mihon-logistics.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000004",
+    "name": "Sample Ryokufu Foods Co.",
+    "domain": "ryokufu-foods.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000005",
+    "name": "Sample Asanagi Denki Co.",
+    "domain": "asanagi-denki.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000006",
+    "name": "Dummy Construction Co.",
+    "domain": "dummy-kensetsu.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000007",
+    "name": "Sample Shiratori Trading Co.",
+    "domain": "shiratori-shoji.example"
+  },
+  {
+    "id": "c0000000-0000-4000-8000-000000000008",
+    "name": "Mihon Software Inc.",
+    "domain": "mihon-software.example"
+  }
+]

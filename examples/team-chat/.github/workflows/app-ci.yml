@@ -1,0 +1,28 @@
+# The team-chat app's checks: install from the lockfile, then refuse an import of the platform's
+# applications or private packages, and a platform package in package.json that is not a
+# published @indx-workspace/* package. GitHub-hosted, a few minutes at most.
+name: App CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx --no-install depcruise --config dependency-cruiser.config.mjs .
+      - run: node --input-type=module -e "import { readFileSync } from 'node:fs'; const p = JSON.parse(readFileSync('package.json', 'utf8')); const all = Object.entries({ ...p.dependencies, ...p.devDependencies }); const bad = all.filter(([name, spec]) => /^@agent-workspace\//u.test(name) || String(spec).startsWith('workspace:')).map(([name]) => name); if (bad.length > 0) { console.error('app-ci - not a published package, install its @indx-workspace/* package from npm instead -', bad.join(', ')); process.exit(1); }"

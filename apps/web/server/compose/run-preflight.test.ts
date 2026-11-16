@@ -2,10 +2,12 @@ import { BUILDER_MODEL } from '@indx-workspace/contracts/builder';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { describe, expect, it } from 'vitest';
 
+import { storageGrantUnavailable } from '../agent-versions/storage-grants';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
+import type { AgentStoreProvider } from '../agents/store';
 import type { DeploymentDefaultModels } from '../models/deployment-default';
 import type { DiscoverModelsResult } from '../models/discovery';
-import { createInMemoryModelsStoreProvider } from '../models/memory-store';
+import { createInMemoryModelsStoreProvider } from '../models/store';
 import type { ModelsStoreProvider } from '../models/store';
 import { createInMemoryRuntimeProfileStoreProvider } from '../runtimes/memory-store';
 import type { ModelSelection } from '../runs/environment';
@@ -13,10 +15,13 @@ import {
   codeLaunchedRunFailure,
   createRunPreflight,
   credentialRejectedFailure,
+  missingRuntimeProfile,
   modelNotFoundFailure,
   modelResolutionRefusal,
   runStartRefusalError,
+  type RunFilesSources,
 } from './run-preflight';
+import type { AgentRunResourceLoader } from './resource-loader';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const SESSION = '44444444-4444-4444-8444-444444444444';
@@ -63,6 +68,9 @@ async function fixture(options: {
   readonly offeredModel?: string;
   /** Discovery fails with this instead of listing models (a rejected key, an unreachable provider). */
   readonly discoveryFailure?: Extract<DiscoverModelsResult, { ok: false }>;
+  /** What the run's files total is read from, over the fixture's agents; absent, the launch judges it. */
+  readonly runFiles?: (agents: AgentStoreProvider) => RunFilesSources;
+  readonly warn?: (message: string) => void;
 }) {
   const models = createInMemoryModelsStoreProvider([WORKSPACE]);
   const connection = await models.forWorkspace(WORKSPACE).create({
@@ -174,6 +182,8 @@ async function fixture(options: {
     projectDefaults: () => Promise.resolve(projectDefaults),
     deploymentDefaultModels: options.deploymentDefaults ?? {},
     policyCeiling: options.policyCeiling ?? null,
+    ...(options.runFiles === undefined ? {} : { runFiles: options.runFiles(agents) }),
+    ...(options.warn === undefined ? {} : { warn: options.warn }),
   });
   return {
     preflight,
@@ -313,6 +323,14 @@ describe('runStartRefusalError', () => {
     const error = runStartRefusalError({ code: 'model_unavailable', message: 'gone.' });
     expect(error.code).toBe('model_unavailable');
     expect(error.publicMessage).toBe('model_unavailable: gone.');
+  });
+});
+
+describe('missingRuntimeProfile', () => {
+  it('names the setup wizard in the words the console turns into a link to it', () => {
+    // `SETUP_WIZARD_WORDS` in `components/setup/setup-wizard-link.tsx` matches these words.
+    const refusal = missingRuntimeProfile({ id: 'a', name: 'General', runtimeProfileId: null });
+    expect(refusal.message).toContain('the setup wizard');
   });
 });
 
@@ -894,5 +912,100 @@ describe('createRunPreflight — the built-in Builder (#1848)', () => {
     expect(refusal?.code).toBe('model_connection_unresolved');
     expect(refusal?.message).toContain('workspace default');
     expect(refusal?.message).not.toContain(BUILDER_MODEL);
+  });
+});
+
+describe('createRunPreflight — a granted storage folder (the storage design, §05)', () => {
+  /** Run files read through `load`, for the fixture's agent granted one connection folder. */
+  const runFiles =
+    (load: AgentRunResourceLoader['load']) =>
+    (agents: AgentStoreProvider): RunFilesSources => ({
+      loader: { load },
+      readRunAgent: async (workspaceId, agentId) => {
+        const agent = await agents.forWorkspace(workspaceId).get(agentId);
+        if (agent === null) throw new Error('fixture agent');
+        return {
+          agent,
+          assignments: {
+            files: [],
+            skillIds: [],
+            connectorIds: [],
+            storageGrants: [
+              { connectionId: crypto.randomUUID(), prefix: 'reports', access: 'read' },
+            ],
+          },
+          toolBundles: [],
+          subagents: [],
+        };
+      },
+      projectOf: () => Promise.resolve(null),
+    });
+
+  const files = { agentVersionId: null, attachments: [] };
+
+  // @story US-STO-12
+  it('[US-STO-12][unit][run] refuses a folder the loader cannot deliver with run_storage_grant_unavailable, before the run is queued', async () => {
+    const warnings: string[] = [];
+    const { preflight, agentId } = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      runFiles: runFiles(() =>
+        Promise.reject(storageGrantUnavailable('a granted storage connection no longer exists')),
+      ),
+      warn: (message) => warnings.push(message),
+    });
+
+    const refusal = await preflight.check({ ...query(agentId), files });
+
+    // The code once, as the refusal's own; the sentence without its `code: ` prefix.
+    expect(refusal).toEqual({
+      code: 'run_storage_grant_unavailable',
+      message:
+        'a granted storage connection no longer exists; fix the storage connection or redeploy the agent.',
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][unit][run] queues the run when the folder cannot be read for any other reason, leaving it to the launch', async () => {
+    const warnings: string[] = [];
+    const { preflight, agentId } = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      runFiles: runFiles(() => Promise.reject(new Error('socket hang up'))),
+      warn: (message) => warnings.push(message),
+    });
+
+    await expect(preflight.check({ ...query(agentId), files })).resolves.toBeNull();
+    expect(warnings).toEqual([expect.stringContaining('the launch judges it: socket hang up')]);
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][unit][run] queues a folder the loader delivers within the limit', async () => {
+    const { preflight, agentId } = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      runFiles: runFiles(() =>
+        Promise.resolve({
+          files: [
+            { kind: 'directory', path: 'storage/acme-data/reports', access: 'read' },
+            {
+              kind: 'file',
+              path: 'storage/acme-data/reports/q3.csv',
+              access: 'read',
+              size: 20,
+              sha256: '',
+            },
+          ],
+          skills: [],
+          mcpServers: {},
+        }),
+      ),
+    });
+
+    await expect(preflight.check({ ...query(agentId), files })).resolves.toBeNull();
   });
 });

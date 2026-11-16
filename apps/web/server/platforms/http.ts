@@ -5,14 +5,14 @@
  * only changes how the files travel.
  */
 import { PLATFORM_EXPORT_REQUEST_MAX_BYTES } from '@indx-workspace/contracts/platforms';
-import { readWhole } from '@agent-workspace/core/storage/streams';
+import { readWhole } from '../storage/objects';
 import { encodeUstar } from '@agent-workspace/runtime/transfer';
 
 import { authoriseAgentVersionRoute } from '../agent-versions/http';
 import { applicationContext } from '../application-context';
 import { problem, type ApiResult } from '../http/result';
 import { apiResultResponse } from '../http/json-transport';
-import { readPublicUrl } from '../endpoints/public-url';
+import { readPublicUrl } from '../integrations';
 import { readBoundedJson } from '../http/json-transport';
 import { skillFilesPrefix } from '../skills/keys';
 import { walkFiles } from '../skills/tree';

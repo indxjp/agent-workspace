@@ -123,6 +123,348 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   does not install as on is `409 feature_not_installed` (ADR-0160 D6–D8).
 - `GET /api/me` carries the caller's workspace's enabled `features`, in `FEATURE_IDS` order
   (ADR-0160 D8).
+- An agent may keep a memory folder across sessions (ADR-0163, #1526).
+  `permissions.memory: 'agent'` (`defineAgent({ permissions: { memory: 'agent' } })`), in force
+  while `readFiles` and `writeFiles` are both on, hands the run the workspace folder `memory/<agentId>/` read-write at
+  `memory/`, and a completed run writes its `memory/` back there: at most 64 files and 256 KiB
+  (`memory_limit_exceeded` otherwise), symlinks refused, only new or changed files, nothing deleted.
+  Each run that wrote leaves one `memory-updated` audit row naming the run (migration 0100). The
+  Claude adapter adds one system-prompt line naming `memory/MEMORY.md`. A member reads and deletes a
+  fact in the file browser, and the next session is not handed it. An agent without `memory` is
+  unchanged. The folder belongs to the agent, not a person: every person who runs the agent reads
+  what any earlier run wrote there, another person's facts and any saved injected instruction
+  included. Per-person memory waits for #1281.
+- An agent's page has a **Schedules** tab: it lists the schedules that start the agent, with when
+  each runs next in its own time zone, pauses, resumes and deletes them, and adds one from a
+  preset (every hour, every day, every weekday, every Monday) or a cron expression. It is hidden
+  while the workspace has Triggers switched off, and a Viewer is told who may use it (UX-18 in
+  #2086).
+- Agent-team runs keep their tree bounded and stoppable (spec 04 §5.18, #1517). A member call
+  whose lead is no longer `running` starts no child: the run start answers
+  `409 parent_run_stopped` and the lead sees `team_member_refused`. A member call that is waiting
+  interrupts its child as soon as the lead stops and answers `team_member_cancelled`. A child's
+  approval continuation counts against its root's 16 children, so a decision over the limit
+  answers `409 team_member_limit` and the child stays paused. A scoped credential cannot decide an
+  approval on a team lead run (`403 token_out_of_scope`), as it cannot start one.
+- Agent teams run (ADR-0104 acceptance, spec 04 §5.18, #1517). `POST /api/agent-teams/:id/runs`
+  starts the team's newest version on its lead, as a run start of the lead (the same body without
+  `version`, the same `Idempotency-Key` and refusals; `409 agent_team_has_no_version` for a team
+  with no version; a scoped token is `403 token_out_of_scope`). The root run records its team
+  version in the new nullable, tenant-paired `runs.agent_team_version_id` (migration 0098).
+- The lead sees each member as `agent__<member>` (`mcp__agent__<member>` on the Claude engine),
+  served by `POST /api/runs/:id/members/mcp` on the lead run's own token at `AW_PUBLIC_URL`. A
+  member call starts a child run of the member's pinned version for the person behind the lead, with
+  its own definition met with the ceiling, at most 16 per root (under a lock), waits for it and
+  returns its answer, or a typed tool error (`AGENT_TEAM_TOOL_ERROR_CODES`) that never carries
+  provider text. A child run gets no member tools, and interrupting the root interrupts every live
+  child through the durable cancellation path.
+- SDK `aw.agentTeams.run(id, input)` and CLI `aw agent-teams run <team> <prompt>` (with
+  `--session`, `--idempotency-key`, `--wait`, `--follow` and `--fail-on-error`).
+- The agent-team routes of ADR-0104's acceptance (spec 04 §5.18, #1516): `GET/POST
+  /api/agent-teams`, `GET/DELETE /api/agent-teams/:id` and `GET/POST /api/agent-teams/:id/versions`,
+  cursor paged, decided as the `agents` resource (every role reads, a Builder writes its own teams,
+  Owner and Admin any) and audited as an agent change naming the team. A bad lead or member list is
+  `422 agent_team_member_invalid`; another workspace's team is `404 agent_team_not_found`.
+- Run trees on the run read: every run renders `parentRunId`, and `GET /api/runs/:id` adds
+  `children` (at most 16, oldest first, one indexed read) and `treeCost`, the exact decimal sum of
+  `cost` over the run and its children. Lists carry neither. Nothing starts a child run yet.
+- Migration `0097_agent_teams` (expand-only, #1516): the tenant-paired tables `agent_teams`,
+  `agent_team_versions` and `agent_team_version_members`, where a team version pins the lead's and
+  each member's agent version, and the nullable `runs.parent_run_id`, a run of the same workspace
+  and never the run itself. Nothing writes `parent_run_id` yet. The core `AgentTeamRepository`
+  numbers versions under the team's lock and refuses another workspace's agent, an unknown version
+  and the lead listed as a member. The formal ER model gains the three tables and the column.
+- `aw dev` runs a development OIDC issuer on `127.0.0.1` when no `OIDC_*` variable is set (issue
+  #2075, ADR-0161's 2026-11-01 amendment), so the local console and a generated app sign a person
+  in with a member's email and the local console password. The app gets `AW_OIDC_ISSUER_URL`,
+  `AW_OIDC_CLIENT_ID`, `AW_OIDC_CLIENT_SECRET`, `AW_APP_CLIENT_ID` and `AW_APP_CLIENT_SECRET`, and
+  `aw dev` makes its `app-backend` endpoint client for the project's agents, so the app's
+  `aw.auth.exchange` starts runs as the signed-in person. One to three `OIDC_*` set is refused
+  (`oidc_configuration_incomplete`). The local runtime takes `environment.devIssuer`, refuses a
+  hand-set `OIDC_*` beside it (`dev_issuer_oidc_set`) and links the bootstrap Owner's identity at
+  the issuer. The production posture refuses a non-`https:` `OIDC_ISSUER_URL` at boot
+  (`oidc_issuer_not_https`). The local runtime's key may create an `app-backend` endpoint client
+  and rotate its secret in the local posture only. The console's sign-in uses
+  `client_secret_basic` with an issuer that serves only that. `awu_live_` is still refused on
+  every run route.
+- A Cloud Run app can now take its workspace id, API key and connector id. Set `workspaceId`,
+  `apiKeySecret` (the id of a Secret Manager secret that holds the key, never the key) and
+  `connectorId` on the app in `agent-workspace.yaml` and deploy again: the app gets
+  `AW_WORKSPACE_ID`, `AW_APP_CONNECTOR_ID` and `AW_APP_API_KEY`, and its own service account may
+  read that one secret and no other. Before, an app on Cloud Run answered `app_misconfigured` past
+  `/api/health`. `aw deploy` now names the keys an app still lacks.
+- A Cloud Run app can now sign people in. Set `signIn` on the app in `agent-workspace.yaml` and
+  deploy again. It holds the app's client id at the deployment's `gcp.oidc` issuer, the Secret
+  Manager id of that client's secret, the app's `app-backend` endpoint client id, and the Secret
+  Manager id of that client's secret. The app gets `AW_OIDC_ISSUER_URL` (always `gcp.oidc.issuer`,
+  the one issuer the token exchange trusts), `AW_OIDC_CLIENT_ID`, `AW_OIDC_CLIENT_SECRET`,
+  `AW_APP_CLIENT_ID` and `AW_APP_CLIENT_SECRET`. Its own service account may read those two secrets
+  and no other. Before, an app's sign-in on Cloud Run answered `sign_in_not_configured`. `aw deploy`
+  now prints the redirect URI to register for each app with a sign-in, and a gap line for each app
+  without one.
+- `aw deploy production` on the `gcp-cloudrun` target deploys `environments.production.apps`
+  (the Vercel target still refuses them). Each app is its own Cloud Run service with its own service
+  account, its own PostgreSQL role and schema, internal ingress, and one always-on instance that
+  migrates on start. An app answers past `/api/health` once its `workspaceId` is set, and its
+  agent panel and recipes work once `apiKeySecret` is set (see the app credentials note). An app
+  name is at most 25 characters on this target. The next steps print each app's run.app address
+  and, with `gcp.domain`, the host to point at the load balancer.
+- Cloud Run now runs code tools and `stdio` MCP servers in a per-session tool sandbox: an internal
+  service with the same no-egress firewall as an agent sandbox. A tool call no longer answers 503
+  `tool_endpoint_unavailable` on this target.
+- One limit remains on Cloud Run. Agents cannot call an app's MCP endpoint yet, because sandboxes
+  reach only the gateway.
+- The tool-host image is copied into Artifact Registry by digest with the other images (`tool-host`),
+  pinned for the Cloud Run deployment in `.env` as `CLOUD_RUN_TOOL_HOST_IMAGE` and overridable with
+  `AW_TOOL_HOST_IMAGE`; the single-vm `.env` is unchanged. The runner manager places tool sandboxes
+  when `AGENT_WORKSPACE_TOOL_HOST_IMAGE` is set. The tool host is a second private Cloud Run service
+  per session (`rt-tool-` prefix) that receives its manifest and run token over an authenticated
+  file intake. The gateway's service account holds `roles/run.servicesInvoker` conditioned on the
+  request's host (`rt-tool-….run.app`): Cloud Run's invoke check sees the host but not the service
+  name, so a name condition let the gateway invoke nothing. The runner manager refuses a tool
+  sandbox whose URL that condition would not match, and the module refuses a `name` starting `rt-`.
+- A Cloud Run tool sandbox is found and removed by labels, so any runner manager instance reuses or
+  deletes a session's sandbox, and one past its lifetime is deleted when the next starts. A sandbox
+  whose host restarted is replaced, and a tool host serves parallel requests.
+- On Google Cloud Run, an agent can now use the `restricted` and `open` network policies. Set
+  `environments.production.gcp.sandboxInternet: true` in `agent-workspace.yaml`. `aw deploy
+production` passes it to Terraform as `sandbox_internet`, copies the egress-proxy image into your
+  Artifact Registry as a fifth image, and creates one proxy VM with no external IP on its own subnet
+  (without Private Google Access), a Cloud NAT gateway that serves only that subnet, firewall rules
+  that let a sandbox open port 3128 to the proxy and nothing else of it, and a signing key in Secret
+  Manager. The plan summary adds the VM and the NAT gateway to the idle-cost line, at list price.
+  Without `gcp.sandboxInternet: true` nothing extra is copied, planned or created and sandboxes keep `none`.
+- Each run gets a proxy credential signed with that key. It names the run's session and its
+  allowlist, and the proxy refuses private ranges, the cloud metadata server and the Google
+  private-access ranges for every run, `open` included. The credential lives as long as the
+  runtime; once it has expired the runner starts a new runtime for the session's next run.
+- Web accepts `restricted` on Cloud Run when the proxy is configured. Without
+  `gcp.sandboxInternet: true` the refusal now says so.
+- A deep link to the page of a feature the deployment does not install (it is missing from `AW_DEPLOYMENT_FEATURES`) now says, in English and Japanese, that the feature is not installed in this deployment and that the operator adds it to the `features` list in `agent-workspace.yaml` and deploys again. It shows no Settings link and does not tell the reader to ask a workspace Owner, who cannot switch it on.
+- The console chat shows Approve and Reject when an agent pauses before a tool call that needs
+  approval, and follows the run the decision continues in the same conversation. Before, the
+  chat showed only an "Awaiting approval" badge and the decision could be sent through the API
+  only.
+  While the card asks, and while the continued run is queued or running, the follow-up box waits,
+  so a new message can neither hide the request nor cut off the approved call.
+- The console's run detail shows the run tree of an agent team run (ADR-0104, #1517): a Team card
+  lists each child run as a collapsible row with its status, cost and a link to it, the tree cost
+  sits beside the run's own cost, and a child run links back to its lead run. In the run view, an
+  `agent__<member>` activity row shows the member name and links to the child run it started. The
+  new strings are in English and Japanese.
+- The console has a **Sign out** button under the signed-in person in the sidebar. It expires the
+  session cookie (and the workspace-selection and invitation cookies) and goes back to the sign-in
+  screen. Before, nothing ended a session: a shared computer stayed signed in until the cookie
+  expired, up to 12 hours. Sessions stay stateless, so a copied cookie is still valid until it
+  expires.
+- A chat opened from the sidebar's recent chats now shows its earlier messages above the composer:
+  what you typed and what the agent answered, read from the Claude Agent SDK session transcript
+  (spec §20). Tool calls, tool results and thinking are left out, as in the live chat. The last 40
+  messages are shown, and the screen says how many older ones are not. They stay on screen when you
+  send the next message (UX-05 step 2 in #2086).
+- The Files screen uploads a whole folder: pick one with "Upload a folder and everything in it", or
+  drop one on the list. Each file lands at its path inside the folder under the folder on screen,
+  the server adds the folders on the way, and an empty subfolder of a dropped folder is created too.
+  Each file is said to be uploaded or not and why, as for several files. One upload takes at most
+  1,000 files; a larger one is refused before anything is sent. A dropped folder used to be skipped
+  with "Upload the files inside it instead" (#2086).
+- The Files screen has a search box. It finds files by the words inside them and shows each
+  file's path, page or sheet, and the matching text, with buttons to open its folder or download
+  it. It says when results are partial and lets you search again, says plainly why a search could
+  not run (no words, no access, Files switched off), and speaks Japanese when the browser asks for it. Clearing the search shows the folder again (UX-17 in #2086).
+- The Google Cloud Run recipe carries two new `environments.production.gcp` keys: `settings` sets a
+  closed list of non-secret web settings, and `secretSettings` maps `AW_DEMO_OPERATOR_TOKEN` and
+  `AW_DEMO_ANTHROPIC_API_KEY` to Secret Manager secrets that web reads at `latest`. The deploy checks
+  from metadata that each secret holds an enabled latest version. Behind a `gcp.domain` the web service now sets
+  `AW_TRUSTED_PROXY_HOPS=2`.
+- `aw deploy status production` reports a Google Cloud deployment without changing it: the CLI
+  version and the image of each service, whether each Cloud Run service's latest revision is
+  ready, whether data protection is on, off or partial, and whether the stack has drifted from the
+  project file (a plan that does not lock the state and is never applied). It exits 0 when every
+  service is ready and the plan is empty, 3 when the plan has changes, and 1 when a service is
+  not ready or nothing was deployed from this machine.
+- `aw deploy production` deploys the whole workspace into your Google Cloud project from one
+  `gcp: { project, region }` block in `agent-workspace.yaml` (BYOC Google Cloud, phase P1). It first
+  checks your tools, sign-in, project, billing, APIs and organisation policies and prints every
+  result with one fix command per failure; with `--yes` it creates the state bucket, enables the
+  APIs, copies the release images and applies, printing a plan summary, per-step timings and the
+  web address. `aw deploy production --show-owner-password` prints the generated Owner password,
+  which is never shown otherwise. `aw deploy destroy production` removes the stack after you type
+  the project id; data protection keeps the database unless the stack was created disposable
+  (`TF_VAR_data_protection=false`). `docs/deploy/gcp-cloudrun.md` is rewritten task-first, with
+  Cloud Shell first and the `--infra` procedure for maintainers.
+  A Google Cloud region with a two-digit number (`europe-west10`) is accepted. The check now also
+  asks for `gcloud auth login`, which a laptop needs beside `gcloud auth application-default
+login`. `aw deploy` refuses a state bucket owned by another project, stops a destroy before
+  anything is deleted when Cloud SQL data protection is on, and copies the release images again
+  when a plan or a destroy left a pin to images that are not there.
+  `aw deploy` re-runs `terraform init` (against the shipped lock file) when the shipped module's
+  providers or lock file change, refuses a `name` in `terraform.tfvars` or `TF_VAR_name` that differs
+  from the project name, checks the `iam.serviceAccounts.actAs` permission, refuses to start a second stack beside one whose state is elsewhere (it prints the `init -migrate-state`
+  command), refuses a `--infra` checkout whose tfvars name another project or region, and
+  `aw deploy destroy production` refuses a stack that never used the managed state. The permission
+  fix names the narrowest roles instead of Owner, and the Terraform install command checks the
+  archive against HashiCorp's SHA256SUMS. A project name longer than 19 characters is cut to 14 characters plus a short hash of the full name. The public-access organisation-policy check prints no fix, and `aw deploy destroy` says the same project name cannot be redeployed right away.
+- A project file may name the Google Cloud project and region a `gcp-cloudrun` production deploys
+  to: `environments.production.gcp: { project, region }`. `gcp` is accepted only with
+  `target: gcp-cloudrun`, and a new project file carries a commented example of it.
+- The home chat's "+ Files" picker lists the workspace files and folders the chosen agent is
+  granted, with each one's access, and the picks narrow the chat: the first message and every
+  follow-up are sent with the picked paths as the run's `fileScope`. The run start re-checks each
+  path against the agent's grants and refuses one outside them (`run_file_scope_not_granted`), so a
+  pick never widens access; picking nothing keeps every grant, as before. The list is shown only to
+  someone who may read the agent's resources. Storage-connection folders are not listed, since
+  `fileScope` narrows workspace files only. On a phone the composer's pickers now span the screen
+  instead of running off it (#2089, RF-502).
+- `examples/` holds four reference apps built only on the published `@indx-workspace/*` packages,
+  each generated from its own `commands.sh` by `npm create` and `aw generate` plus a measured
+  amount of handwritten code: a team chat (`examples/team-chat`), a wiki (`examples/wiki`), a CRM
+  (`examples/crm`) and a service desk (`examples/service-desk`), beside the `examples/minimal`
+  fixture (#1476). Each is scored on six cells (Generated, Handwritten budget, Journeys, Agent on
+  data, Self-host, No fork); `examples/README.md` holds the scoreboard, and a cell that is not met
+  is shown as a gap with its cause.
+- The "Webhooks" resource guide (issue #250, N-3): register an endpoint, what a `WebhookEvent`
+  carries, the Standard Webhooks v1 signature and `verifyWebhookSignature`, the retry schedule,
+  deduplication and who may manage webhooks. "Integrate a backend" shows a receiver that verifies
+  the raw body, deduplicates on the event id and answers a fast `2xx`, and "Retries and
+  idempotency" points at a webhook instead of a polling loop. The roadmap's N-3 entry is removed.
+- A run stops at its spend ceiling on every engine (ADR-0162, #1524). `runs.spend_ceiling_usd`
+  (migration 0099) holds the lowest of the agent's `limits.maxBudgetUsd`, the deployment ceiling's
+  and the start's new `spendCeilingUsd` (`aw.runs.start(agentId, { spendCeilingUsd })`,
+  `aw runs start --spend-ceiling-usd <usd>`), which can only narrow: a higher value is
+  `403 policy_cannot_widen` with the detail `spendCeilingUsd`. The run resource returns it as
+  `spendCeilingUsd`. Once the run's cost reaches it, the gateway refuses the next model call with
+  `403` `run_budget_reached` and ends the run `failed` with that failure code (`503
+  run_budget_unavailable` when the end cannot be written). The engine receives the same value as
+  its `limits.maxBudgetUsd`. The console run view says "Stopped at its spend ceiling (<n> USD)",
+  shows the ceiling next to the cost, and says when an unpriced model leaves it unenforced.
+- The run view lists the files a run wrote to its `outputs/` folder once the run ends, each with
+  its size and a **Download** button, and links to the folder in Files. Before, those files were
+  only in the SDK (`runs.outputs`) or found by browsing Files to `runs/<runId>/outputs/` (UX-14 in
+  #2086). A run that wrote nothing shows nothing, and so does a Viewer, who may not read Files.
+- A schedule's time can be changed in place: the agent page's Schedules tab has **Change time**,
+  and `PATCH /api/triggers/:id` takes `cron` and `timezone` for a `schedule` trigger, checked as on
+  create. The change restarts the schedule's counting, so no run is owed for the old time
+  (ADR-0144 D5). A `webhook` trigger answers `400 invalid_field`. Before, the tab said to delete the
+  schedule and add it again.
+- `docs/operations/settings.md` lists the variables web and the egress proxy read at start-up, with
+  what applies when each is unset. It is generated from each settings module's own list, and
+  `pnpm docs:check` fails when the two differ.
+- The sidebar lists your recent chats under New chat, newest first, with "See all" into Runs
+  (spec §44). Opening one goes back to the home chat, and your next message continues that chat.
+  Its earlier messages are not shown there yet. A new chat is named after its first message. On a
+  run's page, "Open conversation" goes to the same chat; the raw session data link stays beside it
+  (UX-05 in #2086).
+- `docs/operations/storage-grants-report.sql`, a read-only report of the agent versions whose
+  storage-connection folders cannot be bound at run time (deployed before per-version grants, or
+  granting a deleted connection), with the environments pointing at each. The runbook says when to
+  run it.
+- The Agent Store app (`examples/store`): shelves with filters, agent detail pages with Try,
+  Customize and Under the hood tabs, `/platform`, an enquiry form and a privacy notice, in Japanese
+  and English. It is registered with the apps benchmark.
+- The platform answers credentialed CORS to the store's origin (`AW_EMAIL_LINK_BASE_URL`) on the
+  email-link and guest-session routes, takes enquiries and launch notices at `POST /api/store/leads`
+  (consent required), serves the privacy notice's facts at `GET /api/store/privacy`, and a demo
+  workspace's remaining runs at `GET /api/demo/allowance`.
+- A guest who opens the web shell sees only the screens it can use.
+- A run started in an Agent Store demo workspace is refused once the person has started 20 demo
+  runs in 24 hours, the client address its configured number, or the site's demo model cost today
+  has reached its cap, with a typed `429` (`demo_person_runs_reached`, `demo_client_runs_reached`,
+  `demo_site_cost_reached`); while a cap the deployment must set is unset it is refused `503
+  demo_caps_unconfigured`. An approval continuation or a team child run is not counted again; it
+  still stops at the site cost cap. Other workspaces are never gated.
+- A scheduled sweep on the trigger driver deletes demo workspaces after their 24 hours (carrying
+  their model spend into the site's daily total), spent and expired email-link tokens, old
+  admissions, the user rows of email-link guests nothing references any more (only addresses
+  recorded as leads; no other user is deleted), and, once `AW_STORE_LEAD_RETENTION_DAYS` is set, leads past that many days.
+- A visitor's copy of an Agent Store demo can now run: it gets a `default` Anthropic model connection
+  holding the deployment's demo key and a `demo-sandbox` runtime profile with network policy `none`, made
+  only on a runtime driver that enforces it. Its connector reads answer from the entry's sample records.
+- A visitor's copy of an Agent Store demo has the template agent's skills: the deployment seeds each
+  skill the gallery agent uses into its template, the copy makes them in the visitor's workspace, and
+  they are deleted with that workspace.
+- The deployment fills the demo templates through an idempotent operator route, keeps an entry "Under
+  maintenance" when the daily production test fails it, and answers a read-only readiness check that the
+  Anthropic API is reachable with the demo key, without ever returning the key.
+- The Agent Store deploys to Google Cloud Run from one project file (`infra/agent-store/agent-workspace.yaml`),
+  rendered per environment from repository variables. The deploy workflow builds the images from the commit,
+  deploys staging on a merge to main and production only from a `store-v*` tag through a protected
+  environment, and stays off until a person has set up the Google Cloud side. It checks that the Anthropic API
+  key secret has a version and that the platform reaches the Anthropic API with it, without reading or printing
+  the key. The operations runbook lists the one-time setup, rollback, key rotation and the human-only steps.
+- A locked-down `guest` membership role, held only inside a demo workspace: it cannot create
+  agents, connectors, API keys or workspaces, cannot invite, and no route confers it.
+- Email-link (passwordless) sign-in: `POST /api/auth/email-link` sends a single-use link that
+  expires after 15 minutes and is stored only as a hash, rate-limited per address and per IP;
+  `POST /api/auth/email-link/verify` signs the visitor in as the guest of their own demo
+  workspace. The email provider is chosen by `AW_EMAIL_LINK_SENDER`; none is configured by default.
+- Each live Agent Store entry has suggested prompts, a moment check and a recording. The recording
+  is made by running the entry's real agent against the scripted model, never written by hand. When
+  a demo cannot start, the Try tab replays it with the same chat parts as a live run, labelled
+  "recorded with the scripted model".
+- A store card says "verified with the scripted model" until a recorded real-model run of that entry
+  has passed. That run is made by the dispatch-only real-model check (`tests/store/live-verify`),
+  which refuses to start without an explicit spend opt-in.
+- The CRM, team chat, wiki and service desk examples ship fictional Japanese and English sample
+  records for the store's demos.
+- The Agent Store demo provisioner: an email-link visitor's demo workspace is marked with its end
+  (`workspaces.demo_expires_at`, 24 hours after it is made, never moved), and the entry the visitor
+  chose is copied into it from the entry's template workspace through the agents, files and
+  connectors domains. The copy's per-run turns and cost are no wider than the deployment's demo
+  settings, the visitor is granted the agent and nothing else, a tool that could send or write
+  outside is replaced by a stand-in that answers "Sent (demo only, nothing was actually sent)", and
+  the contact is recorded as a lead.
+  Only a template the deployment made is copied (a workspace whose members are all system accounts
+  in a reserved domain), the caps are applied on every copy, and each stand-in echoes the call it
+  was given with `delivered: false`.
+- Email-link sign-up requires a challenge answer (CAPTCHA or equivalent, provider chosen by
+  `AW_EMAIL_LINK_CHALLENGE`; unset answers 503) and refuses addresses on a checked-in
+  disposable-email list (422 `email_link_address_refused`). The link carries the chosen demo entry
+  in its fragment.
+- The tool host container can take its manifest and tokens over HTTP (`PUT /files/manifest.json`,
+  `PUT /files/tokens.json`, guarded by the `x-aw-tool-intake` header) when `AW_TOOL_INTAKE_KEY`
+  is set, so a tool sandbox runs on Cloud Run, which has no exec or file API. Without the variable
+  nothing changes.
+- The console hides the sidebar entries of features the workspace has switched off or the deployment does not install (ADR-0160 D8). A deep link to a switched-off feature's page says it is switched off, that nothing was deleted, and that a workspace Owner can switch it on in Settings → Features. A workspace with nothing switched off shows the console exactly as before.
+- Settings has a **Features** card with one row per feature: its switch, what it needs and what needs it. An Owner switches a feature off after a confirmation that names the navigation entries that disappear and says the data is kept, and switches it back on at once. A switch the server would refuse is disabled with the reason, and other roles see the card read-only. The card, its confirmation and the switched-off page are in English and Japanese.
+- `POST /api/auth/token-exchange` (ADR-0161): an app backend exchanges the signed-in person's ID
+  token from the deployment's own `OIDC_ISSUER_URL` for a 300-second `awo_live_` access token of its
+  new `app-backend` endpoint client. The token acts as that person on `POST /api/agents/:id/runs`
+  (bound agents only), `GET /api/runs/:id`, `GET /api/runs/:id/events`,
+  `POST /api/runs/:id/interrupt` and `GET /api/me`, through the person's own role and agent grants,
+  and every exchange writes one `user-token-exchanged` audit row. Migration `0096` adds
+  `endpoint_clients.oidc_audience` and widens the kind and audit-action checks (expand only).
+- Claude on Google Cloud (Vertex AI) is a keyless model provider (`vertex`, #2105). The gateway
+  signs each request with its own Google Cloud identity (`roles/aiplatform.user`), so no model key
+  is stored. It acts only on the project the deployment names (`GATEWAY_VERTEX_PROJECT_ID`, set by
+  the Cloud Run module) and refuses a connection that names another. It offers `claude-opus-5-5`,
+  `claude-sonnet-5-5`, `claude-haiku-5-5` and `claude-fable-5-1` in the `global`, `us` or `eu`
+  location, prices them in the default catalogue, and refuses the features Vertex AI lacks with
+  `vertex_unsupported_feature`. A `vertex` connection takes `projectId` and `location` and no API
+  key, and a project file cannot declare it.
+- `aw deploy` on `gcp-cloudrun` connects Claude on Vertex AI as the default model on the first
+  deploy, and `gcp.modelLocation` picks its location (`us` and `eu` cost 10 % more). The module
+  enables the Vertex AI API and lets only the gateway call it. The preflight checks that Claude is
+  enabled in Model Garden and links the page that enables it, as a warning that never stops the deploy; a refusal that is not about the model
+  is a warning that names its cause. If seeding fails, finish setup in the browser.
+- Web: Add provider offers Claude on Google Cloud (Vertex AI), which needs no API key. A connection
+  is ready on its config alone, uses the install's project, and refuses any other. An install without a Google Cloud project refuses to create one. Testing it makes
+  no network call, and first-run setup shows a sentence instead of the key field.
+- Claude engine sandboxes set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `DISABLE_TELEMETRY` and
+  `DISABLE_ERROR_REPORTING`, so the engine sends no telemetry or error reports of its own.
+- An app backend acting as the signed-in person (ADR-0161) may decide the approval a run waits on:
+  `POST /api/runs/:id/approval` is now in the `app-backend` grammar, admitted for an `awo_live_`
+  token, and refused `403 token_out_of_scope` for a run of an agent the endpoint client does not
+  bind. The decision still clears the person's own run and approval checks.
+- Run-outcome webhooks (N-3, #250): `GET`/`POST /api/webhooks` and `DELETE /api/webhooks/:id`
+  register, list and remove up to 10 endpoints per workspace (Owner and Admin; `runs` feature). The
+  `whsec_` signing secret is returned once by the create answer and kept in the secrets service. A
+  delivery worker in the web process (PostgreSQL only, no new service) posts a Standard Webhooks v1
+  signed `WebhookEvent` when a run completes, fails or is cancelled, through the egress policy at
+  create and on every attempt, and retries a failed attempt with jittered backoff (8 attempts over
+  about 21 hours) under the same `webhook-id`.
+- `contracts`: the route table lists `webhooks.list`, `webhooks.create` and `webhooks.remove`, and
+  the OpenAPI document carries them.
 
 ### Changed
 
@@ -209,6 +551,284 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   should be `0`. A row counted there kept no object id, so `db:migrate` still refuses. Run 0.6.10
   with `AW_STORAGE_MIGRATE=copy` again after fixing the cause (a `failed` row is retried; a
   `missing` row's old object is gone and needs the file re-uploaded or the row removed).
+- The Models screens are in Japanese for a Japanese reader: the provider list (heading, tabs, each
+  row's status, detail line and buttons), Add Provider (every provider's name and description,
+  every field, the Vertex AI locations) and a provider's detail panel (connection settings,
+  credential rotation, removal with its agent preview). Each screen carries `lang`. A connection's
+  name and settings, a test's result line and a refusal's message are shown as the server sends
+  them. English is unchanged (UX-15 in #2086).
+- The Runtimes screen is in Japanese for a Japanese reader: every driver's name, description, side
+  note and disabled reason, the badges, Test Runtime and Save, the note on disabled drivers, the
+  runtime switch comparison, and the refusal a member sees. The screen carries `lang`. A
+  registered runtime's own reason or refusal and the Test Runtime transcript are shown as the
+  server sends them. English is unchanged and still held to the spec and mockup character for
+  character (UX-15 in #2086).
+- Settings, API keys and Shared links are in Japanese for a Japanese reader: headings, the
+  workspace default model card, the API key form (key name, role names as the sidebar says them,
+  キーを作成, 無効にする) and every word of the Shared links list. Each screen carries `lang`.
+  Endpoint paths, key prefixes and a link's kind and mode are shown as the server sends them. The
+  API key form's name box and role list now have accessible names. English is unchanged
+  (UX-15 in #2086).
+- The Storage screens are in Japanese for a Japanese reader: the connection list (each row, Edit and
+  Test and their accessible names, the test line), Connect storage (every field, each provider's
+  credential fields, the name and key-pair checks, and the Save and test result) and Edit storage
+  connection (settings, credential rotation and the delete dialog), and the refusal a member sees.
+  Each screen carries `lang`. A connection's name, provider, URL and folders are shown as they are
+  stored. An agent's Connected storage panel is still English. English is unchanged (UX-15 in
+  #2086).
+- The Users screen is in Japanese for a Japanese reader: the members table (headings, role names as
+  the sidebar says them, dates, あなた, the last-Owner note, each control's accessible name), the
+  removal confirmation in each of its states, and the invitations section (the form, the one-time
+  link panel, and the table with each invitation's state and date). The screen carries `lang`.
+  Names, addresses, a refusal's own sentence and the server's one-time-link warning are shown as
+  the server sends them. On a phone, short cells keep to one line and the table scrolls inside its
+  card, as it does for English. English is unchanged (UX-15 in #2086).
+- ADR-0104 is accepted for `handoff` mode (U4.2a, #1515). The resource is an _agent team_
+  (`./agent-teams`, `agent_teams*` tables, `/api/agent-teams/**`, `aw.agentTeams`,
+  `aw agent-teams`). A lead calls a member as the tool `agent__<member>`, which
+  `POST /api/runs/:id/members/mcp` serves on the lead run's token. Each call starts a child run
+  that has its own policy, met with the ceiling. The depth is at most 1, a team has at most
+  8 members, and a root has at most 16 child runs. The tree cost is summed when it is read, and
+  interrupting the root cancels its children. The API specification gains §5.18 and the
+  `parentRunId`, `children` and `treeCost` run fields, which land in U4.2b and U4.2c. The run tree
+  is modelled in Lean (`Concepts/RunTree.lean`), with its normative theorems.
+- ADR-0161 is amended (issue #2075): `aw dev` runs a development OIDC issuer on `127.0.0.1`, so an
+  app signs a person in and acts as them by the unchanged token exchange locally. The issuer is a
+  CLI tool (Ed25519 keys from `node:crypto`, no new dependency), runs only when no `OIDC_*`
+  variable is set, and asks for a member's email and the local console password. The local
+  runtime's `start` message gains `environment.devIssuer` (ADR-0109 contract C1). The production
+  posture refuses a non-`https:` `OIDC_ISSUER_URL` at boot (`oidc_issuer_not_https`). The app's
+  five variables are `AW_OIDC_ISSUER_URL`, `AW_OIDC_CLIENT_ID`, `AW_OIDC_CLIENT_SECRET`,
+  `AW_APP_CLIENT_ID` and `AW_APP_CLIENT_SECRET`. ADR-0083 is unchanged: `awu_live_` is still
+  refused on run routes. This records the decision; the issuer lands with G1.
+- ADR-0161 is amended (issue #1530): an `app-backend` access token (`awo_live_`) is also admitted
+  on `GET /api/runs`. The list is the one the person gets in the console, narrowed to the agents
+  the endpoint client binds; an `agent` filter outside them is `403 token_out_of_scope`. An app's
+  Dashboard (`dashboardRoutes()`) and the portal template's Dashboard and `/runs` page now list
+  the signed-in person's runs instead of answering `401`.
+- An agent's Configuration tab is in Japanese for a Japanese reader: the definition, model,
+  engine and permission sections, the assigned files, skills and connectors, the project-provided
+  group, the connected-storage browser and its grants, and the save report. A failure leads with a
+  Japanese sentence; the server's or the network's own words follow it, marked as English.
+  English is unchanged (UX-15 in #2086).
+- The Agents list is in Japanese for a Japanese reader: the heading, the agent count, the search
+  box (which now has an accessible name), New Agent, the table, the empty and no-match lines,
+  Workspace default and the created date. A list, run or model catalog that could not be loaded
+  on the Agents list, the New Agent form or the Runs screens now opens with a Japanese sentence;
+  the server's or the network's own words follow it, marked as English. English is unchanged
+  (UX-15 in #2086).
+- Claude models on an Anthropic API connection now declare prompt caching, so the agent form no
+  longer warns that caching is unsupported for them. A weekly live check
+  (`model-providers-live.yml`) verified that a cached prompt is written once and then read, in plain
+  and streamed requests, through the gateway. Claude on Vertex AI and models on an
+  Anthropic-compatible connection still declare no prompt caching, since no live run has shown it
+  for them.
+- All four reference apps under `examples/` (team chat, wiki, CRM and service desk) now score
+  every cell of the benchmark in `examples/README.md` (#1476): Generated, Handwritten budget,
+  Journeys, Agent on data, Self-host and No fork. Their journeys sign a person in under `aw dev` at
+  its development issuer and act as that person, call the app connector from a claude-agent-sdk
+  run, and move a schedule slot with the app kit's test clock. Self-host is measured by the
+  `apps-e2e` CI job, which boots each app with Docker Compose.
+- On Google Cloud Run, each session's sandbox now has no internet. The sandbox is an internal Cloud
+  Run service on your install's sandbox subnet with Direct VPC egress, and a VPC firewall denies all
+  its egress except plain HTTP to the model gateway's new regional internal Application Load
+  Balancer, a private address on your network. Google's private ranges (`199.36.153.8/30` and
+  `199.36.153.4/30`) are denied to sandboxes on every port, so a sandbox reaches no Google API and
+  no `run.app` service of any project. All IPv6 egress is denied too. There is no NAT, so under
+  network policy `none` a sandbox reaches nothing but the gateway. Public names still resolve
+  through the metadata server's resolver. The firewall rules have the highest VPC priority, so an
+  egress allow rule on an adopted network cannot override them. The gateway now accepts internal
+  traffic only (it keeps `allUsers` at the Cloud Run IAM layer because sandboxes cannot present a
+  Google identity; the per-run token is its gate), and `web` hands sandboxes the load balancer's
+  address. The load balancer adds an idle cost of one forwarding rule (about US$18 a month at list
+  price) plus per-GB data processing. An adopted network must now also have an active proxy-only
+  subnet in the region. The runtime image must be in an Artifact Registry repository of the
+  install's own project: an image in another project's registry is refused at plan, with a message
+  saying to copy it into this project first. The metadata server cannot be firewalled inside Cloud
+  Run, so the sandbox service account holds no roles and Google APIs refuse its token. A Cloud Run
+  runtime profile that uses `open` or `restricted` is now refused, with a message saying it is not
+  available yet; the project-file option `gcp.sandboxInternet` arrives in a later release. The
+  runner manager settings `RUNTIME_VPC_CONNECTOR` and `RUNTIME_EGRESS` are replaced by
+  `RUNTIME_NETWORK` and `RUNTIME_SUBNETWORK`, which the Terraform module sets.
+- Console: the built-in Builder no longer shows in the Agents list or the New chat agent picker.
+  Open it from New Agent, as before. A workspace whose only agent is the Builder now says it has no
+  agents yet. `GET /api/agents` and `aw chat builder` are unchanged.
+- The console's navigation, breadcrumb trail, Menu button, skip link, runtime chip and band, and
+  the role under your name are in Japanese when your browser asks for Japanese (UX-15 in #2086).
+  The English labels are unchanged.
+- The Files screen is in Japanese for a Japanese reader: the heading, the upload and new-folder
+  forms, the breadcrumb, the table (columns, file and folder types, Download, Rename and Delete, and
+  the rename row), the empty and missing-folder lines, the delete questions, every upload line and
+  each file's state, and the drop hint. The file picker that agent detail opens from "Add files or
+  folders" follows the reader's language too. A refusal the server or the browser words keeps its
+  own English sentence, marked `lang="en"`, after a Japanese lead; a line the screen words itself
+  (a part-way move or delete, an upload over the limit) is said in Japanese. A refused create on the
+  New Agent form now also leads in Japanese. English is unchanged (UX-15 in #2086).
+- Files: the rename row now shows the name of the file or folder being renamed, and offers a
+  "Move to folder" choice (Home, the folders on the breadcrumb, and the open folder's subfolders)
+  next to the path field. A typed path still works for any other folder.
+- The Files screen uploads several files at once: pick more than one, or drop them on the folder
+  list. Each file shows whether it is waiting, uploading, uploaded or not uploaded and why, and one
+  failure no longer stops the rest. A dropped folder is named and skipped, a file dropped outside
+  the list no longer opens in the browser in place of the console, and a file too large for the
+  deployment is named with its size and the 64 MiB every deployment accepts (UX-16 in #2086).
+- The model gateway parses its settings once, before it opens the database, and names every
+  refused variable in one start-up error. A missing or invalid `GATEWAY_PRICING_JSON` now stops
+  start-up before any database connection. `docs/operations/settings.md` lists the gateway's
+  variables.
+- The CLI release pins every platform image by digest, and `aw deploy` on the `gcp-cloudrun` target
+  copies only those digests into Artifact Registry. A CLI built from source carries no digests and
+  still resolves image tags from the registry, and says so.
+- When `cosign` is on `PATH`, `aw deploy` verifies the signature of each release image before it
+  copies anything, against the identity of the `images.yml` workflow on `images-v*` tags, and says
+  so. A signature that does not verify stops the deploy. `cosign` is not required: without it the
+  deploy prints that the signatures were not verified and continues.
+- An `AW_WEB_IMAGE`, `AW_GATEWAY_IMAGE`, `AW_RUNNER_IMAGE`, `AW_RUNTIME_IMAGE`,
+  `AW_TOOL_HOST_IMAGE` or `AW_EGRESS_PROXY_IMAGE` override now prints a warning that the image is
+  not one this CLI release pinned. Overrides are never signature-verified.
+- The Google Cloud install (`aw deploy production` with a `gcp` block) is now private by default
+  (BYOC Google Cloud, phase P3). The deployment creates its own network, or adopts yours with
+  `network` and `subnetwork`. Only the web app and the model gateway are reachable from the internet; the
+  runner manager is internal and the web app calls it with its Google identity. Cloud SQL has a private IP address only and accepts
+  encrypted connections only. The model gateway stays reachable behind its per-run token until a later
+  release, because sandboxes cannot present a Google identity.
+- New optional `gcp` keys: `domain` serves the web app at your host name behind a load balancer with
+  a managed certificate (point a DNS `A` record at the printed IP address; the certificate is issued
+  after DNS points there), `armor` adds Cloud Armor, `iap` adds Identity-Aware Proxy (users outside
+  your organisation need a custom OAuth client; IAP sits on the load balancer only, so the `aw-control`
+  agent tool keeps working), and `oidc: { issuer, clientId }` sets up single
+  sign-on. The client secret is asked for once and kept in Secret Manager (it is asked for again when
+  the issuer or client id changes); rotate it with
+  `gcloud secrets versions add <name>-oidc-client-secret --data-file=-`. Register
+  `<web origin>/api/auth/callback` with your provider.
+- `aw deploy destroy production` can wait one to two hours at the end: Google Cloud releases the
+  network that long after its services are deleted. `docs/deploy/gcp-cloudrun.md` describes all of
+  this.
+- The Google Cloud checks say what the organisation policies mean for the deployment. With a
+  `gcp.domain`, they check that it points at the load balancer; before the first deploy the address
+  does not exist yet, so they warn that the record must be created after the deploy, at the printed
+  address.
+- With `oidc` set, the first `--yes` run asks once for the client secret (hidden input, or
+  `AW_OIDC_CLIENT_SECRET` when there is no terminal) and keeps it in Secret Manager; a re-run asks
+  for nothing. The summary says which sign-in is active and, with a `domain`, which address to point
+  it at.
+- A first `--yes` deploy creates Cloud SQL and its private network with a targeted apply while the
+  release images copy, instead of after them, so the two slowest steps overlap. If either fails,
+  the error names both outcomes and what was already created.
+- The Google Cloud install (`aw deploy production` with a `gcp` block) now has production defaults
+  (BYOC Google Cloud, phase P6). Data protection is on by default (`gcp.dataProtection`): Cloud SQL
+  has deletion protection, the buckets are versioned (noncurrent versions are deleted after 30 days)
+  with a 7-day soft delete and cannot be emptied by a destroy, and the web, gateway and runner
+  manager services have deletion protection. This changes behaviour for disposable stacks:
+  `aw deploy destroy production` now refuses while any of it is on. Set `dataProtection: false`,
+  run `aw deploy production --yes`, then destroy. A deleted bucket stays restorable, and billed,
+  for 7 days.
+- New `gcp.size`: `small` (the default; shared-core Cloud SQL, one web instance always warm, the
+  gateway and runner manager scale to zero) or `standard` (`db-custom-2-7680` with regional high
+  availability, at least one instance of every service). Both start with CPU boost and keep 14
+  backups with point-in-time recovery (7 days of logs); the maintenance window is Sunday 18:00 UTC.
+- Four log-based metrics and a dashboard are created always. New `gcp.alertsEmail` adds an email
+  channel, alert policies (web and gateway 5xx, gateway upstream errors, runner manager failures,
+  Cloud SQL CPU and disk, live sandboxes over the size's cap) and an uptime check of `/api/readyz`
+  (none with `iap`). The live-sandboxes alert counts services with an active instance, not metric
+  series. The deploy needs the logging and dashboard roles always, and the alerting roles only
+  with `gcp.alertsEmail`; the permission check names them.
+- New `aw deploy status production` reports versions, revision health, data protection and drift,
+  and exits 3 when the plan has changes.
+- The Cloud Build grants and API are no longer part of the install. Secrets are pinned to the
+  version the module wrote; the single sign-on client secret stays at `latest`. On an existing
+  stack the three Cloud Build grants on the default Compute Engine service account are kept, not
+  revoked: Terraform only forgets them (`removed` blocks), so revoke them by hand if unwanted.
+- New operator runbook: `docs/operations/gcp-cloudrun-runbook.md` (upgrade, rollback, restore,
+  key and secret rotation, budgets, alerts).
+- The home chat and the share dialog now speak Japanese to a reader whose browser asks for it: the
+  heading, the composer, its pickers and Send, the reasons nothing can be sent, and every word of
+  the share dialog. English stays as before, and the values the dialog sends are unchanged
+  (UX-15 in #2086).
+- The New Agent screen is in Japanese for a Japanese reader: the Form/Chat switch, the five form
+  steps (labels, help, permissions, empty and loading states, Create Agent), and the Builder chat
+  beside its definition preview, the saved line and the approval card. The card's warnings about a
+  change that lowers a guard (skipping permission checks, the whole Claude Code tool set, an added
+  tool, a removed deny, a tool used without asking) and the trial and check budget notes say the
+  same in Japanese. What the model wrote and what the server sends (a check's sentence, a refused
+  decision) are shown as they come, marked as English. English is unchanged (UX-15 in #2086).
+- The reference apps' journeys now sign their browser in through the portal's own `/sign-in` at
+  `aw dev`'s development issuer (#1530, on #2075, #2076 and #2077), so a run started or decided in
+  the app is the signed-in person's. The wiki offers its `writer` on each page: the page's agent
+  panel summarizes a page tree into a new page whose first revision carries the panel's run. The
+  CRM's agent panel runs as the person. The service desk's journey fires the SLA sweep's slot past
+  a ticket's SLA, approves the closure in `RecipeGraph`, and checks the ticket's history links the
+  triage, escalation and closure writes to their runs, and its home Dashboard lists the approval
+  waiting as the person. The wiki, CRM and service desk now score every cell.
+- With **Run commands** on, a shell command that changes something now pauses the run and asks:
+  the chat shows Approve and Reject, and Approve runs that one command. Before, the command was
+  refused with nobody asked and the run still ended Completed (#2091). A read-only command, and a
+  command the stored policy already allows, still runs without asking. The agent form says so.
+- The run screen a chat becomes is in Japanese for a Japanese reader: the status badge
+  (承認待ち and the others), the follow-up box and its placeholder, Send, the line before Send
+  and the agent's detail line (標準サンドボックス · 読み書き), the working and failure notices,
+  and Show technical details with its tabs. Each part carries `lang`, so a screen reader reads it as
+  Japanese. The transcript, activity lines and event log are shown as they arrive.
+- The approval card shows a shell command on its own, so the person deciding reads the command, not
+  the call's JSON. The full call, with the agent's own description of the command, is one click away
+  under "Full call" (呼び出しの全文). A call with any other argument, and any other tool, is shown in
+  full.
+- A run start refused with `429 daily_cost_cap_reached` no longer lists `spentUsd` in `details`: it carries `capUsd` and `resetsAt` (and `unpricedUsage: true` when it applies), as the mid-run stop already did. The agent page also reads its tabs again after a restore, and a failed sweep listing is retried at the next delivery instead of after an hour.
+- The runner manager names the variable when a driver setting is missing or blank:
+  `GCP_PROJECT`, `GCP_REGION` and `RUNTIME_SERVICE_ACCOUNT` on `cloud-run-service`,
+  `ACA_SESSION_POOL_ENDPOINT` and its API version on `aca-sessions`, and `RUNTIME_NETWORK` and
+  `AGENT_WORKSPACE_TOOL_NETWORK` on `docker`. Before, start-up stopped on the same values with the
+  runtime's own option name, such as "project must be a non-empty string". The database, master key
+  and tracing settings web and the model gateway share are now in `docs/operations/settings.md`.
+- The runner manager reads its settings in one module, `apps/runner/src/manager-settings.ts`, and
+  its variables are now in the generated settings table (`docs/operations/settings.md`). A failed
+  start logs one JSON line with each refused setting in its own `refused` entry and exits with
+  status 1; the same happens for the Vercel Function entry, which answers 500 as before. A bad
+  `PORT`, a short `RUNNER_MANAGER_TOKEN`, a bad `RUNTIME_VERIFICATION_TIMEOUT_MS` and a bad driver
+  setting are named together, so one restart fixes them all.
+- `RUNTIME_VERIFICATION_TIMEOUT_MS` must be a whole number of milliseconds from 1. Before, any text
+  was passed through `Number()`, so a typo became `NaN` and every sandbox readiness check timed out
+  at once. Unset still means 30 seconds.
+- The Runs screen is in Japanese for a Japanese reader: the list, its filters and table, the run
+  detail panel (figures, labels, usage and runtime cards, team card) and the words a run's cost,
+  duration and model are shown in. The status badges switch to Japanese on the list and the
+  detail together with the run screen's, so no screen mixes languages. A run's own error, its
+  accounting error and a problem's sentence are shown as the server sends them, marked as
+  English. English is unchanged (UX-15 in #2086).
+- A session-state blob save now takes the same steps as a file save: a pending row first, the
+  `PUT` body streamed to object storage (it is no longer held in memory, up to the 32 MiB cap),
+  then a confirm against the row's reservation token. Retention marks a blob row deleting before it
+  deletes the bytes, and the cleanup job finishes deleting rows and abandoned reservations.
+- On Linux, a `file://` storage connection follows a directory symlink that stays inside the connection's folder: it is listed, read, written and deleted through like the folder it names. A listing counts, and does not enter, a link back to a folder it is inside. File symlinks, links that lead outside the folder, and every link on hosts without `/proc/self/fd` are still refused (#1835).
+- An S3 listing page no longer sends a HEAD per file to learn its content type: `contentType` is `null` unless the caller passes the new `ListPageOptions.contentTypes`, and then the HEADs go eight at a time. A run's delivery, a storage-connection browse and every catalog-backed listing send none (#1746).
+- Connecting storage now saves and then tests the connection at once with its stored key ("Save
+  and test"), the same test as the Test button on Storage. The page says "Saved and connected", or
+  what failed (credential, location, reachability, or an allowed folder with no files) with a link
+  to edit the connection. The connection stays saved either way (UX-07 in #2086).
+- A start-up skips the skills adopt walk when the latest `skills` row of `storage_migration_runs` is clean, has `proof_version` 2, `legacy_rows` 0 and `mismatches` 0, and logs `skills adopt skipped: the latest pass left no old skill forms`; a pass that left anything, or failed a workspace, still runs on the next start-up. A pass that does run reads each skill's pending delete by name instead of listing every skill, and counts a workspace that failed twice as one failed workspace. Migration 0094 adds a partial index of the pending `files` rows, so counting a workspace's pending uploads no longer reads its ready rows; it is a plain `CREATE INDEX`, so it holds writes to `files` while it scans the table once.
+- **Breaking:** `db:migrate` refuses with `legacy_storage_rows_remain` unless the latest `adopt` and `skills` rows of `storage_migration_runs` were written by the release after 0.6.11 (`proof_version` 2), are clean and have `legacy_rows` 0, so that release is a required upgrade stop (0.6.10 or 0.6.11 → the release after 0.6.11 → this one). A fresh install upgrades with no step. The self-hosting guide lists the three starts that release needs, and one remedy for each cause that keeps `legacy_rows` above 0: `skipped_ownerless` (give the workspace an owner or remove its old objects), `skipped_path_taken` (another file holds the path: download or remove the old object), `skipped_failed` (start again and read the warn lines) and a skill whose delete is pending (its owner retries `DELETE /api/skills/<name>`). Nothing is deleted or rewritten while it refuses. After the check, a file row and a session-state blob row must name an object id (`files_file_has_object_id`, `session_state_blobs.object_id NOT NULL`).
+- The Agent Store's origin may also call `GET /api/runs` with a session an email link minted, so
+  the store's `/runs` page lists a visitor's own demo runs from the visitor's browser. The guest
+  role's rights are unchanged: a visitor reads only the runs they started in their own demo
+  workspace.
+- The Agent Store app's `/runs`, `/runs/:id`, `/chat` and `/files` read the platform as the
+  signed-in visitor's own session, on their own demo workspace, and say so when the visitor is
+  not signed in or the demo has ended.
+- `web` exits with status 1 when its start fails, instead of listening and answering 500 to every
+  request. An invalid `AW_DEPLOYMENT_POLICY`, `AW_DEPLOYMENT_FEATURES`, `AW_TRUSTED_PROXY_HOPS` or
+  `AW_CONTAINER_IDLE_STOP_SECONDS` is the usual cause: the log line names every refused variable at
+  once, so one restart fixes them all. A container platform now shows the server as crashed or
+  restarting, with the reason in its log. A missing `SESSION_SECRET` or an unreachable database
+  still starts and answers 503 with the reason. `startWeb` (the embedded workspace) rejects with
+  the error instead of exiting its caller's process.
+- The gateway's start-up log lists every refused variable in full. Before, the list was cut at 200
+  characters, so with three or more invalid settings the later ones were missing.
+- Web stops at start-up, exiting with status 1 and logging each refused variable and the value it
+  expects, when `AW_TRUSTED_PROXY_HOPS` is not `0` to `16` or `AW_CONTAINER_IDLE_STOP_SECONDS` is not
+  whole seconds above 15. Before, a malformed proxy count was silently read as "no proxy", so
+  every visitor shared one rate-limit bucket and runnable public links refused to run, and a
+  malformed idle stop meant no run limit, so a Cloudflare Container could stop in the middle of a
+  run. Unset values and `0` for the proxy count work as before.
 
 ### Removed
 
@@ -217,6 +837,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - **Breaking:** the old storage settings no longer say where files, skills and session state are kept: `AW_FILE_STORAGE_ROOT`, `AW_SKILL_STORAGE_ROOT`, `AW_SESSION_TRANSCRIPT_ROOT`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_BACKEND`, `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_PUBLIC_ENDPOINT` and `OBJECT_STORAGE_FORCE_PATH_STYLE`. `AW_STORAGE_URL` alone does. A leftover old variable never stops start-up: the server, `agent-workspace doctor`, `aw dev` and the `vercel` and `cloudflare` deploy commands log one `storage_setting_ignored` warning that names it, never its value. With `AW_STORAGE_URL` unset nothing is read from the old location: the files, skills and session-state APIs stay uninstalled and answer 503, `aw dev` keeps storage off rather than choose a folder, `agent-workspace doctor` fails and prints the `AW_STORAGE_URL=` line that points at the old location, and `deploy` refuses a Vercel or Cloudflare apply. Neither deploy command pushes an old storage variable to the platform project. Set `AW_STORAGE_URL` (for example `file:///var/lib/agent-workspace`) before you upgrade.
 - **Breaking:** the repository `compose.yaml` and a generated Compose project refuse to start without `AW_STORAGE_URL` in `.env`. `.env.example` and `create` write the bundled SeaweedFS as `AW_STORAGE_URL=s3://agent-workspace?endpoint=http://seaweedfs:8333&publicEndpoint=http://localhost:8333&pathStyle=true`, the bucket, endpoint and path style the old settings gave it, so its objects stay where they are. A generated project's `.env` also needs `AW_STORAGE_CREATE_BUCKET=true` for that store.
 - New in `@indx-workspace/contracts/storage-settings`: `IGNORED_STORAGE_VARIABLES`, `ignoredStorageVariables(env)` and `ignoredStorageSettingsWarning(env)`. Every export the old settings had stays as a deprecated shim until the next major release.
+- The provisional adapter-side budget caps of the OpenAI Agents, Mastra and pi engines (ADR-0074 D7,
+  #342) are retired, as ADR-0162 decides: `limits.maxBudgetUsd` is enforced by the gateway for every
+  engine. The adapters no longer price usage, stop a run `max_budget` or refuse a cap on a model
+  their price table did not list; such a run now starts. `@agent-workspace/engine` no longer exports
+  `provisionalBudget`, `subagentBudgetRefusal`, `provisionalPriceFor`, `PROVISIONAL_MODEL_PRICES` or
+  `PROVISIONAL_PRICES_CHECKED_ON`.
+- The `adopt`, `copy`, `copy-dry-run` and `finalize` stages of the move off the old object naming. They ran on the release after 0.6.11, which this release requires as an upgrade stop. `AW_STORAGE_MIGRATE=off` still turns off the skills adopt pass; any other value runs it.
+- The server no longer reads the old object naming: the catalog service opens, signs, renames and deletes a file or a session-state blob only by its object id, the old per-area session-state blob store is gone, and the storage cleanup lists only the new naming. Its report and `GET /api/cron/storage-cleanup` no longer carry `legacyOrphans`. The upgrade guard of this release proves no row needs the old naming; an old object left in the bucket is never read or removed.
 
 ### Fixed
 
@@ -430,6 +1058,226 @@ model_connection_incomplete` naming the field (for example `config.apiVersion`),
   row names an interrupt `refused: interrupted`, apart from `refused: deadline`, and the audit
   write itself is bounded, so a hung audit store no longer keeps the session busy. Its warnings
   name an error's type, never a provider message that could carry an object key.
+- The Administration menu now shows Models, Storage, Users, API Keys and Runtimes only to Owners
+  and Admins; a Builder or Viewer saw them before, and each answered "not allowed". Settings and
+  Shared links stay for everyone, and Settings shows its subsystem status only to Owners and
+  Admins. The runtime chip links to Runtimes only for them (UX-12 in #2086).
+- The New Agent form numbers its steps 1 to 5 in the order they appear; it showed Step 5, 3, 4.
+  Every model picker lists each model once, even when two model connections offer it, and asks
+  which connection to use only when more than one offers the chosen model (UX-22 in #2086).
+- The Builder's approval card lists each change in words ("Write files: Not allowed → Allowed",
+  "Connector: crm — Added", "Skill version: memo — 3 → 4", "Code tool pdf may reach:
+  example.com") instead of field paths; the exact fields stay one click away under "Show the exact
+  fields". The definition preview's "changed" labels use the same words, and its
+  sections are no longer numbered "Step 5, Step 3, Step 4".
+- While the Builder waits for approval of a save, the definition preview no longer reports "The last
+  check failed: unreadable_result": the call the run paused on has no answer until the decision.
+- A refused check, a refused decision, an unreadable tool answer and an unavailable Builder are
+  explained in a sentence, with the code kept small for support.
+- An evaluation now interrupts, and waits for the interrupt of, a case run that is paused for an approval, abandoned at the deadline, or whose event stream cannot be read, before it answers. Under the Builder's trial limits an evaluation that cannot stop a case run answers a typed `trial_not_stopped` refusal and stores no row; `POST /api/agents/{id}/evaluations` keeps storing the row and logs the failure.
+- Evaluation log lines for a failed interrupt, judge call or stream read name the error class only and no longer carry the error's message.
+- A Builder `trial_run` whose run fails after it started now interrupts that run by id before the failure propagates, so it cannot keep spending under the full policy budget.
+- `evals_run` runs each case under the policy's trial budget, as `trial_run` does, and starts nothing when the run API cannot interrupt a run.
+- The Builder's log line for a failed trial interrupt carries the error class and a system code such as `ECONNRESET`, never the message.
+- A run on the claude-agent-sdk engine that asks for structured output with a schema naming its
+  draft 2020-12 `$schema` (as `z.toJSONSchema` writes it) no longer fails before the model is
+  asked: the engine hands Claude Code the schema without that reference, which its validator
+  cannot resolve.
+- A claude-agent-sdk run now ends at most 5 seconds after its `result`, even when the SDK's stream
+  stays open after it: the boundary aborts the SDK and its CLI, and the run ends with the result it
+  reached. Before, a CLI that lingered held the run open until its credential expired. Issue #2076
+  found the reported failure (an app-connector `tools/call` refused `ECONNREFUSED` under `aw dev`
+  after `tools/list` succeeded, then a run that did not end) to be a harness artefact, not a
+  platform bug. A journeys harness that ran Playwright with `spawnSync` blocked the process that
+  serves the scripted model. The run's model request was answered only after Playwright returned,
+  as the harness stopped `aw dev`, so the tool call reached an app that had stopped. The apps lane
+  runs Playwright without blocking (`attemptAsync`), and a lane test now keeps every synchronous
+  call out of the journeys step. With that fixed, the lane showed why triage still left the ticket
+  as it was. A recipe step's run asserts its person as an API-key subject, which holds no role, so
+  the service-desk `ticket`'s `member` rules refused it with `resource_not_found`. The reference
+  app's `ticket` now also admits its `requester` on read and update, and triage moves the ticket
+  to `in_progress` under `aw dev`.
+- A code-tool sandbox on Cloud Run now opens: the runner manager points the tool host at
+  `/tmp/tool-host` (Cloud Run mounts no `/workspace`, which the tool-host image's user cannot
+  create), and the tool host creates its directory before it takes a file. Before, every
+  `PUT /files/manifest.json` failed with HTTP 500 and the manager answered
+  `503 tool_sandbox_unavailable`. The manager now also logs the reason of such a 503.
+- New chat: an empty "+ Files" or "+ Connectors" picker now says that the agent's items are not
+  listed yet and that the agent still uses all of them, and "Upload" and "Manage agents" link to the
+  Files and Agents screens instead of being disabled (#2089).
+- MCP connector Test Connection now sends every request through the egress policy, accepts CRLF and CR line endings on SSE streams, and reports JSON-RPC error codes outside the protocol range as server refusals instead of "not an MCP server".
+- Console keyboard use (UX-23 in #2086): every signed-in console screen starts with a "Skip to
+  content" link that moves focus to the page (New Agent's Builder chat now has exactly one main
+  region while it loads, fails or chats, so the link always lands there); the home chat box shows
+  when it has focus; Esc closes the Agent, Files and Connectors pickers; Enter sends in the home
+  chat (Shift+Enter adds a new line). Enter no longer sends while Japanese input is still being
+  converted, in the home chat or a run's follow-up box.
+- The Files screen's Modified column shows the time in the viewer's own time zone and language,
+  with the zone named (for example `2026年11月9日 10:01 JST`), instead of UTC, and says its language
+  to a screen reader (UX-15 in #2086).
+- On a phone, the console menu now folds behind a Menu button, so a page starts at the top of the
+  screen instead of below the whole menu. Esc closes the menu, and following a link closes it.
+- On a phone, the Agents page no longer scrolls sideways, and the Japanese "show archived" label
+  stays on one line (UX-10 in #2086).
+- When an agent cannot run because setup is not finished, the words "setup wizard" in the composer
+  and in the failed run's message are now a link to the setup wizard (UX-25 in #2086).
+- Console screens no longer use internal terms: the Runs page, the workspace default model card,
+  the storage "Allow writing" note, the run detail page and two runtime descriptions now say what
+  they mean in plain words (UX-13 in #2086).
+- The Builder looks a run's caller up by principal instead of scanning the workspace's member list
+  on every tool call, and an API key bound to a Builder endpoint client no longer fails the whole
+  key listing: it is listed and refused at authentication.
+- A disabled button now looks disabled (faded, with a not-allowed cursor) on every screen that uses
+  the shared button styles, such as "Add schedule" before the form is filled in.
+- The API Keys form wraps at phone width, so the page no longer scrolls sideways at 390 px.
+- The release images build again: `*.test-support.ts` files, which import test helpers from the
+  repository's `tests/` folder, are left out of the Docker build context like `*.test.ts` files,
+  so the web build in the image no longer fails with `TS2307`.
+- `aw push`, `aw check` and the first sync of `aw dev` accept an agent that names a built-in skill
+  (`office-reader`) the workspace has not installed yet. Their dry run refused it with
+  `422 agent_definition_references_missing [skill:office-reader]`, although the save installs the
+  built-in before it checks the body. A dry run now answers what the save would; it still installs
+  nothing (#890).
+- Evaluation scoring reads the whole turn. `contains`, `notContains` and `judge` see the assistant
+  text of every message in the run, not only the last one, and `tool` and `toolInput` are satisfied
+  only by a tool call that completed without an error (a call the tool refused or that failed no
+  longer counts). The judge's verdict is the last JSON object of its reply and the last thing in it;
+  a reply that only quotes a verdict, or has text or another object after it, fails the case closed.
+- Settings → Features: a switch that cannot be turned off says "Switch off Surfaces first" instead
+  of repeating the row's "Needed by: Surfaces" line (UX-21 in #2086).
+- Files: a link to a folder that no longer exists, or to a file, now says so instead of "This folder
+  is empty.", and an empty (0-byte) file is reported as not uploaded instead of being skipped in
+  silence (UX-19 and UX-20 in #2086).
+- Files: when a rename, move or delete is refused, or a delete stops part-way, the reason now stays
+  on screen after the list reloads instead of disappearing at once (#2088). If the list cannot be
+  read again after it, the message says the list may be out of date.
+- On a phone, a short file or folder name in the Files table, such as a Japanese one, no longer
+  breaks into one character per line.
+- With Files switched off, New chat and the Builder chat no longer offer "+ Files" or "Attach
+  file". The switched-off page tells an Owner "You can switch it on in Settings → Features" with the
+  link; anyone else is told which Owner to ask (UX-21 in #2086).
+- An agent with Write files on can no longer write `CLAUDE.md`, `.claude/`, or `.mcp.json` in its workspace without approval, since Claude Code loads them as instructions on later runs. The skills editor now quotes YAML frontmatter values, so editing a skill whose description holds a colon no longer breaks it. `agent-workspace start` and `stop` no longer print a malformed `.env` line, which may hold a secret; they name its line number. Blueprint archives with non-ASCII paths are no longer refused. A bad `PORT` is refused, and a failed listen closes Next and the database pools (#2283).
+- OpenAI and Azure OpenAI model connections: tool-using turns no longer fail on strict-schema
+  validation, cached input tokens are no longer charged twice, and a failed or truncated stream
+  records the tokens it spent (or stays unmeasured) instead of settling as $0 (#2283).
+- Azure OpenAI connections with a dated `apiVersion` now count tokens through
+  `/responses/input_tokens` instead of making a billed Responses call, and a provider without
+  token counting answers a typed 501 rather than a 500 (#2283).
+- On Google Cloud Run without a custom domain, `aw deploy` now reports the web app at the URL the
+  app itself uses for sign-in, `https://<name>-web-<project number>.<region>.run.app`. Before, the
+  `web:` line and the `web_url` output showed the service's other address (`…a.run.app`), so an
+  operator who registered `<web>/api/auth/callback` with their OIDC provider got
+  `redirect_uri_mismatch` at sign-in. When single sign-on is configured, `aw deploy` now also
+  prints the exact redirect URI to register.
+- The caller-identity guide, five tutorials and the gallery project files told you to create a
+  connector's identity secret with `aw secrets set`, a command `aw` does not have. They now use
+  `aw secrets create --name <NAME> --value-stdin` (and `aw secrets replace <NAME> --value-stdin`
+  to rotate it).
+- Setting, promoting or rolling back a pointer, and the Builder's `draft_save`, now answer 409 `agent_archived` when the agent is archived between the request's read and the pointer move; before, that move applied to an archived agent. The check now runs on the locked agent row.
+- A public agent share link no longer shows a visitor a box with only `null` in it. A share with
+  nothing but its name says so in words, and a published agent definition shows its instructions
+  and what it needs instead of raw JSON (#2087).
+- Approving or rejecting a paused run now works when an Owner or Admin decides another member's run, and when the run had file attachments; the continuation no longer fails with `session_not_usable` or `run_file_scope_not_granted` after the decision is consumed.
+- A run paused for approval is now cancelled with `approval_expired` once its 24 hour deadline passes, so an approval-gated trigger no longer stays blocked by undecided runs.
+- An `Idempotency-Key` used on an agent-team run route is no longer treated as a replay of a run started on another team or on the lead agent directly.
+- A run start refused after its new session was opened no longer leaves an empty session behind.
+- A run's Technical details, its error and the call it is waiting to have approved no longer show
+  the folder the run works in on the runtime's host, such as `/srv/runner-ws/<ids>/…`; it reads
+  `<workspace>`, and a path inside it keeps its relative part: `<workspace>/outputs/report.md`.
+  Runs recorded before this change are shown the same way (UX-02 in #2086).
+- `POST /api/runs/:id/interrupt` now stops the runtime within about one cancellation-watch interval
+  (2 s) whichever replica serves it. Before, an interrupt served by a replica that did not hold the
+  run's stream made the run `cancelled` and revoked its tokens, but the runtime kept running until
+  its credential-bounded lifetime ended. The replica holding the run now reads the committed status
+  and interrupts its runtime (ADR-0151-FU-1440 D1, issue #261). No migration.
+- A run started under a lower-only limits override (a Builder trial's budget, for one) now keeps it
+  across an approval continuation: the override is stored on the run (`runs.limits_override`, a
+  nullable column added by migration 0101) and the continuation reads it back, where before it fell
+  back to the agent's full policy budget. A lower policy budget still wins.
+- The daily cost cap now counts a run whose usage settlement failed as unpriced even when it wrote
+  no ledger row that day, so a settlement failure can no longer leave a workspace looking under its
+  cap. Two indexes (`run_usage_records (workspace_id, created_at)` and a partial index on the audit
+  log's agent restore rows) keep the cap's window sum and the archive sweep's restore lookup off
+  full scans.
+- A tool call the agent's permissions refused, with nobody asked, is now said in the chat: "Did not
+  run: Bash". Before, the run ended Completed and the answer could read as if the command had
+  worked; the refusal was only in Show technical details. What Run commands allows is unchanged
+  (part of #2091).
+- A run no longer fails with "The runtime stream ended unexpectedly" when a tool reads a binary
+  file (NUL characters) or its output is cut inside an emoji; the unstorable characters become
+  U+FFFD. Shell output no longer turns a multi-byte character split across two reads into U+FFFD,
+  and an evaluation judge's reason can no longer lose the evaluation the same way (#2283).
+- Files, Skills, a skill, Connectors, New connector, API Keys and Settings now have a `<main>`
+  landmark and the same page margin as the other screens, instead of sitting flush against the
+  sidebar (UX-24 in #2086).
+- A person who opens Storage, a storage connection, Connect storage or Runtimes without the role
+  for it now sees the screen's heading and the refusal inside the page's `<main>` landmark, with
+  the same margin, instead of a bare line of text.
+- Share dialog: "Copy link" now copies the full link (`https://…/p/…`) instead of a path that opens
+  nothing once pasted, and the button says "Share" for the choices that make no link (UX-09 in
+  #2086).
+- Share dialog: a second click while a share is being made no longer publishes a second link; the
+  button waits until the first answer.
+- A file audit row is written once per event even when its write is retried: each row carries an
+  audit key (the stored object for an upload, the file for a delete, the request for a download,
+  link or move), and a retried upload completion records an upload whose first audit write failed.
+  Every download request, a `Range` request included, stays its own `file-downloaded` row.
+- Browsing, testing or running with a storage connection whose credential was stored by 0.6.11 or
+  earlier no longer rewrites it into the target-bound form, which locked undrained older revisions
+  out of the connection. The read binds it to the connection's current URL in memory only, and
+  still refuses it for a URL the connection no longer has; only creating, editing or rotating the
+  connection writes the bound form, as the self-hosting guide says.
+- Azure and S3 storage connections go through the outbound proxy the server's environment names
+  (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`), tunnelled with `CONNECT`, instead of connecting
+  directly. The egress check still runs on the endpoint's name and resolved addresses first, so a
+  private, link-local or plaintext endpoint is refused with `storage_connection_endpoint_forbidden`
+  and never reaches the proxy. Without a proxy, or for a `NO_PROXY` host, the connection stays
+  pinned to the addresses the check saw. GCS connections already followed these variables.
+- Browsing or testing a `file://` storage connection maps the folder's own failures explicitly: a path outside the folder is `storage_connection_endpoint_forbidden` (a test answers `forbidden`), and an I/O failure or the listing's walk cap is `storage_connection_unreachable`. Each is logged as a warning with its reason code only; the whole error, whose message names the customer's key, is no longer logged as unclassified. A run that cannot list a granted folder names the same class (#1835).
+- A `file://` storage connection's conditional writes hold across processes: a write's precondition and its rename, and a delete, take a lock file in the folder, so two replicas writing the same file over a shared mount can no longer both pass `ifMatch` and lose one of the writes. A lock left by a process that died is broken after 10 seconds (#1835).
+- A `file://` storage connection checks a write's `ifMatch` against the file in the folder the write opened, not whatever the key resolves to from the root when the check runs, so a folder renamed inside the root during a write can no longer pass another file's etag (#1835).
+- A `file://` storage connection's listing carries one walk from page to page, so a run's delivery reads each folder once and logs what it skipped once, and a walk that examines more than 200,000 directory entries stops with a typed `FolderWalkLimitError` instead of reading a huge folder to the end (#1835).
+- Pointing `local` back at an older agent version binds the storage connections that version was
+  deployed with, by connection id. After a connection was deleted and recreated under the same
+  name, the move used to bind the new connection to the old version, so the new connection could
+  not be deleted although the version could not run.
+- Migration 0102 gives a version materialised during the upgrade window (by a server older than
+  per-version storage grants) the grants its agent holds, so it no longer fails closed with
+  `run_storage_grant_unavailable`. It never binds a connection created after the version.
+- A run lists each granted storage-connection folder once per launch instead of twice; the input
+  archive and the `/run` body share one listing.
+- Connect storage: a name the server would refuse (capitals, spaces, underscores, a leading digit,
+  or an ID-shaped name) is now caught before saving, with what a name may contain, instead of "The
+  storage connection could not be saved." (UX-08 in #2086).
+- `ObjectStore.read` and `write` take an abort `signal`, and every store passes it to its SDK where it takes one (S3 GetObject and the multipart upload, Azure download and upload, the GCS media stream and upload) and errors the body with it everywhere else. A storage write-back passes its save signal to the connection's open, each read and each write, so at the deadline or a cancel a hung provider call is stopped rather than left holding the session until the sweep (#1835, STO-509).
+- A Cloud Run service or Azure Container Apps session that fails to start is now reported with
+  its failed clean-up, so a billed leftover is no longer silent; a run's tool sandbox that cannot
+  be released is logged (#2283).
+- Google Cloud Storage reads keep a gzip-encoded object's stored bytes, so delivering one no
+  longer fails with "changed size"; Azure Blob Storage no longer reads a missing container as a
+  missing file; a SeaweedFS listing continues past a key that contains a colon (#2283).
+- The recipe routes log an Agent Workspace failure behind a 502, and recipes check
+  `AW_APP_API_KEY` the way agent tools do (#2283).
+- Testing a storage connection now looks into every allowed folder, not only the first. The
+  console says which folders have no files instead of a plain "Connection OK".
+- A trigger whose run fails to start now logs it when freeing the delivery claim fails too, and a schedule slot whose claim has no run is no longer marked fired.
+- A whitespace-only `CRON_SECRET` is read as unset by every cron driver, so the in-process schedulers start instead of neither driver running.
+- A passphrase-protected public share link verifies the passphrase off the event loop and refuses further guesses (429 `passphrase_attempts_limited`) after 10 wrong ones a minute per link and 5 per visitor.
+- Emptying a schedule's Time zone no longer replaces the Schedules tab with an error page; the form
+  says "Enter a time zone, for example Asia/Tokyo." and waits (UX-18 in #2086).
+- A screen reader reads the console's English screens in English again for a Japanese browser: the
+  page stays `lang="en"`, and each translated part (the sidebar, the top bar, the skip link, the
+  runtime band, a run's files, Files search and the Modified column) says `lang="ja"` itself
+  (UX-15 in #2086).
+- When an upload batch ends after the person opened another folder, the folder on screen is the one
+  refreshed, not the folder the batch started in (UX-16 in #2086).
+- Closing a schedule's Change time form (Cancel, Escape or Save) or the delete question (Keep or
+  Escape) puts the keyboard focus back on the button that opened it.
+- An agent with **Write files** on can now write files in its workspace. Claude Code asked before
+  every `Write` and `Edit`, nobody could answer, so each write was refused ("Did not run: Write"),
+  and an agent's memory file was never saved. The switch now allows edits inside the workspace. A
+  read-only file grant still keeps its files read-only, a write outside the workspace is still
+  refused, and a stored approval rule on `Write` or `Edit` still asks first.
 
 ### Added
 
@@ -811,6 +1659,48 @@ secret rotate` and `update --redirect-uri`; `/signin?next=` is honoured for same
   is in flight no longer lets that run write the path back; the file is counted as refused. A
   read-only grant added during the run is still honoured, and a removed `read-write` grant still
   writes nothing.
+- A draft that names `aw-control` in any case or with surrounding space is refused as the reserved
+  connector, and a write that was already journaled is no longer replayed once the workspace has
+  switched the Builder off.
+- The Builder's run-token door logs the error class, never its message, when it fails closed.
+- The Builder's run-token door (`POST /api/builder/mcp`) limits each run to 120 requests a minute
+  (`429 builder_rate_limited` with `Retry-After`) and refuses a write or spend tool call that
+  carries no engine tool-use id (`invalid_arguments`) instead of minting one.
+- A credential that cannot read agents (a scoped API key or browser token) now gets the `404
+  agent_not_found` of a missing agent, not `403 builtin_agent_read_only`, for a write to the
+  built-in Builder agent.
+- On the `gcp-cloudrun` target the runner manager may invoke only sandbox services: its invoke grant
+  is now conditioned on the request's host (`rt-….run.app`) instead of the service name, which Cloud
+  Run does not check when a service is invoked. The runner manager also refuses to call an agent
+  sandbox whose URL is not an `https://rt-….run.app` address.
+- `SESSION_SECRET` no longer signs six things directly. The session, workspace-selection and
+  invitation cookies, the OIDC sign-in transaction, CLI device codes and the public-share visitor
+  key each use their own key, derived from the secret with HKDF, so a token signed for one can never
+  be accepted as another. Nobody is signed out by the upgrade: tokens signed the old way are still
+  accepted until they expire (at most 12 hours). Refactoring part 06 step 5.
+- A code tool can no longer declare a model connection, runtime connection or webhook signing secret, and an upper-case membership or secret id no longer skips the Owner and reserved-secret guards.
+- A public share link is shown once, when it is published, and only the SHA-256 of its token is
+  stored. Migration `0105` clears every stored plain token; existing links keep working because
+  they are already looked up by hash. The publish dialog now says the link won't be shown again.
+  The plain `token` column stays, nullable, for one release so a web process from the previous
+  release can still publish during a rolling update; the next release drops it.
+- Public share links are looked up by the SHA-256 of their token, stored in a new `shares.token_hash`
+  column, the way API keys and other bearer tokens already are. PostgreSQL fills the column for
+  every existing link, so links made before the upgrade keep working. The plain token is still
+  stored for now, because the share list shows each public link again; a follow-up removes it once
+  a link is shown only when it is created.
+- On Windows, a `file://` storage connection refuses a key that NTFS would read as another name or a device: an alternate data stream (`a.txt:s`, `a.txt::$DATA`), a trailing dot or space, a device name such as `nul` or `con.txt`, or a Win32 wildcard character. Such names are left out of listings, and a write no longer tries to flush the folder, which Windows cannot do (#1835).
+- A session signed in by email link is now marked, and `POST /api/auth/workspace` refuses to switch
+  it to any workspace but its own demo workspace (404 `workspace_not_available`), even if the same
+  address later joins a real workspace through the identity provider.
+- The per-address limit on sign-in links is now atomic: concurrent requests for one address from
+  different clients can no longer exceed it.
+- A webhook's signing secret (`WEBHOOK_<id>_SIGNING_SECRET`, issue #250) is platform-owned, like a
+  storage connection's secret: a run's tools, connectors and tool endpoints never receive it, and
+  `/api/secrets` refuses to create or replace a secret with that exact name (`409`); deleting it is
+  still allowed. Other names such as `WEBHOOK_STRIPE_SIGNING_SECRET` stay ordinary secrets. A
+  delivery attempt that fails inside the platform (an unreadable secret or run) now counts as a
+  failed attempt and ends `failed` after the usual 8 attempts instead of being claimed forever.
 
 ## 0.1.0 — release candidate
 

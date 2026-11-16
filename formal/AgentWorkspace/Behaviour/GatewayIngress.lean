@@ -63,7 +63,7 @@ def providerId : ConnectionFamily → String
   | openaiCompatible => "openai-compatible"
 
 /-- The family relays the OpenAI dialects: it has a `WireProtocolForwarder` (ADR-0068 D2). -/
-@[aw_spec (ts := "packages/gateway/src/providers/registry.ts#forwardingRow")
+@[aw_spec (ts := "packages/gateway/src/providers/registry-rows.ts#forwardingRow")
   (doc := "docs/adr/0068-openai-wire-protocols-are-passthrough-ingress.md#d2--the-protocol-rule-is-a-function-of-the-connection-family")]
 def isOpenAIFamily : ConnectionFamily → Bool
   | anthropic | anthropicCompatible => false
@@ -504,7 +504,7 @@ def toolDecision (hasBearer : Bool) (verification : Verification) (tokenActive :
 /-! ## Model listing -/
 
 /-- The envelope `GET /v1/models` answers in (ADR-0068 D6). -/
-@[aw_spec (ts := "packages/gateway/src/router.ts#MODEL_FORMATS")]
+@[aw_spec (ts := "packages/gateway/src/router-models.ts#MODEL_FORMATS")]
 inductive ModelFormat where
   | anthropic
   | openai
@@ -515,7 +515,7 @@ Claude Code reaches the gateway through `ANTHROPIC_BASE_URL` on every family, so
 family would answer an Anthropic SDK with a body it cannot parse. `Accept: application/json` is sent
 identically by both SDKs and carries no signal, but `anthropic-version` does: the Anthropic SDK sends
 it on every request and no OpenAI SDK sends it. `?format=` wins, then `x-gateway-model-format`. -/
-@[aw_spec (ts := "packages/gateway/src/router.ts#modelListingFormat")
+@[aw_spec (ts := "packages/gateway/src/router-models.ts#modelListingFormat")
   (doc := "docs/adr/0068-openai-wire-protocols-are-passthrough-ingress.md#d6--get-v1models-negotiates-on-the-client")]
 def modelListingFormat (anthropicVersion : Bool) (query header : Option ModelFormat) :
     ModelFormat :=
@@ -728,7 +728,7 @@ def settle (protocol : WireProtocol) (m : Measurement) : Settlement :=
 
 /-- The accounting state a settled row leaves the run in: an unmetered row carries no price, so
 the ledger reads `unavailable`; a measured one that priced reads `complete`. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#pricedCount")
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#pricedCount")
   (ts := "packages/gateway/src/database.ts#createDatabaseUsageRecorder")]
 def settledAccounting : Settlement → AccountingState
   | .recorded _ true => .complete

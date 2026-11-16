@@ -24,7 +24,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
-import { ROLES, type Role } from '../../../server/rbac/roles';
+import { ROLES, isConferrable, type Role } from '../../../server/rbac/core/roles';
 import { type RbacRuntime } from '../../../server/rbac/runtime';
 import { recordRunTelemetry } from '../../../server/telemetry/runtime';
 
@@ -188,8 +188,10 @@ describe('GET /api/metrics scopes the projection to the caller’s own workspace
     expect(text).toContain('rbac_runtime_not_configured');
   });
 
-  for (const role of ROLES) {
-    it(`allows role "${role}" to read its own workspace’s metrics (§21 grants metrics read to every role)`, async () => {
+  // §21 grants metrics read to the four conferrable roles. The guest row does not name metrics,
+  // so a guest is refused (spec §21, "The guest role"): the test after this loop.
+  for (const role of ROLES.filter(isConferrable)) {
+    it(`allows role "${role}" to read its own workspace’s metrics (§21 grants metrics read to every conferrable role)`, async () => {
       installTestRuntime();
       const workspaceId = `ws-role-${role}-${crypto.randomUUID()}`;
       const runId = `metrics-role-${role}-${crypto.randomUUID()}`;
@@ -209,6 +211,25 @@ describe('GET /api/metrics scopes the projection to the caller’s own workspace
       expect(body.runs.some((run) => run.runId === runId)).toBe(true);
     });
   }
+
+  it('refuses a guest (403), and its own workspace’s run id occurs nowhere in the response', async () => {
+    installTestRuntime();
+    const workspaceId = `ws-role-guest-${crypto.randomUUID()}`;
+    const runId = `metrics-role-guest-${crypto.randomUUID()}`;
+    recordRunTelemetry({
+      runId,
+      workspaceId,
+      agentId: 'agent-x',
+      status: 'completed',
+      durationMs: 1,
+      costUsd: null,
+    });
+
+    const response = await GET(requestFor({ workspaceId, role: 'guest' }));
+    const text = await response.text();
+    expect(response.status, text).toBe(403);
+    expect(text).not.toContain(runId);
+  });
 
   it('never returns provider credentials, prompts or raw event payloads', async () => {
     installTestRuntime();

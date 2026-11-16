@@ -12,6 +12,14 @@ export function awDevModelFix(code: string, strings: SurfaceStrings, secrets?: r
 // @public
 export interface SurfaceStrings {
     readonly agentSwitcherLabel: string;
+    readonly approvalAlreadyDecided: string;
+    readonly approvalComment: string;
+    readonly approvalExpired: string;
+    readonly approvalFailed: string;
+    readonly approvalFullCall: string;
+    readonly approvalNeeded: (toolName: string) => string;
+    readonly approvalNotAwaiting: string;
+    readonly approve: string;
     readonly attachFiles: string;
     readonly disclaimerLabel: string;
     readonly earlierMessage: string;
@@ -22,6 +30,7 @@ export interface SurfaceStrings {
     readonly launcherLabel: (title: string) => string;
     readonly messageLabel: (agentName: string) => string;
     readonly rateLimited: (retryAfterSeconds: number | null) => string;
+    readonly reject: string;
     readonly removeFile: (name: string) => string;
     readonly send: string;
     readonly suggestedPromptsLabel: string;

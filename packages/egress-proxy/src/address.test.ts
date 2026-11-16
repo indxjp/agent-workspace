@@ -55,3 +55,25 @@ describe('classifyAddress', () => {
     expect(classifyAddress(address)).toBeNull();
   });
 });
+
+describe('the Private Google Access VIPs', () => {
+  it.each([
+    '199.36.153.4',
+    '199.36.153.7',
+    '199.36.153.8',
+    '199.36.153.11',
+    '2600:2d00:2:1000::1',
+    '2600:2d00:2:10ff::1',
+    '2600:2d00:2:2000::1',
+    '2600:2d00:2:20ff::1',
+  ])('refuses %s as address_private', (address) => {
+    expect(classifyAddress(address)).toBe('address_private');
+  });
+
+  it.each(['199.36.153.12', '199.36.153.3', '2600:2d00:2:1100::1', '2600:2d00:2:3000::1'])(
+    'leaves %s public',
+    (address) => {
+      expect(classifyAddress(address)).toBeNull();
+    },
+  );
+});

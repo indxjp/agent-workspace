@@ -34,7 +34,25 @@ describe('AddProviderScreen', () => {
         baseUrl: '',
         deployment: '',
         apiVersion: '',
+        projectId: '',
+        location: 'global',
       }),
     ).toBe(true);
+  });
+
+  it('asks for no API key for Claude on Google Cloud and offers project and location instead', () => {
+    const html = renderToStaticMarkup(<AddProviderScreen initialProvider="vertex" />);
+    expect(html).not.toContain('API Key');
+    expect(html).not.toContain('type="password"');
+    expect(html).toContain('Google Cloud project (optional)');
+    expect(html).toContain('Leave empty to use this install');
+    expect(html).toContain('Global (recommended)');
+    expect(html).toContain('10 %');
+  });
+
+  it('still asks for the API key for an API-key provider', () => {
+    const html = renderToStaticMarkup(<AddProviderScreen initialProvider="anthropic" />);
+    expect(html).toContain('API Key');
+    expect(html).not.toContain('Google Cloud project');
   });
 });

@@ -1,3 +1,4 @@
+import { IGNORED_STORAGE_VARIABLES } from '@indx-workspace/contracts/storage-settings';
 import { describe, expect, it } from 'vitest';
 
 import { createRedactor } from './redact.js';
@@ -10,7 +11,7 @@ describe('createRedactor', () => {
     OPERATOR_TOKEN: "'quoted-token'",
     WEB_IMAGE: 'registry.example/web@sha256:1111',
     COMPOSE_PROJECT_NAME: 'acme-ai',
-    OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
+    AWS_REGION: 'eu-west-1',
     SHORT: 'abc',
     AW_PUBLIC_URL: 'https://agents.acme.example',
     AGENT_WORKSPACE_VERSION: '0.6.1',
@@ -23,9 +24,29 @@ describe('createRedactor', () => {
     expect(text).toBe('session *** password *** url *** token ***');
   });
 
+  it('masks the id of every random_id progress line, which is the generated secret', () => {
+    const id = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-aBcDe';
+    const lines = [
+      `\u001b[0mrandom_id.master_encryption_key: Creation complete after 0s [id=${id}]\u001b[0m`,
+      `random_id.gateway_token_secret: Refreshing state... [id=${id}]`,
+      `random_id.app_identity["minimal"]: Creation complete after 0s [id=${id}]`,
+    ].join('\n');
+    const masked = redact(lines);
+    expect(masked).not.toContain(id);
+    expect(masked).toContain(
+      'random_id.master_encryption_key: Creation complete after 0s [id=***]',
+    );
+    expect(masked).toContain('random_id.app_identity["minimal"]: Creation complete');
+  });
+
+  it('leaves the id of a random_password line, which is not a value, unchanged', () => {
+    const line = 'random_password.db: Creation complete after 0s [id=none]';
+    expect(redact(line)).toBe(line);
+  });
+
   it('keeps image references, the project name and public settings readable', () => {
-    expect(redact('pull registry.example/web@sha256:1111 for acme-ai, path style true')).toBe(
-      'pull registry.example/web@sha256:1111 for acme-ai, path style true',
+    expect(redact('pull registry.example/web@sha256:1111 for acme-ai in eu-west-1')).toBe(
+      'pull registry.example/web@sha256:1111 for acme-ai in eu-west-1',
     );
   });
 
@@ -39,6 +60,19 @@ describe('createRedactor', () => {
     expect(redact('GET https://agents.acme.example/api/health')).toBe(
       'GET https://agents.acme.example/api/health',
     );
+  });
+
+  // STO-606 (#1703): nothing generates the old storage variables any more, so a value left behind in
+  // an operator's `.env` is masked like any other key `deploy` does not know to be public.
+  it('masks the values of the eight ignored storage variables', () => {
+    expect(IGNORED_STORAGE_VARIABLES).toHaveLength(8);
+    const values = IGNORED_STORAGE_VARIABLES.map((name, index): [string, string] => [
+      name,
+      `old-storage-value-${String(index)}`,
+    ]);
+    const withOld = createRedactor(Object.fromEntries(values));
+    const printed = values.map(([, value]) => value).join(' ');
+    expect(withOld(printed)).toBe(values.map(() => '***').join(' '));
   });
 
   it('does not mask a value too short to be a credential', () => {

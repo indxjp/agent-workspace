@@ -171,7 +171,19 @@ export async function collectFragments(root) {
 }
 
 /**
- * The pull-request half: a CHANGELOG.md in the diff fails unless the head branch is `release/*`.
+ * A new package's changelog as the pull request that creates the package adds it: its title and
+ * an empty `## Unreleased`, which the release fills from the fragments. The tarball check
+ * requires a CHANGELOG.md in every published package, so this is the one changelog a pull request
+ * outside `release/*` may add.
+ */
+const EMPTY_CHANGELOG = /^# [^\n]+\n\n## Unreleased\n?$/u;
+
+/** @param {string} text */
+export const isEmptyChangelog = (text) => EMPTY_CHANGELOG.test(text.replaceAll('\r\n', '\n'));
+
+/**
+ * The pull-request half: a CHANGELOG.md in the diff fails unless the head branch is `release/*`,
+ * or the pull request adds it (git status `A`) holding nothing but `isEmptyChangelog` text.
  * A branch that forked before this gate existed only gets a warning, so the PRs open when it
  * landed are not failed on their next run; merging main into such a branch enforces it.
  * @param {{root: string, base: string, head: string, headRef: string}} options
@@ -182,9 +194,14 @@ export function checkPullRequest({ root, base, head, headRef }) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-  const edited = git('diff', '--name-only', `${base}...${head}`)
+  const isAddedEmpty = (/** @type {string} */ status, /** @type {string} */ file) =>
+    status === 'A' && isEmptyChangelog(git('show', `${head}:${file}`));
+  const edited = git('diff', '--name-status', '--no-renames', `${base}...${head}`)
     .split('\n')
-    .filter((file) => file === 'CHANGELOG.md' || file.endsWith('/CHANGELOG.md'));
+    .map((line) => line.split('\t'))
+    .filter(([, file = '']) => file === 'CHANGELOG.md' || file.endsWith('/CHANGELOG.md'))
+    .filter(([status = '', file = '']) => !isAddedEmpty(status, file))
+    .map(([, file = '']) => file);
   if (edited.length === 0 || RELEASE_BRANCH.test(headRef)) return { failures: [], warnings: [] };
   const messages = edited.map(
     (file) =>

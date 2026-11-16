@@ -43,22 +43,24 @@ import type {
 import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
 import {
   SURFACE_SESSION_TTL_SECONDS,
-  SurfaceAllowedOriginsSchema,
   SurfaceDefinitionSchema,
   type SurfaceDefinition,
   type SurfaceSessionRequest,
 } from '@indx-workspace/contracts/surfaces';
-
 import { versionToPin } from '../../agent-versions/session-version';
-import type { AgentRecord } from '../../agents/contract';
-import type { WorkspaceAgentStore } from '../../agents/store';
-import { readDeploymentWorkspaceSlug } from '../../auth/session';
-import { engineForStoredPolicy } from '../../engines/session-engine';
-import { hashApiKeySecret, hashesEqual, randomToken } from '../../rbac/api-key';
-import { Principal } from '../../rbac/principal';
-import type { AgentRef, RunApiEnvironment } from '../../runs/environment';
-import type { TokensRuntime } from '../../tokens/runtime';
-import type { RunGate } from '../../workspaces/run-gate';
+import type { AgentRecord, WorkspaceAgentStore } from '../../agents';
+import {
+  hashApiKeySecret,
+  hashesEqual,
+  Principal,
+  randomToken,
+  readDeploymentWorkspaceSlug,
+  type RunGate,
+  type TokensRuntime,
+} from '../../identity';
+import { type AgentRef, engineForStoredPolicy, type RunStartEnvironment } from '../../execution';
+import { randomIds, type IdGenerator } from '../../ids';
+import { withDeploymentOrigin } from './deployment-origin';
 import {
   surfaceModeOf,
   type ResolvedSurface,
@@ -156,13 +158,17 @@ export interface SurfaceSessionsDependencies {
     agent: AgentRef,
     sessionId: string | null,
     versionId: string | null,
-  ) => ReturnType<NonNullable<RunApiEnvironment['preflight']>>;
+  ) => ReturnType<NonNullable<RunStartEnvironment['preflight']>>;
   /** The installed `POST /api/tokens` runtime, whose `issue` mints the session's token. */
   readonly tokens: () => Pick<TokensRuntime, 'issue'> | null;
+  /** Where a new session's id comes from. Defaults to {@link randomIds}. */
+  readonly ids?: IdGenerator;
 }
 
 const GONE: SurfaceSessionOpening = { kind: 'gone' };
+
 const AGENT_NOT_OFFERED: SurfaceSessionOpening = { kind: 'agent-not-offered' };
+
 const NOT_RESUMABLE: SurfaceSessionOpening = { kind: 'not-resumable' };
 
 /** The bytes of CSPRNG entropy in a resume key: 43 base64url characters (C18). */
@@ -173,14 +179,19 @@ const RESUME_KEY_BYTES = 32;
  * the same owner and a pointer in the environment {@link surfaceEnvironment} picks for it (SD8),
  * with the version a new session of it pins. `null` when `name` is none of those.
  */
+interface SurfaceSessionContext {
+  readonly scope: WorkspaceScope;
+  readonly resolved: ResolvedSurface;
+  readonly agent: AgentRecord;
+}
+
 async function offeredAgent(
   dependencies: SurfaceSessionsDependencies,
-  scope: WorkspaceScope,
-  resolved: ResolvedSurface,
-  mode: SurfaceMode,
-  surfaceAgent: AgentRecord,
-  name: string,
+  context: SurfaceSessionContext,
+  selection: { readonly mode: SurfaceMode; readonly name: string },
 ): Promise<{ readonly agent: AgentRecord; readonly versionId: string } | null> {
+  const { scope, resolved, agent: surfaceAgent } = context;
+  const { mode, name } = selection;
   // Issue #622: the surface's own agent pins the version {@link pickSurfaceVersion} resolved, whose
   // surface admitted this visitor; no second pick, so a promote in between cannot split them.
   if (name === surfaceAgent.name) return { agent: surfaceAgent, versionId: resolved.versionId };
@@ -205,49 +216,15 @@ function surfaceOfVersion(record: AgentVersionRecord, name: string): SurfaceDefi
 }
 
 /**
- * Set by `agent-workspace deploy` to the project's own deployed frontend origin: the domain Vercel
- * confirmed (ADR-0128) or the Cloudflare frontend Worker's `workers.dev` origin (ADR-0129).
- */
-const FRONTEND_ORIGIN_VARIABLE = 'AW_FRONTEND_ORIGIN';
-
-/**
- * `surface` with the deployment's own frontend origin among its `allowedOrigins` (ADR-0128), only
- * when it is served from `production`: a draft (`local`) is never widened, so the try page and an
- * agent not promoted yet keep exactly what they list. The value is `unknown` until the contract's
- * origin schema accepts it and it is `https:`; anything else, or a list already full, is ignored
- * with a warning each time a surface is resolved, never thrown at a visitor.
- */
-export function withDeploymentOrigin(
-  surface: SurfaceDefinition,
-  environment: AgentVersionEnvironment,
-  env: Readonly<Record<string, string | undefined>>,
-): SurfaceDefinition {
-  if (environment !== 'production') return surface;
-  const origin = env[FRONTEND_ORIGIN_VARIABLE]?.trim() ?? '';
-  if (origin === '') return surface;
-  const listed = surface.allowedOrigins ?? [];
-  if (listed.includes(origin)) return surface;
-  const merged = SurfaceAllowedOriginsSchema.safeParse([...listed, origin]);
-  if (!merged.success || !origin.startsWith('https://')) {
-    log.warn(
-      `[surfaces] ${FRONTEND_ORIGIN_VARIABLE} is not an https origin this surface can list, and is ignored.`,
-    );
-    return surface;
-  }
-  return { ...surface, allowedOrigins: merged.data };
-}
-
-/**
  * Whether `resume` names a live session of `agent` opened through this surface, with that key.
  * Every failed check gives the same `false`, so the answer never says which one failed.
  */
 async function isResumable(
   dependencies: SurfaceSessionsDependencies,
-  scope: WorkspaceScope,
-  resolved: ResolvedSurface,
-  agent: AgentRecord,
+  context: SurfaceSessionContext,
   resume: NonNullable<SurfaceSessionRequest['resume']>,
 ): Promise<boolean> {
+  const { scope, resolved, agent } = context;
   const key = await dependencies.surfaceSessionKeys.forScope(scope).find(resume.sessionId);
   if (key === null || key.surfaceName !== resolved.surface.name || key.agentId !== agent.id) {
     return false;
@@ -321,6 +298,7 @@ export function createSurfaceSessionsRuntime(
     );
   }
   const runtime: SurfaceSessionsRuntime = {
+    env: dependencies.env,
     async resolve(name: string, mode: SurfaceMode): Promise<ResolvedSurface | null> {
       const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
       if (scope === null) return null;
@@ -359,47 +337,10 @@ export function createSurfaceSessionsRuntime(
       resolved: ResolvedSurface,
       request: SurfaceSessionRequest,
     ): Promise<SurfaceSessionOpening> {
-      const { workspaceId } = resolved;
-      // Issue #119: an archived workspace takes no new session, checked before anything is read.
-      if (!(await dependencies.runGate.isUsable(workspaceId))) return GONE;
-      const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
-      if (scope === null) return GONE;
-      const surfaceAgent = await dependencies.agents
-        .forWorkspace(workspaceId)
-        .get(resolved.agentId);
-      if (surfaceAgent === null) return GONE;
-      const offered = await offeredAgent(
-        dependencies,
-        scope,
-        resolved,
-        surfaceModeOf(request),
-        surfaceAgent,
-        request.agent ?? surfaceAgent.name,
-      );
-      if (offered === null) return AGENT_NOT_OFFERED;
-      const { agent, versionId } = offered;
+      const prepared = await prepareSurfaceSession(dependencies, resolved, request);
+      if (prepared.kind !== 'ready') return prepared;
+      const { scope, agent, versionId, publisher } = prepared;
       const { resume } = request;
-      if (
-        resume !== undefined &&
-        !(await isResumable(dependencies, scope, resolved, agent, resume))
-      ) {
-        return NOT_RESUMABLE;
-      }
-      const owner = await publisherOf(dependencies, workspaceId, agent);
-      if (owner === null) return GONE;
-      const { publisher, agentRef } = owner;
-      // Before the preflight and before any session, key or token exists (issue #1851).
-      if (agentRef.archived === true) return { kind: 'refused', ...AGENT_ARCHIVED };
-      // A resumed session's project, if it was filed under one, decides its model as a run's would.
-      const refusal = await dependencies.preflight(
-        publisher,
-        agentRef,
-        resume?.sessionId ?? null,
-        versionId,
-      );
-      if (refusal !== null) {
-        return { kind: 'refused', code: refusal.code, message: refusal.message };
-      }
       const tokens = dependencies.tokens();
       if (tokens === null) {
         throw new Error(
@@ -407,35 +348,16 @@ export function createSurfaceSessionsRuntime(
         );
       }
 
-      let sessionId: string;
-      let resumeKey: string | null = null;
-      if (resume === undefined) {
-        const outcome = await dependencies.sessions.forScope(scope).ensure({
-          id: crypto.randomUUID(),
-          agentId: agent.id,
-          ownerPrincipalId: publisher.ownerPrincipalId,
-          userId: publisher.userId,
-          // Issue #612: the conversation runs the version the surface's environment points at.
-          agentVersionId: versionId,
-        });
-        if (outcome.kind !== 'created' && outcome.kind !== 'existing') {
-          log.error(
-            `[surfaces] no session could be opened for agent ${agent.id}: ${outcome.kind}.`,
-          );
-          return GONE;
-        }
-        sessionId = outcome.session.id;
-        resumeKey = randomToken(RESUME_KEY_BYTES);
-        // ponytail: two repositories, no shared transaction; a failed key insert leaves a session nobody can resume and answers 5xx, share one transaction if that is ever seen
-        await dependencies.surfaceSessionKeys.forScope(scope).record({
-          sessionId,
-          surfaceName: resolved.surface.name,
-          agentId: agent.id,
-          keyHash: await hashApiKeySecret(resumeKey),
-        });
-      } else {
-        sessionId = resume.sessionId;
-      }
+      const session =
+        resume === undefined
+          ? await createSurfaceSession(
+              dependencies,
+              { scope, resolved, agent },
+              { versionId, publisher },
+            )
+          : { sessionId: resume.sessionId, resumeKey: null };
+      if (session === null) return GONE;
+      const { sessionId, resumeKey } = session;
       const minted = await tokens.issue(
         publisher,
         { kind: 'session', id: sessionId },
@@ -509,3 +431,91 @@ export function createSurfaceSessionsRuntime(
   };
   return runtime;
 }
+
+async function prepareSurfaceSession(
+  dependencies: SurfaceSessionsDependencies,
+  resolved: ResolvedSurface,
+  request: SurfaceSessionRequest,
+): Promise<
+  | SurfaceSessionOpening
+  | {
+      readonly kind: 'ready';
+      readonly scope: WorkspaceScope;
+      readonly agent: AgentRecord;
+      readonly versionId: string;
+      readonly publisher: Principal;
+    }
+> {
+  const { workspaceId } = resolved;
+  // Issue #119: an archived workspace takes no new session, checked before anything is read.
+  if (!(await dependencies.runGate.isUsable(workspaceId))) return GONE;
+  const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
+  if (scope === null) return GONE;
+  const surfaceAgent = await dependencies.agents.forWorkspace(workspaceId).get(resolved.agentId);
+  if (surfaceAgent === null) return GONE;
+  const offered = await offeredAgent(
+    dependencies,
+    { scope, resolved, agent: surfaceAgent },
+    { mode: surfaceModeOf(request), name: request.agent ?? surfaceAgent.name },
+  );
+  if (offered === null) return AGENT_NOT_OFFERED;
+  const { agent, versionId } = offered;
+  const { resume } = request;
+  if (
+    resume !== undefined &&
+    !(await isResumable(dependencies, { scope, resolved, agent }, resume))
+  ) {
+    return NOT_RESUMABLE;
+  }
+  const owner = await publisherOf(dependencies, workspaceId, agent);
+  if (owner === null) return GONE;
+  const { publisher, agentRef } = owner;
+  // Before the preflight and before any session, key or token exists (issue #1851).
+  if (agentRef.archived === true) return { kind: 'refused', ...AGENT_ARCHIVED };
+  // A resumed session's project, if it was filed under one, decides its model as a run's would.
+  const refusal = await dependencies.preflight(
+    publisher,
+    agentRef,
+    resume?.sessionId ?? null,
+    versionId,
+  );
+  if (refusal !== null) {
+    return { kind: 'refused', code: refusal.code, message: refusal.message };
+  }
+
+  return { kind: 'ready', scope, agent, versionId, publisher };
+}
+
+async function createSurfaceSession(
+  dependencies: SurfaceSessionsDependencies,
+  context: SurfaceSessionContext,
+  owner: { readonly versionId: string; readonly publisher: Principal },
+): Promise<{ readonly sessionId: string; readonly resumeKey: string } | null> {
+  const { scope, resolved, agent } = context;
+  const { versionId, publisher } = owner;
+  const outcome = await dependencies.sessions.forScope(scope).ensure({
+    id: (dependencies.ids ?? randomIds).newId(),
+    agentId: agent.id,
+    ownerPrincipalId: publisher.ownerPrincipalId,
+    userId: publisher.userId,
+    // Issue #612: the conversation runs the version the surface's environment points at.
+    agentVersionId: versionId,
+  });
+  if (outcome.kind !== 'created' && outcome.kind !== 'existing') {
+    log.error(`[surfaces] no session could be opened for agent ${agent.id}: ${outcome.kind}.`);
+    return null;
+  }
+  const sessionId = outcome.session.id;
+  const resumeKey = randomToken(RESUME_KEY_BYTES);
+  // ponytail: two repositories, no shared transaction; a failed key insert leaves a session nobody can resume and answers 5xx, share one transaction if that is ever seen
+  await dependencies.surfaceSessionKeys.forScope(scope).record({
+    sessionId,
+    surfaceName: resolved.surface.name,
+    agentId: agent.id,
+    keyHash: await hashApiKeySecret(resumeKey),
+  });
+
+  return { sessionId, resumeKey };
+}
+
+export { withDeploymentOrigin } from './deployment-origin';

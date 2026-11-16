@@ -7,7 +7,7 @@ T0 — the identity cluster's definitions are coherent.
 * The closed unions (roles, principal kinds in both spellings, scope kinds, verifiers, invitation
   states, multiplicities) have the spellings of their TypeScript lists, and the database checks
   hold the role, principal-kind and scope-kind columns to exactly those spellings.
-* The 36 refined checks cover exactly the checks `catalogue` records without a meaning. The
+* The 46 refined checks cover exactly the checks `catalogue` records without a meaning. The
   `aw_identity_check_theorems` elaborator generates, per check, `<check>_renders_as_snapshot`
   (its `render` is the body the latest snapshot (`Er.Snapshot.file`) records, read while this file
   elaborates) and `<check>_separates_its_samples` (its three-valued `eval` accepts and refuses the
@@ -31,9 +31,9 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Er.Current.Identity
 /-- The role spellings are exactly `MEMBERSHIP_ROLES`, in its order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/team.ts#MEMBERSHIP_ROLES")
   (ts := "packages/core/src/db/schema/memberships.ts#membershipRoles")
-  (ts := "apps/web/server/rbac/roles.ts#ROLES")]
+  (ts := "apps/web/server/rbac/core/roles.ts#ROLES")]
 theorem role_wires_match_contract :
-    WireEnum.wires Role = ["owner", "admin", "builder", "viewer"] := by decide +kernel
+    WireEnum.wires Role = ["owner", "admin", "builder", "viewer", "guest"] := by decide +kernel
 
 /-- Decoding the JSON encoding of any role gives that role back. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/team.ts#MEMBERSHIP_ROLES")]
@@ -41,11 +41,11 @@ theorem role_json_round_trips (r : Role) :
     WireEnum.fromJsonValue? (WireEnum.toJsonValue r) = some r :=
   WireEnum.fromJsonValue?_toJsonValue r
 
-/-- `parseRole` refuses every string that is not exactly one of the four spellings: no case
+/-- `parseRole` refuses every string that is not exactly one of the five spellings: no case
 folding, no whitespace, no default. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/roles.ts#parseRole")]
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/roles.ts#parseRole")]
 theorem parse_role_refuses_unknown_spelling (s : String)
-    (h : s ∉ ["owner", "admin", "builder", "viewer"]) : parseRole s = none := by
+    (h : s ∉ ["owner", "admin", "builder", "viewer", "guest"]) : parseRole s = none := by
   unfold parseRole
   rw [WireEnum.ofWire?_eq_none_iff, role_wires_match_contract]
   exact h
@@ -55,17 +55,18 @@ example : parseRole "Owner" = none ∧ parseRole " viewer" = none ∧ parseRole 
     parse_role_refuses_unknown_spelling _ (by decide +kernel),
     parse_role_refuses_unknown_spelling _ (by decide +kernel)⟩
 
-/-- Every role column of the schema (`memberships`, `api_keys`, `invitations`) is checked against
-exactly the four role spellings. -/
+/-- The role columns of the schema are checked against exactly the role spellings: `memberships`
+against all five, `api_keys` and `invitations` against the four conferrable ones (`guest` is never
+conferred, so neither table can hold it). -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/memberships.ts#memberships_role_valid")
   (ts := "packages/core/src/db/schema/api-keys.ts#api_keys_role_valid")
   (ts := "packages/core/src/db/schema/invitations.ts#invitations_role_valid")]
-theorem role_checks_hold_the_four_roles :
+theorem role_checks_hold_the_roles :
     (catalogue .memberships).oneOfCheck? "memberships_role_valid" =
         some ("role", WireEnum.wires Role) ∧
-      (catalogue .apiKeys).oneOfCheck? "api_keys_role_valid" = some ("role", WireEnum.wires Role) ∧
+      (catalogue .apiKeys).oneOfCheck? "api_keys_role_valid" = some ("role", conferrableWires) ∧
       (catalogue .invitations).oneOfCheck? "invitations_role_valid" =
-        some ("role", WireEnum.wires Role) := by decide +kernel
+        some ("role", conferrableWires) := by decide +kernel
 
 /-- The wire principal kinds are exactly the contract's `PRINCIPAL_KINDS`. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/team.ts#PRINCIPAL_KINDS")]
@@ -89,7 +90,7 @@ theorem principal_kind_storage_round_trips (k : Kind) : Kind.ofStorage? k.toStor
 
 /-- `wireKind` maps each storage spelling to the wire spelling of the same kind, and a wire
 spelling is not a storage spelling. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/handlers.ts#wireKind")]
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/me.ts#wireKind")]
 theorem wire_kind_maps_storage_to_wire :
     wireKindOfStorage? "membership" = some "membership" ∧
       wireKindOfStorage? "api_key" = some "api-key" ∧ wireKindOfStorage? "api-key" = none := by
@@ -116,14 +117,14 @@ theorem invitation_state_wires :
 
 /-! ## The refined checks -/
 
-/-- The 36 refined checks cover exactly the checks `catalogue` records without a meaning on the
-fourteen identity tables, in the same order, and no check is refined twice. -/
+/-- The 46 refined checks cover exactly the checks `catalogue` records without a meaning on the
+eighteen identity tables, in the same order, and no check is refined twice. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem refined_checks_cover_the_cluster :
     tables.all (fun t => (checksOf t).map (·.1) == otherCheckNames t) = true ∧
       checks.all (fun c => tables.contains c.1) = true ∧ (checks.map (·.2.1)).Nodup ∧
-      checks.length = 36 := by decide +kernel
+      checks.length = 46 := by decide +kernel
 
 section Generator
 
@@ -412,12 +413,21 @@ example : unscopedTokenActor.wellFormed = false ∧
 /-! ## Concept values are rows the database admits -/
 
 private theorem role_contains (r : Role) :
-    ["owner", "admin", "builder", "viewer"].contains (WireEnum.toWire r) = true := by
+    ["owner", "admin", "builder", "viewer", "guest"].contains (WireEnum.toWire r) = true := by
   cases r <;> decide +kernel
+
+private theorem role_contains_conferrable (r : Role) (h : r.isConferrable = true) :
+    ["owner", "admin", "builder", "viewer"].contains (WireEnum.toWire r) = true := by
+  cases r <;> first | decide +kernel | exact absurd h (by decide +kernel)
+
+private theorem role_disj_conferrable (r : Role) (h : r.isConferrable = true) :
+    WireEnum.toWire r = "owner" ∨ WireEnum.toWire r = "admin" ∨ WireEnum.toWire r = "builder" ∨
+      WireEnum.toWire r = "viewer" := by
+  cases r <;> first | decide +kernel | exact absurd h (by decide +kernel)
 
 private theorem role_disj (r : Role) :
     WireEnum.toWire r = "owner" ∨ WireEnum.toWire r = "admin" ∨ WireEnum.toWire r = "builder" ∨
-      WireEnum.toWire r = "viewer" := by
+      WireEnum.toWire r = "viewer" ∨ WireEnum.toWire r = "guest" := by
   cases r <;> decide +kernel
 
 private theorem bne_true_of_ne {a b : String} (h : ¬a = b) : (a != b) = true := by
@@ -429,7 +439,7 @@ local macro "identity_row_simp" : tactic => `(tactic|
       checkHolds, CheckExpr.holds, CheckExpr.eval, Row.get, List.lookup_cons, TableSpec.column?,
       TableSpec.hasColumn, parseInstant?_instantText, instantOf?, cmpCells, eqText, and3, or3,
       Rel.apply, otherCheckHolds, principalSourceXor, Pattern.test, boolText, role_contains,
-      role_disj, neCells])
+      role_contains_conferrable, role_disj_conferrable, role_disj, neCells])
 
 set_option maxHeartbeats 2000000 in
 /-- A valid workspace's row is one `workspaces` admits: every column known, every `NOT NULL`
@@ -461,6 +471,7 @@ theorem membership_row_is_admitted (m : Membership) : rowAdmitted .memberships m
   obtain ⟨⟨id⟩, ⟨ws⟩, ⟨u⟩, role, cr, up⟩ := m
   simp [Membership.toRow] <;> identity_row_simp
 
+set_option maxHeartbeats 300000 in
 /-- A valid principal's row is one `workspace_principals` admits: the source shape passes
 `workspace_principals_source_xor` by construction. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]

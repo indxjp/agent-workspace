@@ -38,8 +38,9 @@ export const PI_ADAPTER_VERSION = `0.0.0+${PI_CODING_AGENT_VERSION}`;
  *   copies the parent's stream under a new header, as pi's own `forkFrom` does to a file.
  * * `streamingText: true`, `reasoning: true` — text and thinking deltas are mapped.
  * * `maxTurns: 'adapter'` — counted on `turn_end`, ended with `session.abort()`.
- * * `maxBudget: 'adapter'` — **provisional** (ADR-0074 D7, #342): each response is priced with the
- *   port's table and the run stops `max_budget` at the cap. Billing stays the gateway's.
+ * * `maxBudget: 'adapter'` — enforced outside the engine, by the platform: the gateway refuses a
+ *   model call once the run's settled cost reaches its spend ceiling (ADR-0162, #342). The adapter
+ *   prices nothing and refuses no cap; billing is the gateway's alone (ADR-0065 D6).
  * * `wireProtocols` — Anthropic Messages, the one dialect the gateway serves pi today.
  *
  * The values are the engine catalogue's (ADR-0136), which the control plane's registry reads too.

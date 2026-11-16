@@ -186,7 +186,7 @@ The model, per piece, and the rounding rules, all stated in the script and the s
 
 The tests pin hand-computed prices, so a change to the model is a visible change to the numbers:
 
-```ts title="quotation.test.ts (excerpt)" file="tests/gallery/quotation/quotation.test.ts#excerpt"
+```ts title="quotation.cost-model.test-support.ts (excerpt)" file="tests/gallery/quotation/quotation.cost-model.test-support.ts#excerpt"
 // SS400 200×100×3.2, 4×φ10, 2 bends, 50 pcs:
 //   64 cm³ × 7.85 = 0.5024 kg × ¥150 ÷ 0.8 = 94.2 → ¥94
 //   (600 + 4π·10 = 725.66 mm) 0.72566 m × ¥80 = 58.05 → ¥58;  2 × ¥40 = ¥80;  ¥6000 ÷ 50 = ¥120
@@ -388,7 +388,7 @@ approval as the engine does, so the backend reads the same tool calls a real run
     ```sh title="illustrative" claim="illustrative"
     export ERP_TOKEN=…                              # one token: the stand-in checks what aw dev registers
     export ERP_IDENTITY_SECRET=…                    # signs the caller; the stand-in verifies with the same value
-    aw secrets set ERP_IDENTITY_SECRET              # the same value, for the tool's identity
+    printf '%s' "$ERP_IDENTITY_SECRET" | aw secrets create --name ERP_IDENTITY_SECRET --value-stdin  # the same value, for the tool's identity
     IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
       PORT=8790 node erp/fake-erp.mjs &             # the stand-in ERP; skip it with your own ERP
     # set servers[0].url in apis/erp.openapi.json to http://127.0.0.1:8790/api/v1 (your ERP's URL otherwise)

@@ -203,3 +203,61 @@ spec:
     - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.ingress.controllerNamespace | quote }} } } }]
       ports: [{ protocol: TCP, port: 3000 }]
 {{- end }}
+{{- if .Values.apps }}
+---
+# Apps (templates/apps.yaml) are selected by `agent-workspace.io/role: app`, not by name: a
+# NetworkPolicy's selector expressions are ANDed, so the platform's DNS and database policies above
+# cannot also take them. An app resolves names like every pod of the release.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: apps-dns }
+spec:
+  podSelector: { matchLabels: { agent-workspace.io/role: app } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.dns.namespace | quote }} } }
+          podSelector: { matchLabels: {{ toJson .Values.dns.podSelector }} }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# An app reaches PostgreSQL as its own role, on the same `database.port` and destination as the
+# platform. The role owns only the app's `app_<name>` schema (docs/deploy/kubernetes.md).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: apps-database }
+spec:
+  podSelector: { matchLabels: { agent-workspace.io/role: app } }
+  policyTypes: [Egress]
+  egress:
+    - ports: [{ protocol: TCP, port: {{ .Values.database.port }} }]
+      {{- with include "agent-workspace.egressTo" .Values.database }}
+      {{- . | nindent 6 }}
+      {{- end }}
+---
+# An app calls the platform at `publicUrl` (AW_URL) over https, through the same Ingress the
+# Owner's browser uses. The address that resolves to is the cluster's load balancer, which may be a
+# private one, so the rule opens only port 443 and names no destination.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: apps-egress-https }
+spec:
+  podSelector: { matchLabels: { agent-workspace.io/role: app } }
+  policyTypes: [Egress]
+  egress:
+    - ports: [{ protocol: TCP, port: 443 }]
+{{- if .Values.ingress.enabled }}
+---
+# The ingress controller forwards each app's `host` to it, as it does web's (web-from-ingress-controller).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: apps-from-ingress }
+spec:
+  podSelector: { matchLabels: { agent-workspace.io/role: app } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.ingress.controllerNamespace | quote }} } } }]
+      ports: [{ protocol: TCP, port: 3000 }]
+{{- end }}
+{{- end }}

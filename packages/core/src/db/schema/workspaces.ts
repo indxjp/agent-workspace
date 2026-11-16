@@ -8,6 +8,7 @@
 import {
   boolean,
   foreignKey,
+  index,
   pgTable,
   text,
   timestamp,
@@ -74,6 +75,14 @@ export const workspaces = pgTable(
      * states a workspace ever moves between after creation.
      */
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    /**
+     * `NULL` for every ordinary workspace. Set only for an Agent Store visitor's demo workspace,
+     * once, when the email-link binder makes it: the moment its 24 hours
+     * (`DEMO_WORKSPACE_LIFETIME_SECONDS`) end. It is never moved later. A scheduled sweep deletes the
+     * workspace, and everything in it, once this has passed: the one `DELETE` of a workspace, and
+     * only of one marked here. A demo workspace is told apart from a real one by this column alone.
+     */
+    demoExpiresAt: timestamp('demo_expires_at', { withTimezone: true, mode: 'date' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -83,6 +92,14 @@ export const workspaces = pgTable(
     // Reject it at the boundary instead (ADR-0015).
     check('workspaces_slug_format', sql`${table.slug} ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'`),
     check('workspaces_name_not_blank', sql`length(btrim(${table.name})) > 0`),
+    check(
+      'workspaces_demo_expires_after_created',
+      sql`${table.demoExpiresAt} is null or ${table.demoExpiresAt} > ${table.createdAt}`,
+    ),
+    // The expiry sweep reads the demo workspaces past their end; ordinary workspaces are not indexed.
+    index('workspaces_demo_expires_idx')
+      .on(table.demoExpiresAt)
+      .where(sql`${table.demoExpiresAt} is not null`),
     // #129: a connection with no chosen model is not a default, and a model id with no
     // connection to reach it is not one either. Written and cleared as one pair, never one
     // without the other.

@@ -2,6 +2,7 @@
 
 import { CREDENTIAL_INPUT_PROPS } from '../shell/credential-input';
 
+import { storageStrings, type StorageStrings } from './storage-messages';
 import type { CredentialFields, StorageProvider } from './storage-model';
 
 export const STORAGE_CARD = 'rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
@@ -17,17 +18,20 @@ export function CredentialInputs({
   provider,
   credentials,
   onChange,
+  strings = storageStrings('en'),
 }: Readonly<{
   provider: StorageProvider;
   credentials: CredentialFields;
   onChange: (patch: Partial<CredentialFields>) => void;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  strings?: StorageStrings;
 }>) {
   return (
     <>
       {provider === 's3' ? (
         <>
           <label className={STORAGE_LABEL} htmlFor="storage-access-key-id">
-            Access key ID
+            {strings.accessKeyId}
             <input
               id="storage-access-key-id"
               type="password"
@@ -39,7 +43,7 @@ export function CredentialInputs({
             />
           </label>
           <label className={STORAGE_LABEL} htmlFor="storage-secret-access-key">
-            Secret access key
+            {strings.secretAccessKey}
             <input
               id="storage-secret-access-key"
               type="password"
@@ -54,7 +58,7 @@ export function CredentialInputs({
       ) : null}
       {provider === 'gcs' ? (
         <label className={STORAGE_LABEL} htmlFor="storage-service-account">
-          Service account JSON
+          {strings.serviceAccountJson}
           <input
             id="storage-service-account"
             type="password"
@@ -68,7 +72,7 @@ export function CredentialInputs({
       {provider === 'azblob' ? (
         <>
           <label className={STORAGE_LABEL} htmlFor="storage-azure-kind">
-            Credential type
+            {strings.credentialType}
             <select
               id="storage-azure-kind"
               className={`${STORAGE_CONTROL} mt-1`}
@@ -80,12 +84,12 @@ export function CredentialInputs({
                 })
               }
             >
-              <option value="accountKey">Account key</option>
-              <option value="sasToken">SAS token</option>
+              <option value="accountKey">{strings.accountKey}</option>
+              <option value="sasToken">{strings.sasToken}</option>
             </select>
           </label>
           <label className={STORAGE_LABEL} htmlFor="storage-azure-secret">
-            {credentials.azureKind === 'accountKey' ? 'Account key' : 'SAS token'}
+            {credentials.azureKind === 'accountKey' ? strings.accountKey : strings.sasToken}
             <input
               id="storage-azure-secret"
               type="password"

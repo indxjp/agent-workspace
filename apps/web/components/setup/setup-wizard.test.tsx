@@ -8,6 +8,7 @@ import {
   AdministratorFields,
   DETECTION_FAILED_MESSAGE,
   ProviderKeyField,
+  VERTEX_KEYLESS_MESSAGE,
   RuntimeChoices,
 } from './setup-wizard';
 
@@ -24,7 +25,11 @@ function administratorStep(): string {
 
 function providerKeyStep(): string {
   return renderToStaticMarkup(
-    createElement(ProviderKeyField, { providerApiKey: '', setProviderApiKey: () => undefined }),
+    createElement(ProviderKeyField, {
+      provider: 'anthropic',
+      providerApiKey: '',
+      setProviderApiKey: () => undefined,
+    }),
   );
 }
 
@@ -109,6 +114,20 @@ describe('setup wizard, provider key step', () => {
 
     expectCredentialField(inputTag(html, 'providerApiKey'), 'off');
     expect(html).toContain('for="setup-providerApiKey"');
+  });
+});
+
+describe('setup wizard, Claude on Google Cloud', () => {
+  it('asks for no key and says why', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProviderKeyField, {
+        provider: 'vertex',
+        providerApiKey: '',
+        setProviderApiKey: () => undefined,
+      }),
+    );
+    expect(html).not.toContain('<input');
+    expect(html).toContain(VERTEX_KEYLESS_MESSAGE.replace("'", '&#x27;'));
   });
 });
 

@@ -69,6 +69,10 @@
       "entry": ["src/**/*.test.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx}"]
     },
+    "packages/app": {
+      "entry": ["src/**/*.test.{ts,tsx}", "src/bin/aw-app.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
     "packages/aw": {
       "entry": ["src/**/*.test.ts", "src/project/loader-child.ts", "src/tools/host-child.ts"],
       "project": ["src/**/*.ts"]

@@ -135,7 +135,7 @@ run start with `409 agent_archived`, and is left out of the agent list unless yo
 (`GET /api/agents?archived=include`, or `agents.list({ archived: 'include' })` in the SDK).
 
 **Restore an archived agent.** Call `POST /api/agents/:id/restore` (no body), `agents.restore(id)` in
-the SDK, or run `aw agents restore <id>`. The Owner, an Admin or the agent's owner may restore it.
+the SDK, or run `aw agents restore <id>`. The Owner, an Admin or the Builder who owns the agent may restore it.
 The agent is skipped by the archive sweep for 30 days after a restore. In the console, an archived
 agent's page shows an Archived badge and, to anyone allowed to restore it, a Restore button; the
 agent list hides archived agents unless you tick Show archived.

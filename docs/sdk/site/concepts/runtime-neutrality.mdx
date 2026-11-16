@@ -170,7 +170,7 @@ declared capability or a refusal by name rather than a silent narrowing:
 | Connectors (MCP)      | stdio, streamable HTTP and SSE connectors, with the credentials compose resolves                                                                                                                                                                                             |
 | Skills                | **refused**: `skills: false`, so a skill assignment is `422 engine_capability_unsupported`                                                                                                                                                                                   |
 | `limits.maxTurns`     | the SDK's own `maxTurns`; the run ends with `stopReason: 'max_turns'`                                                                                                                                                                                                        |
-| `limits.maxBudgetUsd` | **provisional** `maxBudget: 'adapter'` — priced from the usage the gateway reports back, stops `max_budget`; an unpriced model is refused; billing stays the gateway's (#342 moves the cap there)                                                                            |
+| `limits.maxBudgetUsd` | `maxBudget: 'adapter'`, enforced by the gateway (ADR-0162): a model call is refused once the run's settled cost reaches its spend ceiling; a cap on any model compiles, and a run on an unpriced model is not capped                                                         |
 | Fork a session        | **refused**: `fork: false`                                                                                                                                                                                                                                                   |
 
 The model is reached through the gateway in the connection's own dialect: the Responses API for an
@@ -195,7 +195,7 @@ permission system and no MCP client, so the adapter configures it rather than pa
 | Connectors (MCP)      | **refused**: `mcp: false`, so a connector is `422 engine_capability_unsupported` with `capability: 'mcp'`                                                                                                               |
 | Skills                | placed at `.pi/skills/<name>/` and loaded by a pinned resource loader                                                                                                                                                   |
 | `limits.maxTurns`     | `maxTurns: 'adapter'` — counted on `turn_end`, stopped with pi-agent-core's `terminate` hint; the run ends with `stopReason: 'max_turns'`                                                                               |
-| `limits.maxBudgetUsd` | **provisional** `maxBudget: 'adapter'` — priced from the shared provisional price table (`packages/engine/src/prices.ts`), stops `max_budget`; an unpriced model is refused                                             |
+| `limits.maxBudgetUsd` | `maxBudget: 'adapter'`, enforced by the gateway (ADR-0162): a model call is refused once the run's settled cost reaches its spend ceiling; a cap on any model compiles, and a run on an unpriced model is not capped    |
 | Fork a session        | supported: `fork: true` copies the parent's stream under a new header                                                                                                                                                   |
 
 The pinned resource loader hands pi only the platform-placed skills and the agent's instructions,
@@ -208,7 +208,7 @@ entry per line, so a later run on the same session resumes it.
 
 ## The fourth engine: Mastra
 
-`engine: 'mastra'` runs an agent as a plain Mastra `Agent` (`@mastra/core`, pinned at 1.79.0)
+`engine: 'mastra'` runs an agent as a plain Mastra `Agent` (`@mastra/core`, pinned at 1.81.0)
 over a `Workspace`, in process, through `packages/engine-mastra/src/boundary.ts`.
 No Mastra server, `Harness`, workflow or wrapper of another engine is used:
 
@@ -219,7 +219,7 @@ No Mastra server, `Harness`, workflow or wrapper of another engine is used:
 | Connectors (MCP)      | Mastra's `MCPClient`; the tools stream as `kind: 'mcp'`, and a tool that asks for an approval is refused                                                                                                                                                                                                                      |
 | Skills                | placed at `.mastra/skills/<name>/` and read as workspace skills                                                                                                                                                                                                                                                               |
 | `limits.maxTurns`     | `maxTurns: 'native'` — Mastra's `maxSteps`; a run cut short ends with `stopReason: 'max_turns'`                                                                                                                                                                                                                               |
-| `limits.maxBudgetUsd` | **provisional** `maxBudget: 'adapter'` — priced from the shared provisional price table, stops `max_budget`; an unpriced model is refused                                                                                                                                                                                     |
+| `limits.maxBudgetUsd` | `maxBudget: 'adapter'`, enforced by the gateway (ADR-0162): a model call is refused once the run's settled cost reaches its spend ceiling; a cap on any model compiles, and a run on an unpriced model is not capped                                                                                                          |
 | Fork a session        | **refused**: `fork: false`                                                                                                                                                                                                                                                                                                    |
 
 The model is an explicit AI SDK provider at the gateway — Anthropic Messages, OpenAI Responses or

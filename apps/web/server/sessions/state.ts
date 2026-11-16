@@ -98,6 +98,12 @@ export interface SessionStateBlobsUnavailable {
   readonly reason: string;
 }
 
+/** A blob over `SESSION_STATE_BLOB_MAX_BYTES`, found while it streamed: nothing was stored. */
+export interface SessionStateBlobTooLarge {
+  readonly ok: false;
+  readonly code: 'too_large';
+}
+
 /**
  * The store the routes are written against.
  *
@@ -133,11 +139,14 @@ export interface SessionStateStore {
     readonly workspaceId: string;
     readonly sessionId: string;
   }): Promise<readonly SessionStateStreamRecord[]>;
-  /** Store a snapshot, replacing whatever was under this key. */
+  /**
+   * Store a snapshot, replacing whatever was under this key. The body is streamed to storage and
+   * measured on the way; over the cap the answer is `too_large` and nothing is stored.
+   */
   putBlob(
     ref: SessionStateBlobRef,
-    bytes: Uint8Array,
-  ): Promise<{ readonly ok: true } | SessionStateBlobsUnavailable>;
+    body: ReadableStream<Uint8Array>,
+  ): Promise<{ readonly ok: true } | SessionStateBlobTooLarge | SessionStateBlobsUnavailable>;
   /** The snapshot under this key, `null` when there is none, or the unavailable arm. */
   getBlob(
     ref: SessionStateBlobRef,

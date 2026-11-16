@@ -4,7 +4,8 @@
  * is refused unless the connection exists in this workspace, the folder sits under one of its
  * `allowedPrefixes`, and a `read-write` grant finds the connection `writeAllowed`.
  */
-import { storageRefusalClass } from '@agent-workspace/core/storage';
+import { storageRefusalClass } from '../storage/objects';
+import { isUnderAllowedPrefix } from '../storage-and-sharing';
 
 import type { StorageGrantRef } from './store';
 import {
@@ -45,15 +46,6 @@ export function storageConnectionLookup(source: {
     }
     return found;
   };
-}
-
-/**
- * Whether `prefix` is `allowed` or below it, compared segment by segment: `reports-old/x` is not
- * under `reports`. Neither side is decoded, so `%2e%2e` is an ordinary segment.
- */
-export function isUnderAllowedPrefix(prefix: string, allowed: string): boolean {
-  const segments = prefix.split('/');
-  return allowed.split('/').every((segment, index) => segments[index] === segment);
 }
 
 /** A run refused because a granted connection folder cannot be delivered (`RUN_START_PROBLEM_CODES`). */

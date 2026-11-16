@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { decide, type Ownership } from '../rbac/decide';
-import { ROLES, type Role } from '../rbac/roles';
+import { ROLES, type Role } from '../rbac/core/roles';
 import {
   NO_RESTORE_CAPABILITY,
   agentRestoreGrantsForRole,

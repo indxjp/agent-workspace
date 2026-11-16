@@ -1,7 +1,7 @@
 import { BUILDER_CATALOG_KINDS } from '@indx-workspace/contracts/builder';
 import { describe, expect, it } from 'vitest';
 
-import type { Role } from '../../../rbac/roles';
+import type { Role } from '../../../identity';
 import type { CallContext, CatalogEntry, CatalogKind, CatalogPort } from '../../ports';
 
 export interface CatalogFixture {

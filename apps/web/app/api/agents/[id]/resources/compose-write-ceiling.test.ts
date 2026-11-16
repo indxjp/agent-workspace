@@ -14,7 +14,7 @@
  * layer up, through the actual production wiring the run composer uses:
  * `createAgentRunResourceLoader` (`apps/web/server/compose/resource-loader.ts`, imported here
  * read-only — this task does not own that file) fed by the real, unmodified
- * `createRepositoryAgentResourceStoreProvider` (`../../../../../server/agents/resource-store.ts`)
+ * `createRepositoryAgentResourceStoreProvider` (`../../../../../server/agents/store.ts`)
  * and `createDatabaseAgentResourceRepositoryProvider`, over a real database. Only the object store
  * behind assigned file content is faked (`createInMemoryObjectStore`, under the real catalog
  * service, as `apps/web/server/compose/resource-loader.test.ts` does) — the write-permission ceiling
@@ -44,8 +44,8 @@ import {
 import { createInMemoryObjectStore } from '@agent-workspace/core/storage';
 
 import { createAgentRunResourceLoader } from '../../../../../server/compose/resource-loader';
-import { createRepositoryAgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
-import { createResourceCatalogStoreProvider } from '../../../../../server/resources/catalog-store';
+import { createRepositoryAgentResourceStoreProvider } from '../../../../../server/agents/store';
+import { createResourceCatalogStoreProvider } from '../../../../../server/storage/store';
 import { createStorageService } from '../../../../../server/storage/service';
 
 const quietLog = { info() {}, warn() {}, error() {}, child: () => quietLog };

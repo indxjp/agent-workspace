@@ -131,7 +131,7 @@ private theorem column_cases {c : String} {ten : Tenancy} (h : ten.column? = som
 /-- The target classifies every table as today's schema does: the same tenant root, the same two
 global identity tables, the same 30 tenant-scoped tables. -/
 @[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#the-target-er-model")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenancy_classes_are_unchanged (t : TableName) :
     (Target.schema t).tenancy = (catalogue t).tenancy := by
   cases t <;> decide +kernel
@@ -140,7 +140,7 @@ theorem tenancy_classes_are_unchanged (t : TableName) :
 class: no reference to the tenant root and no tenant-paired or sibling-paired reference is lost. -/
 @[aw_spec (tier := T4) (doc := "docs/formal/00-orchestrator-prompt.md#61-tiers")
   (doc := "docs/formal/concepts.md#current-to-target-mapping")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem every_tenancy_constraint_is_kept (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) (hten : isTenancyConstraint catalogue t fk = true) :
     fkImage t fk ∈ (Target.schema t).foreignKeys ∧
@@ -166,7 +166,7 @@ theorem every_key_has_an_image (t : TableName) (fk : ForeignKey)
 /-- Every key the target adds (no key of today's schema maps onto it) is itself a tenancy
 constraint: the target only tightens tenancy. -/
 @[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#the-target-er-model")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem added_keys_are_tenancy_constraints :
     (allTables.all fun t => (Target.schema t).foreignKeys.all fun fk' =>
       (catalogue t).foreignKeys.any (fun fk => fkImage t fk == fk') ||
@@ -175,7 +175,7 @@ theorem added_keys_are_tenancy_constraints :
 /-- The target has no unpaired reference and no undeclared `*_id` column, so today's tenancy test
 rules 2 and 3 hold of it as they do of today's schema. -/
 @[aw_spec (tier := T4) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem target_keeps_the_tenancy_rules :
     pairingComplete catalogue = true ∧ pairingComplete Target.schema = true ∧
       idColumnsCovered catalogue Er.Core.nonReferenceIdColumns = true ∧
@@ -280,7 +280,7 @@ theorem table_names_diverge_exactly_at :
 `NOT NULL` `workspace_id` too); the target has none. -/
 @[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/schema/projects.ts#projects")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem set_null_diverges_exactly_at :
     unsoundSetNull catalogue =
         [(.projects, "projects_default_agent_workspace_fk"),
@@ -568,7 +568,7 @@ theorem ledger_providers_are_the_run_providers :
         (catalogue .runs).oneOfCheck? "runs_provider_valid" ∧
       (catalogue .runs).oneOfCheck? "runs_provider_valid" =
         some ("provider", ["anthropic", "anthropic-compatible", "openai", "azure-openai",
-          "openai-compatible"]) := by decide +kernel
+          "openai-compatible", "vertex"]) := by decide +kernel
 
 /-- Every provider today's `runs.provider` accepts is accepted on a ledger row of the target: the
 target witness with its ledger row's provider set to any of them breaks no constraint. -/

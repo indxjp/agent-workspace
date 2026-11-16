@@ -21,9 +21,9 @@
  * repository layer for `findRunWorkspace`. It returns the workspace and the role and no row
  * content beyond them.
  */
-import type { ConferredRole } from './conferral';
-import type { Role } from './roles';
-import type { TokenScope } from './token-scope';
+import type { ConferredRole } from './core/conferral';
+import type { Role } from './core/roles';
+import type { TokenScope } from './core/token-scope';
 
 /** A `users` row, as an API response may see it. */
 export interface UserSummary {
@@ -289,6 +289,11 @@ export interface WorkspaceDirectory {
   listUsers(): Promise<UserSummary[]>;
   createUser(input: CreateUserInput): Promise<CreateUserOutcome>;
   listMemberships(): Promise<MembershipSummary[]>;
+  /**
+   * The workspace's membership acting as `principalId`, or `null` when no live membership principal
+   * of this workspace has that id (another workspace's, an API key's, a removed member's or none).
+   */
+  findMembershipByPrincipal(principalId: string): Promise<MembershipSummary | null>;
   createMembership(input: CreateMembershipInput): Promise<CreateMembershipOutcome>;
   changeMembershipRole(id: string, role: ConferredRole): Promise<MembershipChangeOutcome>;
   deleteMembership(id: string): Promise<DeleteMembershipOutcome>;
@@ -301,6 +306,29 @@ export interface WorkspaceDirectory {
   createInvitation(input: CreateInvitationInput): Promise<CreateInvitationOutcome>;
   resendInvitation(id: string): Promise<ResendInvitationOutcome>;
   revokeInvitation(id: string): Promise<RevokeInvitationOutcome>;
+}
+
+/** What binding an address to a demo workspace needs; ids and time come from the caller. */
+export interface BindGuestWorkspaceInput {
+  readonly email: string;
+  readonly now: Date;
+  /** The id and slug a new demo workspace gets; unused when a younger one is returned. */
+  readonly workspaceId: string;
+  readonly slug: string;
+  /**
+   * How long a new demo workspace lasts: it is marked to end this many seconds after `now`
+   * (`demo_expires_at`, set once), and is returned to its guest until then.
+   */
+  readonly lifetimeSeconds: number;
+}
+
+/** The user and the demo workspace they are bound to as `guest`. */
+export interface GuestBindingSummary {
+  readonly userId: string;
+  readonly workspaceId: string;
+  readonly workspaceSlug: string;
+  /** `false` when a workspace younger than `lifetimeSeconds` was returned. */
+  readonly created: boolean;
 }
 
 /** Everything the routes of this task need from persistence. */
@@ -330,6 +358,15 @@ export interface DirectoryRoot {
   linkIdentity(issuer: string, subject: string, userId: string): Promise<void>;
   /** Every CURRENT membership this user holds, across every workspace (issue #118). */
   membershipsForUser(userId: string): Promise<readonly UserMembershipSummary[]>;
+  /**
+   * Bind an address to its demo workspace as `guest`, in one transaction. The only method that
+   * writes a `guest` membership, and it never goes through `conferRole`: finds or creates the user
+   * by lower-cased address, returns the guest's workspace younger than `lifetimeSeconds` or makes a
+   * new one, and touches none of the user's other memberships. `null`, binding nothing, when the user holds a
+   * membership with any role but `guest`: an address with a real account signs in through its
+   * identity provider, never by link.
+   */
+  bindGuestWorkspace(input: BindGuestWorkspaceInput): Promise<GuestBindingSummary | null>;
   /**
    * Redeem an invitation. Unscoped, like {@link authenticateApiKey}: the caller does not yet know
    * which workspace the invitation names — establishing that is the whole point of the call.

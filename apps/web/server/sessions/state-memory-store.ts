@@ -15,7 +15,8 @@
  *   * `list` answers `null` for a stream that was never written and `[]` for an empty one, and
  *     caps a page at `SESSION_STATE_PAGE_LIMIT` whatever limit is asked for;
  *   * a batch carrying a NUL or an unpaired surrogate is refused whole, as `jsonb` refuses it;
- *   * a blob is refused over the cap by the *route*, so this store simply keeps what it is given.
+ *   * a blob over the cap is refused while it streams, with nothing kept, as the storage service
+ *     refuses it.
  *
  * `apps/web/server/sessions/state-store.test.ts` runs one contract suite against this and against
  * the PostgreSQL store, which is what keeps the two from drifting.
@@ -23,10 +24,12 @@
 import { createHash } from 'node:crypto';
 
 import type { EngineId } from '@indx-workspace/contracts/engines';
+import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
 
 import type {
   SessionStateBlobContent,
   SessionStateBlobRef,
+  SessionStateBlobTooLarge,
   SessionStateEntryPayload,
   SessionStateEntryRecord,
   SessionStateStore,
@@ -187,18 +190,26 @@ export class InMemorySessionStateStore implements SessionStateStore {
     );
   }
 
-  putBlob(
+  async putBlob(
     ref: SessionStateBlobRef,
-    bytes: Uint8Array,
-  ): Promise<{ readonly ok: true } | { readonly ok: false; readonly reason: string }> {
+    body: ReadableStream<Uint8Array>,
+  ): Promise<
+    | { readonly ok: true }
+    | SessionStateBlobTooLarge
+    | { readonly ok: false; readonly reason: string }
+  > {
     if (!this.#blobsEnabled) {
-      return Promise.resolve({ ok: false, reason: 'this fake store has no blob backend.' });
+      await body.cancel().catch(() => undefined);
+      return { ok: false, reason: 'this fake store has no blob backend.' };
     }
+    // A test fake: it reads the body whole, and refuses it over the cap with nothing kept.
+    const bytes = new Uint8Array(await new Response(body).arrayBuffer());
+    if (bytes.byteLength > SESSION_STATE_BLOB_MAX_BYTES) return { ok: false, code: 'too_large' };
     this.#blobs.set(blobId(ref), {
       bytes,
       sha256: createHash('sha256').update(bytes).digest('hex'),
     });
-    return Promise.resolve({ ok: true });
+    return { ok: true };
   }
 
   getBlob(

@@ -131,9 +131,7 @@ export function masterKeyFromBytes(value: Uint8Array): MasterKey {
  * that quoted a malformed key would put a partial secret in a log line, which is exactly what §23
  * exists to prevent.
  */
-export function loadMasterKey(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): MasterKey {
+export function loadMasterKey(env: Readonly<Record<string, string | undefined>>): MasterKey {
   const raw = env[MASTER_KEY_ENV_VAR];
   try {
     return parseMasterKeyHex(raw, MASTER_KEY_ENV_VAR);

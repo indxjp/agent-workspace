@@ -2,7 +2,7 @@ import {
   isPublicSharingEnabled,
   setPublicSharingPolicy,
 } from '../../../server/shares/policy/service';
-import { shareJson, shareProblem, withShares } from '../../../server/shares/core/http';
+import { shareJson, shareProblem, withShares } from '../../../server/shares/http';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 import { DomainError } from '../../../server/errors';
 import { errorResponse } from '../../../server/http/error-response';

@@ -8,6 +8,7 @@ import type { AgentEvent } from '@indx-workspace/sdk/events';
 import { describe, expect, it } from 'vitest';
 
 import {
+  approvalProblemMessage,
   assistantResponseFromAgentEvent,
   badgeForRunStatus,
   beginRun,
@@ -18,6 +19,7 @@ import {
   parseRunStatusPayload,
   userMessage,
   withAssistantResponse,
+  withBlockedTool,
   withRuntimeEvent,
   withSdkEvent,
   withStatus,
@@ -25,6 +27,7 @@ import {
   type RunOpening,
   type Speaker,
 } from './run-model.js';
+import { surfaceStrings } from './locale.js';
 
 const USER: Speaker = { initials: 'AI', name: 'Aya Ito' };
 
@@ -215,5 +218,41 @@ describe("parseRunStatusPayload — server/runs/launcher.ts's `{ status, error }
   it('never throws on a malformed payload', () => {
     expect(parseRunStatusPayload(null)).toEqual({ status: undefined, error: null });
     expect(parseRunStatusPayload(3)).toEqual({ status: undefined, error: null });
+  });
+});
+
+describe('approvalProblemMessage (#1490)', () => {
+  it("words each approval refusal in the reader's language, and any other in the server's words", () => {
+    for (const locale of ['en', 'ja'] as const) {
+      const strings = surfaceStrings(locale);
+      expect(approvalProblemMessage('approval_expired', 'x', strings)).toBe(
+        strings.approvalExpired,
+      );
+      expect(approvalProblemMessage('approval_already_decided', 'x', strings)).toBe(
+        strings.approvalAlreadyDecided,
+      );
+      expect(approvalProblemMessage('run_not_awaiting_approval', 'x', strings)).toBe(
+        strings.approvalNotAwaiting,
+      );
+    }
+    expect(approvalProblemMessage('run_not_found', 'Run not found.', surfaceStrings('en'))).toBe(
+      'Run not found.',
+    );
+  });
+});
+
+describe('refused tool calls (issue #2091)', () => {
+  it('starts with none and records each call once, in order', () => {
+    const run = freshRun();
+    expect(run.blocked).toEqual([]);
+    const once = withBlockedTool(run, { toolCallId: 't1', toolName: 'Bash' });
+    const again = withBlockedTool(once, { toolCallId: 't1', toolName: 'Bash' });
+    expect(again).toBe(once);
+    const next = withBlockedTool(again, { toolCallId: 't2', toolName: 'Write' });
+    expect(next.blocked).toEqual([
+      { toolCallId: 't1', toolName: 'Bash' },
+      { toolCallId: 't2', toolName: 'Write' },
+    ]);
+    expect(run.blocked).toEqual([]);
   });
 });

@@ -184,3 +184,22 @@ of every package names `indxjp/agent-workspace`, `publish-packages.yml` and `npm
 Owner moves each one on npmjs.com and creates the `npm-publish` environment in the public
 repository before the first release from there. Until then the publish job is refused by npm and
 publishes nothing, which is the intended failure.
+
+## Amendment — `@indx-workspace/app` (issue #1500, 2026-10-31)
+
+`packages/app` (`@indx-workspace/app`, the app kit generated portal apps import) joins
+`PUBLISHED_PACKAGES` right after `react`, so the list is nine — contracts, platforms, sdk, react,
+app, aw, cli, embedded, create — under D1–D5 unchanged: the D2 manifest shape, lock-step at
+`CONTRACTS_VERSION` (D3), packed and smoke-installed by the one command (D4), published from the
+tag (D5). It exports `.`, `./server`, `./db`, `./react` and `./testing`.
+
+- Its dependencies may only be contracts, sdk, react, `@modelcontextprotocol/sdk` and zod, and
+  its peer dependencies only `drizzle-orm`, `pg`, `next` and `react`. Each later unit declares a
+  dependency when it first imports it; `packages/app/src/dependencies.test.ts` holds the allowlist
+  and `app-kit-depends-only-on-published-packages` holds the workspace edges.
+- The platform never imports the app kit (`platform-never-imports-the-app-kit`). The app kit's
+  bin, `aw-app`, lands with the generator units of the portal implementation guide; `aw` spawns it
+  and never imports it.
+- Its first version is an Owner-published placeholder, as D5 requires for a new name. Until the
+  Owner publishes it and adds its trusted publisher, `publish-packages.mjs` refuses the whole
+  release with `NEVER_PUBLISHED` before anything is published, which is the intended failure.

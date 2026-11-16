@@ -14,9 +14,11 @@ import {
   eventStreamResponse,
   fetchDouble,
 } from '@indx-workspace/sdk/testing';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { followRunInto } from './home-chat';
+import { ComposerChips, followRunInto } from './home-chat';
 import {
   beginRun,
   userMessage,
@@ -298,5 +300,75 @@ describe('the chat screen over the end of a stream', () => {
     expect(run.technical.sdkEvents).toHaveLength(3);
     expect(run.technical.runtimeEvents.map((line) => line.event)).toEqual(['transport.error']);
     expect(requests).toBe(1);
+  });
+});
+
+describe('the composer chips over the shared AttachmentChips part (R-F5a, #1489)', () => {
+  it('draws the same markup as before the lift: Tailwind classes, ✕, title and label', () => {
+    const html = renderToStaticMarkup(
+      createElement(ComposerChips, {
+        chips: [
+          { id: 'file-1', name: 'notes.md' },
+          { id: 'conn-1', name: 'GitHub' },
+        ],
+        onRemove: () => undefined,
+      }),
+    );
+    const chip = (name: string): string =>
+      '<span class="inline-flex h-6 items-center gap-1.5 rounded-[999px] bg-surface-3 px-[9px] text-[12px] text-text-2">' +
+      `${name}<button type="button" aria-label="Remove ${name}" class="cursor-pointer opacity-55 hover:opacity-100" title="Remove">✕</button></span>`;
+    expect(html).toBe(
+      `<div class="flex flex-wrap items-center gap-1.5">${chip('notes.md')}${chip('GitHub')}</div>`,
+    );
+  });
+});
+
+describe('the chat screen over a tool call the engine refused (issue #2091)', () => {
+  // The Claude Agent SDK's own message, as the runner forwards it on `agent.native`.
+  const denial = {
+    type: 'system',
+    subtype: 'permission_denied',
+    tool_name: 'Bash',
+    tool_use_id: 'toolu_1',
+    message:
+      'This Bash command contains multiple operations. The following parts require approval: mkdir -p outputs',
+    uuid: '00000000-0000-4000-8000-000000000001',
+    session_id: 'sess_1',
+  };
+  const native = (id: number, engine: string, payload: unknown): string =>
+    sseFrame('agent.native', id, {
+      frame: 'agent.native',
+      engine,
+      raw: payload,
+      type: 'system/permission_denied',
+      payload,
+    });
+
+  it('records the refused call once and still ends Completed', async () => {
+    const run = await foldFixture([
+      FIXTURE[0] ?? '',
+      native(2, ENGINE, denial),
+      native(3, ENGINE, denial),
+      FIXTURE[6] ?? '',
+    ]);
+    expect(run.heading.status).toEqual({ label: 'Completed', tone: 'ok', dot: false });
+    expect(run.blocked).toEqual([{ toolCallId: 'toolu_1', toolName: 'Bash' }]);
+    expect(run.technical.sdkEvents.map((line) => line.event)).toContain('agent.native');
+  });
+
+  it('ignores another engine, another native type, and a payload without a tool name', async () => {
+    const run = await foldFixture([
+      native(2, 'openai-agents', denial),
+      sseFrame('agent.native', 3, {
+        frame: 'agent.native',
+        engine: ENGINE,
+        raw: denial,
+        type: 'system/notification',
+        payload: denial,
+      }),
+      native(4, ENGINE, { ...denial, tool_name: '' }),
+      native(5, ENGINE, { ...denial, tool_use_id: undefined }),
+    ]);
+    expect(run.blocked).toEqual([]);
   });
 });

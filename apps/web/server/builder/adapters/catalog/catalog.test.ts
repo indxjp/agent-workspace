@@ -4,8 +4,8 @@ import { BUILDER_CATALOG_KINDS } from '@indx-workspace/contracts/builder';
 import { describe, expect, it } from 'vitest';
 
 import { createInMemoryConnectorsStoreProvider } from '../../../connectors/memory-store';
-import { createInMemoryModelsStoreProvider } from '../../../models/memory-store';
-import type { Role } from '../../../rbac/roles';
+import { createInMemoryModelsStoreProvider } from '../../../models/store';
+import type { Role } from '../../../rbac/core/roles';
 import { createInMemoryRuntimeProfileStoreProvider } from '../../../runtimes/memory-store';
 import type { CatalogEntry, CatalogPort } from '../../ports';
 import { callContextOf } from '../../testing/context';

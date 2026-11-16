@@ -1,7 +1,7 @@
 /**
  * The secrets repository conformance suite — one set of assertions, run against the in-memory
  * provider always, and against a real PostgreSQL whenever `TEST_DATABASE_URL` names one. Modelled
- * on `apps/web/server/agents/store.test.ts`: neither implementation was written by reading the
+ * on `apps/web/server/agents/store.conformance.ts`: neither implementation was written by reading the
  * other, and this suite is the only reason to believe they agree.
  *
  * Fixture rows are read straight out of the database in the PostgreSQL half. This file lives

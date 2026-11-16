@@ -52,7 +52,7 @@ import {
   clearEngineImagesConfiguredForTests,
   configureEngineImagesForTests,
 } from '../server/engines/images';
-import { parseRole } from '../server/rbac/roles';
+import { parseRole } from '../server/rbac/core/roles';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../server/rbac/testing';
 import { startRun } from '../server/runs/api';
 import { InMemoryRunStore } from '../server/runs/memory-store';

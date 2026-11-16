@@ -7,7 +7,11 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { resolveMigrationsDir, runMigrations } from '../migrate.js';
-import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import {
+  createIsolatedTestDatabase,
+  runMigrationsPastStorageProof,
+  type IsolatedTestDatabase,
+} from './testing.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -78,7 +82,7 @@ describe.skipIf(!hasDatabase)('0020 workspace principal backfill', () => {
   const apiKeyRevokedAt = '2024-03-04T05:06:07.000Z';
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0020-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 
@@ -183,7 +187,7 @@ describe.skipIf(!hasDatabase)('0020 workspace principal backfill', () => {
     } finally {
       await client.end();
     }
-    await runMigrations({ url: isolated.url, maxConnections: 4 }, migrationsDir);
+    await runMigrationsPastStorageProof(isolated.url, migrationsDir);
 
     anomalous = await createIsolatedTestDatabase(
       'aw_principal_anomaly',
@@ -473,7 +477,10 @@ describe.skipIf(!hasDatabase)('0020 workspace principal backfill', () => {
 
     let migrationError: unknown;
     try {
-      await runMigrations({ url: anomalous.url, maxConnections: 4 }, resolveMigrationsDir());
+      await runMigrations(
+        { url: anomalous.url, maxConnections: 4 },
+        resolveMigrationsDir(process.env),
+      );
     } catch (error) {
       migrationError = error;
     }

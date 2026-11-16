@@ -5,7 +5,7 @@
 import type { RunFeedbackRequest } from '@indx-workspace/contracts/feedback';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 import {
   admitVisitorWrite,
   resetSurfaceLimits,

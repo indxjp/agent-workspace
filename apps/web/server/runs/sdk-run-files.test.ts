@@ -27,12 +27,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
-import { createResourceCatalogStoreProvider } from '../resources/catalog-store';
+import { createResourceCatalogStoreProvider } from '../storage/store';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { createStorageService } from '../storage/service';
 import { startRun } from './api';
 import type { RunPrincipal } from './environment';
-import { installDeliveringRunApi, type RunWorld } from './run-delivery-fixtures';
+import { installDeliveringRunApi, type RunWorld } from './run-delivery-fixtures.test-support';
 import { InMemoryRunStore } from './memory-store';
 
 const TEXT = 'quarterly numbers';

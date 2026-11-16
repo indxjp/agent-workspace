@@ -1,0 +1,32 @@
+{
+  "conversations": [
+    {
+      "when": "e2e-desk-panel",
+      "turns": [
+        { "tool": "ticket_update", "input": { "id": "{{prompt.uuid.0}}", "priority": "p2" } },
+        { "text": "Lowered the ticket to p2." }
+      ]
+    },
+    {
+      "when": "Triage ticket",
+      "turns": [
+        { "tool": "ticket_update", "input": { "id": "{{prompt.uuid.0}}", "status": "in_progress" } },
+        {
+          "structured": { "resolvable": true, "kbArticleId": null, "summary": "Reset the VPN client." }
+        }
+      ]
+    },
+    {
+      "when": "is resolved by its knowledge base article",
+      "turns": [
+        { "tool": "ticket_update", "input": { "id": "{{prompt.uuid.0}}", "status": "closed" } },
+        { "tool": "ticket_update", "input": { "id": "{{prompt.uuid.0}}", "status": "closed" } },
+        { "text": "Closed the ticket." }
+      ]
+    },
+    {
+      "when": "is open past its",
+      "turns": [{ "text": "Check the VPN gateway first." }]
+    }
+  ]
+}

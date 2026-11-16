@@ -130,7 +130,7 @@ private theorem mem_of_any {l : List ForeignKey} {p : ForeignKey → Bool} (h : 
 parent's, so the database itself compares the two workspaces as part of the key. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem every_composite_key_is_tenant_paired (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) (hlen : 2 ≤ fk.columns.length) :
     isPaired catalogue t fk = true := by
@@ -143,7 +143,7 @@ theorem every_composite_key_is_tenant_paired (t : TableName) (fk : ForeignKey)
 key joins two rows of the same workspace. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem composite_reference_stays_in_workspace (st : State) {t : TableName} {fk : ForeignKey}
     {r r' : Row} (href : References catalogue st t fk r r') (hlen : 2 ≤ fk.columns.length) :
     tenantOf catalogue t r = tenantOf catalogue fk.refTable r' :=
@@ -154,7 +154,7 @@ theorem composite_reference_stays_in_workspace (st : State) {t : TableName} {fk 
 workspace to a tenant-carrying row of another. -/
 @[aw_spec (tier := T2) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem no_cross_workspace_reference (st : State) (hc : Current.consistent st = true)
     {t : TableName} {fk : ForeignKey} {r r' : Row}
     (htarget : (catalogue fk.refTable).tenantColumn?.isSome = true)
@@ -165,7 +165,7 @@ theorem no_cross_workspace_reference (st : State) (hc : Current.consistent st = 
 /-- In every consistent state of today's whole schema, every row reached from a row by a chain of
 references through tenant-carrying tables belongs to the starting row's workspace. -/
 @[aw_spec (tier := T2) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reference_chain_stays_in_workspace (st : State) (hc : Current.consistent st = true)
     {t t' : TableName} {r r' : Row} (hpath : TenantPath catalogue st t r t' r') :
     tenantOf catalogue t r = tenantOf catalogue t' r' :=
@@ -193,7 +193,7 @@ theorem empty_database_is_consistent : Current.consistent State.empty = true := 
 today's database with a reference from one workspace to a tenant-carrying row of another. -/
 @[aw_spec (tier := T2) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
   (doc := "docs/formal/00-orchestrator-prompt.md#61-tiers")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reachable_state_has_no_cross_workspace_reference {st : State}
     (h : Current.Reachable Current.consistent st) {t : TableName} {fk : ForeignKey} {r r' : Row}
     (htarget : (catalogue fk.refTable).tenantColumn?.isSome = true)
@@ -205,7 +205,7 @@ theorem reachable_state_has_no_cross_workspace_reference {st : State}
 /-- A transaction whose writes would leave a reference from one workspace to a tenant-carrying
 row of another is rolled back: the database stays in the state before it. -/
 @[aw_spec (tier := T2) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem cross_workspace_write_is_rolled_back (st : State) (tx : List Current.Stmt)
     {t : TableName} {fk : ForeignKey} {r r' : Row}
     (htarget : (catalogue fk.refTable).tenantColumn?.isSome = true)
@@ -222,7 +222,7 @@ theorem cross_workspace_write_is_rolled_back (st : State) (tx : List Current.Stm
 one owning workspace: one `workspaces` row whose `id` is the row's `workspace_id`. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#workspace-and-principal")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem tenant_row_has_exactly_one_workspace (st : State) (hc : Current.consistent st = true)
     {t : TableName} (hscoped : (catalogue t).tenancy = .scoped) {r : Row} (hr : r ∈ st t) :
     ∃ w ∈ st .workspaces, w.get "id" = r.get "workspace_id" ∧ (w.get "id").isSome = true ∧

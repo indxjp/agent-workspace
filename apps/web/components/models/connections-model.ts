@@ -1,5 +1,6 @@
 import { ApiProblemError, type AgentWorkspaceClient } from '@indx-workspace/sdk';
 
+import { modelsStrings, type ModelsStrings } from './models-messages';
 import { readCatalog, type Catalog } from './catalog';
 import {
   agentsReferencing,
@@ -84,15 +85,16 @@ export async function createConnection(
 export async function testConnection(
   client: AgentWorkspaceClient,
   connectionId: string,
+  strings: Pick<ModelsStrings, 'testReturned'> = modelsStrings('en'),
 ): Promise<string> {
   try {
     const outcome = await client.models.connections.test(connectionId);
     // A failed probe answers `502` with the outcome; the screen has always named that status.
-    if (!outcome.ok) throw new Error('Connection test returned 502.');
+    if (!outcome.ok) throw new Error(strings.testReturned('502'));
     return outcome.message;
   } catch (error) {
     if (error instanceof ApiProblemError)
-      throw new Error(`Connection test returned ${String(error.status)}.`, { cause: error });
+      throw new Error(strings.testReturned(String(error.status)), { cause: error });
     throw error;
   }
 }
@@ -131,15 +133,16 @@ export async function rotateCredential(
 export async function testAfterRotation(
   client: AgentWorkspaceClient,
   connectionId: string,
+  strings: Pick<ModelsStrings, 'rotated' | 'rotatedTestFailed'> = modelsStrings('en'),
 ): Promise<string> {
   try {
     const outcome = await client.models.connections.test(connectionId);
     return outcome.ok
-      ? `Credential rotated. ${outcome.message}`
-      : `Credential rotated. Test failed: ${outcome.message}`;
+      ? strings.rotated(outcome.message)
+      : strings.rotatedTestFailed(outcome.message);
   } catch (error) {
     if (error instanceof ApiProblemError)
-      return `Credential rotated. Test failed: HTTP ${String(error.status)}`;
+      return strings.rotatedTestFailed(`HTTP ${String(error.status)}`);
     throw error;
   }
 }

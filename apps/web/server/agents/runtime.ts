@@ -19,7 +19,7 @@ import type { AgentStoreProvider } from './store';
 import type { AgentResourceStoreProvider } from './resource-store';
 import type { AgentGrantStoreProvider } from './agent-grants-store';
 import type { DeploymentCeiling } from '../policy-ceiling/ceiling';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
+import type { ResourceCatalogStoreProvider } from '../storage-and-sharing';
 
 /**
  * Who the caller is, as far as the agent routes need to know.

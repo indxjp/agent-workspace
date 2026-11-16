@@ -17,3 +17,9 @@ export {
 } from './logger.js';
 export { redacted } from './redact.js';
 export { parseTraceparent, traceHeaders, type TraceContext } from './traceparent.js';
+export {
+  OTEL_EXPORTER_OTLP_ENDPOINT_ENV_VAR,
+  OTEL_SERVICE_NAME_ENV_VAR,
+  readTracingSettings,
+  type TracingSettings,
+} from './tracing-settings.js';

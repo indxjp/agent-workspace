@@ -38,12 +38,16 @@ const LOOK: WidgetLook = {
   frameTitle: 'Help centre',
 };
 
-function install(resolved: ResolvedSurface | null): string[] {
+function install(
+  resolved: ResolvedSurface | null,
+  env: () => Readonly<Record<string, string | undefined>> = () => process.env,
+): string[] {
   const asked: string[] = [];
   installTestDomains({
     surfaces: {
       kind: 'serving',
       runtime: {
+        env,
         resolve: (name, mode) => {
           asked.push(mode === 'public' ? name : `${name} (${mode})`);
           return Promise.resolve(resolved);
@@ -126,6 +130,13 @@ describe('serveWidgetLoader (GET /p/s/<name>/widget.js; S1-18, #456)', () => {
     await expectNotFound(
       await serveWidgetLoader(loaderRequest('main', 'example.com'), 'main', () => LOOK, LOCAL_ENV),
     );
+  });
+
+  it('reads the installed runtime’s environment when the route passes none', async () => {
+    install(RESOLVED, () => LOCAL_ENV);
+    expect((await serveWidgetLoader(loaderRequest('main'), 'main', () => LOOK)).status).toBe(200);
+    install(RESOLVED, () => ({}));
+    await expectNotFound(await serveWidgetLoader(loaderRequest('main'), 'main', () => LOOK));
   });
 
   it('serves a surface with allowedOrigins off loopback, its origin read from the script URL (#622)', async () => {

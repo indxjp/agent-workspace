@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 import { createClient } from '@indx-workspace/sdk';
 import { fetchDouble, fixtures, jsonResponse, type FetchDouble } from '@indx-workspace/sdk/testing';
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentRestoreCapability } from '../../contracts/agents';
 import { AgentArchivedNotice, ArchivedBadge, ArchivedNotice } from './agent-archived';
+import { AgentRestoreScope, RemountOnRestore } from './agent-restore-scope';
 import { AgentsListScreen } from './agents-list';
 
 const double: { current: FetchDouble } = {
@@ -63,6 +64,7 @@ function render(
 let mounted: (() => void) | undefined;
 afterEach(() => {
   refresh.mockClear();
+  tabReads = 0;
   mounted?.();
   mounted = undefined;
 });
@@ -82,6 +84,12 @@ function mount(element: React.ReactElement): HTMLElement {
   };
   return host;
 }
+
+let tabReads = 0;
+const recordTabRead = (): Promise<void> => {
+  tabReads += 1;
+  return Promise.resolve();
+};
 
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
@@ -141,6 +149,39 @@ describe('the Restore button', () => {
     });
     await settle();
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('mounts the tabs again after a restore, so what they read in the browser is read again', async () => {
+    double.current = fetchDouble((request) =>
+      request.method === 'POST'
+        ? jsonResponse(200, fixtures.agent({ ownerPrincipalId: VIEWER }))
+        : jsonResponse(200, archived({ ownerPrincipalId: VIEWER })),
+    );
+    // Stands for a tab: it reads its state in the browser when it mounts, as the real ones do.
+    function Tab() {
+      useEffect(() => {
+        void recordTabRead();
+      }, []);
+      return <p>tab</p>;
+    }
+    const host = mount(
+      <AgentRestoreScope>
+        <AgentArchivedNotice agentId="a-1" locale="en" capability={OWNER_VIEWER} />
+        <RemountOnRestore>
+          <Tab />
+        </RemountOnRestore>
+      </AgentRestoreScope>,
+    );
+    await settle();
+    expect(tabReads).toBe(1);
+
+    act(() => {
+      host.querySelector('button')?.click();
+    });
+    await settle();
+
+    expect(tabReads).toBe(2);
+    expect(host.textContent).toBe('tab');
   });
 
   it('shows the problem message when the server refuses the restore (403)', async () => {

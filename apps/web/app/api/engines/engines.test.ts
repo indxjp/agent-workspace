@@ -17,8 +17,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { EngineListResponseSchema } from '@indx-workspace/contracts/engines';
 
-import { conferredBy } from '../../../server/rbac/conferral';
-import { ROLES, type Role } from '../../../server/rbac/roles';
+import { conferredBy } from '../../../server/rbac/core/conferral';
+import { ROLES, isConferrable, type Role } from '../../../server/rbac/core/roles';
 import {
   installRbacHarness,
   TEST_WORKSPACE_ID,
@@ -49,7 +49,9 @@ function harness(): RbacHarness {
 }
 
 describe('GET /api/engines across the role matrix', () => {
-  it.each(ROLES.map((role) => [role] as const))(
+  // Every role but `guest`: the guest row refuses every resource it does not name (spec §21,
+  // "The guest role"), and the engine catalogue is not one of them. The guest's 403 is below.
+  it.each(ROLES.filter(isConferrable).map((role) => [role] as const))(
     'lets a %s read the catalogue this deployment registers',
     async (role: Role) => {
       const built = harness();
@@ -115,6 +117,19 @@ describe('GET /api/engines across the role matrix', () => {
       expect(response.headers.get('cache-control')).toBe('no-store');
     },
   );
+
+  it('refuses a guest (403) and serves no engine', async () => {
+    const built = harness();
+
+    const response = await built.call(GET, {
+      method: 'GET',
+      path: '/api/engines',
+      as: { email: 'guest@example.test' },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.text).not.toContain('claude-agent-sdk');
+  });
 
   it('answers a body the published contract validates', async () => {
     const built = harness();

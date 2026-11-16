@@ -15,14 +15,9 @@
  *   a leftover object would bring it back. Removing the legacy objects of skills that are not
  *   being deleted is the finalize step's job (#1676).
  */
-import {
-  bytesToStream,
-  listAll,
-  listPageFrom,
-  readWhole,
-  streamToBytes,
-} from '@agent-workspace/core/storage/streams';
-import type { SkillObjectEntry, SkillObjects } from '../storage/store';
+import { bytesToStream, listAll, listPageFrom, readWhole, streamToBytes } from '../storage/objects';
+import type { SkillObjectEntry, SkillObjects } from '../storage-and-sharing';
+import { systemClock, type Clock } from '../clock';
 
 import { skillMetaKey, skillNameFromMetaKey, SKILL_META_PREFIX } from './keys';
 
@@ -57,7 +52,11 @@ function recordStream(
   return { meta, body: bytesToStream(bytes), range: null };
 }
 
-export function withSkillMetaColumn(store: SkillObjects, catalog: MetaCatalog): SkillObjects {
+export function withSkillMetaColumn(
+  store: SkillObjects,
+  catalog: MetaCatalog,
+  clock: Clock = systemClock,
+): SkillObjects {
   if (views.has(store)) return store;
   // The listing of each walk still in progress, keyed by the cursor its next page passes back. A
   // view lives for one request, so an abandoned walk is dropped with it.
@@ -75,7 +74,7 @@ export function withSkillMetaColumn(store: SkillObjects, catalog: MetaCatalog): 
         key,
         sizeBytes: JSON.stringify(row.meta).length,
         contentType: JSON_TYPE,
-        lastModified: new Date(),
+        lastModified: clock.now(),
       });
     }
     return [...listed, ...fromRows];
@@ -89,7 +88,7 @@ export function withSkillMetaColumn(store: SkillObjects, catalog: MetaCatalog): 
       const row = await catalog.getSkill(name);
       if (row?.meta !== null && row?.meta !== undefined) {
         const body = new TextEncoder().encode(JSON.stringify(row.meta));
-        return recordStream(body, JSON_TYPE, new Date());
+        return recordStream(body, JSON_TYPE, clock.now());
       }
       // storage-bridge(#1699): read skill marker objects written before the columns existed
       const legacy = await readWhole(store, key);
@@ -105,7 +104,7 @@ export function withSkillMetaColumn(store: SkillObjects, catalog: MetaCatalog): 
       const record = parseRecord(bytes);
       if (record === null) throw new Error(`skill ${name} record is not a JSON value`);
       if (await catalog.setSkillMeta(name, record)) {
-        return recordStream(bytes, options.contentType ?? null, new Date()).meta;
+        return recordStream(bytes, options.contentType ?? null, clock.now()).meta;
       }
       // storage-bridge(#1699): a skill that only has its legacy record and no row yet keeps being
       // rewritten there until the next list or read gives it a row

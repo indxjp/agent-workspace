@@ -1,14 +1,18 @@
 import type {
+  CreateModelConnectionInput as CoreCreateInput,
   CreateModelConnectionOutcome as CoreCreateOutcome,
   DeleteModelConnectionOutcome as CoreDeleteOutcome,
   ModelConnectionRecord,
   ModelConnectionRepository,
   ModelConnectionRepositoryProvider,
   UpdateModelConnectionOutcome as CoreUpdateOutcome,
+  UpdateModelConnectionPatch,
   WorkspaceScope,
   WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
-import type { SecretsService } from '@agent-workspace/core/secrets';
+import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
+import { createInMemorySecretsService, type SecretsService } from '@agent-workspace/core/secrets';
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
 
 import type {
   CreateModelConnectionInput,
@@ -51,14 +55,15 @@ export interface WorkspaceModelsStore {
   resolve(id: string): Promise<ResolvedModelConnection | null>;
   /**
    * Replace a connection's stored credential in place: `POST /api/model-connections/:id/credential`
-   * (issue #126). `false` when the connection or its secret does not exist.
+   * (issue #126). `false` when the connection or its secret does not exist, or the connection is
+   * keyless and stores no credential.
    */
   replaceCredential(id: string, apiKey: string): Promise<boolean>;
   /**
    * Give a connection `apiKey` whether or not it still has a secret: rotate the secret it has, or
    * write a fresh one under its name when it has none (issue #415). First-run setup uses this to
    * repair its own row when that row's secret was lost, keeping the connection id. `false` when the
-   * connection does not exist.
+   * connection does not exist or is keyless.
    */
   writeCredential(id: string, apiKey: string): Promise<boolean>;
   /** List every `MODEL_CONNECTION_*` secret this workspace holds with no connection row. */
@@ -123,9 +128,18 @@ export function createRepositoryModelsStoreProvider(
         async create(input) {
           const { repository, scope } = await access();
           const id = crypto.randomUUID();
+          if (isKeylessProvider(input.provider)) {
+            // A keyless connection stores no secret: there is no pair to keep whole.
+            return repository.create({
+              id,
+              name: input.name,
+              provider: input.provider,
+              config: input.config,
+            });
+          }
           const sealed = await dependencies.secrets.create(scope, {
             name: modelConnectionSecretName(id),
-            value: Buffer.from(input.apiKey, 'utf8'),
+            value: Buffer.from(input.apiKey ?? '', 'utf8'),
           });
           if (sealed.kind !== 'created') {
             throw new Error(`fresh model-connection secret was refused: ${sealed.kind}`);
@@ -177,6 +191,7 @@ export function createRepositoryModelsStoreProvider(
           const { repository, scope } = await access();
           const connection = await repository.get(id);
           if (connection === null) return null;
+          if (isKeylessProvider(connection.provider)) return { connection, credential: '' };
           const secret = await dependencies.secrets.resolveByName(
             scope,
             modelConnectionSecretName(id),
@@ -186,7 +201,8 @@ export function createRepositoryModelsStoreProvider(
         },
         async replaceCredential(id, apiKey) {
           const { repository, scope } = await access();
-          if ((await repository.get(id)) === null) return false;
+          const connection = await repository.get(id);
+          if (connection === null || isKeylessProvider(connection.provider)) return false;
           const name = modelConnectionSecretName(id);
           const metadata = (await dependencies.secrets.list(scope)).find(
             (candidate) => candidate.name === name,
@@ -201,7 +217,8 @@ export function createRepositoryModelsStoreProvider(
         },
         async writeCredential(id, apiKey) {
           const { repository, scope } = await access();
-          if ((await repository.get(id)) === null) return false;
+          const connection = await repository.get(id);
+          if (connection === null || isKeylessProvider(connection.provider)) return false;
           const name = modelConnectionSecretName(id);
           const value = Buffer.from(apiKey, 'utf8');
           const metadata = (await dependencies.secrets.list(scope)).find(
@@ -231,4 +248,74 @@ export function createRepositoryModelsStoreProvider(
       };
     },
   };
+}
+
+/**
+ * The in-memory adapter's repository. {@link createInMemoryModelsStoreProvider} puts the repository
+ * adapter above over it, with a scope resolver for the given workspaces and an in-memory secrets
+ * service. Tests, the formal model and the run-delivery fixtures use it; production wires
+ * {@link createRepositoryModelsStoreProvider} over PostgreSQL. It lives here because this is the
+ * folder's one file that names `packages/core/db` (F-15).
+ */
+function inMemoryRepositories(): ModelConnectionRepositoryProvider {
+  const byWorkspace = new Map<string, Map<string, ModelConnectionRecord>>();
+  return {
+    forScope(scope: WorkspaceScope): ModelConnectionRepository {
+      let rows = byWorkspace.get(scope.workspaceId);
+      if (rows === undefined) {
+        rows = new Map();
+        byWorkspace.set(scope.workspaceId, rows);
+      }
+      const current = rows;
+      const conflicting = (name: string, except?: string) =>
+        [...current.values()].some((row) => row.id !== except && row.name === name);
+      return {
+        list: () => Promise.resolve([...current.values()]),
+        get: (id) => Promise.resolve(current.get(id) ?? null),
+        create(input: CoreCreateInput): Promise<CoreCreateOutcome> {
+          if (conflicting(input.name))
+            return Promise.resolve({ kind: 'name-conflict', name: input.name });
+          const now = new Date();
+          const connection: ModelConnectionRecord = {
+            ...input,
+            workspaceId: scope.workspaceId,
+            createdAt: now,
+            updatedAt: now,
+          };
+          current.set(connection.id, connection);
+          return Promise.resolve({ kind: 'created', connection });
+        },
+        update(id: string, patch: UpdateModelConnectionPatch): Promise<CoreUpdateOutcome> {
+          const existing = current.get(id);
+          if (existing === undefined) return Promise.resolve({ kind: 'not-found' });
+          if (patch.name !== undefined && conflicting(patch.name, id)) {
+            return Promise.resolve({ kind: 'name-conflict', name: patch.name });
+          }
+          const connection = { ...existing, ...patch, updatedAt: new Date() };
+          current.set(id, connection);
+          return Promise.resolve({ kind: 'updated', connection });
+        },
+        delete(id: string): Promise<CoreDeleteOutcome> {
+          const connection = current.get(id);
+          if (connection === undefined) return Promise.resolve({ kind: 'not-found' });
+          current.delete(id);
+          // This in-memory double models no `agents` table, so there is never anyone to report —
+          // the real PostgreSQL repository is what `model-connections.test.ts` holds to the real
+          // referencing-agents behaviour.
+          return Promise.resolve({ kind: 'deleted', connection, referencedBy: [] });
+        },
+      };
+    },
+  };
+}
+
+export function createInMemoryModelsStoreProvider(
+  workspaceIds: readonly string[],
+): ModelsStoreProvider {
+  const scopes = createInMemoryWorkspaceScopeResolver(workspaceIds.map((id) => ({ id, slug: id })));
+  return createRepositoryModelsStoreProvider({
+    repositories: inMemoryRepositories(),
+    scopes,
+    secrets: createInMemorySecretsService(),
+  });
 }

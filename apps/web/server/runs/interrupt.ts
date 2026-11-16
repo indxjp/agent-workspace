@@ -13,11 +13,16 @@
  * built) and the route handlers (where an interrupt is served) into separate module graphs, and
  * only a `globalThis` property is shared by every bundle in one Node process.
  *
- * **Best effort, by design.** A run this process is not holding — a different replica, or a run
- * that already ended — has no entry, and {@link signalLiveRun} then does nothing rather than fail
- * the request: the control-plane transition (terminal status, token revocation) is the security
- * boundary and always happens; this signal is the courtesy that stops the runtime sooner when it
- * can be reached at all. See `docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md`.
+ * **The fast path, not the only path.** A run this process is not holding — a different replica,
+ * or a run that already ended — has no entry, and {@link signalLiveRun} then does nothing rather
+ * than fail the request: the control-plane transition (terminal status, token revocation) is the
+ * security boundary and always happens. When the interrupt lands on the replica holding the run,
+ * this signal stops the runtime at once. When it lands anywhere else, the holder's cancellation
+ * watch (`cancellation-watch.ts`, started by the launcher) reads the committed status within one
+ * interval and raises the same {@link signalRuntimeInterrupt} — the durable cross-replica path
+ * (`docs/adr/ADR-0151-FU-1440-*.md` D1). The handle's `onInterrupt` is the once-per-launch flag
+ * that keeps the watch from signalling a second time. See
+ * `docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md`.
  */
 import { defineSlot } from '../runtime-slot';
 import { publicRunFailure } from './failures';
@@ -28,7 +33,10 @@ export interface LiveRunHandle {
   readonly base: string;
   /** Private runner-manager authentication, the same headers the launcher's own requests carry. */
   readonly headers: Readonly<Record<string, string>>;
-  /** Stops what the launcher still does for the run on this process (its storage write-back). */
+  /**
+   * Stops what the launcher still does for the run on this process (its storage write-back), and
+   * marks the launch interrupted, so its cancellation watch does not signal the runtime again.
+   */
   readonly onInterrupt?: () => void;
 }
 

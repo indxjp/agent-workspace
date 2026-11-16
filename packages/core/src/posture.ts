@@ -32,7 +32,7 @@ export type DeploymentPosture = (typeof deploymentPostures)[number];
 const deploymentPostureSchema = z.enum(deploymentPostures);
 
 type DeploymentPostureErrorCode =
-  'invalid_deployment_posture' | 'local_posture_needs_loopback_host';
+  'invalid_deployment_posture' | 'local_posture_needs_loopback_host' | 'oidc_issuer_not_https';
 
 export class DeploymentPostureError extends Error {
   readonly code: DeploymentPostureErrorCode;
@@ -59,13 +59,36 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
+ * ADR-0161's 2026-11-01 amendment (DI9, issue #2075): under the production posture the one trusted
+ * OIDC issuer must be `https:`, loopback or not. `aw dev`'s development issuer is `http:` on
+ * `127.0.0.1` by construction, so this is how production refuses it. An unset or blank
+ * `OIDC_ISSUER_URL` is not checked here (`readOidcConfiguration` owns the all-or-none rule).
+ */
+function refuseInsecureOidcIssuer(env: Readonly<Record<string, string | undefined>>): void {
+  const issuer = (env['OIDC_ISSUER_URL'] ?? '').trim();
+  if (issuer.length === 0) return;
+  let protocol: string | undefined;
+  try {
+    protocol = new URL(issuer).protocol;
+  } catch {
+    protocol = undefined;
+  }
+  if (protocol !== 'https:') {
+    throw new DeploymentPostureError(
+      'oidc_issuer_not_https',
+      'OIDC_ISSUER_URL must be an https: URL under the production posture; a plain http: or loopback issuer, such as the development issuer of aw dev, is refused',
+    );
+  }
+}
+
+/**
  * Read the deployment posture from an environment, or throw {@link DeploymentPostureError}.
  *
  * An unset or blank `AW_DEPLOYMENT_POSTURE` derives the posture from `NODE_ENV` without checking
  * HOST. An explicit `local` needs HOST set to a loopback literal.
  */
 export function readDeploymentPosture(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
 ): DeploymentPosture {
   return checkDeploymentPosture(env, env['HOST']);
 }
@@ -77,6 +100,15 @@ export function readDeploymentPosture(
  * non-loopback value.
  */
 export function checkDeploymentPosture(
+  env: Readonly<Record<string, string | undefined>>,
+  bindHost: string | undefined,
+): DeploymentPosture {
+  const posture = postureOf(env, bindHost);
+  if (posture === 'production') refuseInsecureOidcIssuer(env);
+  return posture;
+}
+
+function postureOf(
   env: Readonly<Record<string, string | undefined>>,
   bindHost: string | undefined,
 ): DeploymentPosture {

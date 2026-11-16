@@ -1,0 +1,94 @@
+[
+  {
+    "id": "d0000000-0000-4000-8000-000000000001",
+    "title": "Switching the HDMI input",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Press the input button on the projector remote and pick HDMI."
+      },
+      {
+        "type": "paragraph",
+        "text": "If nothing shows, replug the cable and set the laptop to duplicate the display."
+      }
+    ],
+    "tags": ["meeting room", "projector"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000002",
+    "title": "Resetting your password",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Use \"Forgot password\" on the sign-in page."
+      }
+    ],
+    "tags": ["account"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000003",
+    "title": "Requesting access to a shared folder",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Ask the folder owner for access; it applies once approved."
+      }
+    ],
+    "tags": ["access"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000004",
+    "title": "Clearing a printer paper jam",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Open the cover, pull out the paper and reseat the tray."
+      }
+    ],
+    "tags": ["printer"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000005",
+    "title": "Checking your VPN connection",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Update the client, restart, then connect."
+      }
+    ],
+    "tags": ["vpn"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000006",
+    "title": "Preparing a new joiner's PC",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Create accounts, run initial setup, then hand over the device."
+      }
+    ],
+    "tags": ["onboarding"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000007",
+    "title": "Freeing mailbox space",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Delete old mail and attachments and empty the trash."
+      }
+    ],
+    "tags": ["mail"]
+  },
+  {
+    "id": "d0000000-0000-4000-8000-000000000008",
+    "title": "Reconnecting to Wi-Fi",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Turn Wi-Fi off and on. If it persists, contact the help desk."
+      }
+    ],
+    "tags": ["network"]
+  }
+]

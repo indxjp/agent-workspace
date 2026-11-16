@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { clearApplicationContext } from '../../../../../server/application-context';
 import { installTestDomains } from '../../../../../server/application-context-fixtures';
-import { conferredBy } from '../../../../../server/rbac/conferral';
+import { conferredBy } from '../../../../../server/rbac/core/conferral';
 import { installRbacHarness } from '../../../../../server/rbac/testing';
 import type { WorkspaceFeaturesAuditEvent } from '../../../../../server/workspaces/features-runtime';
 import { createMemoryWorkspaceRepository } from '../../../../../server/workspaces/testing';

@@ -2,11 +2,13 @@
  * The daily cost cap (issue #1851) on the public share run path: `createPublicShareRun` starts
  * runs without `startRunOnSession`, so it must consult the cap itself before writing any row.
  */
+import { createHash } from 'node:crypto';
+
 import type { ShareRecord } from '@agent-workspace/core/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getRunApi, type RunApiEnvironment } from '../../runs/environment';
-import { createPublicShareRun } from './projects';
+import { createPublicShareRun, wireShares } from './projects';
 
 vi.mock('../../runs/environment', () => ({ getRunApi: vi.fn() }));
 
@@ -15,7 +17,7 @@ const WORKSPACE = '00000000-0000-4000-8000-000000000002';
 const share: ShareRecord = {
   id: '00000000-0000-4000-8000-000000000001',
   workspaceId: WORKSPACE,
-  token: 'pub_runnable',
+  tokenHash: 'not-checked-here',
   subjectType: 'agent',
   subjectId: 'agent-1',
   subjectLabel: 'Agent',
@@ -89,5 +91,18 @@ describe('createPublicShareRun daily cost cap', () => {
       'The publishing workspace no longer exists.',
     );
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('wireShares resolvePublic (part 06 step 3)', () => {
+  it("finds a public link's workspace by the hash of its token, never by the token", async () => {
+    const findShareWorkspace = vi.fn(() => Promise.resolve(null));
+    const runtime = wireShares({
+      root: { findShareWorkspace },
+    } as unknown as Parameters<typeof wireShares>[0]);
+    await expect(runtime.resolvePublic('pub_wired')).resolves.toBeNull();
+    expect(findShareWorkspace).toHaveBeenCalledWith(
+      createHash('sha256').update('pub_wired', 'utf8').digest('hex'),
+    );
   });
 });

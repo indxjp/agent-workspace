@@ -109,6 +109,9 @@ describe('storage grants on PostgreSQL', () => {
             )
             .orderBy(asc(auditEvents.createdAt), asc(auditEvents.id))
         ).map((row) => row.label),
+      deleteConnection: async (id) => {
+        await isolated.db.delete(storageConnections).where(eq(storageConnections.id, id));
+      },
     };
   }
 

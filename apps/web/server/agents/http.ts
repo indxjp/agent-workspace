@@ -18,14 +18,13 @@ import { applicationContext } from '../application-context';
 import { AGENT_INSTRUCTIONS_MAX_LENGTH } from '../../contracts/agents';
 import { problem, type ApiResult } from '../http/result';
 import { isUuid } from './contract';
-import { agentNotFound, refuseBuiltinWrite } from './handlers';
+import { agentNotFound, refuseBuiltinWriteFor } from './handlers';
 import { resolverForRow } from '../resources/item-ownership';
 import type { WorkspaceAgentStore } from './store';
 import type { AgentsRuntime } from './runtime';
 import { readBoundedJson, readRouteParam } from '../http/json-transport';
 import { authorise, type OwnershipResolver } from '../rbac/http';
-import type { Ownership } from '../rbac/decide';
-import type { Principal } from '../rbac/principal';
+import type { Ownership, Principal } from '../identity';
 
 /**
  * The most bytes a single JSON code unit can occupy: `\uXXXX`, the escape `JSON.stringify`
@@ -121,7 +120,7 @@ export function agentOwnership(
       // throw, rather than answering "not found" the way this resolver promises to.
       () => (isUuid(id) ? store.get(id) : Promise.resolve(null)),
       agentNotFound,
-      (row) => refuseBuiltinWrite(row, operation),
+      (row, principal) => refuseBuiltinWriteFor(principal, row, operation),
     );
 }
 

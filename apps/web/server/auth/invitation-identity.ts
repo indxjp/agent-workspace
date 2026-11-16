@@ -7,6 +7,9 @@
  * distinct version tag makes cross-use with either other signed token fail closed.
  */
 
+import { systemClock } from '../clock.ts';
+import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
+
 const encoder = new TextEncoder();
 const TOKEN_VERSION = 'awinv1';
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
@@ -54,20 +57,37 @@ function base64UrlDecode(text: string): Uint8Array<ArrayBuffer> | null {
   return bytes;
 }
 
-function hmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
+function importHmacKey(bytes: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ]);
+}
+
+/** This token's own key, derived from the secret (part 06 step 5, `./core/key-ring.ts`). */
+async function purposeKey(secret: string): Promise<CryptoKey> {
+  return importHmacKey(await derivePurposeKey(crypto.subtle, secret, 'invitation-identity'));
+}
+
+/** The purpose key, then the raw secret every token was signed with before step 5 (roll-over). */
+async function verifiesUnderAnyKey(
+  secret: string,
+  signature: Uint8Array<ArrayBuffer>,
+  signed: Uint8Array<ArrayBuffer>,
+): Promise<boolean> {
+  for (const key of verificationKeys(
+    () => purposeKey(secret),
+    () => importHmacKey(encoder.encode(secret)),
+  )) {
+    if (await crypto.subtle.verify('HMAC', await key(), signature, signed)) return true;
+  }
+  return false;
 }
 
 export async function mintInvitationIdentityToken(
   input: { readonly email: string; readonly issuer: string; readonly subject: string },
   secret: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<string> {
   const email = input.email.trim().toLowerCase();
   if (!EMAIL_SHAPE.test(email) || input.issuer.trim() === '' || input.subject.trim() === '') {
@@ -83,7 +103,11 @@ export async function mintInvitationIdentityToken(
   };
   const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
   const signed = `${TOKEN_VERSION}.${payload}`;
-  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(signed));
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await purposeKey(secret),
+    encoder.encode(signed),
+  );
   return `${signed}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
@@ -91,7 +115,7 @@ export async function mintInvitationIdentityToken(
 export async function verifyInvitationIdentityToken(
   token: unknown,
   secret: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<InvitationIdentityVerifyResult> {
   if (typeof token !== 'string' || token.length === 0) {
     return { ok: false, reason: 'no invitation identity cookie on the request' };
@@ -104,9 +128,8 @@ export async function verifyInvitationIdentityToken(
   }
   const signature = base64UrlDecode(signaturePart);
   if (signature === null) return { ok: false, reason: 'signature segment is not base64url' };
-  const signatureValid = await crypto.subtle.verify(
-    'HMAC',
-    await hmacKey(secret),
+  const signatureValid = await verifiesUnderAnyKey(
+    secret,
     signature,
     encoder.encode(`${version}.${payloadPart}`),
   );

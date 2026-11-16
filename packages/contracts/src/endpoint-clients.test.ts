@@ -26,6 +26,7 @@ const resource = {
   actsForPrincipalId: '44444444-4444-4444-8444-444444444444',
   apiKeyIds: [],
   redirectUris: [],
+  oidcAudience: null,
   hasClientSecret: false,
   revokedAt: null,
   createdAt: '2026-10-10T10:00:00.000Z',
@@ -118,6 +119,90 @@ describe('CreateEndpointClientRequestSchema', () => {
         agentIds: ['not-a-uuid'],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('an app-backend client (ADR-0161 D4)', () => {
+  const appBackend = {
+    name: 'portal',
+    kind: 'app-backend',
+    agentIds: [AGENT_A],
+    oidcAudience: 'portal-web',
+  };
+
+  it('takes 1 to 64 agents and an oidcAudience', () => {
+    expect(CreateEndpointClientRequestSchema.safeParse(appBackend).success).toBe(true);
+    const many = Array.from(
+      { length: ENDPOINT_CLIENT_AGENTS_MAX },
+      (_, index) => `${String(index).padStart(8, '0')}-1111-4111-8111-111111111111`,
+    );
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...appBackend, agentIds: many }).success,
+    ).toBe(true);
+  });
+
+  it('refuses no agent, 65 agents and toolNames', () => {
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...appBackend, agentIds: [] }).success,
+    ).toBe(false);
+    const tooMany = Array.from(
+      { length: ENDPOINT_CLIENT_AGENTS_MAX + 1 },
+      (_, index) => `${String(index).padStart(8, '0')}-1111-4111-8111-111111111111`,
+    );
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...appBackend, agentIds: tooMany }).success,
+    ).toBe(false);
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...appBackend, toolNames: ['getOrder'] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('requires oidcAudience, bounded to 1 to 255 characters with no surrounding space', () => {
+    const withoutAudience = { name: 'portal', kind: 'app-backend', agentIds: [AGENT_A] };
+    const missing = CreateEndpointClientRequestSchema.safeParse(withoutAudience);
+    expect(missing.success).toBe(false);
+    expect(missing.error?.issues[0]?.path).toEqual(['oidcAudience']);
+    for (const oidcAudience of ['', 'a'.repeat(256), ' portal']) {
+      expect(
+        CreateEndpointClientRequestSchema.safeParse({ ...appBackend, oidcAudience }).success,
+      ).toBe(false);
+    }
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...appBackend, oidcAudience: 'a'.repeat(255) })
+        .success,
+    ).toBe(true);
+  });
+
+  it('refuses oidcAudience on every other kind', () => {
+    for (const [kind, agentIds] of [
+      ['mcp-project', [AGENT_A]],
+      ['a2a-agent', [AGENT_A]],
+      ['builder', []],
+    ] as const) {
+      expect(
+        CreateEndpointClientRequestSchema.safeParse({
+          name: 'other',
+          kind,
+          agentIds,
+          oidcAudience: 'portal-web',
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('renders oidcAudience on the resource, and a patch may change it', () => {
+    expect(
+      EndpointClientResourceSchema.safeParse({
+        ...resource,
+        kind: 'app-backend',
+        oidcAudience: 'portal-web',
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateEndpointClientRequestSchema.safeParse({ oidcAudience: 'portal-web' }).success,
+    ).toBe(true);
+    expect(UpdateEndpointClientRequestSchema.safeParse({ oidcAudience: '' }).success).toBe(false);
   });
 });
 

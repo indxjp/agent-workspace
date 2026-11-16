@@ -39,6 +39,7 @@
  * `docs/adr/W2-DB-02-the-run-port-is-not-scope-bound.md` rather than left to be discovered.
  */
 import type { EngineId } from '@indx-workspace/contracts/engines';
+import type { ProjectPolicyLimits } from '@indx-workspace/contracts/policy-ceiling';
 import {
   type ModelProvider,
   RUN_STATUSES,
@@ -116,6 +117,8 @@ export interface RunRecord {
   readonly cacheCreationInputTokens?: number;
   readonly toolCalls?: number;
   readonly costUsd?: string;
+  /** The run's spend ceiling in USD (ADR-0162), fixed at start; `null` when it has none. */
+  readonly spendCeilingUsd?: string | null;
   readonly costCurrency?: 'USD';
   readonly priceTableVersion?: string | null;
   /** §35's "errors": the failure message, null when the run did not fail. */
@@ -138,6 +141,11 @@ export interface RunRecord {
   readonly outputSchema?: Readonly<Record<string, unknown>> | null;
   /** The caller identity the run acts for (ADR-0142 D2); an approval continuation keeps it (ADR-0157). */
   readonly subject?: string | null;
+  /**
+   * The lower-only limits the run was started under (#1963), `null` when it had none. An approval
+   * continuation inherits them; they can only lower the limits the agent's policy resolves.
+   */
+  readonly limitsOverride?: ProjectPolicyLimits | null;
   /** The call a paused run waits on; non-null only while `awaiting_approval` (ADR-0145). */
   readonly pendingApproval?: ApprovalCall | null;
   /** The calls this run may make without asking: the ones its predecessor's approval admitted. */
@@ -149,6 +157,16 @@ export interface RunRecord {
    * `null` for a run with no approved calls and for one not yet started.
    */
   readonly approvalsConsumedAt?: Date | null;
+  /**
+   * The lead run that started this one through an agent team's member tool (ADR-0104), or `null`
+   * for a root run. Optional like most fields here; both stores always set it.
+   */
+  readonly parentRunId?: string | null;
+  /**
+   * The agent-team version a team run's lead runs (ADR-0104 acceptance decision 4), or `null`.
+   * Only `get()` sets it; it is never rendered.
+   */
+  readonly agentTeamVersionId?: string | null;
 }
 
 /** A completed run's answer. `structured` is `null` when the run asked for no output schema. */
@@ -181,6 +199,11 @@ interface RunListFilter {
   readonly initiatingUserId?: string;
   /** Exact session ownership, used for an own-grant collection read. */
   readonly ownerPrincipalId?: string;
+  /**
+   * The session's agent is one of these (ADR-0161, the amendment of issue #1530: an app backend's
+   * bound agents). An empty set matches no run.
+   */
+  readonly agentIds?: readonly string[];
 }
 
 /**
@@ -249,6 +272,8 @@ export interface CreateRunInput {
   readonly outputSchema?: Readonly<Record<string, unknown>>;
   /** The caller identity the run acts for, stored so an approval continuation inherits it (ADR-0157). */
   readonly subject?: string;
+  /** The lower-only limits the run starts under, stored so a continuation keeps them (#1963). */
+  readonly limitsOverride?: ProjectPolicyLimits;
   /** The start request's `Idempotency-Key`, scoped to the acting principal (ADR-0151, #250). */
   readonly idempotency?: RunIdempotency;
   /** The calls a decision on a paused run admits for this continuation run (ADR-0145 D2.3). */
@@ -259,6 +284,16 @@ export interface CreateRunInput {
    * {@link RunStore.create} then throws {@link ApprovalDecisionError} instead of creating a run.
    */
   readonly decides?: string;
+  /**
+   * Makes this run a child run of the lead run `parent.runId` (ADR-0104 acceptance decisions 5
+   * and 6). {@link RunStore.create} throws {@link ChildRunLimitError} when that run already has
+   * `parent.maxChildren` children, decided under a lock on the lead run.
+   */
+  readonly parent?: { readonly runId: string; readonly maxChildren: number };
+  /** The agent-team version a team run's lead runs (ADR-0104 decision 4). */
+  readonly agentTeamVersionId?: string;
+  /** The run's effective spend ceiling in USD (ADR-0162), a six-place decimal; omitted for none. */
+  readonly spendCeilingUsd?: string;
 }
 
 /** A start key, the principal it belongs to, and the hash of the request it was first used with. */
@@ -331,6 +366,22 @@ export class IdempotencyKeyTakenError extends Error {
   }
 }
 
+/** {@link CreateRunInput.parent} named a lead run that already has its most child runs. */
+export class ChildRunLimitError extends Error {
+  constructor(readonly runId: string) {
+    super(`run ${runId} already has its most child runs`);
+    this.name = 'ChildRunLimitError';
+  }
+}
+
+/** {@link CreateRunInput.parent} named a lead run that is no longer `running`; no child was created. */
+export class ParentRunStoppedError extends Error {
+  constructor(readonly runId: string) {
+    super(`run ${runId} is no longer running, so it starts no child run`);
+    this.name = 'ParentRunStoppedError';
+  }
+}
+
 /** {@link CreateRunInput.decides} named a run that cannot be decided; no run was created. */
 export class ApprovalDecisionError extends Error {
   constructor(
@@ -348,7 +399,10 @@ export interface RunStore {
    * Throws {@link ApprovalDecisionError} when `decides` names a run that is not awaiting approval
    * (judged first, #1440), {@link IdempotencyKeyTakenError} when `input.idempotency`'s key is
    * already held (judged before the session's busy check, so a racing retry is replayed), and
-   * {@link SessionBusyError} when the session already has a non-terminal run. A refusal leaves
+   * {@link SessionBusyError} when the session already has a non-terminal run, and
+   * {@link ChildRunLimitError} when `parent` (or, for a child's continuation, its root) already
+   * has its most children, and {@link ParentRunStoppedError} when `parent` is no longer
+   * `running`. A refusal leaves
    * the paused run `decides` names untouched.
    */
   create(input: CreateRunInput): Promise<RunRecord>;
@@ -426,6 +480,16 @@ export interface RunStore {
    * does (see this file's header).
    */
   listRuns(workspaceId: string, input: ListRunsInput): Promise<RunListPage>;
+  /**
+   * The runs of `workspaceId` whose parent is `parentRunId`, oldest first, at most `limit`
+   * (ADR-0104 acceptance decision 7): one indexed read, `[]` for a run with no children. Takes the
+   * workspace explicitly, like {@link listRuns}: the caller has already read the parent in it.
+   */
+  listChildren(
+    workspaceId: string,
+    parentRunId: string,
+    limit: number,
+  ): Promise<readonly RunRecord[]>;
 }
 
 /**

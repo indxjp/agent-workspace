@@ -5,13 +5,14 @@
  * function from here and convert the result to a `Response`. Nothing here touches `Request` or
  * `Response`, so each function is testable with a store and a catalog and no Next.js involved.
  */
-import type { CatalogSkillRevision, ResourceCatalogRepository } from '@agent-workspace/core/db';
 import {
   MAX_SKILL_REQUEST_BODY_BYTES,
   SKILL_IMPORT_MULTIPART,
   SKILL_MD_FILENAME,
   type SkillRevision,
 } from '@indx-workspace/contracts/skills';
+
+import type { SkillCatalog, SkillRevisionRow } from './ports';
 
 import {
   existingSkillProblem,
@@ -36,8 +37,8 @@ import {
 } from './keys';
 import { withSkillMetaColumn } from './meta-column';
 import type { MultipartReader } from './multipart';
-import { readBytes } from '@agent-workspace/core/storage/streams';
-import type { SkillObjects } from '../storage/store';
+import { readBytes } from '../storage/objects';
+import type { SkillObjects } from '../storage-and-sharing';
 import { skillSyncContext, syncSkillCatalogRow } from './pending-delete';
 import type { ApiResult } from '../http/result';
 import { log } from '../telemetry/logger';
@@ -87,7 +88,7 @@ export function problemCode(result: ApiResult): string | undefined {
 /** `GET /api/skills` — every skill, each with the id of its catalog row. */
 export async function listSkillsWithIds(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   rows?: SkillRows,
 ): Promise<ApiResult> {
@@ -167,7 +168,7 @@ async function removeImportedSkill(
  */
 export async function importSkillWithId(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   rawBody: unknown,
   rows: SkillRowsAccess,
@@ -219,7 +220,7 @@ export async function importSkillWithId(
  */
 async function releaseReservation(
   store: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   reserved: { readonly id: string; readonly name: string },
   keepFiles: boolean,
   rows: SkillRowsWriter,
@@ -241,7 +242,7 @@ async function releaseReservation(
  */
 export async function importReserved(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   rawBody: unknown,
   rows: SkillRowsAccess,
@@ -260,7 +261,7 @@ export async function importReserved(
 /** A `201` of `importSkill` or `recordImportedSkill`, with its catalog row updated; else as given. */
 async function completeImport(
   store: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   imported: ApiResult,
   writer: SkillRowsWriter,
@@ -386,14 +387,14 @@ async function readImportHead(
  */
 export async function importSkillMultipartWithId(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   reader: MultipartReader,
   rows: SkillRowsAccess,
 ): Promise<ApiResult> {
   const store = withSkillMetaColumn(objects, catalog);
   const writer = rowsWriter(rows, principal);
-  let reserved: Awaited<ReturnType<ResourceCatalogRepository['createSkill']>> = null;
+  let reserved: Awaited<ReturnType<SkillCatalog['createSkill']>> = null;
   let imported = false;
   let keepFiles = false;
   try {
@@ -485,7 +486,7 @@ export async function importSkillMultipartWithId(
 /** `GET /api/skills/:name` (not `?export=true`) — the skill with the id of its catalog row. */
 export async function getSkillWithId(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   name: string,
   rows?: SkillRows,
@@ -522,7 +523,7 @@ export async function getSkillWithId(
   return { ...response, body: { skill: { ...detail, id, revisions } } };
 }
 
-function revisionBody(revision: CatalogSkillRevision): SkillRevision {
+function revisionBody(revision: SkillRevisionRow): SkillRevision {
   return {
     number: revision.number,
     fileCount: revision.fileCount,
@@ -551,7 +552,7 @@ class PublishRefused extends Error {
 // @story US-STO-08
 export async function publishSkillRevisionWithId(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   name: string,
   rawBody: unknown,
@@ -628,7 +629,7 @@ export async function publishSkillRevisionWithId(
 /** `PATCH /api/skills/:name` — apply the edit, then upsert the catalog row from the result. */
 export async function patchSkillWithId(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   principal: SkillPrincipal,
   name: string,
   rawBody: unknown,

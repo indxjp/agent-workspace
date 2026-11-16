@@ -1,0 +1,8 @@
+// Your page: draw it with the parts of @indx-workspace/app/react and @indx-workspace/react.
+export default function {{component}}Page() {
+  return (
+    <main>
+      <h1>{{title}}</h1>
+    </main>
+  );
+}

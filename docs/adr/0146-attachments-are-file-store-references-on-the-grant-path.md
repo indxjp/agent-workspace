@@ -245,3 +245,10 @@ overrun it by at most what is in flight. The limits come from `SURFACE_ATTACHMEN
   stable error codes, and `run.warning` is a new platform event name. They join the SDK's and the
   CLI's tables when the server unit lands. The earlier unit text's `run_attachment_not_found` is
   replaced by the existing `file_not_found`.
+
+## Amendment (2026-11-01): an agent's memory folder rides this path
+
+Decided by [ADR-0163](0163-an-agent-may-keep-a-memory-folder-on-the-grant-path.md) (issue #1526).
+An agent whose permissions keep memory is handed its folder `memory/<agentId>/` as `read-write` file
+references at `memory/` under the run's working directory, through Decision 2's path unchanged. It
+is the one grant a completed run writes back to, outside `runs/<runId>/outputs/`.

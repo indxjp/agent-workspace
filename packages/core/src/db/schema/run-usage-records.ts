@@ -76,6 +76,9 @@ export const runUsageRecords = pgTable(
   (table) => [
     uniqueIndex('run_usage_records_response_unique').on(table.runId, table.providerResponseId),
     index('run_usage_records_workspace_run_idx').on(table.workspaceId, table.runId),
+    // The daily-cost window (`usageCostUsd`) sums one workspace's rows by `created_at`; without
+    // this it scans the workspace's whole ledger on every uncached read (#1963, SPD-15).
+    index('run_usage_records_workspace_created_idx').on(table.workspaceId, table.createdAt),
     foreignKey({
       columns: [table.runId, table.workspaceId],
       foreignColumns: [runs.id, runs.workspaceId],

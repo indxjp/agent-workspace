@@ -1,6 +1,6 @@
 ---
 title: "Integrate a backend"
-description: "Run agents from your own server or CI job: which role to mint an API key with, start-and-wait vs. streaming, polling instead of webhooks, stopping a run, and mapping SDK errors onto your own API."
+description: "Run agents from your own server or CI job: which role to mint an API key with, start-and-wait vs. streaming, receiving run outcomes with a signed webhook, stopping a run, and mapping SDK errors onto your own API."
 ---
 
 <Info>
@@ -23,7 +23,7 @@ What you can do:
 - [Call an agent from code in a few minutes](#call-it-from-code-starting-from-aw-dev), starting from `aw dev`
 - [Mint a key with the right role](#which-role-to-mint)
 - [Wait for the answer, or stream progress](#start-and-wait-vs-streaming)
-- [Learn when a run finished, without webhooks](#learn-when-a-run-finished)
+- [Learn when a run finished](#learn-when-a-run-finished), in-process or [with a webhook](#receive-run-outcomes-with-a-webhook)
 - [Stop a run](#stopping-a-run)
 - [Turn SDK failures into your own API's errors](#mapping-sdk-errors-onto-your-own-api)
 - [Run an agent from CI with no code](#running-aw-from-ci-as-the-no-code-alternative)
@@ -40,6 +40,9 @@ sequenceDiagram
   else progress as it happens
     B->>A: follow(runId)
     A-->>B: run-status and agent frames until done
+  else called back when it ends
+    A->>B: POST to your webhook, a signed run.completed, run.failed or run.cancelled
+    B-->>A: 2xx
   end
   opt stop it
     B->>A: interrupt(runId)
@@ -165,37 +168,110 @@ Both share the same reconnect behaviour. Every frame kind is on [Streaming](/gui
 
 ## Learn when a run finished
 
-Nothing calls back into your backend when a run finishes. Two patterns work today:
+Three patterns, from the simplest:
 
 - **Stay in-process:** call `follow` or `waitForOutcome` from the same request or job that started
   the run. This is the common case.
+- **Be called back:** register a webhook, and the platform posts a signed event to your backend
+  when the run completes, fails or is cancelled. Use it when the process that started the run is
+  gone by the time it ends: a queue worker, a serverless function, a long run.
 - **Check from another process:** persist the run id (and the last event id, if you have one),
   then call [`runs.get`](/resources/runs#get) for its `status`, or reopen the stream with
   [`runs.follow(runId, { after: lastEventId })`](/resources/runs#follow).
 
 Polling `runs.list` on a timer for "everything that changed" is not supported: `RunListQuery` has
-no `updatedAfter` or similar field. Poll `runs.get(runId)` for a run id you already have.
+no `updatedAfter` or similar field. Poll `runs.get(runId)` for a run id you already have, or let a
+webhook tell you.
 
-<Note>
-  **Today:** a backend learns that a run finished by following its stream or polling `runs.get` —
-  there is no callback. **Target:** a workspace registers an endpoint and receives signed
-  `run.completed`, `run.failed` and `run.cancelled` events, retried with backoff and deduplicated by
-  run id. Tracked as [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes).
-</Note>
+## Receive run outcomes with a webhook
 
-## `runs.start` is not idempotent — detect a duplicate before retrying
+<Steps>
+  <Step title="Register the endpoint">
 
-`runs.start` answers `202` with no dedupe: calling it twice makes two runs, and there is no
-`Idempotency-Key`. Before retrying an uncertain `start` (a timeout, a redeploy, a queue
-redelivery), list by `agent` and correlate by `sessionId` —
-[Retries and idempotency](/guides/retries-and-idempotency#runs-start-is-not-idempotent) has the
-pattern and the retry rule for every other method.
+An Owner or Admin key registers the URL once. The answer carries the signing secret, and this is
+the only time it does: store it with your receiver's configuration.
 
-<Note>
-  **Today:** pass `idempotencyKey` to `runs.start` and reuse it when you retry: a retry after a
-  lost response returns the run the first start queued instead of starting a second one. Tracked as
-  [S-6](/concepts/roadmap#s-6-idempotency-keys).
-</Note>
+```ts title="register-webhook.ts (illustrative)" claim="illustrative"
+const { webhook, secret } = await aw.webhooks.create({
+  url: 'https://api.example.com/hooks/agent-workspace',
+  events: ['run.completed', 'run.failed', 'run.cancelled'], // the default
+});
+```
+
+From a terminal, `aw webhooks create --webhook-url <url>` does the same and prints the secret
+once ([Webhooks](/resources/webhooks#create)).
+
+  </Step>
+  <Step title="Verify, deduplicate, answer fast">
+
+The receiver checks the signature over the body exactly as it arrived, records the event under its
+id, and answers `2xx` before doing the work. Any `2xx` settles the delivery; anything else, or no
+answer within 10 seconds, is retried with backoff for about 21 hours.
+
+```ts title="webhook-receiver.ts" claim="compile"
+import {
+  verifyWebhookSignature,
+  WebhookVerificationError,
+  type WebhookEvent,
+} from '@indx-workspace/sdk';
+
+function signingSecret(): string {
+  const secret = process.env.AGENT_WORKSPACE_WEBHOOK_SECRET;
+  if (secret === undefined) throw new Error('set AGENT_WORKSPACE_WEBHOOK_SECRET');
+  return secret;
+}
+
+/** Event ids already accepted. In production, a unique key in your own database. */
+const accepted = new Set<string>();
+/** Work for after the answer: a job queue in production. */
+const work: WebhookEvent[] = [];
+
+/** `POST /hooks/agent-workspace`, as a Fetch API handler (Next.js, Hono, a worker). */
+export async function POST(request: Request): Promise<Response> {
+  const body = await request.text(); // the raw body: never parse and re-serialise it first
+  let event: WebhookEvent;
+  try {
+    event = await verifyWebhookSignature({ secret: signingSecret(), headers: request.headers, body });
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) return new Response(error.code, { status: 400 });
+    throw error;
+  }
+  // At least once: a retry repeats the same event id (the webhook-id header).
+  if (!accepted.has(event.id)) {
+    accepted.add(event.id);
+    work.push(event);
+  }
+  return new Response(null, { status: 204 });
+}
+```
+
+  </Step>
+  <Step title="Act on the outcome">
+
+`event.data.run` carries the run's id, status, error, usage and cost, and `accountingState` says
+whether the numbers are final. It never carries the prompt or the output; read those with
+`aw.runs.result(event.data.run.id)` when you need them. A run sends at most one event to each
+webhook, so `data.run.id` is as good a deduplication key as `event.id`.
+
+  </Step>
+</Steps>
+
+To test a receiver on your own machine, point a webhook at `http://127.0.0.1:<port>/…` on a local
+deployment: plain `http:` is accepted for a loopback host outside production only. A deployed
+control plane checks every URL against its egress policy, and refuses a private address with
+`400 webhook_url_refused`. Everything else, from the signature scheme to the retry schedule, is
+on [Webhooks](/resources/webhooks).
+
+## Retry `runs.start` with an idempotency key
+
+`runs.start` answers `202`, and without a key calling it twice makes two runs. Pass
+`idempotencyKey` and reuse it when you retry an uncertain start (a timeout, a redeploy, a queue
+redelivery): the same key and input answer with the run the first start queued instead of starting
+a second one, and the same key with another input is `409 run_idempotency_conflict`. Derive the key
+from the job you are doing, such as a queue message id, so a redelivery reuses it.
+[Retries and idempotency](/guides/retries-and-idempotency#make-runs-start-idempotent-with-a-key)
+has the rules and the retry rule for every other method; from a script,
+`aw runs start --idempotency-key <key>` does the same.
 
 ## Stopping a run
 
@@ -296,10 +372,10 @@ SDK (branching on a specific `ApiProblemError.code`, custom retry logic).
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Run an agent and get its settled outcome                                  | `aw.runs.start` + `aw.runs.waitForOutcome`, or `aw runs start --wait` from CI        |
 | Stream progress to your own log or frontend                               | `aw.runs.follow`, forwarding frames as they arrive                                   |
-| Detect (not prevent) a duplicate `runs.start` after an uncertain response | List by `agent`, correlate by `sessionId` — see above                                |
+| Retry an uncertain `runs.start` without starting a second run              | `idempotencyKey` — see [above](#retry-runs-start-with-an-idempotency-key)            |
 | Map every SDK failure onto your own API's error shape                     | `instanceof ApiProblemError \| ContractViolationError \| TransportError` — see above |
 | Learn which workspace and role an API key resolves to                     | `aw.me()` — see [Which role to mint](#which-role-to-mint) above                      |
-| Get called back when a run finishes                                       | Not yet — no webhooks; stay in-process or poll `runs.get`                            |
+| Get called back when a run finishes                                       | `aw.webhooks.create` and `verifyWebhookSignature` — see [above](#receive-run-outcomes-with-a-webhook) |
 | Stop a run from your backend                                              | `aw.runs.interrupt(runId)` — see [Stopping a run](#stopping-a-run) above             |
 
 ## See also
@@ -316,5 +392,8 @@ SDK (branching on a specific `ApiProblemError.code`, custom retry logic).
   </Card>
   <Card title="Retries and idempotency" href="/guides/retries-and-idempotency">
     What's safe to retry automatically, and the `withRetry` wrapper you own.
+  </Card>
+  <Card title="Webhooks" href="/resources/webhooks">
+    The event, the signature, the retry schedule and who may register an endpoint.
   </Card>
 </CardGroup>

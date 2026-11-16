@@ -1,7 +1,7 @@
 import { isUuid } from '@indx-workspace/contracts';
 
 import { errorResponse } from '../../../../server/http/error-response';
-import { requireShareAccess, shareProblem, withShares } from '../../../../server/shares/core/http';
+import { requireShareAccess, shareProblem, withShares } from '../../../../server/shares/http';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {

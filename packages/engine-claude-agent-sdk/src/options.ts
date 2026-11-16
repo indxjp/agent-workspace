@@ -85,6 +85,13 @@ export type ClaudeApprovalGate = {
   readonly deferred: readonly string[];
   /** The canonical texts of the calls already approved. */
   readonly approvedToolCalls: readonly string[];
+  /**
+   * The rules also written as Claude Code `ask` rules, with settings hooks off: the stored
+   * `requireApproval`. The command rule Run commands adds (`claudeCommandApprovalRules`, #2091) is
+   * in `requireApproval` but not here, so Claude Code still runs a read-only command and an
+   * `allowedTools` command without asking. Empty means the run starts with no extra settings.
+   */
+  readonly ask: readonly string[];
 };
 
 /**

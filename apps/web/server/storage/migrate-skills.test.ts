@@ -326,6 +326,30 @@ describe('the skills adopt stage', () => {
     expect(await rowPaths('.skills/demo')).toEqual([]);
   });
 
+  // #1925 item 5: each moved skill's pending-delete check listed every skill row, so a first pass
+  // over n skills read the whole skills table about 2n times.
+  it('[US-STO-13][unit][cli] a first pass reads the skill list a fixed number of times, however many skills move', async () => {
+    const listings = async (count: number) => {
+      const { catalog, old, deps } = world();
+      for (let index = 0; index < count; index += 1) {
+        const name = `skill-${String(index)}`;
+        await seedBareSkill(old, {
+          name,
+          files: [
+            { path: 'SKILL.md', contentBase64: b64(SKILL_MD.replace('demo', name)) },
+            { path: 's/run.sh', contentBase64: b64('run') },
+          ],
+        });
+      }
+      const listSkills = vi.spyOn(catalog, 'listSkills');
+      const report = await runSkillsAdoptStage(deps);
+      expect(report).toMatchObject({ skills: count, moved: 2 * count, remaining: 0, failed: 0 });
+      return listSkills.mock.calls.length;
+    };
+
+    expect(await listings(5)).toBe(await listings(1));
+  });
+
   it('[US-STO-13][unit][cli] every pass is recorded, an unchanged one included', async () => {
     const { runs, deps } = world();
     const recorded = vi.spyOn(runs, 'record');
@@ -370,6 +394,28 @@ describe('the skills adopt stage', () => {
     expect(warnings).toEqual([
       [expect.any(String), { stage: 'skills', code: 'store_inconsistent' }],
     ]);
+  });
+
+  // #1925 item 7: a failed workspace was counted once per failure, so the count was inflated.
+  it('[US-STO-13][unit][cli] a workspace that fails twice in one pass is counted once', async () => {
+    const { old, catalog, deps, runs } = world();
+    await seedBareSkill(old, {
+      name: 'broken',
+      files: [{ path: 'SKILL.md', contentBase64: Buffer.from([0x80]).toString('base64') }],
+    });
+    await catalog.putSkill({
+      name: 'kept',
+      skillMd: SKILL_MD,
+      enabled: true,
+      ownerPrincipalId: 'owner',
+      createdBy: null,
+    });
+    vi.spyOn(catalog, 'listSkillRevisions').mockRejectedValue(new Error('down'));
+
+    const report = await runSkillsAdoptStage(deps);
+
+    expect(report).toMatchObject({ workspaces: 1, failed: 1 });
+    expect(await runs.latest('skills')).toMatchObject({ clean: false, mismatches: 1 });
   });
 
   it('[US-STO-13][unit][cli] a workspace that fails is counted and does not stop the run', async () => {

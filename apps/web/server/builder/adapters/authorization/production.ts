@@ -4,7 +4,7 @@ import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { isUuid } from '../../../agents/contract';
 import { awControlAllowed } from '../../agent/aw-control-allowed';
 import { ownershipOf } from '../../../agents/run-ownership';
-import { decide, type Ownership } from '../../../rbac/decide';
+import { decide, type Ownership } from '../../../identity';
 import { isBuilderAgent } from '../../agent/is-builder-agent';
 import type { AgentRecord } from '../../../agents/contract';
 import type { Facts } from '../../core/facts';

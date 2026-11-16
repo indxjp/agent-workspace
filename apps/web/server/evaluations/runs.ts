@@ -24,12 +24,10 @@ import {
 } from '@indx-workspace/contracts/evaluations';
 import { z } from 'zod';
 
-import { isUuid } from '../agents/contract';
+import { agentVersionNotFound, isUuid, type WorkspaceAgentVersionStore } from '../agents';
 import { formatIssues, problem, type ApiResult } from '../http/result';
-import { agentVersionNotFound } from '../agent-versions/problems';
-import type { WorkspaceAgentVersionStore } from '../agent-versions/store';
 import { readBoundedJson } from '../http/json-transport';
-import type { RunPrincipal, RunApiEnvironment } from '../runs/environment';
+import type { RunApiEnvironment, RunEvaluationEnvironment, RunPrincipal } from '../execution';
 import { runCase } from './handlers';
 import { score } from './score';
 
@@ -250,7 +248,7 @@ export async function getEvaluationRun(
 }
 
 type StoredEvaluation = NonNullable<
-  Awaited<ReturnType<NonNullable<RunApiEnvironment['evaluationRuns']>['find']>>
+  Awaited<ReturnType<NonNullable<RunEvaluationEnvironment['evaluationRuns']>['find']>>
 >;
 
 function resource(stored: StoredEvaluation): EvaluationRunResource {

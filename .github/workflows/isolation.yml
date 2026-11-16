@@ -389,7 +389,7 @@ jobs:
           merge-multiple: true
 
       - name: Summary logic
-        run: node --test infra/tests/isolation/summary.test.mjs
+        run: node --test infra/tests/isolation/summary.test.mjs infra/tests/isolation/cloud-run-lane.test.mjs infra/tests/isolation/log-result.test.mjs
 
       - name: Table
         run: |

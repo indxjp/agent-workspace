@@ -11,7 +11,7 @@
  * before creating a membership.
  */
 import { refusingLocalRuntimeKey } from '../../../server/cli-auth/local-runtime-key-guard';
-import { createMembership, listMemberships } from '../../../server/rbac/handlers';
+import { createMembership, listMemberships } from '../../../server/rbac/membership-handlers';
 import { readJsonBody } from '../../../server/http/result';
 import { authorise, toResponse } from '../../../server/rbac/http';
 

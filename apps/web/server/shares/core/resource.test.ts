@@ -1,14 +1,16 @@
 import type { ShareRecord } from '@agent-workspace/core/db';
 import { describe, expect, it } from 'vitest';
 
-import { publishedSnapshot, toShareResource, visibleShares } from './resource';
-import { parsePublishShareRequest } from './input';
+import { parsePublishShareRequest, publishedSnapshot } from '../publish-request';
+import { toShareListItem, toShareResource, visibleShares } from './resource';
+
+const TOKEN = 'pub_do-not-leak-for-non-public';
 
 function share(visibility: ShareRecord['visibility']): ShareRecord {
   return {
     id: '00000000-0000-4000-8000-000000000001',
     workspaceId: '00000000-0000-4000-8000-000000000002',
-    token: 'pub_do-not-leak-for-non-public',
+    tokenHash: 'not-checked-here',
     subjectType: 'project',
     subjectId: 'project-1',
     subjectLabel: 'Project',
@@ -33,22 +35,36 @@ describe('share wire resource', () => {
   it.each(['private', 'workspace'] as const)(
     'omits secrets and public URL for %s shares',
     (visibility) => {
-      const resource = toShareResource(share(visibility), 2);
+      const resource = toShareResource(share(visibility), TOKEN);
       expect(resource).not.toHaveProperty('passphraseHash');
       expect(resource).not.toHaveProperty('token');
+      expect(resource).not.toHaveProperty('tokenHash');
       expect(resource).not.toHaveProperty('workspaceId');
       expect(resource).not.toHaveProperty('createdBy');
       expect(resource).not.toHaveProperty('url');
-      expect(resource).toHaveProperty('viewCount', 2);
+      expect(JSON.stringify(resource)).not.toContain(TOKEN);
     },
   );
 
   it('emits a /p URL only for public shares without exposing the raw token field', () => {
-    const resource = toShareResource(share('public'));
-    expect(resource).toHaveProperty('url', '/p/pub_do-not-leak-for-non-public');
+    const resource = toShareResource(share('public'), TOKEN);
+    expect(resource).toHaveProperty('url', `/p/${TOKEN}`);
     expect(resource).not.toHaveProperty('token');
+    expect(resource).not.toHaveProperty('tokenHash');
     expect(resource).not.toHaveProperty('passphraseHash');
+    expect(resource).not.toHaveProperty('viewCount');
   });
+
+  it.each(['private', 'workspace', 'public'] as const)(
+    'lists a %s share with its view count and never a link (part 06 step 3 phase 2)',
+    (visibility) => {
+      const item = toShareListItem(share(visibility), 2);
+      expect(item).toHaveProperty('viewCount', 2);
+      expect(item).not.toHaveProperty('url');
+      expect(item).not.toHaveProperty('tokenHash');
+      expect(item).not.toHaveProperty('passphraseHash');
+    },
+  );
 });
 
 describe('published share content', () => {

@@ -10,10 +10,12 @@
     "checkJs": true,
     "paths": {
       "@agent-workspace/core": ["./packages/core/src/index.ts"],
+      "@agent-workspace/egress-proxy": ["./packages/egress-proxy/src/index.ts"],
       "@agent-workspace/gateway": ["./packages/gateway/src/index.ts"],
       "@agent-workspace/gateway/providers/registry": [
         "./packages/gateway/src/providers/registry.ts"
       ],
+      "@agent-workspace/gateway/settings": ["./packages/gateway/src/settings.ts"],
       "@agent-workspace/runtime/driver": ["./packages/runtime/src/index.ts"],
       "@agent-workspace/runtime/driver/local": ["./packages/runtime/src/local.ts"],
       "@agent-workspace/runtime/driver/docker": ["./packages/runtime/src/docker.ts"],
@@ -29,6 +31,11 @@
       "@agent-workspace/runtime/driver/aca-sessions": ["./packages/runtime/src/aca-sessions.ts"],
       "@agent-workspace/runtime/engine-images": ["./packages/runtime/src/engine-images.ts"],
       "@agent-workspace/runtime/transfer": ["./packages/runtime/src/transfer.ts"],
+      "@indx-workspace/app": ["./packages/app/src/index.ts"],
+      "@indx-workspace/app/server": ["./packages/app/src/server/index.ts"],
+      "@indx-workspace/app/db": ["./packages/app/src/db/index.ts"],
+      "@indx-workspace/app/react": ["./packages/app/src/react/index.ts"],
+      "@indx-workspace/app/testing": ["./packages/app/src/testing/index.ts"],
       "@indx-workspace/platforms": ["./packages/platforms/src/index.ts"],
       "@indx-workspace/platforms/testing": ["./packages/platforms/src/testing/index.ts"]
     },
@@ -40,7 +47,8 @@
   // `tests/**/*.ts` is here for the same reason the two files above are: it is not inside any
   // workspace member, so `pnpm -r typecheck` never sees it, and type-aware ESLint's
   // `projectService` needs it to belong to a real project. Added by W1-CORE-01 with
-  // `tests/sdk-surface.test.ts` (plan §9.1's sdk-surface gate).
+  // `tests/sdk-surface.test.ts` (plan §9.1's sdk-surface gate). `examples/store/catalog/**/*.ts` (the
+  // store's catalog) is here for the same reason: the store app is not a workspace member.
   "include": [
     "vitest.config.ts",
     "vitest.coverage.config.ts",
@@ -50,6 +58,7 @@
     "eslint.config.mjs",
     "scripts/**/*.mjs",
     "tests/**/*.ts",
+    "examples/store/catalog/**/*.ts",
     "tests/**/*.mts",
     "scripts/**/*.mts"
   ],

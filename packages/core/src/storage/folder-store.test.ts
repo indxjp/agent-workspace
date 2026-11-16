@@ -1,151 +1,25 @@
 // @story US-STO-12
 import { execFileSync } from 'node:child_process';
 import { closeSync, constants, openSync } from 'node:fs';
-import {
-  chmod,
-  lstat,
-  mkdir,
-  mkdtemp,
-  open,
-  readFile,
-  readdir,
-  readlink,
-  realpath,
-  rename,
-  rm,
-  stat,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
+import { chmod, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
-import { Worker } from 'node:worker_threads';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { keysOf, textAt } from './contract.js';
-import {
-  createFolderObjectStore,
-  FolderPathError,
-  FolderStoreError,
-  type FolderSkipCounts,
-  type FolderStoreOptions,
-} from './folder-store.js';
+import { useFolderFixture, utf8 } from './folder-store.fixture.test-support.js';
+import { FOLDER_WALK_MAX_ENTRIES, FolderStoreError, FolderWalkLimitError } from './folder-store.js';
 import { UnsafeObjectKeyError } from './key-safety.js';
-import type { ObjectStore } from './object-store.js';
 import { streamToBytes } from './streams.js';
 
 const text = (bytes: Uint8Array | undefined): string => new TextDecoder().decode(bytes);
-const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
-
-/** Each race runs this many rounds, or for this long, whichever comes first. */
-const RACE_ROUNDS = 2000;
-const RACE_MS = 1200;
-/** A race in which the other thread swapped the folder fewer times than this proved nothing. */
-const MIN_SWAPS = 20;
-
-/** The shared `Int32Array` slots between a test and its worker. */
-const STOP = 0;
-const SWAPS = 1;
-
-/**
- * Runs in a worker thread: swaps `<root>/d` between the real folder and the link `<root>/d-link` as
- * fast as `rename` allows, until the shared stop flag is set, counting each time `d` was the link.
- * `d-real` holds the folder while `d` is the link. A write may create a plain `d` while it is briefly
- * absent, and may write into it while it is being cleared; every step is tried again on the next
- * turn rather than ending the worker.
- */
-const TOGGLE_FOLDER = `
-const { lstatSync, renameSync, rmSync } = require('node:fs');
-const { join } = require('node:path');
-const { workerData } = require('node:worker_threads');
-const shared = new Int32Array(workerData.shared);
-const d = join(workerData.root, 'd');
-const real = join(workerData.root, 'd-real');
-const link = join(workerData.root, 'd-link');
-const attempt = (step) => {
-  try {
-    step();
-    return true;
-  } catch {
-    return false;
-  }
-};
-while (Atomics.load(shared, ${STOP}) === 0) {
-  if (attempt(() => renameSync(d, real)) && attempt(() => renameSync(link, d))) {
-    Atomics.add(shared, ${SWAPS}, 1);
-    attempt(() => renameSync(d, link));
-  }
-  if (!attempt(() => renameSync(real, d))) {
-    // A plain folder the store made in the gap; never the link, whose removal would end the swap.
-    let plain = false;
-    attempt(() => {
-      plain = lstatSync(d).isDirectory();
-    });
-    if (plain) attempt(() => rmSync(d, { recursive: true, force: true }));
-    attempt(() => renameSync(real, d));
-  }
-}
-`;
-
-/**
- * A worker running `source` with `workerData` plus a shared `Int32Array` buffer. `exited` and the
- * error listener exist from the spawn, so a worker that dies early is reported, never awaited
- * forever; `stop()` sets the stop flag and resolves once it exited with code 0.
- */
-async function startWorker(
-  source: string,
-  workerData: Record<string, unknown>,
-): Promise<{
-  readonly shared: Int32Array;
-  readonly exited: Promise<number>;
-  readonly stop: () => Promise<void>;
-}> {
-  const buffer = new SharedArrayBuffer(8);
-  const worker = new Worker(source, { eval: true, workerData: { ...workerData, shared: buffer } });
-  const errors: unknown[] = [];
-  worker.on('error', (error) => errors.push(error));
-  const exited = new Promise<number>((resolve) => worker.once('exit', resolve));
-  await Promise.race([new Promise((resolve) => worker.once('online', resolve)), exited]);
-  const shared = new Int32Array(buffer);
-  return {
-    shared,
-    exited,
-    stop: async () => {
-      Atomics.store(shared, STOP, 1);
-      const code = await exited;
-      if (errors.length > 0) throw new Error('The worker failed.', { cause: errors[0] });
-      if (code !== 0) throw new Error(`The worker exited with code ${code}.`);
-    },
-  };
-}
 
 describe('folder store', () => {
-  let base: string;
-  let root: string;
-  let outside: string;
-  let skipped: FolderSkipCounts[];
-
-  const openStore = (options: FolderStoreOptions = {}): ObjectStore =>
-    createFolderObjectStore(root, { onSkipped: (counts) => skipped.push(counts), ...options });
-
-  beforeEach(async () => {
-    base = await realpath(await mkdtemp(path.join(os.tmpdir(), 'aw-folder-')));
-    root = path.join(base, 'root');
-    outside = path.join(base, 'outside');
-    skipped = [];
-    await mkdir(path.join(root, 'reports', '2026'), { recursive: true });
-    await mkdir(outside);
-    await writeFile(path.join(root, 'reports', 'a.txt'), 'alpha');
-    await writeFile(path.join(root, 'reports', '2026', 'b.csv'), 'bravo');
-    await writeFile(path.join(outside, 'secret.txt'), 'outside-secret');
-  });
-
-  afterEach(async () => {
-    await rm(base, { recursive: true, force: true });
-  });
+  const fx = useFolderFixture();
+  const { openStore } = fx;
 
   // #1835: a body nobody reads used to keep its FileHandle open until the collector closed it,
   // with Node's DEP0137 warning. The store now closes the handle once the body is unreachable.
@@ -178,33 +52,6 @@ describe('folder store', () => {
     }
   });
 
-  // #1835: a write the store reported done survives a crash: the bytes and the folder entry that
-  // names them are flushed before it returns.
-  it('flushes the written file and its folder before a write returns', async () => {
-    const probe = await open(path.join(root, 'reports', 'a.txt'), 'r');
-    const prototype: unknown = Object.getPrototypeOf(probe);
-    await probe.close();
-    const synced: string[] = [];
-    const sync = vi
-      .spyOn(prototype as { sync: () => Promise<void> }, 'sync')
-      .mockImplementation(async function (this: { fd: number }) {
-        synced.push(await readlink(`/proc/self/fd/${String(this.fd)}`));
-      });
-    try {
-      const store = openStore();
-      await store.write('reports/new.txt', new TextEncoder().encode('new'), {});
-      await store.write('reports/new.txt', new TextEncoder().encode('newer'), {
-        ifMatch: (await store.head('reports/new.txt'))?.etag ?? '',
-      });
-      const folder = path.join(root, 'reports');
-      expect(synced.filter((at) => at === folder)).toHaveLength(2);
-      expect(synced.filter((at) => path.dirname(at) === folder && at !== folder)).toHaveLength(2);
-      expect(await textAt(store, 'reports/new.txt')).toBe('newer');
-    } finally {
-      sync.mockRestore();
-    }
-  });
-
   it('[US-STO-12][unit][sdk] a key is the file at that path, typed by its name', async () => {
     const store = openStore();
     expect(await textAt(store, 'reports/a.txt')).toBe('alpha');
@@ -212,7 +59,7 @@ describe('folder store', () => {
       sizeBytes: 5,
       contentType: 'text/csv',
     });
-    await writeFile(path.join(root, 'reports', 'blob.unknownext'), '?');
+    await writeFile(path.join(fx.root, 'reports', 'blob.unknownext'), '?');
     expect((await store.head('reports/blob.unknownext'))?.contentType).toBe(
       'application/octet-stream',
     );
@@ -220,69 +67,6 @@ describe('folder store', () => {
     expect(await store.read('reports/missing.txt')).toBeNull();
     const ranged = await store.read('reports/a.txt', { range: { start: 1, end: 2 } });
     expect(text(await streamToBytes(ranged!.body))).toBe('lp');
-  });
-
-  it('[US-STO-12][unit][sdk] a file symlink that leaves the folder is never read or listed', async () => {
-    await symlink(path.join(outside, 'secret.txt'), path.join(root, 'reports', 'leak.txt'));
-    const store = openStore();
-
-    expect(await store.read('reports/leak.txt')).toBeNull();
-    expect(await store.head('reports/leak.txt')).toBeNull();
-    expect(await store.read('reports/leak.txt')).toBeNull();
-    const keys = [...(await keysOf(store, 'reports')), ...(await keysOf(store, 'reports', true))];
-    expect(keys).not.toContain('reports/leak.txt');
-    expect(keys).toContain('reports/a.txt');
-    expect(skipped.every((counts) => counts.links === 1 && counts.unreadable === 0)).toBe(true);
-    expect(skipped.length).toBeGreaterThan(0);
-  });
-
-  it('[US-STO-12][unit][sdk] a directory symlink that leaves the folder is not entered, listed or written through', async () => {
-    await symlink(outside, path.join(root, 'linked'));
-    const store = openStore();
-
-    expect(await store.read('linked/secret.txt')).toBeNull();
-    expect(await store.head('linked/secret.txt')).toBeNull();
-    expect(await keysOf(store, '')).toEqual(['reports']);
-    expect(await keysOf(store, 'linked')).toEqual([]);
-    expect(await keysOf(store, 'linked', true)).toEqual([]);
-    expect(skipped).toContainEqual({ links: 1, unreadable: 0 });
-    // Through the link as a middle component: only what was opened decides, not the path.
-    await mkdir(path.join(outside, 'inner'));
-    await writeFile(path.join(outside, 'inner', 'deep.txt'), 'outside-deep');
-    expect(await keysOf(store, 'linked/inner')).toEqual([]);
-    expect(await keysOf(store, 'linked/inner', true)).toEqual([]);
-    expect((await store.listPage('linked/inner', { recursive: true })).entries).toEqual([]);
-    expect(await store.read('linked/inner/deep.txt')).toBeNull();
-
-    await expect(store.write('linked/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
-      FolderPathError,
-    );
-    await expect(store.write('linked/deeper/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
-      FolderPathError,
-    );
-    await expect(store.delete('linked/secret.txt')).resolves.toBeUndefined();
-    expect((await readdir(outside)).sort()).toEqual(['inner', 'secret.txt']);
-    expect(await readFile(path.join(outside, 'secret.txt'), 'utf8')).toBe('outside-secret');
-  });
-
-  it('[US-STO-12][unit][sdk] a file symlink is refused even when it stays inside the folder, so reads and listings agree', async () => {
-    await symlink(path.join(root, 'reports', 'a.txt'), path.join(root, 'alias.txt'));
-    const store = openStore();
-
-    expect(await store.read('alias.txt')).toBeNull();
-    expect(await store.read('alias.txt')).toBeNull();
-    expect(await store.head('alias.txt')).toBeNull();
-    expect(await keysOf(store, '')).toEqual(['reports']);
-    expect(await keysOf(store, 'alias.txt', true)).toEqual([]);
-    expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
-  });
-
-  it('[US-STO-12][unit][sdk] a directory symlink inside the folder is not descended into when listing', async () => {
-    await symlink(path.join(root, 'reports'), path.join(root, 'again'));
-    const store = openStore();
-
-    expect(await keysOf(store, '')).toEqual(['reports']);
-    expect(await keysOf(store, '', true)).toEqual(['reports/2026/b.csv', 'reports/a.txt']);
   });
 
   it('[US-STO-12][unit][sdk] an unsafe key is refused by every member and never decoded', async () => {
@@ -295,28 +79,11 @@ describe('folder store', () => {
       await expect(store.delete(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
       await expect(store.listPage(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
     }
-    expect(await readdir(base)).toEqual(['outside', 'root']);
-  });
-
-  it('[US-STO-12][unit][sdk] a directory swapped for a symlink between the check and the open serves nothing', async () => {
-    await writeFile(path.join(outside, 'a.txt'), 'outside-copy');
-    let swapped = false;
-    const store = openStore({
-      beforeOpen: async () => {
-        if (swapped) return;
-        swapped = true;
-        await rename(path.join(root, 'reports'), path.join(base, 'moved'));
-        await symlink(outside, path.join(root, 'reports'));
-      },
-    });
-
-    expect(await store.read('reports/a.txt')).toBeNull();
-    expect(await store.head('reports/a.txt')).toBeNull();
-    expect(swapped).toBe(true);
+    expect(await readdir(fx.base)).toEqual(['outside', 'root']);
   });
 
   it('[US-STO-12][unit][sdk] a named pipe is not opened for reading, so it cannot block a worker thread', async () => {
-    const pipe = path.join(root, 'reports', 'pipe');
+    const pipe = path.join(fx.root, 'reports', 'pipe');
     execFileSync('mkfifo', [pipe]);
     const store = openStore();
     const within = <T>(work: Promise<T>): Promise<T | 'timed out'> =>
@@ -325,7 +92,7 @@ describe('folder store', () => {
     try {
       // Four heads would occupy all four libuv threads if an open blocked; the readFile needs one.
       const heads = Promise.all([1, 2, 3, 4].map(() => store.head('reports/pipe')));
-      const unrelated = readFile(path.join(root, 'reports', 'a.txt'), 'utf8');
+      const unrelated = readFile(path.join(fx.root, 'reports', 'a.txt'), 'utf8');
       expect(await within(heads)).toEqual([null, null, null, null]);
       expect(await within(unrelated)).toBe('alpha');
       expect(await within(store.read('reports/pipe'))).toBeNull();
@@ -339,89 +106,21 @@ describe('folder store', () => {
     }
   });
 
-  it('[US-STO-12][unit][sdk] a write is atomic: no temp file is listed and a failed body keeps the old file', async () => {
-    const store = openStore();
-    let release: (() => void) | undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const slow = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        controller.enqueue(utf8('new-'));
-        await gate;
-        controller.enqueue(utf8('bytes'));
-        controller.close();
-      },
-    });
-    const pending = store.write('reports/slow.txt', slow, {});
-    for (let attempts = 0; attempts < 200; attempts += 1) {
-      const names = await readdir(path.join(root, 'reports'));
-      if (names.some((name) => name.startsWith('.%aw-write-'))) break;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-    expect((await readdir(path.join(root, 'reports'))).some((n) => n.startsWith('.%'))).toBe(true);
-    expect(await keysOf(store, 'reports')).toEqual(['reports/2026', 'reports/a.txt']);
-    expect(await store.head('reports/slow.txt')).toBeNull();
-    release?.();
-    const meta = await pending;
-    expect(meta.sizeBytes).toBe(9);
-    expect(await textAt(store, 'reports/slow.txt')).toBe('new-bytes');
-
-    const failing = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        controller.enqueue(utf8('partial'));
-        controller.error(new Error('source broke'));
-      },
-    });
-    await expect(store.write('reports/a.txt', failing, {})).rejects.toThrow('source broke');
-    expect(await textAt(store, 'reports/a.txt')).toBe('alpha');
-    expect((await readdir(path.join(root, 'reports'))).sort()).toEqual([
-      '2026',
-      'a.txt',
-      'slow.txt',
-    ]);
-  });
-
-  it('[US-STO-12][unit][sdk] a write replaces a symlink at the target instead of writing through it', async () => {
-    await symlink(path.join(outside, 'secret.txt'), path.join(root, 'target.txt'));
-    const store = openStore();
-
-    await store.write('target.txt', utf8('mine'), {});
-    expect(await readFile(path.join(outside, 'secret.txt'), 'utf8')).toBe('outside-secret');
-    expect((await lstat(path.join(root, 'target.txt'))).isSymbolicLink()).toBe(false);
-    expect(await readFile(path.join(root, 'target.txt'), 'utf8')).toBe('mine');
-  });
-
-  it('[US-STO-12][unit][sdk] a write creates missing folders, copy and delete work on plain files', async () => {
-    const store = openStore();
-    await store.write('new/deep/note.md', utf8('hello'), { contentType: 'application/x-ignored' });
-    expect((await store.head('new/deep/note.md'))?.contentType).toBe('text/markdown');
-    await store.copy('new/deep/note.md', 'copy.md');
-    expect(await textAt(store, 'copy.md')).toBe('hello');
-    await store.delete('copy.md');
-    await store.delete('copy.md');
-    expect(await store.head('copy.md')).toBeNull();
-    await store.delete('new');
-    expect(await store.head('new/deep/note.md')).not.toBeNull();
-    await store.copy('never.md', 'dest.md');
-    expect(await store.head('dest.md')).toBeNull();
-  });
-
   it('[US-STO-12][unit][sdk] a file the process cannot read is skipped and counted, not fatal', async () => {
-    const locked = path.join(root, 'reports', 'locked.txt');
+    const locked = path.join(fx.root, 'reports', 'locked.txt');
     await writeFile(locked, 'nope');
     await chmod(locked, 0o000);
     const store = openStore();
 
     const keys = await keysOf(store, 'reports');
     expect(keys).toEqual(['reports/2026', 'reports/a.txt']);
-    expect(skipped).toEqual([{ links: 0, unreadable: 1 }]);
+    expect(fx.skipped).toEqual([{ links: 0, unreadable: 1 }]);
   });
 
   it('[US-STO-12][unit][sdk] folder names with a space list their files, and paging visits each entry once', async () => {
-    await mkdir(path.join(root, 'Q3 reports'), { recursive: true });
-    await writeFile(path.join(root, 'Q3 reports', 'n 1.txt'), 'one');
-    await writeFile(path.join(root, 'Q3 reports', 'n 2.txt'), 'two');
+    await mkdir(path.join(fx.root, 'Q3 reports'), { recursive: true });
+    await writeFile(path.join(fx.root, 'Q3 reports', 'n 1.txt'), 'one');
+    await writeFile(path.join(fx.root, 'Q3 reports', 'n 2.txt'), 'two');
     const store = openStore();
 
     expect(await keysOf(store, '')).toEqual(['Q3 reports', 'reports']);
@@ -438,312 +137,88 @@ describe('folder store', () => {
     expect(keys).toEqual(['Q3 reports/n 1.txt', 'Q3 reports/n 2.txt']);
   });
 
+  // #1835: a run's delivery pages through a granted folder. Each page used to walk the folder again
+  // from the start of its current directory and warn about the same skipped entries once per page.
+  it('[US-STO-12][unit][sdk] a recursive listing read page by page reads each folder once and reports its skips once', async () => {
+    await mkdir(path.join(fx.root, 'p'));
+    for (const name of ['a', 'b', 'c', 'd', 'e']) {
+      await writeFile(path.join(fx.root, 'p', `${name}.txt`), name);
+    }
+    await symlink(path.join(fx.outside, 'secret.txt'), path.join(fx.root, 'p', 'leak.txt'));
+    let readdirs = 0;
+    const store = openStore({
+      beforeReaddir: () => {
+        readdirs += 1;
+        return Promise.resolve();
+      },
+    });
+
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await store.listPage('p', {
+        recursive: true,
+        limit: 1,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      keys.push(...page.entries.map((entry) => entry.key));
+      cursor = page.cursor ?? undefined;
+    } while (cursor !== undefined);
+
+    expect(keys).toEqual(['p/a.txt', 'p/b.txt', 'p/c.txt', 'p/d.txt', 'p/e.txt']);
+    expect(readdirs).toBe(1);
+    expect(fx.skipped).toEqual([{ links: 1, unreadable: 0 }]);
+  });
+
+  it('[US-STO-12][unit][sdk] a cursor from another store, or one whose walk has ended, still resumes in the right place', async () => {
+    const first = await openStore().listPage('reports', { recursive: true, limit: 1 });
+    expect(first.entries.map((entry) => entry.key)).toEqual(['reports/2026/b.csv']);
+    const resumed = await openStore().listPage('reports', {
+      recursive: true,
+      limit: 1,
+      cursor: first.cursor ?? '',
+    });
+    expect(resumed).toMatchObject({ entries: [{ key: 'reports/a.txt' }], cursor: null });
+  });
+
+  // #1835: a walk that examines more directory entries than the cap stops with a typed error rather
+  // than reading a folder of millions of names, or a tree of empty folders, to the end.
+  it('[US-STO-12][unit][sdk] a walk that examines more entries than the cap fails with a typed error', async () => {
+    expect(FOLDER_WALK_MAX_ENTRIES).toBe(200_000);
+    await mkdir(path.join(fx.root, 'many'));
+    for (let n = 0; n < 6; n += 1)
+      await writeFile(path.join(fx.root, 'many', `f${String(n)}`), 'x');
+    const store = openStore({ walkMaxEntries: 5 });
+
+    await expect(store.listPage('many', { recursive: true })).rejects.toBeInstanceOf(
+      FolderWalkLimitError,
+    );
+    await expect(store.listPage('many')).rejects.toBeInstanceOf(FolderWalkLimitError);
+    // The count is one walk's, carried from page to page: `many` (7 names) fits, `many/zz` does not.
+    await mkdir(path.join(fx.root, 'many', 'zz'));
+    await writeFile(path.join(fx.root, 'many', 'zz', 'g'), 'x');
+    const paged = openStore({ walkMaxEntries: 7 });
+    const first = await paged.listPage('many', { recursive: true, limit: 2 });
+    expect(first.entries).toHaveLength(2);
+    let cursor = first.cursor;
+    const walkRest = async (): Promise<void> => {
+      while (cursor !== null) {
+        cursor = (await paged.listPage('many', { recursive: true, limit: 2, cursor })).cursor;
+      }
+    };
+    await expect(walkRest()).rejects.toBeInstanceOf(FolderWalkLimitError);
+  });
+
   it('[US-STO-12][unit][sdk] hidden files are listed like any other, and names the key guard refuses are not', async () => {
-    await writeFile(path.join(root, '.hidden'), 'h');
-    await writeFile(path.join(root, '50%.txt'), 'foreign');
+    await writeFile(path.join(fx.root, '.hidden'), 'h');
+    await writeFile(path.join(fx.root, '50%.txt'), 'foreign');
     const store = openStore();
 
     expect(await keysOf(store, '')).toEqual(['.hidden', 'reports']);
   });
 
-  /** `root/d` holds `f.txt` ('in'); another thread swaps it with a link to `outside` until stopped. */
-  async function toggleFolder(): Promise<{
-    readonly swaps: () => number;
-    readonly stop: () => Promise<void>;
-  }> {
-    await mkdir(path.join(root, 'd'));
-    await writeFile(path.join(root, 'd', 'f.txt'), 'in');
-    await writeFile(path.join(outside, 'f.txt'), 'outside');
-    await symlink(outside, path.join(root, 'd-link'));
-    const worker = await startWorker(TOGGLE_FOLDER, { root });
-    return { swaps: () => Atomics.load(worker.shared, SWAPS), stop: worker.stop };
-  }
-
-  /**
-   * Runs `round` `RACE_ROUNDS` times or for `RACE_MS`, whichever comes first, then stops the swap:
-   * the worker must have exited cleanly and swapped the folder at least `MIN_SWAPS` times.
-   */
-  async function race(round: () => Promise<void>): Promise<void> {
-    const toggler = await toggleFolder();
-    try {
-      const deadline = Date.now() + RACE_MS;
-      for (let rounds = 0; rounds < RACE_ROUNDS && Date.now() < deadline; rounds += 1)
-        await round();
-    } finally {
-      await toggler.stop();
-    }
-    expect(toggler.swaps()).toBeGreaterThanOrEqual(MIN_SWAPS);
-  }
-
-  it('[US-STO-12][unit][sdk] the race harness reports a worker that died, instead of waiting for it forever', async () => {
-    // The old toggler's death: the store writes into `d` while it is being cleared, so the final
-    // `rmdir` of `rmSync` fails `ENOTEMPTY` and nothing caught it.
-    await openStore().write('d/w.txt', utf8('written meanwhile'), {});
-    const dies = `
-      const { rmdirSync } = require('node:fs');
-      const { join } = require('node:path');
-      const { workerData } = require('node:worker_threads');
-      rmdirSync(join(workerData.root, 'd'));
-    `;
-    const worker = await startWorker(dies, { root });
-    expect(await worker.exited).toBe(1);
-
-    await expect(worker.stop()).rejects.toMatchObject({ cause: { code: 'ENOTEMPTY' } });
-  });
-
-  it('[US-STO-12][unit][sdk] a folder another thread keeps swapping for an outside link never leaks a read', async () => {
-    const store = openStore();
-    const leaks: string[] = [];
-    await race(async () => {
-      if ((await textAt(store, 'd/f.txt')) === 'outside') leaks.push('read');
-      if ((await store.head('d/f.txt'))?.sizeBytes === 7) leaks.push('head');
-    });
-
-    expect(leaks).toEqual([]);
-  });
-
-  it('[US-STO-12][unit][sdk] a folder another thread keeps swapping for an outside link never leaks a name or size', async () => {
-    const store = openStore();
-    const leaks: string[] = [];
-    await race(async () => {
-      const entries = [
-        ...(await store.listPage('d')).entries,
-        ...(await store.listPage('d', { recursive: true })).entries,
-      ];
-      for (const entry of entries) {
-        if (entry.key !== 'd/f.txt' || (entry.kind === 'file' && entry.sizeBytes !== 2)) {
-          leaks.push(entry.key);
-        }
-      }
-    });
-
-    expect(leaks).toEqual([]);
-  });
-
-  it('[US-STO-12][unit][sdk] a folder another thread keeps swapping for an outside link never receives a write or a temp file', async () => {
-    const store = openStore();
-    await race(async () => {
-      await store.write('d/w.txt', utf8('PWN'), {}).catch(() => null);
-    });
-
-    expect((await readdir(outside)).sort()).toEqual(['f.txt', 'secret.txt']);
-    const everywhere = await readdir(base, { recursive: true });
-    expect(everywhere.filter((name) => name.includes('.%aw-write-'))).toEqual([]);
-  });
-
-  /** Moves `root/reports` to `base/moved` and puts a link to `outside` in its place. */
-  async function swapReports(): Promise<void> {
-    await rename(path.join(root, 'reports'), path.join(base, 'moved'));
-    await symlink(outside, path.join(root, 'reports'));
-  }
-
-  async function restoreReports(): Promise<void> {
-    await rm(path.join(root, 'reports'));
-    await rename(path.join(base, 'moved'), path.join(root, 'reports'));
-  }
-
-  it('[US-STO-12][unit][sdk] a write whose folder is swapped for an outside link after the check is refused and leaves no temp file', async () => {
-    for (const writeOptions of [{}, { ifNoneMatch: '*' as const }]) {
-      let swapped = false;
-      const store = openStore({
-        beforeStage: async () => {
-          swapped = true;
-          await swapReports();
-        },
-      });
-
-      await expect(store.write('reports/w.txt', utf8('PWN'), writeOptions)).rejects.toBeInstanceOf(
-        FolderPathError,
-      );
-      expect(swapped).toBe(true);
-      expect(await readdir(outside)).toEqual(['secret.txt']);
-      expect((await readdir(path.join(base, 'moved'))).sort()).toEqual(['2026', 'a.txt']);
-      await restoreReports();
-    }
-  });
-
-  it('[US-STO-12][unit][sdk] a write whose folder is moved out after staging is refused before the rename or link', async () => {
-    for (const writeOptions of [{}, { ifNoneMatch: '*' as const }]) {
-      let swapped = false;
-      const store = openStore({
-        beforeCommit: async () => {
-          swapped = true;
-          await swapReports();
-        },
-      });
-
-      await expect(store.write('reports/w.txt', utf8('PWN'), writeOptions)).rejects.toBeInstanceOf(
-        FolderPathError,
-      );
-      expect(swapped).toBe(true);
-      expect(await readdir(outside)).toEqual(['secret.txt']);
-      expect((await readdir(path.join(base, 'moved'))).sort()).toEqual(['2026', 'a.txt']);
-      await restoreReports();
-    }
-  });
-
-  it('[US-STO-12][unit][sdk] a delete whose folder is moved out and swapped for an outside link after the check is refused and removes nothing', async () => {
-    await writeFile(path.join(outside, 'a.txt'), 'outside-copy');
-    let swapped = false;
-    const store = openStore({
-      beforeDelete: async () => {
-        swapped = true;
-        await swapReports();
-      },
-    });
-
-    await expect(store.delete('reports/a.txt')).rejects.toBeInstanceOf(FolderPathError);
-    expect(swapped).toBe(true);
-    expect(await readFile(path.join(outside, 'a.txt'), 'utf8')).toBe('outside-copy');
-    expect(await readFile(path.join(base, 'moved', 'a.txt'), 'utf8')).toBe('alpha');
-  });
-
-  it('[US-STO-12][unit][sdk] a listing whose middle folder is swapped for an outside link lists no outside name', async () => {
-    await mkdir(path.join(outside, '2026'));
-    await writeFile(path.join(outside, '2026', 'leak.csv'), 'outside-leak');
-    // Swapped before the folder is opened: the open goes through the link, so what it opened decides.
-    let opened = false;
-    const beforeOpen = openStore({
-      beforeOpen: async () => {
-        if (opened) return;
-        opened = true;
-        await swapReports();
-      },
-    });
-    expect(await keysOf(beforeOpen, 'reports/2026', true)).toEqual([]);
-    expect(opened).toBe(true);
-    await restoreReports();
-
-    // Swapped once the folder is open: its names are read through the descriptor, not the path.
-    let read = false;
-    const beforeReaddir = openStore({
-      beforeReaddir: async () => {
-        if (read) return;
-        read = true;
-        await swapReports();
-      },
-    });
-    expect(await keysOf(beforeReaddir, 'reports/2026', true)).toEqual(['reports/2026/b.csv']);
-    expect(read).toBe(true);
-  });
-
-  it('[US-STO-12][unit][sdk] a write whose middle folder is moved out after the check stages only in that folder, and is refused', async () => {
-    let landed: { readonly outside: string[]; readonly moved: string[] } | undefined;
-    const store = openStore({
-      beforeStage: swapReports,
-      afterStage: async () => {
-        landed = {
-          outside: await readdir(outside, { recursive: true }),
-          moved: await readdir(path.join(base, 'moved', '2026')),
-        };
-      },
-    });
-
-    await expect(store.write('reports/2026/w.txt', utf8('PWN'), {})).rejects.toBeInstanceOf(
-      FolderPathError,
-    );
-    expect(landed?.outside).toEqual(['secret.txt']);
-    expect(landed?.moved.filter((name) => name.startsWith('.%aw-write-'))).toHaveLength(1);
-    expect(await readdir(outside, { recursive: true })).toEqual(['secret.txt']);
-    expect(await readdir(path.join(base, 'moved', '2026'))).toEqual(['b.csv']);
-  });
-
-  it('[US-STO-12][unit][sdk] a link as a middle component is never written or deleted through, even to an existing outside folder', async () => {
-    await symlink(outside, path.join(root, 'linked'));
-    await mkdir(path.join(outside, 'inner'));
-    await writeFile(path.join(outside, 'inner', 'deep.txt'), 'outside-deep');
-    const store = openStore();
-
-    await expect(store.write('linked/inner/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
-      FolderPathError,
-    );
-    await store.delete('linked/inner/deep.txt');
-    expect(await readdir(path.join(outside, 'inner'))).toEqual(['deep.txt']);
-    expect(await readFile(path.join(outside, 'inner', 'deep.txt'), 'utf8')).toBe('outside-deep');
-  });
-
-  describe('without /proc/self/fd (the path-check fallback)', () => {
-    const openFallback = (): ObjectStore => openStore({ procFd: false });
-
-    it('[US-STO-12][unit][sdk] an outside file symlink is never read or listed', async () => {
-      await symlink(path.join(outside, 'secret.txt'), path.join(root, 'reports', 'leak.txt'));
-      const store = openFallback();
-
-      expect(await store.read('reports/leak.txt')).toBeNull();
-      expect(await store.head('reports/leak.txt')).toBeNull();
-      expect(await keysOf(store, 'reports', true)).toEqual(['reports/2026/b.csv', 'reports/a.txt']);
-      expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
-    });
-
-    it('[US-STO-12][unit][sdk] an outside directory symlink is not entered, listed or written through', async () => {
-      await symlink(outside, path.join(root, 'linked'));
-      await mkdir(path.join(outside, 'inner'));
-      await writeFile(path.join(outside, 'inner', 'deep.txt'), 'outside-deep');
-      const store = openFallback();
-
-      expect(await store.read('linked/secret.txt')).toBeNull();
-      expect(await store.read('linked/inner/deep.txt')).toBeNull();
-      expect(await keysOf(store, 'linked')).toEqual([]);
-      expect(await keysOf(store, 'linked/inner', true)).toEqual([]);
-      expect(await keysOf(store, '')).toEqual(['reports']);
-      for (const key of ['linked/new.txt', 'linked/inner/new.txt', 'linked/deeper/new.txt']) {
-        await expect(store.write(key, utf8('x'), {})).rejects.toBeInstanceOf(FolderPathError);
-      }
-      await store.delete('linked/inner/deep.txt');
-      expect((await readdir(outside, { recursive: true })).sort()).toEqual([
-        'inner',
-        'inner/deep.txt',
-        'secret.txt',
-      ]);
-    });
-
-    // #1991 A2: `O_NOFOLLOW` must apply to the name that was asked for, not to its resolved target.
-    it('[US-STO-12][unit][sdk] an inside file symlink addressed directly is not read', async () => {
-      await symlink(path.join(root, 'reports', 'a.txt'), path.join(root, 'alias.txt'));
-      const store = openFallback();
-
-      expect(await store.read('alias.txt')).toBeNull();
-      expect(await store.head('alias.txt')).toBeNull();
-    });
-
-    it('[US-STO-12][unit][sdk] an inside directory alias is not read, written or deleted through', async () => {
-      await symlink(path.join(root, 'reports'), path.join(root, 'alias'));
-      const store = openFallback();
-
-      expect(await store.read('alias/a.txt')).toBeNull();
-      expect(await store.head('alias/a.txt')).toBeNull();
-      await expect(store.write('alias/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
-        FolderPathError,
-      );
-      await store.delete('alias/a.txt');
-      expect((await readdir(path.join(root, 'reports'))).sort()).toEqual(['2026', 'a.txt']);
-    });
-
-    it('[US-STO-12][unit][sdk] the `..` key is refused', async () => {
-      const store = openFallback();
-      for (const key of ['..', '../outside/secret.txt', 'reports/../../outside/secret.txt']) {
-        await expect(store.read(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
-        await expect(store.write(key, utf8('x'), {})).rejects.toBeInstanceOf(UnsafeObjectKeyError);
-      }
-      expect(await readFile(path.join(outside, 'secret.txt'), 'utf8')).toBe('outside-secret');
-    });
-  });
-
-  it('[US-STO-12][unit][sdk] an overwrite keeps the file mode, and a new file is no wider than 0644', async () => {
-    const file = path.join(root, 'reports', 'a.txt');
-    // World-writable, so a umask of 002 or 022 would narrow it if the store did not restore it.
-    await chmod(file, 0o666);
-    const store = openStore();
-
-    await store.write('reports/a.txt', utf8('again'), {});
-    expect((await stat(file)).mode & 0o777).toBe(0o666);
-    expect(await readFile(file, 'utf8')).toBe('again');
-    await store.write('reports/new.txt', utf8('n'), {});
-    expect((await stat(path.join(root, 'reports', 'new.txt'))).mode & 0o777 & ~0o644).toBe(0);
-  });
-
   it('[US-STO-12][unit][sdk] a filesystem failure names the key and a code, never a host path', async () => {
-    await symlink(path.join(root, 'nowhere'), path.join(root, 'dangling'));
+    await symlink(path.join(fx.root, 'nowhere'), path.join(fx.root, 'dangling'));
     const store = openStore();
     const failed = (work: Promise<unknown>): Promise<unknown> =>
       work.then(
@@ -759,12 +234,12 @@ describe('folder store', () => {
       // A dangling link where a folder goes.
       await failed(store.write('dangling/x.txt', utf8('x'), {})),
     ];
-    await chmod(path.join(root, 'reports'), 0o555);
+    await chmod(path.join(fx.root, 'reports'), 0o555);
     try {
       // A folder the process may not change: `unlink` fails `EACCES`.
       errors.push(await failed(store.delete('reports/a.txt')));
     } finally {
-      await chmod(path.join(root, 'reports'), 0o755);
+      await chmod(path.join(fx.root, 'reports'), 0o755);
     }
 
     expect(errors.map((error) => (error as Error).name)).toEqual([
@@ -781,11 +256,11 @@ describe('folder store', () => {
     ]);
     for (const error of errors) {
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).not.toContain(root);
+      expect((error as Error).message).not.toContain(fx.root);
       expect((error as Error).message).not.toContain(os.tmpdir());
       expect((error as Error).cause).toBeUndefined();
     }
     expect(errors[0]).toBeInstanceOf(FolderStoreError);
-    expect(await readFile(path.join(root, 'reports', 'a.txt'), 'utf8')).toBe('alpha');
+    expect(await readFile(path.join(fx.root, 'reports', 'a.txt'), 'utf8')).toBe('alpha');
   });
 });

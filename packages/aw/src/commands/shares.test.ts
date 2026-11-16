@@ -18,7 +18,9 @@ describe('aw shares', () => {
     const human = await runCli(['shares', 'list'], {
       route: () => json(200, { shares: [FIXTURES.share] }),
     });
-    expect(human.stdout).toContain('/p/token');
+    expect(human.stdout).toContain('A session');
+    // A public link is shown once, when it is published; the list prints no link column.
+    expect(human.stdout).not.toContain('url');
     const revoke = await runCli(['shares', 'revoke', 'sh-1'], { route: () => json(204, null) });
     expect(revoke.code).toBe(EXIT_CODE.ok);
     expect(revoke.calls[0]?.method).toBe('DELETE');

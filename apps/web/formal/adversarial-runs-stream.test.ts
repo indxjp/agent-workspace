@@ -66,6 +66,7 @@ function runningRun(): Record<string, unknown> {
       toolCalls: 0,
     },
     cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+    spendCeilingUsd: null,
     error: null,
     accountingState: 'pending',
     accountingError: null,

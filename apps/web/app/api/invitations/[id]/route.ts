@@ -5,7 +5,7 @@
  * denies for every grant narrower than `any` — the same reasoning
  * `apps/web/app/api/memberships/[id]/route.ts`'s header gives, and it costs nothing here because
  * `invitations`' grant is `any` for the only role that reaches this route (§21 Owner, and Admin's
- * `MANAGE`, `apps/web/server/rbac/permissions.ts`).
+ * `MANAGE`, `apps/web/server/rbac/core/permissions.ts`).
  */
 import { revokeInvitation } from '../../../../server/invitations/handlers';
 import { applicationContext } from '../../../../server/application-context';

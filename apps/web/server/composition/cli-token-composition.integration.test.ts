@@ -152,7 +152,7 @@ describe.skipIf(!hasDatabase)('aw login, end to end through register() and the r
         method: 'POST',
         headers: {
           origin: ORIGIN,
-          cookie: `${sessionCookieName()}=${cookie}`,
+          cookie: `${sessionCookieName(process.env)}=${cookie}`,
           'content-type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({

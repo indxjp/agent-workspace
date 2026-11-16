@@ -10,8 +10,8 @@ import { resolveMigrationsDir, runMigrations } from '../migrate.js';
 import { memberships } from '../schema/memberships.js';
 import { sessions } from '../schema/sessions.js';
 import { users } from '../schema/users.js';
-import { workspaces } from '../schema/workspaces.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { insertPriorWorkspaces } from './prior-workspaces.test-support.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -26,7 +26,7 @@ describe.skipIf(!hasDatabase)('0019 session identity backfill', () => {
   const unusedSessionId = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0019-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 
@@ -54,7 +54,7 @@ describe.skipIf(!hasDatabase)('0019 session identity backfill', () => {
       databaseUrl,
       priorMigrationsDir,
     );
-    await isolated.db.insert(workspaces).values({
+    await insertPriorWorkspaces(isolated.db, {
       id: workspaceId,
       slug: 'session-backfill',
       name: 'Session Backfill',

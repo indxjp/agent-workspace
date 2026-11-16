@@ -1,84 +1,25 @@
+import { randomUUID } from 'node:crypto';
+
+import {
+  describe,
+  describeError,
+  type SessionDurability,
+  type RunState,
+  newRunState,
+  observeSdkEvent,
+  verdict,
+} from './run-state.js';
+export type { SessionDurability } from './run-state.js';
+import { type ApprovalRequest, type ApprovalState, decideToolPermission } from './permissions.js';
+export { type ApprovalRequest, type ApprovalState, decideToolPermission } from './permissions.js';
 /**
- * `packages/engine-claude-agent-sdk/src/boundary.ts` — **the** Claude Agent SDK boundary (§42).
+ * The sole Claude Agent SDK import boundary. Public signatures use platform-owned types;
+ * tests/no-sdk-import.test.ts also verifies the emitted declarations.
  *
- * This is the only file in `apps/` and `packages/` that may `import`
- * `@anthropic-ai/claude-agent-sdk`. `tests/no-sdk-import.test.ts` asserts that over the whole
- * tracked tree — as of ENG-04 (#303) it does so from a **table** of
- * `{ third-party SDK → the one file allowed to import it }`, one row per engine adapter, with
- * the same set equality and the same `.d.ts`-leak check applied to every row. So the claim keeps
- * its meaning when a second adapter is added: the second engine gets a row, not an exception.
- *
- * ENG-04 moved this file here from `apps/runner/src/claude.ts` **without behaviour change**. That
- * is the unit's defining constraint and the formal half of it is
- * `formal/AgentWorkspace/Theorems/Refinement/EnginePortCompile.lean`. What the move buys is that
- * the runner no longer imports an SDK boundary at all: it looks an engine up in
- * `apps/runner/src/engines.ts` and talks to `@agent-workspace/engine`'s port, so adding an
- * engine is adding a package.
- *
- * Three jobs, and deliberately no fourth (§53 — there is no agent loop, planner, tool executor
- * or conversation engine here, and there must never be one):
- *
- *   1. **Translate.** {@link toSdkOptions} turns the plain object `packages/core`'s compile step
- *      produces (`CompiledSdkOptions`, spec §5) into the SDK's own `Options`. `packages/core`
- *      cannot type-check itself against `Options` — it is forbidden from importing the SDK — so
- *      this function is the one place the two types actually meet, and it is where a readonly
- *      array becomes a mutable one and an optional field becomes present-or-absent.
- *   2. **Wrap.** {@link startRun} calls `query()` once and hands back its stream.
- *   3. **Normalise.** Every raw `SDKMessage` goes through `classifySdkEvent` — the union
- *      W1-CORE-01 defined — before it leaves this file.
- *
- * ## The import site is not the boundary; the emitted `.d.ts` is
- *
- * A file that imports the SDK privately and then puts an SDK type on an exported signature has
- * moved the import site, not removed it: every consumer still needs the SDK's declarations to
- * type-check. The first version of this file did exactly that — `toSdkOptions` returned
- * `Options` and the overlay's `sessionStore` was the SDK's `SessionStore`, so
- * `tsc --emitDeclarationOnly` produced a `claude.d.ts` that imported the package.
- *
- * So the SDK's types are confined to module-private declarations here. What the exported surface
- * carries instead is platform-owned: {@link TranscriptMirror} (restated field for field from the
- * SDK's `SessionStore`, with the compiler checking both directions of assignability at
- * `instrumentSessionStore`), {@link TranslatedSdkOptions} for the translated object, and
- * `ClassifiedSdkEvent` from `packages/core` for the stream. `tests/no-sdk-import.test.ts` emits
- * this file's declarations and asserts the result contains no SDK module specifier, because an
- * `import`-statement scan cannot see a type that travels in a `.d.ts`.
- *
- * ## The two claims this file refuses to make quietly
- *
- * **Session durability (spec §14.9, a release blocker).** R-01 §6 verified live that a session's
- * state is, by default, one JSONL file at `<CLAUDE_CONFIG_DIR>/projects/<projectKey>/<id>.jsonl`
- * inside the sandbox. A `sessionStore` is a *mirror*, not a replacement, and its writes are
- * best-effort: 3 attempts, then the batch is dropped and a `system/mirror_error` event is
- * emitted while the run carries on. So {@link ClaudeRun.sessionDurability} answers `durable:
- * true` only because a scenario passed — a store was supplied, its `append()` calls were
- * observed to resolve, the stream ran to a `result`, and no batch was dropped. Every other
- * answer is `durable: false` **with the reason named** (ADR-0015).
- *
- * **The tenant skill surface (R-01 contradiction 6) — narrowed here, not closed.** Three separate
- * facts, and only the first is fixed by this file:
- *
- *   - `settingSources: []` does *not* empty the surface. R-01's probe 2 ran with
- *     `settingSources: []` and `system/init` still reported the bundled Claude Code skills.
- *     `skills` is the lever, so a compiled options object that omits `skills` does not mean "no
- *     opinion", it means "the tenant's agent inherits whatever the CLI bundles" — and
- *     {@link toSdkOptions} rejects it rather than forwarding it. Same for `tools`, which is the
- *     field that actually restricts (R-01 §10).
- *   - `skills: []` closes only the **model-invoked** path: the `Skill` tool refuses a name that is
- *     not on the list. **User-typed `/name` dispatch is not closed by any option value** — R-01 §8
- *     says so ("*A skills allowlist is therefore not a security boundary for user-typed
- *     prompts*"), and this task probed it: with `skills: []` compiled from
- *     `{ mode: 'allowlist', names: [] }`, a tenant prompt of `/dataviz` still loaded that bundled
- *     skill. {@link startRun} passes the tenant's `prompt` straight to `query()`, so the tenant
- *     controls that path. Closing it needs prompt-level dispatch filtering, which this platform
- *     does not have; it is an open spec §7/§25 item and a declared gap on this task's PR, not
- *     something this file may claim.
- *   - `system/init.skills` is **insensitive** to the `skills` option — the same list is reported
- *     with `skills: []` and with `skills: 'all'` — so R-01 §8's advice to "confirm what loaded by
- *     reading `system/init` → `skills`" does not work, and the platform cannot audit its own skill
- *     scoping from the event stream.
- *
- * The evidence for the last two is in the "Evidence" section of
- * `docs/adr/W1-RN-01-session-durability-is-a-verdict.md`.
+ * Compiled tools and skills must be explicit. A skill allowlist restricts model-invoked tools,
+ * but cannot restrict user-typed slash commands or reveal loaded skills through system/init
+ * (docs/adr/W1-RN-01-session-durability-is-a-verdict.md).
+ * A transcript mirror proves durability only after successful writes and a completed stream.
  */
 import {
   createSdkMcpServer,
@@ -88,18 +29,16 @@ import {
   type CanUseTool,
   type McpServerConfig as SdkMcpServerConfig,
   type Options as SdkOptions,
-  type SDKMessage,
   type SessionStore,
   type Settings,
 } from '@anthropic-ai/claude-agent-sdk';
 import { classifySdkEvent, type ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
-import { canonicalCall, needsApproval } from '@indx-workspace/contracts/agents';
+
 import {
   EngineRefusalError,
   executeRunSkillScript,
   RUN_SKILL_SCRIPT_TOOL,
   skillScriptToolDescription,
-  type SessionDurabilityVerdict,
   type SkillScriptSetup,
 } from '@agent-workspace/engine';
 
@@ -126,20 +65,6 @@ import {
 } from './skill-script.js';
 
 /** Name a value in a rejection message without stringifying something huge or cyclic. */
-function describe(value: unknown): string {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return 'an array';
-  if (typeof value === 'string') return `the string ${JSON.stringify(value)}`;
-  if (typeof value === 'number') return `the number ${String(value)}`;
-  if (typeof value === 'boolean') return `the boolean ${String(value)}`;
-  return `a value of type ${typeof value}`;
-}
-
-/** The message of a thrown value, without assuming it is an `Error`. */
-function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return `non-Error thrown: ${describe(error)}`;
-}
 
 // ── 1. Translation: CompiledSdkOptions → the SDK's Options ──────────────────────────────
 
@@ -152,6 +77,17 @@ function describeError(error: unknown): string {
  * in `packages/core` normalises away on save — is refused by name rather than passed through to
  * a `query()` call that would fail somewhere less legible.
  */
+
+function toSdkMcpTool(tool: import('./options.js').CompiledMcpToolPolicy) {
+  return {
+    name: tool.name,
+    ...(tool.permission_policy === undefined ? {} : { permission_policy: tool.permission_policy }),
+    ...(tool.org_max_permission === undefined
+      ? {}
+      : { org_max_permission: tool.org_max_permission }),
+  };
+}
+
 function toSdkMcpServer(name: string, config: CompiledMcpServerConfig): SdkMcpServerConfig {
   const type = config.type;
   if (type === 'http' || type === 'sse') {
@@ -162,15 +98,7 @@ function toSdkMcpServer(name: string, config: CompiledMcpServerConfig): SdkMcpSe
       ...(config.tools === undefined
         ? {}
         : {
-            tools: config.tools.map((tool) => ({
-              name: tool.name,
-              ...(tool.permission_policy === undefined
-                ? {}
-                : { permission_policy: tool.permission_policy }),
-              ...(tool.org_max_permission === undefined
-                ? {}
-                : { org_max_permission: tool.org_max_permission }),
-            })),
+            tools: config.tools.map(toSdkMcpTool),
           }),
       ...(config.timeout === undefined ? {} : { timeout: config.timeout }),
       ...(config.alwaysLoad === undefined ? {} : { alwaysLoad: config.alwaysLoad }),
@@ -426,7 +354,7 @@ function agentWorkspaceServer(
 }
 
 /**
- * The flag-tier settings a gated run starts with (ADR-0145 D3).
+ * The flag-tier settings a run with a stored gate starts with (ADR-0145 D3).
  *
  * `settingSources: ['project']` loads the workspace's `.claude/settings.json`, whose
  * `permissions.allow` rules and hooks can settle a call before `canUseTool` is asked. Each gate is
@@ -498,14 +426,32 @@ function buildSdkOptions(compiled: CompiledSdkOptions, overlay: SdkOptionOverlay
     ...(compiled.outputFormat === undefined
       ? {}
       : {
-          outputFormat: { type: 'json_schema', schema: { ...compiled.outputFormat.schema } },
+          outputFormat: {
+            type: 'json_schema',
+            schema: withoutMetaSchema(compiled.outputFormat.schema),
+          },
         }),
     ...(overlay.sessionStore === undefined ? {} : { sessionStore: overlay.sessionStore }),
     ...(overlay.abortController === undefined ? {} : { abortController: overlay.abortController }),
-    ...(canUseTool === undefined || approval === undefined
+    ...(canUseTool === undefined || approval === undefined ? {} : { canUseTool }),
+    // Only a stored gate is also an `ask` rule; Run commands' own rule is not (#2091, `ask`).
+    ...(approval === undefined || approval.gate.ask.length === 0
       ? {}
-      : { canUseTool, settings: gatedRunSettings(approval.gate.requireApproval) }),
+      : { settings: gatedRunSettings(approval.gate.ask) }),
   };
+}
+
+/**
+ * A copy of a run's output schema without its top-level `$schema`. ADR-0143 fixes the dialect at
+ * draft 2020-12 and lets a schema name it (`z.toJSONSchema` does), but Claude Code's `--json-schema`
+ * validator loads no 2020-12 meta-schema and refuses a schema that references it ("no schema with
+ * key or ref"), ending the run before the model is asked. The dialect is already settled by the
+ * contract, so the reference carries nothing the CLI needs.
+ */
+function withoutMetaSchema(schema: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const copy: Record<string, unknown> = { ...schema };
+  delete copy['$schema'];
+  return copy;
 }
 
 /**
@@ -533,209 +479,6 @@ export function structuredOutputFailure(event: ClassifiedSdkEvent): Error | null
   return new Error(
     'output_schema_unsatisfied: the model could not produce an answer that matches the requested output schema.',
   );
-}
-
-// ── 2. Durability: an answer that is only ever `true` because something passed ───────────
-
-/**
- * Whether this run's conversation survives the sandbox (spec §14.9, §20).
- *
- * The type itself is `@agent-workspace/engine`'s {@link SessionDurabilityVerdict} — ENG-04 moved
- * it to the port, because "can this conversation be resumed after the sandbox is gone?" is a
- * question every engine has to answer and not a Claude one. The alias is kept so this module's
- * existing consumers read the same name they always did.
- *
- * Two arms, and the `false` arm always carries a sentence. There is no "probably fine": §14.9
- * calls a session that lives only in `CLAUDE_CONFIG_DIR` a release blocker, so the platform
- * must be able to say *which* runs it may offer a resume for and which it may not.
- */
-export type SessionDurability = SessionDurabilityVerdict;
-
-/** The call a run stopped on. The tool's arguments appear only in `canonicalCall`, never in a message. */
-export type ApprovalRequest = {
-  readonly toolName: string;
-  readonly toolUseId: string;
-  readonly canonicalCall: string;
-};
-
-/**
- * What the approval gate remembers about one run. `consumed` holds single use within this
- * execution; across executions the control plane holds it, by stamping the continuation's approvals
- * consumed when the run starts and never queueing it again (ADR-0151). The gateway keeps its own
- * durable record per call (`runs.consumed_tool_calls`, ADR-0145 D2.1), because it runs the write.
- */
-export type ApprovalState = {
-  readonly consumed: Set<string>;
-  request: ApprovalRequest | null;
-};
-
-type PermissionDecision =
-  | { readonly behavior: 'allow'; readonly updatedInput: Record<string, unknown> }
-  | { readonly behavior: 'deny'; readonly message: string; readonly interrupt?: true };
-
-/**
- * `canUseTool`, as a pure decision (ADR-0145 D2.1, D5). Only reached for a call no `allowedTools`
- * rule or `disallowedTools` rule already settled.
- *
- * A gated call runs only when its exact canonical text was approved, and each approval is good for
- * one call. A gated call that is not approved records itself and denies with `interrupt`, which ends
- * the run; the first one wins, because the model may issue several in one turn. A call to a tool the
- * gate does not name is denied, except for the `deferred` auto-approvals `splitApprovals` moved out of
- * `allowedTools`, which are allowed here — unscoped ones only: this decision reads the tool name, so a
- * scoped rule such as `Edit(//ws/**)` allowing here would allow the tool over every path.
- */
-export function decideToolPermission(
-  gate: ClaudeApprovalGate,
-  state: ApprovalState,
-  toolName: string,
-  input: Record<string, unknown>,
-  toolUseId: string,
-): PermissionDecision {
-  if (!needsApproval(gate.requireApproval, toolName)) {
-    const unscoped = gate.deferred.filter((rule) => !rule.includes('('));
-    return needsApproval(unscoped, toolName)
-      ? { behavior: 'allow', updatedInput: input }
-      : { behavior: 'deny', message: `${toolName} is not allowed by this agent's tool policy.` };
-  }
-  let call: string;
-  try {
-    call = canonicalCall(toolName, input);
-  } catch {
-    return {
-      behavior: 'deny',
-      message: `approval_required: the arguments of ${toolName} are not JSON, so the call cannot be approved.`,
-    };
-  }
-  if (gate.approvedToolCalls.includes(call)) {
-    if (state.consumed.has(call)) {
-      return {
-        behavior: 'deny',
-        message: `approval_already_used: the approval for this ${toolName} call was already used.`,
-      };
-    }
-    state.consumed.add(call);
-    return { behavior: 'allow', updatedInput: input };
-  }
-  if (gate.approvedToolCalls.length > 0) {
-    return {
-      behavior: 'deny',
-      message: `approval_call_mismatch: ${toolName} was called with arguments nobody approved.`,
-    };
-  }
-  state.request ??= { toolName, toolUseId, canonicalCall: call };
-  return {
-    behavior: 'deny',
-    interrupt: true,
-    message: `approval_required: ${toolName} needs a person's approval before it runs.`,
-  };
-}
-
-type RunState = {
-  readonly approval: ApprovalState;
-  /** The first `handoff_to_person` call of the run; later calls are ignored. */
-  handoff: RecordedHandoff | null;
-  readonly storeConfigured: boolean;
-  appendsSettled: number;
-  appendsInFlight: number;
-  readonly appendFailures: string[];
-  readonly mirrorErrors: string[];
-  sawResult: boolean;
-  exhausted: boolean;
-  failure: string | null;
-};
-
-function newRunState(storeConfigured: boolean): RunState {
-  return {
-    approval: { consumed: new Set(), request: null },
-    handoff: null,
-    storeConfigured,
-    appendsSettled: 0,
-    appendsInFlight: 0,
-    appendFailures: [],
-    mirrorErrors: [],
-    sawResult: false,
-    exhausted: false,
-    failure: null,
-  };
-}
-
-/**
- * Read a `system/mirror_error` envelope without trusting its shape.
- *
- * R-01 §4 records that the SDK emits fields the `.d.ts` does not declare, so the envelope is
- * parsed defensively rather than cast. What matters is that a batch was dropped; the text is
- * for the operator.
- */
-function describeMirrorError(event: Record<string, unknown>): string {
-  const error = typeof event['error'] === 'string' ? event['error'] : 'no error text';
-  const key = event['key'];
-  if (typeof key !== 'object' || key === null || Array.isArray(key)) return error;
-  const record = key as Record<string, unknown>;
-  const projectKey = typeof record['projectKey'] === 'string' ? record['projectKey'] : '?';
-  const sessionId = typeof record['sessionId'] === 'string' ? record['sessionId'] : '?';
-  const subpath = typeof record['subpath'] === 'string' ? `/${record['subpath']}` : '';
-  return `${projectKey}/${sessionId}${subpath}: ${error}`;
-}
-
-/**
- * The durability verdict for a finished run.
- *
- * Read this as one long "no, because …" list ending in a single "yes, and here is the evidence".
- * ADR-0015: the run is durable because a scenario passed — a store was configured, its writes
- * were observed to resolve, none was dropped, and the stream reached a `result` — never because
- * no failure was seen.
- */
-function verdict(state: RunState): SessionDurability {
-  if (!state.exhausted) {
-    return {
-      durable: false,
-      reason:
-        'the event stream has not been exhausted. Durability is asserted about a completed run; a stream still open, or abandoned by the consumer before it ended, may have transcript batches that were never mirrored.',
-    };
-  }
-  if (state.failure !== null) {
-    return { durable: false, reason: `the run stream ended in an error: ${state.failure}` };
-  }
-  if (!state.storeConfigured) {
-    return {
-      durable: false,
-      reason:
-        'no sessionStore was supplied, so this session exists only as <CLAUDE_CONFIG_DIR>/projects/<projectKey>/<sessionId>.jsonl inside the sandbox (R-01 §6, verified live). Spec §14.9: destroying the sandbox destroys the conversation, and the session id in Postgres is not enough to resume it.',
-    };
-  }
-  if (state.mirrorErrors.length > 0) {
-    return {
-      durable: false,
-      reason: `the SDK emitted ${String(state.mirrorErrors.length)} system/mirror_error event(s): a batch of transcript entries was dropped after 3 attempts and has no surviving copy in the store. First: ${state.mirrorErrors[0] ?? '(none recorded)'}`,
-    };
-  }
-  if (state.appendFailures.length > 0) {
-    return {
-      durable: false,
-      reason: `${String(state.appendFailures.length)} sessionStore.append() call(s) rejected. The SDK retries, but a run whose mirror rejected cannot be claimed durable. First: ${state.appendFailures[0] ?? '(none recorded)'}`,
-    };
-  }
-  if (state.appendsInFlight > 0) {
-    return {
-      durable: false,
-      reason: `${String(state.appendsInFlight)} sessionStore.append() call(s) were still in flight when the stream ended; their outcome is unknown.`,
-    };
-  }
-  if (!state.sawResult) {
-    return {
-      durable: false,
-      reason:
-        "the stream ended without a 'result' event, so the run did not reach a terminal state and the transcript may be incomplete.",
-    };
-  }
-  if (state.appendsSettled === 0) {
-    return {
-      durable: false,
-      reason:
-        'a sessionStore was configured but it received no append() call, so nothing about this session was mirrored out of the sandbox.',
-    };
-  }
-  return { durable: true, mirroredBatches: state.appendsSettled };
 }
 
 /**
@@ -827,28 +570,145 @@ export type ClaudeRun = {
   abort(reason?: unknown): void;
 };
 
-async function* normalise(
-  source: AsyncIterable<SDKMessage>,
+/**
+ * How long the SDK's stream may stay open after the run's `result` before the run ends without
+ * it. With a string prompt the `result` is the CLI's last message, and the stream closes as the
+ * CLI exits; a CLI that lingers instead (for example on a connection to an MCP server it never
+ * finishes closing) would otherwise hold the run open until its credential expires (issue #2076).
+ */
+export const RESULT_LINGER_MS = 5_000;
+
+/** What {@link normalise} does when the stream lingers past its `result`. */
+export type ResultLinger = {
+  /** {@link RESULT_LINGER_MS} outside tests. */
+  readonly ms: number;
+  /** Stop the SDK and its CLI: the run's abort. */
+  readonly abort: (reason: Error) => void;
+};
+
+const LINGERED = Symbol('lingered');
+
+/** `next`, or {@link LINGERED} when it has not settled within `ms`. */
+async function within<T>(next: Promise<T>, ms: number): Promise<T | typeof LINGERED> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof LINGERED>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(LINGERED);
+    }, ms);
+  });
+  try {
+    return await Promise.race([next, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The SDK's messages, each through `classifySdkEvent`. Once a `result` has arrived, a stream that
+ * does not end within `linger.ms` is ended here: the SDK is aborted, and the run ends with the
+ * result it reached, as though the stream had drained.
+ */
+export function normalise(
+  source: AsyncIterable<unknown>,
+  linger: ResultLinger,
+  state: RunState = newRunState(false),
+): AsyncGenerator<ClassifiedSdkEvent, void, void> {
+  return normaliseInto(source, linger, state);
+}
+
+/**
+ * {@link normalise} with the rest of what {@link startRun} wires around it: `mirror` instrumented
+ * as the SDK's `sessionStore`, and the durability verdict over both. `startRun` hands the
+ * instrumented store to `query()`; a test calls its `append` itself, as the SDK would.
+ */
+export function normaliseMirrored(
+  source: AsyncIterable<unknown>,
+  linger: ResultLinger,
+  mirror: TranscriptMirror,
+): {
+  readonly events: AsyncGenerator<ClassifiedSdkEvent, void, void>;
+  readonly sessionStore: TranscriptMirror;
+  readonly sessionDurability: () => SessionDurability;
+} {
+  const state = newRunState(true);
+  return {
+    events: normaliseInto(source, linger, state),
+    sessionStore: instrumentSessionStore(mirror, state),
+    sessionDurability: () => verdict(state),
+  };
+}
+
+/**
+ * A `system/permission_denied` message for each call `canUseTool` refused by policy since the last
+ * one, in the SDK's own shape (`SDKPermissionDeniedMessage`). The SDK sends this message when it
+ * refuses a call itself; it sends nothing when `canUseTool` refuses, so without this a run whose
+ * gate exists (#2091) would lose the console's "did not run" notice (#2207). Reported before the
+ * next SDK message, which is the refused call's tool result. `session_id` is the one the SDK's own
+ * messages carry.
+ */
+function* deniedEvents(state: RunState, next: unknown): Generator<ClassifiedSdkEvent> {
+  const calls = state.approval.denied.splice(0);
+  if (calls.length === 0) return;
+  const record = typeof next === 'object' && next !== null ? (next as Record<string, unknown>) : {};
+  const sessionId = typeof record['session_id'] === 'string' ? record['session_id'] : '';
+  for (const call of calls) {
+    yield classifySdkEvent({
+      type: 'system',
+      subtype: 'permission_denied',
+      tool_name: call.toolName,
+      tool_use_id: call.toolUseId,
+      decision_reason_type: 'rule',
+      message: call.message,
+      uuid: randomUUID(),
+      session_id: sessionId,
+    });
+  }
+}
+
+async function* normaliseInto(
+  source: AsyncIterable<unknown>,
+  linger: ResultLinger,
   state: RunState,
 ): AsyncGenerator<ClassifiedSdkEvent, void, void> {
+  const iterator = source[Symbol.asyncIterator]();
+  let open = true;
   try {
-    for await (const raw of source) {
-      const event = classifySdkEvent(raw);
-      if (event.kind === 'system' && event.subtype === 'mirror_error') {
-        state.mirrorErrors.push(describeMirrorError(event.event));
-      } else if (event.kind === 'result' || event.kind === 'result-unknown') {
-        state.sawResult = true;
+    for (;;) {
+      const next = iterator.next();
+      const step = state.sawResult ? await within(next, linger.ms) : await next;
+      if (step === LINGERED) {
+        // The pending read settles (or rejects) once the abort reaches the SDK; nobody awaits it.
+        next.catch(() => undefined);
+        state.lingered = true;
+        linger.abort(
+          new Error(`the SDK stream stayed open ${String(linger.ms)} ms after the run's result`),
+        );
+        break;
       }
+      if (step.done === true) {
+        open = false;
+        break;
+      }
+      yield* deniedEvents(state, step.value);
+      const event = classifySdkEvent(step.value);
+      observeSdkEvent(state, event);
       yield event;
     }
-    // Set only here, after the loop drained normally. A consumer that `break`s out leaves this
-    // false, and the durability verdict then refuses on "not exhausted" rather than answering
-    // from a partial run.
+    yield* deniedEvents(state, undefined);
+    // Set only here, after the loop drained normally or lingered past its `result`. A consumer
+    // that `break`s out leaves this false, and the durability verdict then refuses on "not
+    // exhausted" rather than answering from a partial run. A lingered stream is over for the run,
+    // but `state.lingered` keeps the verdict from reading it as drained.
     state.exhausted = true;
   } catch (error) {
+    open = false;
     state.exhausted = true;
     state.failure = describeError(error);
     throw error;
+  } finally {
+    // What `for await` does on an early exit: close the source. Not awaited, since a source that
+    // lingered may answer `return()` only after its pending read.
+    if (open) iterator.return?.().catch(() => undefined);
   }
 }
 
@@ -926,7 +786,16 @@ export function startRun(start: ClaudeRunStart, deps: RunDeps = {}): ClaudeRun {
   });
 
   return {
-    events: normalise(session, state),
+    events: normaliseInto(
+      session,
+      {
+        ms: RESULT_LINGER_MS,
+        abort: (reason) => {
+          abortController.abort(reason);
+        },
+      },
+      state,
+    ),
     sessionDurability: () => verdict(state),
     approvalRequest: () => state.approval.request,
     handoff: () => state.handoff,

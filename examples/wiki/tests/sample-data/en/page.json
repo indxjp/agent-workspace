@@ -1,0 +1,211 @@
+[
+  {
+    "id": "b0000000-0000-4000-8000-000000000001",
+    "title": "New joiner guide",
+    "position": 0,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "New joiner guide"
+      },
+      {
+        "type": "paragraph",
+        "text": "What to do in your first week. For expenses, see the expense policy."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000002",
+    "title": "Expense policy",
+    "parent": "b0000000-0000-4000-8000-000000000001",
+    "position": 1,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Expense policy"
+      },
+      {
+        "type": "paragraph",
+        "text": "Claim expenses within 30 days. Anything over 30,000 yen needs prior approval from your manager."
+      },
+      {
+        "type": "paragraph",
+        "text": "A receipt is required. Private spending is not covered."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000003",
+    "title": "Travel expense claims",
+    "parent": "b0000000-0000-4000-8000-000000000001",
+    "position": 2,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Travel expense claims"
+      },
+      {
+        "type": "paragraph",
+        "text": "Public transport is reimbursed at cost. Taxis only after the last train or with heavy luggage."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000004",
+    "title": "Reimbursing out-of-pocket costs",
+    "parent": "b0000000-0000-4000-8000-000000000001",
+    "position": 3,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Reimbursing out-of-pocket costs"
+      },
+      {
+        "type": "paragraph",
+        "text": "Submit out-of-pocket costs in the expense system; they are paid on the next payday."
+      },
+      {
+        "type": "paragraph",
+        "text": "The cut-off is the 25th of each month."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000005",
+    "title": "Business trip requests",
+    "parent": "b0000000-0000-4000-8000-000000000001",
+    "position": 4,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Business trip requests"
+      },
+      {
+        "type": "paragraph",
+        "text": "Request trips two weeks ahead. Book lodging within the cap."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000006",
+    "title": "Buying office supplies",
+    "parent": "b0000000-0000-4000-8000-000000000001",
+    "position": 5,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Buying office supplies"
+      },
+      {
+        "type": "paragraph",
+        "text": "Ask admin to buy supplies. Over 50,000 yen, get at least two quotes."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000007",
+    "title": "Sales basics",
+    "position": 6,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Sales basics"
+      },
+      {
+        "type": "paragraph",
+        "text": "Log every deal in the CRM. A discount over the limit needs the director's approval."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000008",
+    "title": "Writing a quote",
+    "parent": "b0000000-0000-4000-8000-000000000007",
+    "position": 7,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Writing a quote"
+      },
+      {
+        "type": "paragraph",
+        "text": "Build quotes from the price list with a 30-day validity."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000009",
+    "title": "From quote to contract",
+    "parent": "b0000000-0000-4000-8000-000000000007",
+    "position": 8,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "From quote to contract"
+      },
+      {
+        "type": "paragraph",
+        "text": "Quote, internal approval, contract review, signing."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000010",
+    "title": "IT usage guide",
+    "position": 9,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "IT usage guide"
+      },
+      {
+        "type": "paragraph",
+        "text": "Covers PC setup, accounts and how to reach the help desk."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000003"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000011",
+    "title": "Changing your password",
+    "parent": "b0000000-0000-4000-8000-000000000010",
+    "position": 10,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Changing your password"
+      },
+      {
+        "type": "paragraph",
+        "text": "Change your password every 90 days. Reuse is not allowed."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000003"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000012",
+    "title": "Meeting room equipment",
+    "parent": "b0000000-0000-4000-8000-000000000010",
+    "position": 11,
+    "blocks": [
+      {
+        "type": "heading1",
+        "text": "Meeting room equipment"
+      },
+      {
+        "type": "paragraph",
+        "text": "Connect the projector by HDMI. If nothing shows, check the input source."
+      }
+    ],
+    "space": "c0000000-0000-4000-8000-000000000003"
+  }
+]

@@ -12,14 +12,14 @@ import { draftBody } from '../../adapters/checker/checker.contract';
 import { InMemoryRunStore } from '../../../runs/memory-store';
 import { callContextOf } from '../../testing/context';
 import {
+  approvedFor,
   gatedInputs,
   WORKSPACE,
   builderDoor,
   scriptedModel,
-  toolUse,
   type Door,
   type GatedTool,
-} from './harness';
+} from './harness.test-support';
 
 const PERSON = callContextOf(WORKSPACE, 'builder', 'principal-builder', 'user-builder');
 const NEW_AGENT = { body: draftBody('Refund desk', ['crm']) };
@@ -33,20 +33,6 @@ const freshDoor = () =>
     runStore: new InMemoryRunStore(),
     scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
   });
-
-/** A run the person approved `tool(input)` for: it pauses, the person approves, the continuation runs. */
-async function approvedFor(
-  door: Door,
-  tool: Parameters<typeof toolUse>[0],
-  input: Record<string, unknown>,
-) {
-  const script = { turns: [{ toolUses: [toolUse(tool, input)] }, { text: 'Done.' }] };
-  const model = await scriptedModel(`builder-save-${randomUUID()}`, script);
-  const paused = await door.start({ role: 'builder' }, model);
-  await door.runScripted(paused.token, model, { gated: true });
-  const decided = await door.decide(paused.runId, 'approve');
-  return door.start({ role: 'builder' }, model, decided.runId);
-}
 
 /** Approves `input` for a new run, then sends that `draft_save` to the door. */
 async function approvedSave(door: Door, input: Record<string, unknown>, callId = 'save-1') {

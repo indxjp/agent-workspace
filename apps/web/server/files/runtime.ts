@@ -15,7 +15,7 @@
  * or its bucket was refused or could not be reached; the root logs which.
  */
 import type { FileTextStoreProvider, WorkspaceObjectStoreProvider } from './store';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
+import type { ResourceCatalogStoreProvider } from '../storage/store';
 import type { StorageService } from '../storage/service';
 
 /** Who the caller is, as far as the files routes need to know. Mirrors `agents/runtime.ts`'s. */

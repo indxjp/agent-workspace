@@ -20,9 +20,10 @@ export const AcceptedInvitationResponseSchema: z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         createdAt: z.ZodISODateTime;
     }, z.core.$strict>;
@@ -35,13 +36,21 @@ export interface AcceptInvitationInput {
 }
 
 // @public
+const CONFERRABLE_ROLES: readonly ["owner", "admin", "builder", "viewer"];
+
+// Warning: (ae-forgotten-export) The symbol "CONFERRABLE_ROLES" needs to be exported by the entry point invitations.d.ts
+//
+// @public
+type ConferrableRoleName = (typeof CONFERRABLE_ROLES)[number];
+
+// @public
 export interface CreateInvitationInput {
     // (undocumented)
     readonly email: string;
-    // Warning: (ae-forgotten-export) The symbol "MembershipRoleName" needs to be exported by the entry point invitations.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ConferrableRoleName" needs to be exported by the entry point invitations.d.ts
     //
     // (undocumented)
-    readonly role: MembershipRoleName;
+    readonly role: ConferrableRoleName;
 }
 
 // @public
@@ -57,8 +66,8 @@ export const InvitationListResponseSchema: z.ZodObject<{
         email: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
         }>;
         invitedBy: z.ZodNullable<z.ZodString>;
@@ -78,8 +87,8 @@ export const InvitationResourceSchema: z.ZodObject<{
     email: z.ZodString;
     role: z.ZodEnum<{
         builder: "builder";
-        admin: "admin";
         owner: "owner";
+        admin: "admin";
         viewer: "viewer";
     }>;
     invitedBy: z.ZodNullable<z.ZodString>;
@@ -99,8 +108,8 @@ export const InvitationResponseSchema: z.ZodObject<{
         email: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
         }>;
         invitedBy: z.ZodNullable<z.ZodString>;
@@ -121,8 +130,8 @@ export const IssuedInvitationResponseSchema: z.ZodObject<{
         email: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
         }>;
         invitedBy: z.ZodNullable<z.ZodString>;
@@ -135,14 +144,6 @@ export const IssuedInvitationResponseSchema: z.ZodObject<{
     link: z.ZodString;
     warning: z.ZodString;
 }, z.core.$strict>;
-
-// @public
-const MEMBERSHIP_ROLES: readonly ["owner", "admin", "builder", "viewer"];
-
-// Warning: (ae-forgotten-export) The symbol "MEMBERSHIP_ROLES" needs to be exported by the entry point invitations.d.ts
-//
-// @public
-type MembershipRoleName = (typeof MEMBERSHIP_ROLES)[number];
 
 // (No @packageDocumentation comment for this package)
 

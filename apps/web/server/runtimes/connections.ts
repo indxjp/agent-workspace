@@ -51,6 +51,7 @@ import {
   type WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
+import { systemClock, type Clock } from '../clock';
 import { problem, type ApiResult } from '../http/result';
 
 // ── The port ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +136,9 @@ function decodeDriver(name: string): string | null {
 
 // ── In-memory implementation, for routes.test.ts ────────────────────────────────────────
 
-export function createInMemoryRuntimeConnectionStoreProvider(): RuntimeConnectionStoreProvider {
+export function createInMemoryRuntimeConnectionStoreProvider(
+  clock: Clock = systemClock,
+): RuntimeConnectionStoreProvider {
   const byWorkspace = new Map<string, Map<string, RuntimeConnectionRecord>>();
   let nextId = 1;
 
@@ -173,7 +176,7 @@ export function createInMemoryRuntimeConnectionStoreProvider(): RuntimeConnectio
             id: `00000000-0000-4000-9000-${String(nextId).padStart(12, '0')}`,
             name: encoded.name,
             driver: input.driver,
-            createdAt: new Date(),
+            createdAt: clock.now(),
           };
           nextId += 1;
           rows().set(connection.id, connection);

@@ -18,7 +18,6 @@ import { agents, type AgentPermissions } from '../schema/agents.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
-import { workspaces } from '../schema/workspaces.js';
 import { createDatabaseAgentResourceRepositoryProvider } from './agent-resources.js';
 import {
   createDatabaseAgentVersionRepositoryProvider,
@@ -35,6 +34,7 @@ import { createDatabaseRuntimeProfileRepositoryProvider } from './runtime-profil
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
 import { postgresViolations, type PostgresViolation } from './violations.js';
+import { insertPriorWorkspaces } from './prior-workspaces.test-support.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -65,9 +65,11 @@ describe.skipIf(!hasDatabase)('agents.materialised_version_id against real Postg
 
   async function workspace(): Promise<Workspace> {
     const workspaceId = crypto.randomUUID();
-    await isolated.db
-      .insert(workspaces)
-      .values({ id: workspaceId, slug: `mv-${workspaceId.slice(0, 8)}`, name: 'Materialised' });
+    await insertPriorWorkspaces(isolated.db, {
+      id: workspaceId,
+      slug: `mv-${workspaceId.slice(0, 8)}`,
+      name: 'Materialised',
+    });
     const directory = createDatabaseDirectoryRoot(isolated.db).forWorkspace(workspaceId);
     const owner = await directory.createUser({
       email: `owner-${workspaceId}@example.test`,
@@ -352,7 +354,7 @@ describe.skipIf(!hasDatabase)('0040 materialised-version backfill', () => {
   const unpointed = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0040-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
     const journal = JSON.parse(
@@ -378,9 +380,11 @@ describe.skipIf(!hasDatabase)('0040 materialised-version backfill', () => {
       priorMigrationsDir,
     );
 
-    await isolated.db
-      .insert(workspaces)
-      .values({ id: workspaceId, slug: workspaceId, name: 'Pre-0040 workspace' });
+    await insertPriorWorkspaces(isolated.db, {
+      id: workspaceId,
+      slug: workspaceId,
+      name: 'Pre-0040 workspace',
+    });
     await isolated.db
       .insert(users)
       .values({ id: userId, email: `${userId}@example.test`, name: 'Pre-0040 owner' });

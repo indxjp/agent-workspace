@@ -226,6 +226,16 @@ function deploymentPolicy(segments: readonly EnvSegment[]): string | undefined {
 }
 
 /**
+ * The comma-separated feature list `.env` carries as `AW_DEPLOYMENT_FEATURES` (which `aw deploy`
+ * writes), or `undefined` when it carries none or a blank one. The last occurrence wins.
+ */
+function deploymentFeatures(segments: readonly EnvSegment[]): string | undefined {
+  const value =
+    segments.findLast(({ key }) => key === 'AW_DEPLOYMENT_FEATURES')?.value.trim() ?? '';
+  return value === '' ? undefined : value;
+}
+
+/**
  * The origin of the `AW_PUBLIC_URL` `.env` carries (which `aw deploy` writes), or `undefined`
  * when blank. A trailing slash or path is dropped because the Terraform modules accept only an
  * origin; a value that is not a parseable URL is kept so the module's own validation rejects it.
@@ -327,6 +337,7 @@ async function planRender(
   const desired: RenderedArtefact[] = [
     ...renderDeployArtefacts(profile, images, {
       deploymentPolicy: deploymentPolicy(segments),
+      deploymentFeatures: deploymentFeatures(segments),
       publicUrl: publicUrl(segments),
     }),
   ];

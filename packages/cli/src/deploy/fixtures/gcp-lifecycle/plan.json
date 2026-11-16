@@ -1,0 +1,137 @@
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {
+      "address": "google_project_service.required[\"run.googleapis.com\"]",
+      "type": "google_project_service",
+      "name": "com\"]",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_project_service.required[\"iam.googleapis.com\"]",
+      "type": "google_project_service",
+      "name": "com\"]",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_artifact_registry_repository.images",
+      "type": "google_artifact_registry_repository",
+      "name": "images",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_sql_database_instance.main",
+      "type": "google_sql_database_instance",
+      "name": "main",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_storage_bucket.objects",
+      "type": "google_storage_bucket",
+      "name": "objects",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_storage_bucket.state",
+      "type": "google_storage_bucket",
+      "name": "state",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_cloud_run_v2_service.web",
+      "type": "google_cloud_run_v2_service",
+      "name": "web",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_cloud_run_v2_service.gateway",
+      "type": "google_cloud_run_v2_service",
+      "name": "gateway",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "random_password.bootstrap_admin_password",
+      "type": "random_password",
+      "name": "bootstrap_admin_password",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_service_account.runtime",
+      "type": "google_service_account",
+      "name": "runtime",
+      "change": {
+        "actions": ["no-op"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_secret_manager_secret.master_key",
+      "type": "google_secret_manager_secret",
+      "name": "master_key",
+      "change": {
+        "actions": ["update"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    }
+  ]
+}

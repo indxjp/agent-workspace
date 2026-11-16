@@ -1,0 +1,188 @@
+---
+title: "Share app parts as blueprints"
+description: "An app blueprint is a versioned npm package of app parts. aw blueprint add installs one after showing its plan; each new version arrives as a proposal you diff, then accept or decline, and a file you edited is never overwritten."
+---
+
+An **app blueprint** is a versioned release of parts of an app: a resource with its pages and
+routes, its recipes, its agents, its skills, its tests and its migrations, published as one npm
+package. Another app installs it with `aw blueprint add`, and then receives each new version as a
+proposal it reviews, never as a silent overwrite of code it now owns
+([ADR-0166](https://github.com/indxjp/agent-workspace/blob/main/docs/adr/0166-a-blueprint-is-a-versioned-release-of-app-parts-received-as-a-proposal.md)).
+
+Some older decision records say "the blueprint" for the product design review of 2026-10-04. That
+is a document, not an app blueprint.
+
+A blueprint is code that runs in your app once it is written. Installing one is reviewing
+third-party code, which is why every command that writes shows its plan first.
+
+## What a blueprint holds
+
+Beside its `package.json`, a blueprint package holds `blueprint.json` and the parts it lists, each
+landing at the same path in your app:
+
+| Part kind  | Path in the package                                     | Lands at                                                  |
+| ---------- | ------------------------------------------------------- | --------------------------------------------------------- |
+| `resource` | `resources/<name>.ts`                                   | the same path, and two `app.config.ts` lines              |
+| `recipe`   | `recipes/<name>.ts` (a default-exported `defineRecipe`) | the same path, and two `app.config.ts` lines              |
+| `page`     | `app/**`                                                | the same path                                             |
+| `agent`    | `agents/<name>.agent.md`                                | the same path                                             |
+| `skill`    | `skills/**`                                             | the same path                                             |
+| `test`     | `tests/**`                                              | the same path                                             |
+| migration  | `migrations/<NNNN>_<tag>.sql`                           | `db/migrations/<next>_<tag>.sql`, appended to the journal |
+
+It never holds rows or other data, uploaded files, `.env` files, secret values, connector URLs,
+tokens, `app.config.ts`, `package.json` edits, `agent-workspace.yaml` or an `agents/<name>.ts`.
+Every part is text; a binary file, a link, or a path outside the package is refused. An agent
+travels only as a portable `agents/<name>.agent.md` file, which `aw check`, `aw push` and `aw dev`
+load beside your `agents/*.ts` files; a name your project already defines in `agents/<name>.ts` is
+refused.
+
+`blueprint.json` is read by a strict schema, so an unknown key is refused:
+
+```json title="blueprint.json (illustrative)" claim="illustrative"
+{
+  "name": "helpdesk",
+  "version": "1.2.0",
+  "appKit": "^0.6.12",
+  "parts": [
+    { "path": "resources/ticket.ts", "kind": "resource" },
+    { "path": "app/tickets/page.tsx", "kind": "page" },
+    { "path": "tests/ticket.test.ts", "kind": "test" }
+  ],
+  "slots": { "connectors": [], "secrets": [], "agents": [] },
+  "migrations": ["migrations/0000_create_tickets.sql"]
+}
+```
+
+- `name` names the installed blueprint (`blueprint:<name>` in `aw-generated.json`) and the
+  argument of `aw blueprint diff` and `update`. It is not the npm package name.
+- `version` is an exact version and equals the package's own.
+- `appKit` is the range of `@indx-workspace/app` the parts are written for: an exact version,
+  `^x.y.z` or `~x.y.z`, with npm's meaning. An app whose installed app kit is outside it is refused.
+- `slots` names what your app binds: connectors (`{ "slot": "email", "kind": "mcp" }`), secret
+  references (`{ "slot": "crm_api_key" }`, never a value) and the agents the blueprint creates.
+  Binding happens only in your `agent-workspace.yaml`; `aw` never edits that file, and the plan
+  prints the lines to add for each slot that is not bound yet.
+- A migration names your app's schema as `{{appSchema}}` (`"{{appSchema}}"."tickets"`); it is the
+  only placeholder there is. A `{{key}}` anywhere in a part is refused rather than substituted.
+
+## Package and publish it
+
+A blueprint is an ordinary npm package: `blueprint.json` at its root, `"keywords":
+["indx-workspace-blueprint"]`, an exact `version`, and no install scripts (they never run anyway).
+Publish it with `npm publish` to the registry your team uses; a private registry and its sign-in
+come from npm and your `.npmrc`. There is no blueprint registry of our own.
+
+## Install one
+
+```sh title="illustrative" claim="illustrative"
+npx aw blueprint add @acme/helpdesk-blueprint@1.2.0
+npx aw blueprint add @acme/helpdesk-blueprint@1.2.0 --yes
+```
+
+`aw blueprint add <npm-spec>` fetches the package with `npm pack --ignore-scripts` into a temporary
+directory and checks the tarball against the sha512 integrity npm reported before it reads a
+single file. Then it prints the plan: the source and its integrity, each file it would add, each
+`app.config.ts` and migration-journal edit, and each slot. Without `--yes` it writes nothing and
+exits 3, the exit code every plan-first command uses for "changes pending". With `--yes` it writes
+the files and records them, with their hashes and the source, under `blueprint:<name>` in
+`aw-generated.json`. The blueprint is not added to your `package.json` or lockfile: it is source
+your app copies, pinned by that record.
+
+`add` refuses, before anything is written, when the app kit is outside `appKit`, a destination
+already exists or belongs to another recorded entry, an agent slot names an agent you already
+define, the blueprint is installed already, or a migration is destructive.
+
+`aw blueprint list` prints each installed blueprint's name, package, exact version and integrity
+(`--json` for a script).
+
+## Preview a new version, then accept or decline it
+
+```sh title="illustrative" claim="illustrative"
+npx aw blueprint diff helpdesk --to 1.3.0
+npx aw blueprint update helpdesk --to 1.3.0
+npx aw blueprint update helpdesk --to 1.3.0 --yes
+```
+
+Without `--to`, both take npm's `latest` and print the exact version it resolved to. Pin exact
+versions: the integrity recorded at install makes a version republished under the same number a
+refusal.
+
+`aw blueprint update <name>` compares three things for each file: the hash recorded at install,
+the file on disk, and the new version. It proposes:
+
+| Your file vs what was installed | New version        | Proposed   | `--yes` does                                                |
+| ------------------------------- | ------------------ | ---------- | ----------------------------------------------------------- |
+| unchanged                       | changed            | `update`   | writes the new file                                         |
+| unchanged                       | removed            | `remove`   | deletes the file                                            |
+| (none before)                   | added              | `add`      | writes it; an existing file at that path refuses the update |
+| edited                          | changed or removed | `conflict` | never touches your file                                     |
+| edited                          | equal to your file | (nothing)  | records the new hash                                        |
+
+Without `--yes` it prints that plan with its edits and exits 3, and no file changes. That is
+declining: run nothing more, and nothing moves. `--yes` accepts it: it applies every change that
+does not conflict and records the new version. `aw blueprint diff <name>` shows the same proposal
+as line diffs and never writes; it exits 3 when the version has a change and 0 when it has none,
+so a CI step can tell whether an installed blueprint is behind.
+
+### Conflicts and sidecars
+
+A file you edited after it was installed is never overwritten. When the new version changes it,
+`--yes` writes the new text beside it as `<file>.blueprint-<version>` for you to merge; when the
+new version removes it, the file stays and becomes your own. The hash recorded for a conflicted
+file is the new version's, so taking the sidecar verbatim lets the next update run cleanly, and
+keeping your own text shows the same conflict again. An unmerged sidecar refuses the next update,
+naming it, until you merge or delete it.
+
+## The migration rule
+
+A blueprint's migrations follow the expand-only discipline: add, backfill, switch, and contract in
+a later release. `add` and `update` refuse a migration that holds `DROP`, `RENAME`, `SET NOT NULL`,
+`ALTER COLUMN … TYPE`, or a `CHECK` on an existing table without `NOT VALID`, and the refusal names
+the migration and the rule. Because the SQL comes from a package, it also refuses `TRUNCATE`,
+`DELETE FROM`, a `DO` block, `EXECUTE` (other than a trigger's `EXECUTE FUNCTION`), and any change
+to `standard_conforming_strings` or `backslash_quote`. Comments are read as PostgreSQL reads them,
+so a `--` inside a string cannot hide the statement after it. A migration already installed is never rewritten: a new version whose
+copy of it differs, or that drops it, is refused, so a version may only append migrations. A
+destructive change ships as a separate major version, and its release notes give the contract step
+you write as your own migration.
+
+## Remove one
+
+```sh title="illustrative" claim="illustrative"
+npx aw destroy blueprint helpdesk
+npx aw destroy blueprint helpdesk --yes
+```
+
+`aw destroy blueprint <name>` removes exactly what the blueprint wrote, like any other
+`aw destroy`: it shows the plan first, deletes only files that are still as written, refuses a file
+edited since, and reverts its `app.config.ts` lines and its journal entries while they are the
+journal's last.
+
+## Trust
+
+Once written, a blueprint's code runs with your app's own permissions: a route acts as the
+signed-in person, and a recipe writes as that person's agent. The platform never loads or runs a
+blueprint and keeps no record of one. Its agents reach the platform only when you push them, as
+ordinary agent versions under your policy ceiling and approval gates, so a blueprint cannot widen
+what a person may do. Secrets stay references: a blueprint names a secret slot, and you set its
+value with `aw secrets create` in your own workspace.
+
+## What is not built
+
+- A marketplace, catalogue or registry service, or any blueprint record on the platform.
+- Exporting or importing data, and seed rows.
+- Sharing credentials of any kind.
+- Automatic updates and update notifications.
+- Installing from the console or by an agent.
+- Renaming or namespacing parts on install: a path collision refuses instead.
+- Publishing tooling beyond `npm publish`.
+- Blueprints that depend on other blueprints.
+
+## Proof
+
+The repository's apps lane builds a fixture blueprint from the service desk reference app (its
+ticket resource with its pages, routes, migration and test, and its SLA rule as a recipe), installs
+it into the minimal reference app with `aw blueprint add`, builds the app and runs its tests and
+the blueprint's, proposes a new version (exit 3, no file changed), applies it, refuses a version
+with a destructive migration by name, and removes the blueprint with `aw destroy blueprint`.

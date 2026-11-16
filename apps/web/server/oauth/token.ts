@@ -3,6 +3,7 @@
  * PKCE `S256`, `client_credentials` for a confidential client, and `refresh_token` with rotation.
  * A code or refresh token presented twice is theft: the whole family is revoked.
  */
+import { systemClock } from '../clock';
 import { closeEndpointToolSandbox } from '../tool-endpoint/close';
 import { authenticateClient } from './client-auth';
 import { oauthError, oauthJson, type OAuthErrorCode } from './http';
@@ -45,7 +46,7 @@ async function issue(
     subjectPrincipalId: grant.subjectPrincipalId,
     resource: grant.resource,
     familyId: grant.familyId,
-    expiresAt: new Date(Date.now() + OAUTH_TOKEN_TTL_MS[kind]),
+    expiresAt: new Date(systemClock.now().getTime() + OAUTH_TOKEN_TTL_MS[kind]),
   });
   return minted.presented;
 }
@@ -105,6 +106,14 @@ export async function token(request: Request): Promise<Response> {
   const auth = await authenticateClient(request);
   if (!auth.ok) return auth.response;
   const { client, form, runtime } = auth;
+  // ADR-0161 D4: an app-backend client's tokens come from the ID-token exchange alone; a grant here
+  // would act for the client's creator, and it has no resource URL.
+  if (client.kind === 'app-backend') {
+    return refusal(
+      'unauthorized_client',
+      'An app-backend client exchanges ID tokens at /api/auth/token-exchange.',
+    );
+  }
 
   const scope = form.get('scope');
   if (scope !== null && scope.trim() !== OAUTH_SCOPE) {

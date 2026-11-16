@@ -142,6 +142,10 @@ const NEVER_REFUSES: Readonly<Record<string, string>> = {
     'The readiness probe (issue #1562): it reads no caller and no body, and refuses only for a malformed MASTER_ENCRYPTION_KEY, which this process does not configure. That 503 is the standard envelope, pinned in server/readiness.test.ts.',
   'POST /api/auth/cli-device':
     'The first step of the CLI device sign-in (issue #242): it starts a sign-in for any caller, pre-authentication, and reads no body. Its one refusal in a wired deployment is 429 over the rate limit, whose envelope cli-auth/handlers.test.ts asserts.',
+  'GET /api/store/privacy':
+    'The facts the store privacy notice states (internal spec, "The store app"): public configuration read from the installed settings, with no body and no caller. Its one refusal is 503 service_unavailable where no store runtime is installed, in the standard envelope, pinned in server/demo/storefront/transport/routes.test.ts.',
+  'GET /api/store/demos':
+    'Which live Agent Store entries are under maintenance (internal spec, "The GCP deployment"): public, with no body and no caller, and it answers 200 with an empty list where no demo operations are installed, so it has no refusal path. Pinned in server/demo/maintenance/maintenance.test.ts.',
   'GET /api/setup/runtime-detect':
     'A read-only, pre-authentication probe of the local container runtime that answers 200 with what it found to every caller; it has no refusal path.',
 };
@@ -279,7 +283,7 @@ describe('the sweep covers the whole declared API surface', () => {
     const sources = [
       ...trackedFiles('apps/web/app/api'),
       ...trackedFiles('apps/web/server'),
-    ].filter((file) => /\.(ts|tsx|mts)$/u.test(file) && !/\.test\.tsx?$/u.test(file));
+    ].filter((file) => /\.(ts|tsx|mts)$/u.test(file) && !/\.test(?:-support)?\.tsx?$/u.test(file));
     const spelled = sources
       .filter((file) => BARE_CODE_BODY.test(readFileSync(path.join(REPO_ROOT, file), 'utf8')))
       .sort();
@@ -316,7 +320,10 @@ describe('the edge (apps/web/proxy.ts) refuses in the standard envelope', () => 
       if (unsafe) {
         probes.push([
           'a session, a cross-origin write',
-          { cookie: `${sessionCookieName()}=${token}`, origin: 'https://elsewhere.test' },
+          {
+            cookie: `${sessionCookieName(process.env)}=${token}`,
+            origin: 'https://elsewhere.test',
+          },
         ]);
       }
       for (const [probe, headers] of probes) {

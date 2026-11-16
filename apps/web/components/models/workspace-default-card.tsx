@@ -1,5 +1,8 @@
 'use client';
 
+import type { VersionsLocale } from '../agents/versions-messages';
+import { adminStrings } from '../resources/admin-messages';
+
 /**
  * The workspace-wide model default — issue #130's Minimum implementation: "Workspace default on
  * the existing `apps/web/app/(shell)/admin/settings` screen — not a new workspace settings
@@ -22,21 +25,21 @@
  * `AgentModelSection`'s `catalogState.kind === 'failed'` message): it says so, plainly, rather than
  * accepting a click that would not actually save anything.
  */
-export function WorkspaceModelDefaultCard() {
+export function WorkspaceModelDefaultCard({ locale = 'en' }: { readonly locale?: VersionsLocale }) {
+  const strings = adminStrings(locale);
   return (
     <section
+      lang={locale}
       className="rounded-(--radius) border border-border bg-surface p-4"
       aria-labelledby="workspace-model-default-heading"
     >
       <h2 id="workspace-model-default-heading" className="mb-1 text-[15px] font-semibold">
-        Workspace default model
+        {strings.defaultModelHeading}
       </h2>
       <p className="text-[13px] text-muted">
-        The last rung of the resolution ladder, below the project default and the agent override.
-        Setting it from this screen is not available yet — this deployment has no API route to
-        change it, only to read it during a run. Until one lands, unset it stays{' '}
-        <code>not set</code>, and a run with no project or agent default configured is refused with
-        the reason named at the layer that failed, rather than silently guessing.
+        {strings.defaultModelBefore}
+        <code>not set</code>
+        {strings.defaultModelAfter}
       </p>
     </section>
   );

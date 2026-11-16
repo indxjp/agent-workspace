@@ -3,7 +3,8 @@
  * PostgreSQL repository alike (`storage-grants.memory.test.ts`, `storage-grants.postgres.test.ts`),
  * so the two cannot drift apart: the resolved connection id is stored, `read-write` survives only
  * while the agent may write files, a `storage-grant-changed` row is written once per version whose
- * grants differ from the previous version's, and the delete guard sees a granted connection.
+ * grants differ from the previous version's, the delete guard sees a granted connection, and a
+ * deleted connection takes every version's grant on it with it (PostgreSQL's cascade).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -22,6 +23,8 @@ export interface StorageGrantHarness {
   grantsOf(agentId: string): Promise<readonly StorageGrantRef[]>;
   /** The subject labels of the agent's `storage-grant-changed` audit rows, oldest first. */
   grantAuditsOf(agentId: string): Promise<readonly string[]>;
+  /** Delete connection `id` as its DELETE route does, once no current grant names it. */
+  deleteConnection(id: string): Promise<void>;
 }
 
 let sequence = 0;
@@ -253,6 +256,28 @@ export function describeStorageGrantStore(
 
       expect(await harness.store.storageGrantsOf(v1)).toHaveLength(1);
       expect(await harness.store.isConnectionGranted(harness.connections.second)).toBe(false);
+    });
+
+    // @story US-STO-12
+    it('[US-STO-12][contract][sdk] deleting a connection removes every version’s grant on it, and no other', async () => {
+      const harness = await open();
+      const gone: StorageGrantRef = {
+        connectionId: harness.connections.first,
+        prefix: 'reports',
+        access: 'read',
+      };
+      const kept: StorageGrantRef = {
+        connectionId: harness.connections.second,
+        prefix: 'archive',
+        access: 'read',
+      };
+      const { agentId, name, versionId: v1 } = await createAgent(harness, [gone, kept]);
+      // History never holds a delete: only the current grants do.
+      await redeploy(harness, agentId, name, [kept]);
+
+      await harness.deleteConnection(harness.connections.first);
+
+      expect(await harness.store.storageGrantsOf(v1)).toEqual([kept]);
     });
   });
 }

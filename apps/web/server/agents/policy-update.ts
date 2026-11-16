@@ -5,7 +5,7 @@
  */
 import { applicationContext } from '../application-context';
 import type { AgentPolicy, BuiltinAgentOperation } from '../../contracts/agents';
-import { agentNotFound, refuseBuiltinWrite } from './handlers';
+import { agentNotFound, refuseBuiltinWriteFor } from './handlers';
 import { problem, type ApiResult } from '../http/result';
 import { isUuid } from './contract';
 import { readAgentIdParam, readJsonBody, withWorkspaceStore } from './http';
@@ -24,7 +24,7 @@ import {
 import { policyConnectorNames, saveConsoleEdit } from '../agent-versions/http';
 import { judgeAgent } from '../policy-ceiling/ceiling';
 import { requireResourceAccess } from '../resources/authorise';
-import type { OwnershipResolver } from '../rbac/http';
+import type { OwnershipResolver } from '../identity';
 
 /**
  * Who may read or update the policy. Follows `app/api/agents/[id]/resources/route.ts`'s shape: the
@@ -41,7 +41,7 @@ function ownershipOf(id: unknown, operation: BuiltinAgentOperation): OwnershipRe
     }
     const row = await runtime.agents.forWorkspace(principal.workspaceId).get(id);
     if (row === null) return { kind: 'refuse', result: agentNotFound() };
-    const readOnly = refuseBuiltinWrite(row, operation);
+    const readOnly = refuseBuiltinWriteFor(principal, row, operation);
     if (readOnly !== null) return { kind: 'refuse', result: readOnly };
     return {
       kind: 'ownership',

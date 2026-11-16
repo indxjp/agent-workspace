@@ -100,7 +100,7 @@ describe('compileMastraRun', () => {
       toolCallConcurrency: 3,
     });
     expect(out.networkEgress).toBe(true);
-    expect(out.limits).toEqual({ maxSteps: 7, budget: null });
+    expect(out.limits).toEqual({ maxSteps: 7 });
     expect(out.workspace).toEqual({
       cwd: '/workspace/tenant',
       grants: [{ kind: 'file', path: 'notes.md', access: 'read-write', segments: ['notes.md'] }],
@@ -165,20 +165,15 @@ describe('compileMastraRun', () => {
     ).toBe(MASTRA_DEFAULT_MODELS.openai);
   });
 
-  it('prices a cap with the provisional table, and refuses a cap it cannot price', () => {
-    const capped = compiled({
-      portable: { ...portable, limits: { maxTurns: null, maxBudgetUsd: 2 } },
-    });
-    expect(capped.limits.budget).toMatchObject({ maxBudgetUsd: 2, model: 'claude-sonnet-4-5' });
-    expect(
-      refusal({
-        portable: {
-          ...portable,
-          model: 'unpriced-model',
-          limits: { maxTurns: null, maxBudgetUsd: 2 },
-        },
-      }),
-    ).toMatchObject({ code: 'engine_capability_unsupported' });
+  // ADR-0162 (#342): the gateway enforces the cap from its own catalogue, so the adapter prices
+  // nothing and refuses no cap, priced model or not.
+  it('compiles a cap on any model, priced or unpriced, without carrying it', () => {
+    for (const model of [null, 'unpriced-model']) {
+      const capped = compiled({
+        portable: { ...portable, model, limits: { maxTurns: null, maxBudgetUsd: 2 } },
+      });
+      expect(capped.limits).toEqual({ maxSteps: null });
+    }
   });
 
   it('withholds the command tools under a read-only grant, and follows each switch', () => {
@@ -420,16 +415,17 @@ describe('compileMastraRun', () => {
       ]);
     });
 
-    it('refuses by name a subagent on another model when a budget cap is set', () => {
-      const result = refusal({
+    it('compiles a subagent on another model under a budget cap: the gateway meters every call', () => {
+      const out = compiled({
         portable: {
           ...portable,
           limits: { maxTurns: null, maxBudgetUsd: 1 },
           subagents: [{ ...researcher, model: 'claude-opus-4-5' }],
         },
       });
-      expect(result.code).toBe('engine_capability_unsupported');
-      expect(result.reason).toContain('"researcher"');
+      expect(out.subagents).toEqual([
+        expect.objectContaining({ name: 'researcher', model: 'claude-opus-4-5' }),
+      ]);
     });
 
     it('refuses by name two subagents whose tool names collide, or one too long', () => {

@@ -16,7 +16,7 @@ import { workspaces } from './workspaces.js';
 
 /**
  * The ratings a run may get. This is the database's copy of `@indx-workspace/contracts/feedback`'s
- * list, in the same order, restated here; `apps/web/server/sdk-conformance.test.ts` holds the two
+ * list, in the same order, restated here; `apps/web/server/sdk-conformance.*.test.ts` holds the two
  * equal.
  */
 export const RUN_FEEDBACK_RATINGS = ['up', 'down'] as const;

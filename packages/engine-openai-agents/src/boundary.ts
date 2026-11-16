@@ -64,7 +64,6 @@ import {
   runShell,
   searchWorkspaceFiles,
 } from './executors.js';
-import { openAiAgentsBudgetSpent } from './budget.js';
 import { addResponseUsage, type OpenAiAgentsEvent, type OpenAiAgentsUsage } from './frames.js';
 import type { EngineStoreSession } from './session.js';
 import { nodeSkillScriptHost, OPENAI_AGENTS_SKILL_SCRIPT_INPUT } from './skill-script.js';
@@ -359,14 +358,13 @@ export type OpenAiAgentsRunStarter = (
 /**
  * Run one compiled agent on the real SDK, yielding plain events and, last, `run_completed`.
  *
- * A turn limit reached is `max_turns`, a spent budget is `max_budget` and an abort is `cancelled`,
- * each as a terminal event; any other failure is re-thrown, so the runner reports it as the run's
- * error rather than as a turn that ended normally.
+ * A turn limit reached is `max_turns` and an abort is `cancelled`, each as a terminal event; any
+ * other failure is re-thrown, so the runner reports it as the run's error rather than as a turn
+ * that ended normally.
  *
- * **The budget (provisional, ADR-0074 D7, #342).** After every model response the usage the
- * gateway reported back is added up and priced (`./budget.ts`); once the estimate reaches
- * `limits.budget.maxBudgetUsd` the run is aborted through its own signal — so no further model
- * request or tool call starts — and ends `max_budget`.
+ * **The budget is the gateway's (ADR-0162).** This adapter enforces no spend cap: the gateway
+ * refuses a model call once the run's settled cost reaches its spend ceiling and ends the run
+ * `run_budget_reached` itself, so the refused call surfaces here as a failed model call.
  */
 export async function* startOpenAiAgentsRun(
   compiled: OpenAiAgentsCompiled,
@@ -376,30 +374,14 @@ export async function* startOpenAiAgentsRun(
   setTracingDisabled(true);
   const servers = compiled.mcpServers.map((server) => mcpServerFor(server, compiled.env));
   // An object, so reads after the stream loop are not narrowed away by the closure's writes.
-  const state: { usage: OpenAiAgentsUsage | null; turns: number; budgetSpent: boolean } = {
-    usage: null,
-    turns: 0,
-    budgetSpent: false,
-  };
-  // The run's own signal: the caller's interrupt, or this adapter's budget stop.
-  const run = new AbortController();
-  const forwardAbort = (): void => {
-    run.abort(deps.signal.reason);
-  };
-  if (deps.signal.aborted) forwardAbort();
-  else deps.signal.addEventListener('abort', forwardAbort, { once: true });
-  // Price one model response into the usage; `ownTurn` is false for a subagent's, which costs money
-  // but is not one of the run's turns.
+  const state: { usage: OpenAiAgentsUsage | null; turns: number } = { usage: null, turns: 0 };
+  // Add one model response's usage; `ownTurn` is false for a subagent's, which is reported usage
+  // but not one of the run's turns.
   const meter = (raw: unknown, ownTurn: boolean): void => {
     const data = raw as { type?: unknown; response?: { usage?: unknown } };
     if (data.type !== 'response_done') return;
     if (ownTurn) state.turns += 1;
     state.usage = addResponseUsage(state.usage, data.response?.usage);
-    state.budgetSpent =
-      compiled.limits.budget !== null &&
-      openAiAgentsBudgetSpent(compiled.limits.budget, state.usage);
-    // A subagent's stream is drained inside its tool call, so the parent loop cannot stop it.
-    if (state.budgetSpent) run.abort(new Error('the run reached its budget cap.'));
   };
   try {
     for (const server of servers) await server.connect();
@@ -417,7 +399,7 @@ export async function* startOpenAiAgentsRun(
         name: subagent.name,
         instructions: subagent.instructions,
         model: await modelFor(compiled, subagent.model),
-        tools: toolsFor(compiled, run.signal, subagent.tools),
+        tools: toolsFor(compiled, deps.signal, subagent.tools),
         mcpServers: servers,
         modelSettings,
       });
@@ -438,7 +420,7 @@ export async function* startOpenAiAgentsRun(
       name: compiled.agent.name,
       instructions: compiled.agent.instructions,
       model: await modelFor(compiled),
-      tools: [...toolsFor(compiled, run.signal), ...delegates],
+      tools: [...toolsFor(compiled, deps.signal), ...delegates],
       mcpServers: servers,
       modelSettings,
       // `strict: false`: the provider sees the caller's schema as written; the answer is checked
@@ -456,13 +438,13 @@ export async function* startOpenAiAgentsRun(
           }),
     });
     const runner = new Runner({ tracingDisabled: true, traceIncludeSensitiveData: false });
-    let stopReason: 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled' = 'end_turn';
+    let stopReason: 'end_turn' | 'max_turns' | 'cancelled' = 'end_turn';
     let output: { readonly text: string; readonly structured: unknown } | undefined;
     let unsatisfied = false;
     try {
       const result = await runner.run(agent, prompt, {
         stream: true,
-        signal: run.signal,
+        signal: deps.signal,
         ...(compiled.limits.maxTurns === null ? {} : { maxTurns: compiled.limits.maxTurns }),
         ...(deps.session === null ? {} : { session: asSdkSession(deps.session) }),
       });
@@ -470,29 +452,21 @@ export async function* startOpenAiAgentsRun(
         const plain = toEvent(event);
         if (plain.kind === 'raw_model_stream_event') meter(plain.data, true);
         yield plain;
-        if (state.budgetSpent) break;
       }
-      if (state.budgetSpent) {
-        // The abort settles `completed` one way or the other; neither way is the run's error.
-        await result.completed.catch(() => undefined);
-        stopReason = 'max_budget';
-      } else {
-        await result.completed;
-        const failure: unknown = result.error;
-        if (failure !== null && failure !== undefined) {
-          throw failure instanceof Error
-            ? failure
-            : new Error('the run failed with a non-Error value.');
-        }
-        const answer = finalAnswer(result.newItems, result.finalOutput, compiled.outputSchema);
-        if (answer === null) unsatisfied = true;
-        else output = answer;
+      await result.completed;
+      const failure: unknown = result.error;
+      if (failure !== null && failure !== undefined) {
+        throw failure instanceof Error
+          ? failure
+          : new Error('the run failed with a non-Error value.');
       }
+      const answer = finalAnswer(result.newItems, result.finalOutput, compiled.outputSchema);
+      if (answer === null) unsatisfied = true;
+      else output = answer;
     } catch (error) {
-      if (state.budgetSpent) stopReason = 'max_budget';
       // The SDK raises this when the final text is not JSON; it is the only structured-output
       // failure it reports, so with a schema asked for it is the model's answer that was wrong.
-      else if (error instanceof ModelBehaviorError && compiled.outputSchema !== null) {
+      if (error instanceof ModelBehaviorError && compiled.outputSchema !== null) {
         unsatisfied = true;
       } else if (error instanceof MaxTurnsExceededError) stopReason = 'max_turns';
       else if (deps.signal.aborted) stopReason = 'cancelled';
@@ -511,7 +485,6 @@ export async function* startOpenAiAgentsRun(
       throw new Error(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`);
     }
   } finally {
-    deps.signal.removeEventListener('abort', forwardAbort);
     for (const server of servers) await server.close().catch(() => undefined);
   }
 }

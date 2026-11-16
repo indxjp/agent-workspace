@@ -176,7 +176,7 @@ export async function loadPlatformProject(
   const document = read.project;
 
   const loaded = (await hasTypeScriptAgents(cwd))
-    ? await loadProject({ root: cwd, io, signal, ...options })
+    ? await loadProject({ root: cwd, io, signal, ...options, agentMarkdown: false })
     : { agents: [], problems: [], secrets: [], tools: [], codeTools: [] };
   if (loaded.problems.length > 0) {
     for (const problem of loaded.problems) notice(io, mode, formatProblem(problem));

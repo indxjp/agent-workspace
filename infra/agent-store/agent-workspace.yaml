@@ -1,0 +1,87 @@
+# The Agent Store's project file: what `aw deploy production` deploys for the store, its four
+# demo apps and the platform behind them, on Google Cloud Run (spec, "GCP deployment").
+#
+# It is a template. `node tests/store/deploy/render.ts <dir>` fills every placeholder from the
+# environment, checks the result against the project-file schema, and writes <dir>/agent-workspace.yaml.
+# A value that is not set stops the render and names the variable. Nothing here is a secret: the two
+# secretSettings name Secret Manager secrets, never their values, and each image is a digest.
+#
+#   STORE_GCP_PROJECT   the Google Cloud project of the environment
+#   STORE_DOMAIN        the store's host name, such as agents.indx.example; the platform is app.<it>,
+#                       the demo apps crm.<it>, desk.<it>, wiki.<it> and chat.<it>
+#   STORE_ALERTS_EMAIL  where Cloud Monitoring alerts go
+#   STORE_OWNER_EMAIL   the deployment's Owner (environments.local.identity.bootstrapAdmin, which `aw deploy` reads)
+#   STORE_IMAGE_<APP>   the digest reference of each app image: STORE, CRM, SERVICE_DESK, WIKI, TEAM_CHAT
+#   STORE_APPS_WORKSPACE_ID  optional: the id of the workspace the five apps act in (their AW_WORKSPACE_ID).
+#                       Until it is set the apps answer app_misconfigured (runbook, "the apps' workspace")
+#   STORE_API_KEY_SECRET_<APP>  optional: the Secret Manager id holding that app's API key
+#                       (AW_APP_API_KEY), for APP in STORE, CRM, SERVICE_DESK, WIKI, TEAM_CHAT
+#   STORE_SETTINGS_JSON optional: a JSON object of the non-secret web settings (the demo caps, the lead
+#                       retention, the default models); a setting that is not in it is left out
+#   STORE_OIDC_ISSUER, STORE_OIDC_CLIENT_ID  optional, together: the identity provider the platform and the
+#                       apps sign people in at (gcp.oidc), and the platform's own client there. The deploy
+#                       reads that client's secret from Secret Manager (store-oidc-client-secret)
+#   STORE_APP_OIDC_CLIENT_ID_<APP>, STORE_APP_CLIENT_ID_<APP>  optional, together: that app's own client at
+#                       the issuer and its app-backend endpoint client (the app's signIn); their secrets
+#                       are the Secret Manager secrets store-app-<app>-oidc-client-secret and
+#                       store-app-<app>-app-client-secret (runbook, "the apps' sign-in")
+#   A line that holds an optional variable is left out of the project file when its variables are unset
+#   or empty, so the first deploy, before the workspace exists, still renders. A line whose optional
+#   variables are only partly set stops the render.
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: agent-store
+environments:
+  local:
+    cloud: local
+    identity:
+      # The Owner of the deployment: who signs in first and mints the verification workspace key.
+      bootstrapAdmin: '${STORE_OWNER_EMAIL}'
+  production:
+    target: gcp-cloudrun
+    url: 'https://app.${STORE_DOMAIN}'
+    gcp:
+      project: '${STORE_GCP_PROJECT}'
+      region: asia-northeast1
+      domain: 'app.${STORE_DOMAIN}'
+      armor: true
+      alertsEmail: '${STORE_ALERTS_EMAIL}'
+      oidc: { issuer: '${STORE_OIDC_ISSUER}', clientId: '${STORE_OIDC_CLIENT_ID}' }
+      # The sign-in page of the store opens the link in the visitor's mail. STORE_SETTINGS_JSON adds
+      # the caps and the default models after it.
+      settings: ${STORE_WEB_SETTINGS}
+      # Secret Manager ids in the environment's own project. A person stores each value (runbook).
+      secretSettings:
+        AW_DEMO_OPERATOR_TOKEN: store-demo-operator-token
+        AW_DEMO_ANTHROPIC_API_KEY: store-anthropic-api-key
+    apps:
+      store:
+        image: '${STORE_IMAGE_STORE}'
+        url: 'https://${STORE_DOMAIN}'
+        workspaceId: '${STORE_APPS_WORKSPACE_ID}'
+        apiKeySecret: '${STORE_API_KEY_SECRET_STORE}'
+        signIn: { oidcClientId: '${STORE_APP_OIDC_CLIENT_ID_STORE}', oidcClientSecret: store-app-store-oidc-client-secret, appClientId: '${STORE_APP_CLIENT_ID_STORE}', appClientSecret: store-app-store-app-client-secret }
+      crm:
+        image: '${STORE_IMAGE_CRM}'
+        url: 'https://crm.${STORE_DOMAIN}'
+        workspaceId: '${STORE_APPS_WORKSPACE_ID}'
+        apiKeySecret: '${STORE_API_KEY_SECRET_CRM}'
+        signIn: { oidcClientId: '${STORE_APP_OIDC_CLIENT_ID_CRM}', oidcClientSecret: store-app-crm-oidc-client-secret, appClientId: '${STORE_APP_CLIENT_ID_CRM}', appClientSecret: store-app-crm-app-client-secret }
+      service-desk:
+        image: '${STORE_IMAGE_SERVICE_DESK}'
+        url: 'https://desk.${STORE_DOMAIN}'
+        workspaceId: '${STORE_APPS_WORKSPACE_ID}'
+        apiKeySecret: '${STORE_API_KEY_SECRET_SERVICE_DESK}'
+        signIn: { oidcClientId: '${STORE_APP_OIDC_CLIENT_ID_SERVICE_DESK}', oidcClientSecret: store-app-service-desk-oidc-client-secret, appClientId: '${STORE_APP_CLIENT_ID_SERVICE_DESK}', appClientSecret: store-app-service-desk-app-client-secret }
+      wiki:
+        image: '${STORE_IMAGE_WIKI}'
+        url: 'https://wiki.${STORE_DOMAIN}'
+        workspaceId: '${STORE_APPS_WORKSPACE_ID}'
+        apiKeySecret: '${STORE_API_KEY_SECRET_WIKI}'
+        signIn: { oidcClientId: '${STORE_APP_OIDC_CLIENT_ID_WIKI}', oidcClientSecret: store-app-wiki-oidc-client-secret, appClientId: '${STORE_APP_CLIENT_ID_WIKI}', appClientSecret: store-app-wiki-app-client-secret }
+      team-chat:
+        image: '${STORE_IMAGE_TEAM_CHAT}'
+        url: 'https://chat.${STORE_DOMAIN}'
+        workspaceId: '${STORE_APPS_WORKSPACE_ID}'
+        apiKeySecret: '${STORE_API_KEY_SECRET_TEAM_CHAT}'
+        signIn: { oidcClientId: '${STORE_APP_OIDC_CLIENT_ID_TEAM_CHAT}', oidcClientSecret: store-app-team-chat-oidc-client-secret, appClientId: '${STORE_APP_CLIENT_ID_TEAM_CHAT}', appClientSecret: store-app-team-chat-app-client-secret }

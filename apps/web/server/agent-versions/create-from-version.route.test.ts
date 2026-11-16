@@ -42,6 +42,7 @@ import {
 } from './memory-store';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 /**
  * `POST /api/agents {version, dryRun?}` (S1-06, issue #444) through the real route on the memory
@@ -215,7 +216,7 @@ describe('POST /api/agents {version}', () => {
     }
   });
 
-  it('does not install a built-in skill for a dry run: a dry run has no side effects', async () => {
+  it('a dry run installs no built-in skill, yet answers what the save would (#890)', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'create-builtin-dry-'));
     try {
       const memory = createInMemoryCatalogStore();
@@ -238,10 +239,12 @@ describe('POST /api/agents {version}', () => {
         fromVersionRequest({ dryRun: true, resources: { skills: ['office-reader'] } }),
       );
 
-      expect(response.status).toBe(422);
+      // The save installs office-reader before it checks the body, so it would succeed.
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ ok: true, number: 1 });
       expect(putSkill).not.toHaveBeenCalled();
       expect(await catalog.listSkills()).toEqual([]);
-      expect(await catalog.listFiles()).toEqual([]);
+      expect(await listCatalogFiles(catalog)).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

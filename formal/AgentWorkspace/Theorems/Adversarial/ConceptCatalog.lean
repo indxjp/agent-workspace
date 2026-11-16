@@ -58,7 +58,7 @@ private theorem id_identifies {S : Schema} {st : State} (hc : Er.Core.consistent
 parent table carrying that id belongs to the writer's workspace: the database refuses every
 other state. -/
 @[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem forged_id_names_a_row_of_the_writers_workspace (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) {t : TableName} {fk : ForeignKey}
     (hfk : fk ∈ (S t).foreignKeys) (hpair : isPaired S t fk = true) {c : String}
@@ -144,7 +144,7 @@ aw_catalog_forgery_theorems
 /-- The generated forgery theorems cover every assignment, grant, version, revision, project-link and
 owner reference to an id-keyed row: 29 references. -/
 @[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem forgery_theorems_cover_every_id_reference :
     (forgeableReferences.map fun (t, k, c) => (TableName.toWire t, c, TableName.toWire k.refTable)) =
       [("agent_files", "agent_id", "agents"), ("agent_files", "file_id", "files"),
@@ -321,7 +321,7 @@ private theorem isPrefixOf_append_cancel :
 /-- A subtree move or delete of `pre` never touches a sibling whose path merely starts with the
 same characters: `docs2/x` is not under `docs`, whatever the prefix and the suffix. -/
 @[aw_spec (tier := T3)
-  (ts := "packages/core/src/db/repositories/resource-catalogs.ts#pathUnderPrefix")]
+  (ts := "packages/core/src/db/repositories/resource-catalogs-sql.ts#pathUnderPrefix")]
 theorem sibling_sharing_leading_characters_is_not_under_the_prefix (pre suf : String)
     (hne : suf.toList ≠ []) (hslash : suf.toList.head? ≠ some '/') :
     File.underPrefix pre (pre ++ suf) = false := by

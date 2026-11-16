@@ -1,4 +1,4 @@
-/** The three `node:fs` functions `render.ts` reads the starter files with; the SDK has no Node types. */
+/** The `node:fs` functions the template renderer reads files with; the SDK has no Node types. */
 declare module 'node:fs' {
   export function readdirSync(
     path: URL,

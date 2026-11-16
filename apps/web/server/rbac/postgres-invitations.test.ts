@@ -11,7 +11,7 @@ import {
   users,
   workspaces,
 } from '@agent-workspace/core/db/unscoped';
-import { conferredBy } from './conferral';
+import { conferredBy } from './core/conferral';
 import { createPostgresDirectory } from './postgres-directory';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());

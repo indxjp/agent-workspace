@@ -21,6 +21,7 @@ import type { SpanExporter } from '@opentelemetry/sdk-trace';
 
 import type { Logger } from './logger.js';
 import { parseTraceparent } from './traceparent.js';
+import { readTracingSettings } from './tracing-settings.js';
 
 export { SpanKind, SpanStatusCode, type Span };
 
@@ -57,10 +58,10 @@ export async function startTracing(
   log: Logger,
   exporter?: SpanExporter,
 ): Promise<Tracing | null> {
-  const endpoint = env['OTEL_EXPORTER_OTLP_ENDPOINT']?.trim();
-  if (!endpoint) return null;
+  const { endpoint, serviceName } = readTracingSettings(env);
+  if (endpoint === undefined) return null;
   try {
-    return await startSdk(service, endpoint, env['OTEL_SERVICE_NAME']?.trim(), exporter);
+    return await startSdk(service, endpoint, serviceName, exporter);
   } catch (error) {
     log.error('tracing failed to start; continuing without spans', {
       collector: collectorHost(endpoint),

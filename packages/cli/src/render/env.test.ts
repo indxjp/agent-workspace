@@ -149,6 +149,28 @@ describe('the rendered environment against the documented inventory', () => {
    * in the Secret built from this file would be a value nothing reads at best, and one that moves
    * a listener away from its Service at worst.
    */
+  it('pins the Cloud Run tool host for gcp alone, never under the key compose.yaml reads', () => {
+    const toolHost = `registry.example/tool-host@${digest('8')}`;
+    const withToolHost = (profile: ReturnType<typeof defaultProfile>) =>
+      parseEnvironment(
+        renderEnv({
+          profile,
+          secrets,
+          images: { ...images, toolHost },
+          dockerGroupId: 0,
+          projectName: 'acme-ai',
+        }),
+      );
+    const gcp = defaultProfile({ cloud: 'gcp', projectName: 'acme-ai' });
+    expect(withToolHost(gcp)['CLOUD_RUN_TOOL_HOST_IMAGE']).toBe(toolHost);
+    expect(withToolHost(gcp)).not.toHaveProperty('TOOL_HOST_IMAGE');
+    // The single-vm .env is the same with or without a tool host to pin.
+    const local = localProfile('seaweedfs');
+    expect(withToolHost(local)).toEqual(render(local));
+    expect(withToolHost(local)).not.toHaveProperty('CLOUD_RUN_TOOL_HOST_IMAGE');
+    expect(withToolHost(local)).not.toHaveProperty('TOOL_HOST_IMAGE');
+  });
+
   it('renders PORT for the Compose project alone', () => {
     expect(render(localProfile('seaweedfs'))['PORT']).toBe('127.0.0.1:3000');
     for (const cloud of ['aws', 'gcp', 'azure'] as const) {

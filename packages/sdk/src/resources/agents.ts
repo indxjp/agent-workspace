@@ -235,7 +235,7 @@ export class AgentsClient {
 
   /**
    * Bring back an archived agent (`POST /api/agents/:id/restore`). An agent that is not archived is
-   * returned unchanged, so a repeat is safe. Only an Owner, an Admin or the agent's owner may.
+   * returned unchanged, so a repeat is safe. Only an Owner, an Admin or the Builder who owns the agent may.
    */
   public async restore(agentId: string, options: RequestOptions = {}): Promise<AgentResource> {
     return this.#http.json({

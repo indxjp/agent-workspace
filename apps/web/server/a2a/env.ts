@@ -5,8 +5,8 @@
  * authorisation stay the run API's; this seam adds only who is calling and which agent a public
  * name points at.
  */
-import type { OAuthGrant } from '../rbac/principal';
-import type { RunPrincipal } from '../runs/environment';
+import type { OAuthGrant, ResolveRunOwnership } from '../identity';
+import type { RunPrincipal } from '../execution';
 
 /** How the caller proved who it is; only `api-key` and `oauth-token` are accepted on the A2A routes. */
 export type A2aCredentialVia =
@@ -39,6 +39,8 @@ export interface A2aEnvironment {
    * It serves the agent card to a request with no credential, which names no workspace itself.
    */
   findDeploymentAgent(name: string): Promise<PublishedAgent | null>;
+  /** Who may run an agent, for `decide()`'s `run` operation (`agents/run-ownership.ts`). */
+  readonly agentOwnership: ResolveRunOwnership;
   now(): number;
 }
 

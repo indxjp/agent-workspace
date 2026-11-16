@@ -29,7 +29,7 @@ import {
 } from '@indx-workspace/contracts/runtimes';
 import { SkillFileSchema } from '@indx-workspace/contracts/skills';
 import { PROJECT_VISIBILITIES } from '@indx-workspace/contracts/projects';
-import { MEMBERSHIP_ROLES } from '@indx-workspace/contracts/team';
+import { CONFERRABLE_ROLES } from '@indx-workspace/contracts/team';
 
 /**
  * A parsed JSON body never holds `undefined` — JSON has no such value — but `z.optional()`
@@ -69,7 +69,7 @@ export function exact<Schema extends z.ZodType>(
   return withoutUndefined(parsed) as Exact<z.output<Schema>>;
 }
 
-const Role = z.enum(MEMBERSHIP_ROLES);
+const Role = z.enum(CONFERRABLE_ROLES);
 const nullableString = z.string().nullable();
 
 /** `members add`. */

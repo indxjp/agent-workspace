@@ -16,6 +16,9 @@ export const CLOUDFLARE_SANDBOX_REFUSAL: string;
 export const CODE_TOOL_NEEDS_HOST_REFUSAL: string;
 export const LANES: Lane[];
 export const CHAPTERS: Chapter[];
+export function laneRuntimeDriver(lane: { sandbox: string }): string;
+export function withRuntimeDefault(yaml: string, driver: string): string | null;
+export function errorMessage(error: unknown): string;
 export function missingVariables(
   names: readonly string[],
   env: Record<string, string | undefined>,

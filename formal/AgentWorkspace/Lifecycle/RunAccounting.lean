@@ -25,7 +25,7 @@ def accountingFromLedger (ledger : List Bool) : AccountingState :=
 
 /-- A successful record insert or duplicate response: only a new response appends to the ledger.
 `priced` is whether that response has a price table version. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 def recordAccounting (a : RunAccounting) (priced : Bool) (isNew : Bool) : RunAccounting :=
   if isNew then
     let ledger := a.ledger ++ [priced]
@@ -34,7 +34,7 @@ def recordAccounting (a : RunAccounting) (priced : Bool) (isNew : Bool) : RunAcc
 
 /-- A late price for the first, previously unpriced response updates that ledger row without
 inserting another response or adding its token counters again. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 def priceFirstResponse (a : RunAccounting) : RunAccounting :=
   if a.ledger.head? = some false then
     let ledger := a.ledger.set 0 true
@@ -43,14 +43,14 @@ def priceFirstResponse (a : RunAccounting) : RunAccounting :=
 
 /-- Two different priced catalogue versions conflict; an unpriced arrival has no version
 opinion and cannot conflict with an earlier priced response. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 def priceVersionConflict (existing incoming : Option String) : Bool :=
   match existing, incoming with
   | some a, some b => a != b
   | _, _ => false
 
 /-- The repository writes `failed` only while accounting is pending. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#markAccountingFailed")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#markAccountingFailed")]
 def failAccounting (a : RunAccounting) : RunAccounting :=
   if a.state = .pending then { a with state := .failed } else a
 

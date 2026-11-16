@@ -1,51 +1,1212 @@
 [
   {
     "type": "dependency",
-    "from": "apps/web/server/agents/agent-grants-store.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "from": "apps/web/server/oauth/store.ts",
+    "to": "apps/web/server/agents/run-ownership.ts",
+    "unresolvedTo": "../agents/run-ownership",
+    "dependencyTypes": ["local", "import"],
     "rule": {
       "severity": "error",
-      "name": "domain-does-not-import-persistence"
+      "name": "context-agents-entered-through-its-entry"
     }
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/agents/policy.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
+    "from": "apps/web/server/runs/api.ts",
+    "to": "apps/web/server/agents/run-ownership.ts",
+    "unresolvedTo": "../agents/run-ownership",
+    "dependencyTypes": ["local", "import"],
     "rule": {
       "severity": "error",
-      "name": "domain-does-not-import-persistence"
+      "name": "context-agents-entered-through-its-entry"
     }
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/agents/resource-store.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
+    "from": "apps/web/server/runs/failures.ts",
+    "to": "apps/web/server/compose/runtime-manager-client.ts",
+    "unresolvedTo": "../compose/runtime-manager-client",
+    "dependencyTypes": ["local", "import"],
     "rule": {
       "severity": "error",
-      "name": "domain-does-not-import-persistence"
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/launcher-deadlines.ts",
+    "to": "apps/web/server/compose/run-preflight.ts",
+    "unresolvedTo": "../compose/run-preflight",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/run-files-load-fixtures.ts",
+    "to": "apps/web/server/compose/resource-loader.ts",
+    "unresolvedTo": "../compose/resource-loader",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/run-files-load-fixtures.ts",
+    "to": "apps/web/server/compose/workspace-lifecycle.ts",
+    "unresolvedTo": "../compose/workspace-lifecycle",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/shares/http.ts",
+    "to": "apps/web/server/resources/authorise.ts",
+    "unresolvedTo": "../resources/authorise",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/skills/pending-delete.ts",
+    "unresolvedTo": "../skills/pending-delete",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/skills/service.ts",
+    "unresolvedTo": "../skills/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/skills/tree.ts",
+    "unresolvedTo": "../skills/tree",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/loader/test-runtime.ts",
+    "to": "apps/web/server/agent-versions/memory-store.ts",
+    "unresolvedTo": "../../agent-versions/memory-store",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/attachments.ts",
+    "to": "apps/web/server/projects/archive-gate.ts",
+    "unresolvedTo": "../../projects/archive-gate",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/attachments.ts",
+    "to": "apps/web/server/resources/authorise.ts",
+    "unresolvedTo": "../../resources/authorise",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/composition.ts",
+    "to": "apps/web/server/agent-versions/session-version.ts",
+    "unresolvedTo": "../../agent-versions/session-version",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/adapters/runner/production.ts",
+    "to": "apps/web/server/evaluations/handlers.ts",
+    "unresolvedTo": "../../../evaluations/handlers",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-agents-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/adapters/runner/production.ts",
+    "to": "apps/web/server/evaluations/handlers.ts",
+    "unresolvedTo": "../../../evaluations/handlers",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-evaluations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/a2a/dispatch.ts",
+    "to": "apps/web/server/runs/environment.ts",
+    "unresolvedTo": "../runs/environment",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/a2a/v0_3/rpc.ts",
+    "to": "apps/web/server/runs/api.ts",
+    "unresolvedTo": "../../runs/api",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/a2a/v0_3/rpc.ts",
+    "to": "apps/web/server/runs/failures.ts",
+    "unresolvedTo": "../../runs/failures",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/a2a/v0_3/rpc.ts",
+    "to": "apps/web/server/runs/service.ts",
+    "unresolvedTo": "../../runs/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/member-tools.ts",
+    "to": "apps/web/server/runs/api.ts",
+    "unresolvedTo": "../runs/api",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/member-tools.ts",
+    "to": "apps/web/server/runs/environment.ts",
+    "unresolvedTo": "../runs/environment",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/member-tools.ts",
+    "to": "apps/web/server/runs/service.ts",
+    "unresolvedTo": "../runs/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/team-run.ts",
+    "to": "apps/web/server/runs/api.ts",
+    "unresolvedTo": "../runs/api",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/team-run.ts",
+    "to": "apps/web/server/runs/environment.ts",
+    "unresolvedTo": "../runs/environment",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/adapters/runner/production.ts",
+    "to": "apps/web/server/runs/service.ts",
+    "unresolvedTo": "../../../runs/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/adapters/runner/runner.contract.ts",
+    "to": "apps/web/server/runs/service.ts",
+    "unresolvedTo": "../../../runs/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/run-preflight.ts",
+    "to": "apps/web/server/runs/transcription.ts",
+    "unresolvedTo": "../runs/transcription",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/run-request-resources.ts",
+    "to": "apps/web/server/runs/failures.ts",
+    "unresolvedTo": "../runs/failures",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/run-request.ts",
+    "to": "apps/web/server/runs/failures.ts",
+    "unresolvedTo": "../runs/failures",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/runtime-provider-credential.ts",
+    "to": "apps/web/server/runtimes/connections.ts",
+    "unresolvedTo": "../runtimes/connections",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/evaluations/handlers.ts",
+    "to": "apps/web/server/runs/service.ts",
+    "unresolvedTo": "../runs/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/tool-endpoint/handler.ts",
+    "to": "apps/web/server/runs/api.ts",
+    "unresolvedTo": "../runs/api",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/triggers/fire.ts",
+    "to": "apps/web/server/runs/api.ts",
+    "unresolvedTo": "../runs/api",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/triggers/fire.ts",
+    "to": "apps/web/server/runs/environment.ts",
+    "unresolvedTo": "../runs/environment",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/triggers/fire.ts",
+    "to": "apps/web/server/runs/service.ts",
+    "unresolvedTo": "../runs/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/triggers/schedule-pass.ts",
+    "to": "apps/web/server/runs/environment.ts",
+    "unresolvedTo": "../runs/environment",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/webhooks/store.ts",
+    "to": "apps/web/server/runs/api.ts",
+    "unresolvedTo": "../runs/api",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/api.ts",
+    "to": "apps/web/server/agents/run-ownership.ts",
+    "unresolvedTo": "../agents/run-ownership",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/environment.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../agents",
+    "dependencyTypes": ["local", "type-only", "import", "pre-compilation-only"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/failures.ts",
+    "to": "apps/web/server/compose/runtime-manager-client.ts",
+    "unresolvedTo": "../compose/runtime-manager-client",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/feedback.ts",
+    "to": "apps/web/server/evaluations/index.ts",
+    "unresolvedTo": "../evaluations",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/launcher-deadlines.ts",
+    "to": "apps/web/server/compose/run-preflight.ts",
+    "unresolvedTo": "../compose/run-preflight",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/launcher-outputs.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../agents",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/run-files-load-fixtures.ts",
+    "to": "apps/web/server/compose/resource-loader.ts",
+    "unresolvedTo": "../compose/resource-loader",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/run-files-load-fixtures.ts",
+    "to": "apps/web/server/compose/workspace-lifecycle.ts",
+    "unresolvedTo": "../compose/workspace-lifecycle",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/start-run.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../agents",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/transcription.ts",
+    "to": "apps/web/server/endpoints/request.ts",
+    "unresolvedTo": "../endpoints/request",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/transcription.ts",
+    "to": "apps/web/server/models/store.ts",
+    "unresolvedTo": "../models/store",
+    "dependencyTypes": ["local", "type-only", "import", "pre-compilation-only"],
+    "rule": {
+      "severity": "error",
+      "name": "context-execution-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/a2a/dispatch.ts",
+    "to": "apps/web/server/oauth/resource.ts",
+    "unresolvedTo": "../oauth/resource",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/handlers.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agents/http.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agents/restore-capability.ts",
+    "to": "apps/web/server/auth/index.ts",
+    "unresolvedTo": "../auth",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/transport/external.ts",
+    "to": "apps/web/server/oauth/resource.ts",
+    "unresolvedTo": "../../oauth/resource",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/endpoint-clients/handlers.ts",
+    "to": "apps/web/server/cli-auth/local-runtime-key-guard.ts",
+    "unresolvedTo": "../cli-auth/local-runtime-key-guard",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/endpoint-clients/handlers.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/projects/archive-capability.ts",
+    "to": "apps/web/server/auth/index.ts",
+    "unresolvedTo": "../auth",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/resources/authorise.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/acceptance/run-acceptance.mjs",
+    "to": "apps/web/server/auth/session.ts",
+    "unresolvedTo": "../../auth/session.ts",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/shares/runnable/visitor-identity.ts",
+    "to": "apps/web/server/auth/core/key-ring.ts",
+    "unresolvedTo": "../../auth/core/key-ring.ts",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/tool-endpoint/handler.ts",
+    "to": "apps/web/server/oauth/resource.ts",
+    "unresolvedTo": "../oauth/resource",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/triggers/handlers.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/webhooks/handlers.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/resource.ts",
+    "to": "apps/web/server/endpoints/public-url.ts",
+    "unresolvedTo": "../endpoints/public-url",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/revoke.ts",
+    "to": "apps/web/server/tool-endpoint/close.ts",
+    "unresolvedTo": "../tool-endpoint/close",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/store.ts",
+    "to": "apps/web/server/agents/run-ownership.ts",
+    "unresolvedTo": "../agents/run-ownership",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/token.ts",
+    "to": "apps/web/server/tool-endpoint/close.ts",
+    "unresolvedTo": "../tool-endpoint/close",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/setup/runtime-detection.ts",
+    "to": "apps/web/server/execution/index.ts",
+    "unresolvedTo": "../execution",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-identity-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-teams/member-tools.ts",
+    "to": "apps/web/server/tool-endpoint/handler.ts",
+    "unresolvedTo": "../tool-endpoint/handler",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/transport/external.ts",
+    "to": "apps/web/server/tool-endpoint/handler.ts",
+    "unresolvedTo": "../../tool-endpoint/handler",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/builder/transport/mcp.ts",
+    "to": "apps/web/server/tool-endpoint/handler.ts",
+    "unresolvedTo": "../../tool-endpoint/handler",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/resource.ts",
+    "to": "apps/web/server/endpoints/public-url.ts",
+    "unresolvedTo": "../endpoints/public-url",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/revoke.ts",
+    "to": "apps/web/server/tool-endpoint/close.ts",
+    "unresolvedTo": "../tool-endpoint/close",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/oauth/token.ts",
+    "to": "apps/web/server/tool-endpoint/close.ts",
+    "unresolvedTo": "../tool-endpoint/close",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/transcription.ts",
+    "to": "apps/web/server/endpoints/request.ts",
+    "unresolvedTo": "../endpoints/request",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/transcription.ts",
+    "to": "apps/web/server/models/store.ts",
+    "unresolvedTo": "../models/store",
+    "dependencyTypes": ["local", "type-only", "import", "pre-compilation-only"],
+    "rule": {
+      "severity": "error",
+      "name": "context-integrations-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agent-versions/storage-grants.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/resource-loader-files.ts",
+    "to": "apps/web/server/storage/store.ts",
+    "unresolvedTo": "../storage/store",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/storage-writeback.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/platforms/http.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/attachments.ts",
+    "to": "apps/web/server/files/handlers.ts",
+    "unresolvedTo": "../files/handlers",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/attachments.ts",
+    "to": "apps/web/server/storage/store.ts",
+    "unresolvedTo": "../storage/store",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/run-files-load-fixtures.ts",
+    "to": "apps/web/server/storage/service.ts",
+    "unresolvedTo": "../storage/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/run-files-load-fixtures.ts",
+    "to": "apps/web/server/storage/testing.ts",
+    "unresolvedTo": "../storage/testing",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/sessions/file-search-api.ts",
+    "to": "apps/web/server/files/http.ts",
+    "unresolvedTo": "../files/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/sessions/file-search-api.ts",
+    "to": "apps/web/server/files/search-http.ts",
+    "unresolvedTo": "../files/search-http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/sessions/store.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/builtin.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/delete.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/handlers.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/meta-column.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/pending-delete.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/rows-fixture.ts",
+    "to": "apps/web/server/storage/service.ts",
+    "unresolvedTo": "../storage/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/service.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/skill-metadata.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/tree.ts",
+    "to": "apps/web/server/storage/objects.ts",
+    "unresolvedTo": "../storage/objects",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-entered-through-its-entry"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/files/file-path-policy.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../agents",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/shares/http.ts",
+    "to": "apps/web/server/resources/authorise.ts",
+    "unresolvedTo": "../resources/authorise",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/shares/session-snapshot/snapshot.ts",
+    "to": "apps/web/server/execution/index.ts",
+    "unresolvedTo": "../../execution",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../agents",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/skills/pending-delete.ts",
+    "unresolvedTo": "../skills/pending-delete",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/skills/service.ts",
+    "unresolvedTo": "../skills/service",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/storage/migrate-skills.ts",
+    "to": "apps/web/server/skills/tree.ts",
+    "unresolvedTo": "../skills/tree",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/loader/test-runtime.ts",
+    "to": "apps/web/server/agent-versions/memory-store.ts",
+    "unresolvedTo": "../../agent-versions/memory-store",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/loader/test-runtime.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../../agents",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/attachments.ts",
+    "to": "apps/web/server/projects/archive-gate.ts",
+    "unresolvedTo": "../../projects/archive-gate",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/attachments.ts",
+    "to": "apps/web/server/resources/authorise.ts",
+    "unresolvedTo": "../../resources/authorise",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/composition.ts",
+    "to": "apps/web/server/agent-versions/session-version.ts",
+    "unresolvedTo": "../../agent-versions/session-version",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/composition.ts",
+    "to": "apps/web/server/agents/index.ts",
+    "unresolvedTo": "../../agents",
+    "dependencyTypes": ["local", "type-only", "import", "pre-compilation-only"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/composition.ts",
+    "to": "apps/web/server/execution/index.ts",
+    "unresolvedTo": "../../execution",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "context-storage-and-sharing-imports-only-upstream"
     }
   },
   {
@@ -81,25 +1242,6 @@
   {
     "type": "dependency",
     "from": "apps/web/server/cli-auth/runtime.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/compose/runtime-provider-credential.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
     "dependencyTypes": [
@@ -176,7 +1318,15 @@
     "from": "apps/web/server/composition/session-rbac.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"
@@ -434,17 +1584,6 @@
     "from": "apps/web/server/composition/wiring/tokens-surfaces.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/connectors/tools.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
     "dependencyTypes": [
       "aliased",
       "aliased-tsconfig",
@@ -454,36 +1593,6 @@
       "import",
       "pre-compilation-only"
     ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/files/http.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/models/memory-store.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"
@@ -548,44 +1657,6 @@
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/resources/catalog-store.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/runs/environment.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "apps/web/server/runs/repository-store.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
@@ -620,82 +1691,6 @@
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
     "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/skills/delete.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/skills/http.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/skills/pending-delete.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "domain-does-not-import-persistence"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/skills/service.ts",
-    "to": "packages/core/src/db/index.ts",
-    "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"
@@ -767,6 +1762,61 @@
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/audit/api.ts",
+    "to": "apps/web/server/rbac/http.ts",
+    "unresolvedTo": "../rbac/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "shared-kernel-imports-no-context"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/features/console.ts",
+    "to": "apps/web/server/auth/index.ts",
+    "unresolvedTo": "../auth",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "shared-kernel-imports-no-context"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/features/route-feature.ts",
+    "to": "apps/web/server/auth/api-key-routes.ts",
+    "unresolvedTo": "../auth/api-key-routes",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "shared-kernel-imports-no-context"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/http/rate-limit.ts",
+    "to": "apps/web/server/shares/runnable/visitor-identity.ts",
+    "unresolvedTo": "../shares/runnable/visitor-identity",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "shared-kernel-imports-no-context"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/pagination/list-cursor.ts",
+    "to": "apps/web/server/runs/http.ts",
+    "unresolvedTo": "../runs/http",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "shared-kernel-imports-no-context"
     }
   }
 ]

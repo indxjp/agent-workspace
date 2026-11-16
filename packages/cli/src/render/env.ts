@@ -364,6 +364,10 @@ export const ENV_IMAGE_KEYS: Readonly<Record<keyof Required<DeploymentImages>, s
   runtime: CLAUDE_AGENT_SDK_RUNTIME_IMAGE_KEY,
   postgres: 'POSTGRES_IMAGE',
   seaweedfs: 'SEAWEEDFS_IMAGE',
+  egressProxy: 'EGRESS_PROXY_IMAGE',
+  // Not `TOOL_HOST_IMAGE`: compose.yaml reads that key for the single-vm tool host. This pin is
+  // the Cloud Run tool host's, written for `gcp` only and read by nothing but the gcp-cloudrun deploy.
+  toolHost: 'CLOUD_RUN_TOOL_HOST_IMAGE',
 };
 
 /**
@@ -384,6 +388,13 @@ export function envImageEntries(
     [ENV_IMAGE_KEYS.runner, images.runner],
     [ENV_IMAGE_KEYS.runtime, images.runtime],
   ];
+  // Only a `gcp` set with `sandboxInternet` carries the egress proxy; no other shape resolves it.
+  if (images.egressProxy !== undefined)
+    platform.push([ENV_IMAGE_KEYS.egressProxy, images.egressProxy]);
+  // Likewise the tool host, which only the gcp-cloudrun deploy reads; a Compose project's own
+  // tool-host pin is TOOL_HOST_IMAGE, which this line must never be mistaken for.
+  if (profile.cloud === 'gcp' && images.toolHost !== undefined)
+    platform.push([ENV_IMAGE_KEYS.toolHost, images.toolHost]);
   if (profile.cloud !== 'local') return platform;
   const { postgres, seaweedfs } = images;
   if (postgres === undefined || seaweedfs === undefined) {

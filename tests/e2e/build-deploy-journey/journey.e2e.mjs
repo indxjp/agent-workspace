@@ -20,7 +20,7 @@
  * The deployment answers through a fake Anthropic API, not the scripted model: a deployment is not
  * in the `local` posture, which is the only one that accepts a scripted model.
  *
- * It needs Docker with Compose and Buildx, `openssl`, `npm` and the eight packages built. It starts
+ * It needs Docker with Compose and Buildx, `openssl`, `npm` and the nine packages built. It starts
  * and removes containers, networks and volumes, and every runtime or tool-host container on the
  * daemon: run it against a disposable daemon. Environment: `BD_WORK_DIR` (default: a new temporary
  * directory), `BD_NPM_PORT` (4873), `BD_REGISTRY_PORT` (5000), `BD_CONTROL_PORT` (18083), and

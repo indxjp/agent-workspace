@@ -1,6 +1,9 @@
+import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import path from 'node:path';
 import { Writable, type Readable } from 'node:stream';
 import { createInterface } from 'node:readline/promises';
+import { parseEnv } from 'node:util';
 
 import {
   BootstrapAdminSchema,
@@ -11,7 +14,9 @@ import {
   type ProjectRead,
 } from '@indx-workspace/contracts/project-file';
 import {
+  LOCAL_CONSOLE_OIDC_CLIENT_ID,
   LocalRuntimeStartMessageSchema,
+  localConsoleRedirectUri,
   type LocalRuntimeStartMessage,
 } from '@indx-workspace/contracts/local-runtime';
 
@@ -61,9 +66,9 @@ function fieldPath(read: ProjectRead, field: string): string {
 /**
  * The `start` message for the project in `cwd`: the local environment's port, runtime driver and
  * bootstrap Owner, validated against the contract before anything is forked. An environment the
- * local runtime cannot honour is refused by its field path. The project file's `policy` (C13) and
- * the `withheld` secret names (SD17) are sent only when there are any, so a slice-1 project's
- * `start` is unchanged.
+ * local runtime cannot honour is refused by its field path. The project file's `policy` (C13), its
+ * `features` (ADR-0160 D5) and the `withheld` secret names (SD17) are sent only when there are any,
+ * so a slice-1 project's `start` is unchanged.
  */
 export function localStartMessage(
   read: ProjectRead,
@@ -102,6 +107,9 @@ export function localStartMessage(
       ...(driver === undefined ? {} : { runtimeDriver: driver }),
       bootstrapAdmin: local.identity.bootstrapAdmin,
       ...(read.lifted || read.project.policy === undefined ? {} : { policy: read.project.policy }),
+      ...(read.lifted || read.project.features === undefined
+        ? {}
+        : { features: read.project.features }),
       ...(withheld.length === 0 ? {} : { withheld }),
       modelSecrets: modelSecretNames(read),
     },
@@ -171,7 +179,7 @@ export function signedInIdentity(
 }
 
 /** Whether `port` can be bound on the loopback address right now. */
-function isFree(port: number): Promise<boolean> {
+export function isFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer();
     server.once('error', () => {
@@ -290,4 +298,117 @@ export async function promptSecret(
     muted = false;
     output.write('\n');
   }
+}
+
+/** The four variables that configure the control plane's one OIDC issuer (ADR-0161 D5). */
+const OIDC_VARIABLES = [
+  'OIDC_ISSUER_URL',
+  'OIDC_CLIENT_ID',
+  'OIDC_CLIENT_SECRET',
+  'OIDC_REDIRECT_URI',
+] as const;
+
+/** The project's `.env` as parsed, or empty when there is none or it cannot be read. */
+async function projectDotEnv(cwd: string): Promise<Readonly<Record<string, string | undefined>>> {
+  try {
+    return parseEnv(await readFile(path.join(cwd, '.env'), 'utf8'));
+  } catch {
+    // No readable .env: the runtime refuses an unreadable one itself.
+    return {};
+  }
+}
+
+/** `names` joined for a sentence, with `is` or `are`. */
+function namesAre(names: readonly string[]): string {
+  return `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'}`;
+}
+
+/**
+ * ADR-0161 amendment DI2 (issue #2075): whether `aw dev` runs its development OIDC issuer
+ * (`dev-issuer`, none of the four `OIDC_*` set in its environment or the project's `.env`) or the
+ * developer's own identity provider applies (`own-idp`, all four set). One to three set is refused
+ * before the fork with `oidc_configuration_incomplete`, naming the missing ones. No value is read
+ * out or printed, only whether each name is set.
+ */
+export async function oidcConfigurationMode(
+  env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
+): Promise<'dev-issuer' | 'own-idp'> {
+  const dotEnv = await projectDotEnv(cwd);
+  const set = OIDC_VARIABLES.filter(
+    (name) => nonBlank(env[name]) !== undefined || nonBlank(dotEnv[name]) !== undefined,
+  );
+  if (set.length === 0) return 'dev-issuer';
+  if (set.length === OIDC_VARIABLES.length) return 'own-idp';
+  const missing = OIDC_VARIABLES.filter((name) => !set.includes(name));
+  throw new CommandRefusedError(
+    `oidc_configuration_incomplete: ${namesAre(set)} set but ${namesAre(missing)} not; set all four for your own identity provider, or none for the development issuer of aw dev`,
+    `set ${missing.join(', ')}, or remove ${set.join(', ')} from the environment and .env`,
+  );
+}
+
+/** Where the runtime keeps a generated console password, relative to the project. */
+const LOCAL_SECRETS_FILE = path.join('.agent-workspace', 'secrets', 'local-secrets.json');
+
+/** `BOOTSTRAP_ADMIN_PASSWORD` of the generated secrets file, or `undefined`. */
+async function generatedPassword(cwd: string): Promise<string | undefined> {
+  let secrets: unknown;
+  try {
+    secrets = JSON.parse(await readFile(path.join(cwd, LOCAL_SECRETS_FILE), 'utf8'));
+  } catch {
+    return undefined;
+  }
+  if (typeof secrets !== 'object' || secrets === null) return undefined;
+  const value: unknown = Object.getOwnPropertyDescriptor(
+    secrets,
+    'BOOTSTRAP_ADMIN_PASSWORD',
+  )?.value;
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
+ * ADR-0161 amendment DI6: the local console password in the runtime's own precedence (the
+ * environment, then `.env`, then the generated secrets file), read when the issuer's form is
+ * posted; `undefined` when none is set yet. Never printed.
+ */
+export async function readLocalConsolePassword(
+  env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
+): Promise<string | undefined> {
+  const name = 'BOOTSTRAP_ADMIN_PASSWORD';
+  return (
+    nonBlank(env[name]) ?? nonBlank((await projectDotEnv(cwd))[name]) ?? generatedPassword(cwd)
+  );
+}
+
+/** What the development issuer gives the `start` message: its URL and the console's client. */
+export interface DevIssuerRegistrar {
+  readonly url: string;
+  registerClient(clientId: string, redirectUri: string): string;
+}
+
+/**
+ * `start` with `environment.devIssuer` (ADR-0161 amendment DI5): the console registered at the
+ * issuer with its callback on the runtime's port, and the bootstrap Owner's `sub` there.
+ */
+export function withDevIssuer(
+  start: LocalRuntimeStartMessage,
+  issuer: DevIssuerRegistrar,
+  ownerSubject: string,
+): LocalRuntimeStartMessage {
+  const redirectUri = localConsoleRedirectUri(start.environment.port);
+  const clientSecret = issuer.registerClient(LOCAL_CONSOLE_OIDC_CLIENT_ID, redirectUri);
+  return LocalRuntimeStartMessageSchema.parse({
+    ...start,
+    environment: {
+      ...start.environment,
+      devIssuer: {
+        issuer: issuer.url,
+        clientId: LOCAL_CONSOLE_OIDC_CLIENT_ID,
+        clientSecret,
+        redirectUri,
+        ownerSubject,
+      },
+    },
+  });
 }

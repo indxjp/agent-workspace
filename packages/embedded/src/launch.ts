@@ -104,6 +104,8 @@ async function runIpcLauncher(): Promise<number> {
     assertServerServesContracts: (url) => cli.assertServerServesContracts(url),
     openDatabaseRoot: db.openDatabaseRoot,
     prepareLocalRuntimeProfile,
+    linkIdentity: (root, { issuer, subject, userId }) =>
+      root.directory.linkIdentity(issuer, subject, userId),
     issueLocalCredential: credential.issueLocalApiKey,
     onSignal: signals.on,
     claimSignals: signals.claim,

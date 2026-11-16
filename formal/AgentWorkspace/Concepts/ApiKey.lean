@@ -92,10 +92,11 @@ structure ApiKey where
   deriving DecidableEq, Repr
 
 /-- The checks of `api_keys` as a predicate on the concept: name, prefix and hash are not blank,
-an expiry is after creation, and a revocation is not before creation. -/
+the role is conferrable (a key is never a guest: `api_keys_role_valid` holds it to the four
+`CONFERRABLE_ROLES`), an expiry is after creation, and a revocation is not before creation. -/
 @[aw_spec (ts := "packages/core/src/db/schema/api-keys.ts#apiKeys")]
 def ApiKey.valid (k : ApiKey) : Bool :=
-  notBlank k.name && notBlank k.keyPrefix && notBlank k.keyHash &&
+  notBlank k.name && notBlank k.keyPrefix && notBlank k.keyHash && k.role.isConferrable &&
     k.expiresAt.all (k.createdAt < ·) && k.revokedAt.all (k.createdAt ≤ ·)
 
 /-- The states of a key at an instant. -/

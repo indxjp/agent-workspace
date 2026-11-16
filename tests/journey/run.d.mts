@@ -1,5 +1,8 @@
 export const VERDACCIO_IMAGE: string;
 export const PLAYWRIGHT_IMAGE: string;
+export const PORTAL_FEATURES: readonly ['chat', 'files', 'connectors'];
+export const PORTAL_CREATE_ARGS: readonly string[];
+export const PORTAL_CHECKS_MS: number;
 export const FAKE_KEY_PREFIX: string;
 export const HOME: string;
 export const SECRETS: Set<string>;

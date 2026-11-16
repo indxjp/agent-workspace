@@ -14,7 +14,14 @@ import { clearFeatureSwitches } from '../../../features/runtime';
 import { draftBody } from '../../adapters/checker/checker.contract';
 import { InMemoryRunStore } from '../../../runs/memory-store';
 import { serveExternalBuilderMcp, type ExternalPrincipal } from '../external';
-import { WORKSPACE, builderDoor, scriptedModel, toolResults, toolUse, type Door } from './harness';
+import {
+  WORKSPACE,
+  builderDoor,
+  scriptedModel,
+  toolResults,
+  toolUse,
+  type Door,
+} from './harness.test-support';
 
 const ORIGIN = 'https://aw.example.test';
 const MODEL = 'scripted:builder-feature-switch';

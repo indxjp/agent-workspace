@@ -1,7 +1,6 @@
 import { BUILDER_CATALOG_KINDS } from '@indx-workspace/contracts/builder';
 
-import { decide } from '../../../rbac/decide';
-import type { Role } from '../../../rbac/roles';
+import { decide, type Role } from '../../../identity';
 import type { CatalogKind } from '../../ports';
 
 /** The console route each listed kind is read from; RBAC answers for the route, so the catalog agrees with the console. */

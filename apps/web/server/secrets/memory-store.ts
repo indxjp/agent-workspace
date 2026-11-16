@@ -91,7 +91,9 @@ export function createInMemorySecretsStoreProvider(
         },
         async remove(id: string): Promise<DeleteSecretOutcome> {
           const resolved = await scope();
-          const owned = (await service.list(resolved)).some((secret) => secret.id === id);
+          const owned = (await service.list(resolved)).some(
+            (secret) => secret.id.toLowerCase() === id.toLowerCase(),
+          );
           if (!owned) return { kind: 'not-found' };
           const referrers = referrersOf(workspaceId, id);
           if (referrers !== null) return { kind: 'in-use', referrers };

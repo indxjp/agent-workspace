@@ -1,0 +1,293 @@
+---
+title: "demo-operator"
+description: "The @indx-workspace/contracts/demo-operator exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/demo-operator.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## DEMO_ENTRY_STATES
+
+- `'available'`
+- `'maintenance'`
+
+## DEMO_MAINTENANCE_PATH
+
+`PUT /api/demo/maintenance/{entry}` (operator): the daily production test's verdict on one live
+entry. `maintenance` puts its card "Under maintenance" and its Try tab on the recording;
+`available` takes it back. `reason` says why in words, never a secret or a model's raw output.
+
+Value: `'/api/demo/maintenance'`
+
+## DEMO_OPERATOR_TOKEN_SETTING
+
+The bearer token the deployment's own operator steps (the deploy workflow's template seeding,
+the nightly sample check, the daily production test's maintenance flip and the readiness check)
+send to the platform: `Authorization: Bearer <token>`. The web service reads it from this
+setting, which a person stores in Secret Manager; while it is unset every operator route answers
+`404`, so a deployment without it has no operator surface at all (the `CRON_SECRET` pattern).
+
+Value: `'AW_DEMO_OPERATOR_TOKEN'`
+
+## DEMO_READINESS_PATH
+
+`GET /api/demo/readiness` (operator): the read-only checks a deploy runs before it calls the
+store ready (R2): whether the demo's Anthropic API key is configured, and whether the platform
+reached the Anthropic API with it by listing models (no tokens are spent). It never carries the
+key or any part of it.
+
+Value: `'/api/demo/readiness'`
+
+## DEMO_SEED_CONNECTORS_MAX
+
+The most connectors one seed declares.
+
+Value: `16`
+
+## DEMO_SEED_FILE_MAX_BYTES
+
+The most bytes one sample file of a seed carries, decoded (the provisioner's own copy limit).
+
+Value: `1_048_576`
+
+## DEMO_SEED_FILES_MAX
+
+The most sample files one seed carries.
+
+Value: `200`
+
+## DEMO_SEED_RECORD_SETS_MAX
+
+The most sample record sets one seed carries.
+
+Value: `64`
+
+## DEMO_SEED_RECORDS_MAX_CHARACTERS
+
+The most characters one record set's data has, as JSON.
+
+Value: `262_144`
+
+## DEMO_SEED_SKILL_FILES_MAX
+
+The most files one carried skill has.
+
+Value: `64`
+
+## DEMO_SEED_SKILLS_MAX
+
+The most skills one seed carries.
+
+Value: `16`
+
+## DEMO_TEMPLATE_RESERVED_FOLDER
+
+The folder a template workspace keeps its own files in (the sample record sets and the seed's
+digest). A seed's sample file may not be at or under it.
+
+Value: `'demo-template'`
+
+## DEMO_TEMPLATES_PATH
+
+`PUT /api/demo/templates/{entry}` (operator): fill the entry's template workspace
+(`demoTemplateWorkspaceSlug(entry)`), making it first with the deployment's template-owner
+account as its only member. Idempotent: the same seed twice changes nothing, and a changed seed
+replaces the agent, its skills, its connectors, the files and the records it names. The agent is a
+K-1 definition (`aw agents export` shape): no secret, no model connection, no runtime profile.
+`skills` carries the files of every skill the definition names that is not a built-in.
+
+Value: `'/api/demo/templates'`
+
+## DEMO_VERIFICATION_PATH
+
+`PUT /api/demo/verification/{workspaceId}` (operator, no body): copy every demo template the
+deployment holds into the ordinary workspace `workspaceId`, made exactly as a visitor's demo copy
+is made, for the real-model verification (R1) and the daily production test. `entries` are the
+entries copied. Idempotent. A visitor's demo workspace, a template and a workspace with no Owner
+are refused (`409 verification_workspace_refused`).
+
+Value: `'/api/demo/verification'`
+
+## DemoEntryState
+
+- `"maintenance"`
+- `"available"`
+
+## DemoEntryStateSchema
+
+- `"maintenance"`
+- `"available"`
+
+## DemoMaintenanceRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `state` | `"maintenance" \| "available"` | Yes |  |
+| `reason` | `string` | Yes |  |
+
+## DemoMaintenanceRequestSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `state` | `"maintenance" \| "available"` | Yes |  |
+| `reason` | `string` | Yes |  |
+
+## DemoReadiness
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiKeyConfigured` | `false \| true` | Yes |  |
+| `apiReachable` | `false \| true` | Yes |  |
+
+## DemoReadinessSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiKeyConfigured` | `false \| true` | Yes |  |
+| `apiReachable` | `false \| true` | Yes |  |
+
+## DemoSampleRecords
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connector` | `string` | Yes |  |
+| `resource` | `string` | Yes |  |
+| `lang` | `"en" \| "ja"` | Yes |  |
+| `tools` | `readonly string[]` | Yes |  |
+| `data` | `unknown` | Yes | The records as parsed JSON (an array of records, or one object of them). |
+
+## DemoSampleRecordsSchema
+
+One set of the entry's sample records (`demo.records`): the records of one resource in one
+language, in the source's own data format, and the read tools of one seeded connector that
+answer with them. Fictional data only.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connector` | `string` | Yes |  |
+| `resource` | `string` | Yes |  |
+| `lang` | `"en" \| "ja"` | Yes |  |
+| `tools` | `readonly string[]` | Yes |  |
+| `data` | `unknown` | Yes | The records as parsed JSON (an array of records, or one object of them). |
+
+## DemoSeedConnector
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `reads` | `readonly string[]` | Yes |  |
+| `writes` | `readonly string[]` | Yes |  |
+
+## DemoSeedConnectorSchema
+
+One connector the demo agent names, as the seed declares it: the tools that only read and the
+tools that would send or write outside. The template keeps no address and no secret of it. In a
+visitor's copy a read tool answers from the entry's sample records (`DemoSampleRecordsSchema`)
+and a write tool answers `DEMO_SEND_RESULT` (`./demo`).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `reads` | `readonly string[]` | Yes |  |
+| `writes` | `readonly string[]` | Yes |  |
+
+## DemoSeedFile
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `base64` | `string` | Yes |  |
+
+## DemoSeedFileSchema
+
+One sample file of the entry's `demo.seed`, at its workspace path, its bytes as base64.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `base64` | `string` | Yes |  |
+
+## DemoSeedSkill
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly DemoSeedFile[]` | Yes |  |
+
+## DemoSeedSkillSchema
+
+One skill the demo agent is assigned, carried by its files (`SKILL.md` and the files beside it,
+at their paths inside the skill's folder), from the entry's own source project. A built-in skill
+(`BUILTIN_SKILL_NAMES`) is never carried: the definition names it and the platform installs its
+own release. The template keeps the skill under its name, and a visitor's copy gets it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly DemoSeedFile[]` | Yes |  |
+
+## DemoTemplateReport
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | `string` | Yes |  |
+| `agent` | `null \| string` | Yes |  |
+| `files` | `number` | Yes |  |
+| `recordSets` | `number` | Yes |  |
+
+## DemoTemplateReports
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `templates` | `readonly DemoTemplateReport[]` | Yes |  |
+
+## DemoTemplateReportSchema
+
+One template as `GET /api/demo/templates` (operator) reports it, for the nightly sample check:
+whether the deployment made it, and what a visitor's copy would get from it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | `string` | Yes |  |
+| `agent` | `null \| string` | Yes |  |
+| `files` | `number` | Yes |  |
+| `recordSets` | `number` | Yes |  |
+
+## DemoTemplateReportsSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `templates` | `readonly DemoTemplateReport[]` | Yes |  |
+
+## DemoTemplateSeed
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; memory?: "agent" \| undefined; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; skillRevisions?: Readonly<Record<string, number>> \| undefined; }>; }>` | Yes |  |
+| `connectors` | `readonly DemoSeedConnector[]` | Yes |  |
+| `skills` | `readonly DemoSeedSkill[]` | Yes |  |
+| `files` | `readonly DemoSeedFile[]` | Yes |  |
+| `records` | `readonly DemoSampleRecords[]` | Yes |  |
+
+## DemoTemplateSeedSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; memory?: "agent" \| undefined; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; skillRevisions?: Readonly<Record<string, number>> \| undefined; }>; }>` | Yes |  |
+| `connectors` | `readonly DemoSeedConnector[]` | Yes |  |
+| `skills` | `readonly DemoSeedSkill[]` | Yes |  |
+| `files` | `readonly DemoSeedFile[]` | Yes |  |
+| `records` | `readonly DemoSampleRecords[]` | Yes |  |
+
+## DemoVerificationFill
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaceId` | `string` | Yes |  |
+| `entries` | `readonly string[]` | Yes |  |
+
+## DemoVerificationFillSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaceId` | `string` | Yes |  |
+| `entries` | `readonly string[]` | Yes |  |

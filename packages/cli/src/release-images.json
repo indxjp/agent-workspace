@@ -1,10 +1,12 @@
 {
   "registry": "ghcr.io/indxjp",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "images": {
     "web": "web",
     "gateway": "gateway",
     "runner": "runner",
-    "runtime": "runtime-claude-agent-sdk"
+    "runtime": "runtime-claude-agent-sdk",
+    "egressProxy": "egress-proxy",
+    "toolHost": "tool-host"
   }
 }

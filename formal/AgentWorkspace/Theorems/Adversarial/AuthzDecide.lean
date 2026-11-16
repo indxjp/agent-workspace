@@ -57,7 +57,7 @@ private theorem allow_cases (q : Query) (f : Option RouteFacts) (h : decideOrdin
 /-- A run-scoped browser token is allowed only reads of its run, including equivalent UUID
 spellings of its id (the row or a sub-resource read with `GET`/`HEAD`). -/
 @[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_scoped_token_reaches_only_reads_of_its_run (q : Query) (run : RunId)
     (f : Option RouteFacts) (hq : q.scope = some (.run run)) (h : decideOrdinary q = .allow f) :
     classifyPath q.path = .«public» ∨
@@ -89,7 +89,7 @@ outside the public surface, the `download-urls` sub-resource of `files` (a read;
 No other `runs` sub-resource reaches the `run` verb: `interrupt` stays out; no other `files` route
 is reachable: the relay routes stay out, and so does `upload-urls` (issue #1574). -/
 @[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem session_scoped_token_reaches_only_run_reads_and_agent_runs (q : Query) (session : SessionId)
     (f : Option RouteFacts) (hq : q.scope = some (.session session)) (h : decideOrdinary q = .allow f) :
     classifyPath q.path = .«public» ∨
@@ -144,7 +144,7 @@ example : classifyPath "/api/agents/a/runs" = .«public» ∨
 scope never reaches `POST /api/runs/:id/feedback`, and the session scope's `run` verb on `runs`
 does not extend to `interrupt` (or any other sub-resource but `feedback`). -/
 @[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem feedback_cell_is_session_only_and_sub_keyed (run : RunId) (session : SessionId)
     (id : Option String) :
     checkTokenScope (.run run) .runs .run (some "feedback") id = some .notInGrammar ∧
@@ -180,7 +180,7 @@ private theorem parsed_sub_names_a_row (path : String) (res : Resource) (s : Str
 of `runs`, its path names a row: `tokens` is in no grammar, and a scope reads one run, never the
 collection. -/
 @[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR")]
+  (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")]
 theorem scoped_token_never_mints_or_lists (q : Query) (s : Scope) (hq : q.scope = some s)
     (fact : RouteFacts) (h : decideOrdinary q = .allow (some fact)) :
     fact.resource ≠ .tokens ∧
@@ -233,7 +233,7 @@ private theorem parsed_sub_is_classified (path : String) (res : Resource) (sub i
 surface and parses as `/api/<the allowed resource>[/:id[/<sub>]]`, with any sub one that
 `SUB_RESOURCES` classifies under that resource. -/
 @[aw_spec (tier := T3) (doc := "docs/adr/0015-gates-decide-on-positive-assertions.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#parsePath")]
+  (ts := "apps/web/server/rbac/core/decide.ts#parsePath")]
 theorem allow_needs_a_classified_route (q : Query) (fact : RouteFacts)
     (h : decideOrdinary q = .allow (some fact)) :
     classifyPath q.path = .api ∧ ∃ sub id, parsePath q.path = .ok fact.resource sub id ∧
@@ -252,7 +252,7 @@ example : classifyPath "/api/runs/r/events" = .api ∧ ∃ sub id,
 /-- Secrets are Owner-only: no other role, whatever path spelling, method, ownership or scope it
 supplies, is ever allowed on `secrets`. -/
 @[aw_spec (tier := T3) (doc := "docs/spec.md#21-users-and-rbac")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem secrets_are_owner_only (q : Query) (fact : RouteFacts) (h : decideOrdinary q = .allow (some fact))
     (hs : fact.resource = .secrets) : parseRoleInput q.role = some .owner := by
   rcases allow_cases q _ h with ⟨_, hf⟩ | ⟨role, res, sub, id, op, hr, _, _, _, _, hap, hf⟩
@@ -270,7 +270,7 @@ example : parseRoleInput "owner" = some .owner :=
 /-- A Viewer writes nothing but its own shares and workspace memberships: every write it is
 allowed is on `shares` or `workspaces`, for a row it owns or a collection. -/
 @[aw_spec (tier := T3) (doc := "docs/spec.md#21-users-and-rbac")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem viewer_writes_only_its_own_shares_and_workspaces (q : Query) (fact : RouteFacts)
     (hr : parseRoleInput q.role = some .viewer) (h : decideOrdinary q = .allow (some fact))
     (hw : fact.operation = .write) :

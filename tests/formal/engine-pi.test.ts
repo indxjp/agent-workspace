@@ -148,7 +148,6 @@ function requestFrom(input: unknown): EngineRunRequest {
 const REFUSAL_MARKERS: Readonly<Record<string, string>> = {
   policy: 'policy arm',
   mcp: 'mcp: false',
-  maxBudget: 'provisional price table',
   gateway: 'gateway connection',
   wireProtocols: 'speaks',
   fork: 'fork',
@@ -169,7 +168,6 @@ describe('engine-pi: compile', () => {
         connection: compiled.connection,
         model: compiled.agent.model,
         maxTurns: compiled.limits.maxTurns,
-        budgetCap: compiled.limits.budget !== null,
         grants: compiled.workspace.grants.map((grant) => ({
           directory: grant.kind === 'directory',
           path: grant.path,
@@ -183,7 +181,6 @@ describe('engine-pi: compile', () => {
         connection: expected['connection'],
         model: expected['model'],
         maxTurns: expected['maxTurns'],
-        budgetCap: expected['budgetCap'],
         grants: expected['grants'],
         skills: expected['skills'],
       });

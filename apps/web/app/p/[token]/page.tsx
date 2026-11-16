@@ -1,11 +1,11 @@
 import { log } from '../../../server/telemetry/logger';
-import { ShareService } from '../../../server/shares/core/service';
+import { ShareService } from '../../../server/shares/service';
 import { applicationContext } from '../../../server/application-context';
 import { PublicMessageForm } from '../../../components/shares/public-message-form';
 import { SharedSnapshot } from '../../../components/shares/shared-snapshot';
 import { runnablePublicLinksEnabled } from '../../../server/shares/runnable/feature';
 import { DomainError } from '../../../server/errors';
-import { resolvePublicShare } from '../../../server/shares/core/http';
+import { resolvePublicShare } from '../../../server/shares/http';
 export const dynamic = 'force-dynamic';
 export default async function PublicSharePage({
   params,
@@ -47,7 +47,7 @@ export default async function PublicSharePage({
       error instanceof DomainError &&
       error.code === 'invalid_passphrase' &&
       runnablePublicLinksEnabled() &&
-      (await resolved.sharing.shares.findByToken(token))?.mode === 'runnable'
+      (await new ShareService(resolved.sharing).findByToken(token))?.mode === 'runnable'
     ) {
       return (
         <main className="mx-auto max-w-[760px] p-8">

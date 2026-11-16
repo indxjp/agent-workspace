@@ -78,7 +78,7 @@ theorem every_route_preserves_foreign (s : State) (p : Principal) (r : Request) 
 
 /-- Current-schema transactions either pass every constraint or leave a consistent pre-state
 unchanged. The repository applies this check at write/commit, not after a read or stream. -/
-@[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/runs.ts#finish")
+@[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem committed_run_write_preserves_er (s : State)
     (tx : List AgentWorkspace.Er.Current.Stmt)

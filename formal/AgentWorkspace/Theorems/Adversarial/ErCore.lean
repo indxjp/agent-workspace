@@ -19,7 +19,7 @@ tenant-carrying row of a different workspace is not a state the database accepts
 the writer copied into the row. -/
 @[aw_spec (tier := T3)
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem forged_cross_tenant_reference_is_rejected (S : Schema) (hS : pairingComplete S = true)
     (st : State) {t : TableName} {fk : ForeignKey} {r r' : Row}
     (htarget : (S fk.refTable).tenantColumn?.isSome = true) (href : References S st t fk r r')
@@ -70,7 +70,7 @@ example : consistent catalogue (fun t => if t = .agents then Witness.state .agen
 column of a table (so that the pairing rule has nothing left to check) fails the
 "every reference is declared" gate. -/
 @[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem deleted_reference_is_caught (S : Schema) (decl : List (TableName × String × SqlType))
     (t : TableName) (c : Column) (hc : c ∈ (S t).columns) (hid : isIdColumn c.name = true)
     (hnd : decl.contains (t, c.name, c.type) = false)
@@ -100,8 +100,8 @@ def withoutModelConnectionKeys : Schema := fun u =>
 /-- Deleting the foreign keys over `agents.model_connection_id` keeps the pairing rule green (no
 key is left to be unpaired) but fails the declared-reference gate, which is why rule 3 exists. -/
 @[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem deleting_a_reference_passes_pairing_but_not_the_gate :
     pairingComplete withoutModelConnectionKeys = true ∧
       idColumnsCovered withoutModelConnectionKeys nonReferenceIdColumns = false := by

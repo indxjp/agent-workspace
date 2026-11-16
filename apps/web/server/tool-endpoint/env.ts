@@ -8,10 +8,8 @@
  */
 import type { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-versions';
 
-import type { RunOwnershipPrincipal } from '../agents/run-ownership';
-import type { OAuthGrant } from '../rbac/principal';
-import type { Ownership } from '../rbac/decide';
-import type { RunPrincipal } from '../runs/environment';
+import type { OAuthGrant, Ownership, RunOwnershipPrincipal } from '../identity';
+import type { RunPrincipal } from '../execution';
 
 export interface ToolEndpointIdentity {
   readonly principal: RunPrincipal;

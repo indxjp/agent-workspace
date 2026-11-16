@@ -16,6 +16,7 @@ import {
   type LoadedCodeTool,
   type LoadedTool,
   type LoaderFeatures,
+  type LoadProjectOptions,
   type ProjectLoad,
 } from './load.js';
 import { localProblem, problemsFromError, type ProjectProblem } from './problems.js';
@@ -37,6 +38,8 @@ export interface ProjectRunOptions {
   readonly defaultEngine?: EngineId | undefined;
   /** Variables the loader child must not see: the project's secret names (SD17). */
   readonly withheld?: readonly string[] | undefined;
+  /** The project file's `models`, which an `.agent.md` model is matched to (ADR-0166 D12). */
+  readonly models?: LoadProjectOptions['models'];
   /**
    * What to do with the project's catalog tools before the agents are dry-run (C15): `aw check`
    * dry-runs their connectors, `aw dev` applies them. Left out, tools are not touched here (`aw

@@ -4,7 +4,7 @@
  * The catalogue is deployment configuration, not workspace data: every engine it lists is the same
  * for every caller, which is why `authorise` is handed `'not-applicable'` — there is no row here to
  * own. What the gate still decides is that the caller is authenticated and that §21 lets its role
- * read the resource, which the `engines` row of `apps/web/server/rbac/permissions.ts` grants to
+ * read the resource, which the `engines` row of `apps/web/server/rbac/core/permissions.ts` grants to
  * every workspace member and API key.
  *
  * Deliberately trivial, like `app/api/me/route.ts`: everything worth testing is `listEngines` in

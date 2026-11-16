@@ -1,0 +1,170 @@
+[
+  {
+    "id": "b0000000-0000-4000-8000-000000000001",
+    "title": "Laptop won't show on the meeting room projector",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "In meeting room B nothing appears on the projector over HDMI."
+      }
+    ],
+    "status": "new",
+    "priority": "p3",
+    "requester": "a0000000-0000-4000-8000-000000000001",
+    "assignee": "a0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000002",
+    "title": "Forgot my password and cannot sign in",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "I cannot sign in since yesterday."
+      }
+    ],
+    "status": "new",
+    "priority": "p3",
+    "requester": "a0000000-0000-4000-8000-000000000002",
+    "assignee": "a0000000-0000-4000-8000-000000000003"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000003",
+    "title": "No access to the shared folder",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "Opening the sales folder gives a permission error."
+      }
+    ],
+    "status": "in_progress",
+    "priority": "p2",
+    "requester": "a0000000-0000-4000-8000-000000000003",
+    "assignee": "a0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000004",
+    "title": "Printer paper jam will not clear",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "The 3rd floor printer keeps reporting a paper jam."
+      }
+    ],
+    "status": "in_progress",
+    "priority": "p4",
+    "requester": "a0000000-0000-4000-8000-000000000001",
+    "assignee": "a0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000005",
+    "title": "VPN will not connect",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "The VPN does not connect from home."
+      }
+    ],
+    "status": "on_hold",
+    "priority": "p2",
+    "requester": "a0000000-0000-4000-8000-000000000002",
+    "assignee": "a0000000-0000-4000-8000-000000000003"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000006",
+    "title": "Prepare a PC for a new joiner",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "Please set up a PC and accounts for next week's new joiner."
+      }
+    ],
+    "status": "resolved",
+    "priority": "p3",
+    "requester": "a0000000-0000-4000-8000-000000000003",
+    "assignee": "a0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000007",
+    "title": "Mailbox almost full",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "My mailbox is at 95%."
+      }
+    ],
+    "status": "resolved",
+    "priority": "p4",
+    "requester": "a0000000-0000-4000-8000-000000000001",
+    "assignee": "a0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000008",
+    "title": "Camera does not work in web meetings",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "The camera is not detected in web meetings."
+      }
+    ],
+    "status": "closed",
+    "priority": "p3",
+    "requester": "a0000000-0000-4000-8000-000000000002",
+    "assignee": "a0000000-0000-4000-8000-000000000003"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000009",
+    "title": "Internal system is slow",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "Pages load very slowly in the morning."
+      }
+    ],
+    "status": "in_progress",
+    "priority": "p1",
+    "requester": "a0000000-0000-4000-8000-000000000003",
+    "assignee": "a0000000-0000-4000-8000-000000000001"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000010",
+    "title": "Software installation request",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "Please install the design software."
+      }
+    ],
+    "status": "new",
+    "priority": "p4",
+    "requester": "a0000000-0000-4000-8000-000000000001",
+    "assignee": "a0000000-0000-4000-8000-000000000002"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000011",
+    "title": "Wi-Fi is unstable",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "Wi-Fi drops often in the 2nd floor meeting rooms."
+      }
+    ],
+    "status": "on_hold",
+    "priority": "p3",
+    "requester": "a0000000-0000-4000-8000-000000000002",
+    "assignee": "a0000000-0000-4000-8000-000000000003"
+  },
+  {
+    "id": "b0000000-0000-4000-8000-000000000012",
+    "title": "Reset two-factor sign-in",
+    "description": [
+      {
+        "type": "paragraph",
+        "text": "I changed phones and need to set it up again."
+      }
+    ],
+    "status": "closed",
+    "priority": "p3",
+    "requester": "a0000000-0000-4000-8000-000000000003",
+    "assignee": "a0000000-0000-4000-8000-000000000001"
+  }
+]

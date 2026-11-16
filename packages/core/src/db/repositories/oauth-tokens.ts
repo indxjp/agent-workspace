@@ -1,6 +1,7 @@
-import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
+import { auditEvents } from '../schema/audit-events.js';
 import { endpointClientAgents } from '../schema/endpoint-client-agents.js';
 import { endpointClients, type EndpointClientKind } from '../schema/endpoint-clients.js';
 import { oauthTokens, type OAuthTokenKind } from '../schema/oauth-tokens.js';
@@ -18,6 +19,18 @@ export interface IssueOAuthTokenInput {
   readonly codeChallenge?: string | undefined;
   readonly redirectUri?: string | undefined;
   readonly expiresAt: Date;
+}
+
+/**
+ * The audit row written with an exchanged token (ADR-0161 D11): the person as the actor, the
+ * endpoint client as the subject. Never a token, a secret or an ID token.
+ */
+export interface ExchangedTokenAudit {
+  readonly actorPrincipalId: string;
+  readonly actorUserId: string;
+  readonly actorLabel: string;
+  readonly clientId: string;
+  readonly clientName: string;
 }
 
 export interface OAuthTokenRecord {
@@ -45,6 +58,11 @@ export type OAuthConsumeOutcome =
 
 export interface OAuthTokenRepository {
   issue(input: IssueOAuthTokenInput): Promise<void>;
+  /**
+   * Issue an access token from a token exchange and write its one `user-token-exchanged` audit row
+   * in the same transaction (ADR-0161 D11), so no exchanged token exists without its row.
+   */
+  issueExchanged(input: IssueOAuthTokenInput, audit: ExchangedTokenAudit): Promise<void>;
   /**
    * Spend a code or refresh token for `clientId`. The `UPDATE ... WHERE used_at IS NULL` is the
    * single-use guarantee: of two concurrent presentations exactly one is `consumed`.
@@ -83,8 +101,13 @@ export interface ActiveOAuthAccessToken {
   readonly clientId: string;
   readonly clientKind: EndpointClientKind;
   readonly clientName: string;
-  /** The agent of an `a2a-agent` client; `null` for `mcp-project`. */
+  /** The agent of an `a2a-agent` client; `null` for every other kind. */
   readonly agentId: string | null;
+  /**
+   * Every agent the client binds, read with the client on every lookup, so unbinding an agent
+   * takes effect on the next request (ADR-0161 D8). Sorted; empty for a `builder` client.
+   */
+  readonly agentIds: readonly string[];
   readonly subjectPrincipalId: string;
   readonly resource: string;
 }
@@ -98,6 +121,8 @@ export interface OAuthClientRecord {
   readonly actsForPrincipalId: string;
   readonly clientSecretHash: string | null;
   readonly redirectUris: readonly string[];
+  /** The ID token audience of an `app-backend` client (ADR-0161 D4); `null` for every other kind. */
+  readonly oidcAudience: string | null;
 }
 
 const RECORD_COLUMNS = {
@@ -129,6 +154,7 @@ export async function findOAuthClient(
       actsForPrincipalId: endpointClients.actsForPrincipalId,
       clientSecretHash: endpointClients.clientSecretHash,
       redirectUris: endpointClients.redirectUris,
+      oidcAudience: endpointClients.oidcAudience,
     })
     .from(endpointClients)
     .where(and(eq(endpointClients.id, clientId), isNull(endpointClients.revokedAt)))
@@ -139,7 +165,8 @@ export async function findOAuthClient(
 /**
  * Cross-tenant lookup of a live access token by its globally unique hash, before the caller knows
  * which workspace it names (the same exception as `findActiveBrowserTokenByHash`). A revoked client
- * kills every token it issued here, and an `a2a-agent` client whose agent is gone fails closed.
+ * kills every token it issued here, and an `a2a-agent` or `app-backend` client whose agents are
+ * gone fails closed. The bound agents are read in the same statement as the client.
  */
 export async function findActiveOAuthAccessToken(
   db: Database,
@@ -152,7 +179,12 @@ export async function findActiveOAuthAccessToken(
       clientId: oauthTokens.clientId,
       clientKind: endpointClients.kind,
       clientName: endpointClients.name,
-      agentId: endpointClientAgents.agentId,
+      agentIds: sql<string[]>`array(
+        select ${endpointClientAgents.agentId}::text from ${endpointClientAgents}
+        where ${endpointClientAgents.workspaceId} = ${endpointClients.workspaceId}
+          and ${endpointClientAgents.clientId} = ${endpointClients.id}
+        order by ${endpointClientAgents.agentId}
+      )`,
       subjectPrincipalId: oauthTokens.subjectPrincipalId,
       resource: oauthTokens.resource,
     })
@@ -164,13 +196,6 @@ export async function findActiveOAuthAccessToken(
         eq(endpointClients.id, oauthTokens.clientId),
       ),
     )
-    .leftJoin(
-      endpointClientAgents,
-      and(
-        eq(endpointClientAgents.workspaceId, endpointClients.workspaceId),
-        eq(endpointClientAgents.clientId, endpointClients.id),
-      ),
-    )
     .where(
       and(
         eq(oauthTokens.tokenHash, tokenHash),
@@ -180,12 +205,14 @@ export async function findActiveOAuthAccessToken(
         isNull(endpointClients.revokedAt),
       ),
     )
-    .orderBy(asc(endpointClientAgents.agentId))
     .limit(1);
   const row = rows[0];
   if (row === undefined) return null;
-  if (row.clientKind === 'a2a-agent' && row.agentId === null) return null;
-  return { ...row, agentId: row.clientKind === 'a2a-agent' ? row.agentId : null };
+  const agentIds: readonly string[] = row.agentIds;
+  const agentId = agentIds[0] ?? null;
+  if (row.clientKind === 'a2a-agent' && agentId === null) return null;
+  if (row.clientKind === 'app-backend' && agentIds.length === 0) return null;
+  return { ...row, agentIds, agentId: row.clientKind === 'a2a-agent' ? agentId : null };
 }
 
 export function createDatabaseOAuthTokenRepositoryProvider(
@@ -203,20 +230,38 @@ export function createDatabaseOAuthTokenRepositoryProvider(
           .returning({ id: oauthTokens.id });
         return changed.length;
       };
+      const tokenRow = (input: IssueOAuthTokenInput) => ({
+        id: input.id,
+        workspaceId,
+        clientId: input.clientId,
+        kind: input.kind,
+        tokenHash: input.tokenHash,
+        subjectPrincipalId: input.subjectPrincipalId,
+        resource: input.resource,
+        familyId: input.familyId,
+        codeChallenge: input.codeChallenge ?? null,
+        redirectUri: input.redirectUri ?? null,
+        expiresAt: input.expiresAt,
+      });
       return {
         async issue(input) {
-          await db.insert(oauthTokens).values({
-            id: input.id,
-            workspaceId,
-            clientId: input.clientId,
-            kind: input.kind,
-            tokenHash: input.tokenHash,
-            subjectPrincipalId: input.subjectPrincipalId,
-            resource: input.resource,
-            familyId: input.familyId,
-            codeChallenge: input.codeChallenge ?? null,
-            redirectUri: input.redirectUri ?? null,
-            expiresAt: input.expiresAt,
+          await db.insert(oauthTokens).values(tokenRow(input));
+        },
+
+        async issueExchanged(input, audit) {
+          if (input.kind !== 'access')
+            throw new Error('a token exchange issues access tokens only');
+          await db.transaction(async (tx) => {
+            await tx.insert(oauthTokens).values(tokenRow(input));
+            await tx.insert(auditEvents).values({
+              workspaceId,
+              actorPrincipalId: audit.actorPrincipalId,
+              actorUserId: audit.actorUserId,
+              actorLabel: audit.actorLabel,
+              action: 'user-token-exchanged',
+              subjectId: audit.clientId,
+              subjectLabel: audit.clientName,
+            });
           });
         },
 

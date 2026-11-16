@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Generates `docs/sdk/api/<package>/<subpath>.api.md`, the API Extractor report of every
- * `exports` subpath of the published consumer packages (contracts, sdk, react, aw). A report is
- * the full public declaration (signatures, members, generics), so a breaking change reads as a
+ * `exports` subpath of the published consumer packages (contracts, sdk, react, app, aw). A report
+ * is the full public declaration (signatures, members, generics), so a breaking change reads as a
  * normal diff before the package is published. `--write` regenerates the reports
  * (`pnpm api:update`), `--check` renders them in a scratch directory and fails when a committed
  * file differs (`docs:check`). The reports are generated, never hand-edited.
@@ -21,7 +21,7 @@ import ts from 'typescript';
 
 /** Repo-relative directory of the committed reports. */
 export const API_DIR = 'docs/sdk/api';
-export const API_PACKAGES = ['contracts', 'sdk', 'react', 'aw'];
+export const API_PACKAGES = ['contracts', 'sdk', 'react', 'app', 'aw'];
 
 /** @param {string} directory @returns {Promise<string[]>} every file under it, relative, sorted */
 async function listFiles(directory) {

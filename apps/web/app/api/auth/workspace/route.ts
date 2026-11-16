@@ -51,8 +51,9 @@ import {
   checkRequestOrigin,
   clearedSelectionCookie,
   mintSessionToken,
+  newEmailLinkSessionClaims,
   newSessionClaims,
-  readSessionSecret,
+  sessionSecret,
   safeNextPath,
   sessionCookie,
   verifySelectionToken,
@@ -92,7 +93,7 @@ async function readSelection(request: Request, secret: string): Promise<Selectio
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = readSessionSecret(process.env);
+  const secret = sessionSecret();
   if (!secret.ok) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 });
 
   const selection = await readSelection(request, secret.secret);
@@ -129,6 +130,34 @@ function contentTypeIsJson(request: Request): boolean {
   );
 }
 
+/** The one workspace a session minted by the email-link sign-in may enter; `null` for any other. */
+function boundWorkspaceOf(session: Awaited<ReturnType<typeof verifySessionToken>> | null) {
+  return session?.ok === true && session.claims.via === 'email_link' ? session.claims.ws : null;
+}
+
+/**
+ * The membership `requested` names, by id or slug, among the caller's current ones. A session bound
+ * to one workspace (`boundSlug`) can enter no other, however many memberships the address holds.
+ */
+function selectMembership<T extends { workspaceId: string; workspaceSlug: string }>(
+  memberships: readonly T[],
+  requested: string,
+  boundSlug: string | null,
+): T | undefined {
+  return memberships.find(
+    (candidate) =>
+      (candidate.workspaceId === requested || candidate.workspaceSlug === requested) &&
+      (boundSlug === null || candidate.workspaceSlug === boundSlug),
+  );
+}
+
+/** The claims for the switched session: marked again when it was an email-link session. */
+function switchedClaims(email: string, workspaceSlug: string, fromEmailLink: boolean) {
+  return fromEmailLink
+    ? newEmailLinkSessionClaims(email, workspaceSlug)
+    : newSessionClaims(email, workspaceSlug);
+}
+
 export async function POST(request: Request): Promise<Response> {
   const isJson = contentTypeIsJson(request);
 
@@ -146,7 +175,7 @@ export async function POST(request: Request): Promise<Response> {
       : NextResponse.json({ error: 'cross_origin' }, { status: 403 });
   }
 
-  const secret = readSessionSecret(process.env);
+  const secret = sessionSecret();
   const runtime = applicationContext()?.rbac ?? null;
   if (!secret.ok || runtime === null) {
     return isJson
@@ -195,6 +224,9 @@ export async function POST(request: Request): Promise<Response> {
 
   let email: string;
   let userId: string | null = null;
+  // A session the email-link sign-in minted is a guest of one demo workspace. It is never switched
+  // to another, whatever memberships the address has gained since, and never re-minted unmarked.
+  const boundWorkspaceSlug = boundWorkspaceOf(verifiedSession);
   if (verifiedSession !== null && verifiedSession.ok) {
     email = verifiedSession.claims.sub;
   } else {
@@ -222,9 +254,7 @@ export async function POST(request: Request): Promise<Response> {
   // earlier in this request's own session: a membership removed since is a membership this
   // request must not honour.
   const memberships = await runtime.directory.membershipsForUser(userId);
-  const match = memberships.find(
-    (candidate) => candidate.workspaceId === requested || candidate.workspaceSlug === requested,
-  );
+  const match = selectMembership(memberships, requested, boundWorkspaceSlug);
   if (match === undefined) {
     // Identical outcome whether `requested` names a real workspace this user does not belong to,
     // or names nothing at all — the response must not be an oracle for which.
@@ -233,7 +263,10 @@ export async function POST(request: Request): Promise<Response> {
       : redirectTo('/api/auth/workspace', pickerQuery('workspace_not_available', destination));
   }
 
-  const token = await mintSessionToken(newSessionClaims(email, match.workspaceSlug), secret.secret);
+  const token = await mintSessionToken(
+    switchedClaims(email, match.workspaceSlug, boundWorkspaceSlug !== null),
+    secret.secret,
+  );
 
   if (isJson) {
     const workspacesRuntime = applicationContext()?.workspaces ?? null;

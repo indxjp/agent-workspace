@@ -10,7 +10,7 @@ import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';

@@ -24,12 +24,12 @@
  *
  * The key's role is always `admin`. The issuer reads the role of `userId`'s own membership of
  * `workspaceId` from the directory, never from its caller, and mints only when that stored role is
- * `owner` or `admin`: exactly the callers `conferRole(role, 'admin')` in `rbac/conferral.ts` allows,
+ * `owner` or `admin`: exactly the callers `conferRole(role, 'admin')` in `rbac/core/conferral.ts` allows,
  * so the key never exceeds the person it stands for. No membership, or any other role, is
  * `not_issued`. This module does not import `conferral.ts` itself because it is bundled into the
  * local runtime, whose type-check (`packages/embedded`, `nodenext`) refuses the extensionless
  * relative imports of the RBAC module graph behind it; `local-credential.test.ts` asserts, for every
- * role in `rbac/roles.ts`, that {@link mayHoldLocalApiKey} answers exactly what
+ * role in `rbac/core/roles.ts`, that {@link mayHoldLocalApiKey} answers exactly what
  * `conferRole(role, 'admin')` answers, so the two cannot drift.
  *
  * ## It cannot outlive the run

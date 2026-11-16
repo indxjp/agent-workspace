@@ -5,7 +5,7 @@
  * never reaches the model resolver or the usage recorder. The agent sandbox therefore never holds
  * a tool token and cannot choose where the gateway dials.
  */
-import type { DatabaseRoot, RunRecord } from '@agent-workspace/core/db';
+import type { RunRecord } from '@agent-workspace/core/db';
 import { terminalRunStatuses } from '@agent-workspace/core/db';
 import {
   TOOL_GATEWAY_PROBLEM_CODES,
@@ -13,6 +13,7 @@ import {
 } from '@indx-workspace/contracts/tool-connectors';
 
 import { verifyRunToken } from '../auth.js';
+import type { GatewayRunTokens } from '../ports.js';
 import { endpointSandboxRunId, type EndpointGrantCodec } from '../tokens/endpoint-grant.js';
 import {
   toolSandboxRunToken,
@@ -35,6 +36,11 @@ type ToolSandboxForwardDependencies = {
    * that route requires it beside the run token (ADR-0132). Never sent to any other origin.
    */
   readonly managerToken?: string;
+  /**
+   * A Google ID token for an audience, for a Cloud Run tool sandbox behind Cloud Run IAM. Sent in
+   * `x-serverless-authorization` to an https `*.run.app` origin only; never to any other origin.
+   */
+  readonly serverlessIdToken?: (audience: string) => Promise<string>;
   readonly fetch?: typeof fetch;
   readonly timeoutMs?: number;
 };
@@ -55,6 +61,8 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const MANAGER_ROUTE = /^\/tool-sandboxes\/[^/]+\/mcp$/u;
 /** The manager route's header for the run token: its `authorization` is the manager's (`apps/runner`). */
 const MANAGER_RUN_AUTHORIZATION = 'x-aw-tool-authorization';
+/** Cloud Run checks this header for its IAM invoker check, then passes `authorization` through. */
+const SERVERLESS_AUTHORIZATION = 'x-serverless-authorization';
 /** The only request headers that reach the sandbox besides the two it is given. */
 const FORWARDED_HEADERS = ['content-type', 'accept', 'mcp-protocol-version', 'x-aw-agent'] as const;
 
@@ -104,7 +112,11 @@ function tooLarge(): Response {
  * The run a verified token names, through its workspace scope, while the token is active and the
  * run is not over; `null` otherwise. `runs` is that scope's run store.
  */
-export async function liveRun(database: DatabaseRoot, claims: RunTokenClaims, tokenHash: string) {
+export async function liveRun(
+  database: GatewayRunTokens,
+  claims: RunTokenClaims,
+  tokenHash: string,
+) {
   const scope = await database.scopes.forWorkspaceId(claims.workspaceId);
   if (scope === null) return null;
   const tokenActive = await database.runTokens
@@ -116,7 +128,7 @@ export async function liveRun(database: DatabaseRoot, claims: RunTokenClaims, to
 }
 
 /** C16's shape for the sandbox: the token is live, the run is not over and a sandbox was recorded. */
-export function createDatabaseToolSandboxResolver(database: DatabaseRoot): ToolSandboxResolver {
+export function createDatabaseToolSandboxResolver(database: GatewayRunTokens): ToolSandboxResolver {
   return {
     async resolve(claims, tokenHash): Promise<ToolSandboxResolution> {
       const refuse = (code: ToolRefusal['code']): ToolRefusal => ({
@@ -163,6 +175,16 @@ async function forwardToToolSandbox(
       headers.set(MANAGER_RUN_AUTHORIZATION, runAuthorization);
     } else {
       headers.set('authorization', runAuthorization);
+    }
+    if (
+      dependencies.serverlessIdToken !== undefined &&
+      url.protocol === 'https:' &&
+      url.hostname.endsWith('.run.app')
+    ) {
+      headers.set(
+        SERVERLESS_AUTHORIZATION,
+        `Bearer ${await dependencies.serverlessIdToken(url.origin)}`,
+      );
     }
     const upstream = await (dependencies.fetch ?? fetch)(url, {
       method: 'POST',

@@ -6,11 +6,15 @@ import type {
   BuilderToolName,
   BuilderToolOutputs,
 } from '@indx-workspace/contracts/builder';
-import type { EvalCase, EvaluationResource } from '@indx-workspace/contracts/evaluations';
-import type { RunStatus } from '@indx-workspace/contracts/runs';
+import type { BuiltinAgentProblemCode } from '@indx-workspace/contracts/agents';
+import type {
+  EvalCase,
+  EvaluationProblemCode,
+  EvaluationResource,
+} from '@indx-workspace/contracts/evaluations';
+import type { RunStartProblemCode, RunStatus } from '@indx-workspace/contracts/runs';
 
-import type { RunOwnershipPrincipal } from '../agents/run-ownership';
-import type { Role } from '../rbac/roles';
+import type { Role, RunOwnershipPrincipal } from '../identity';
 import type { Facts, JournalRow } from './core/facts';
 
 /** The cost class of a tool (design §04): what the caller's role must allow. */
@@ -128,10 +132,24 @@ export interface CheckerPort {
   ): Promise<CheckResult>;
 }
 
+/**
+ * The codes a refused evaluation can carry: the evaluation route's own, those of a first case
+ * whose run start was refused, a built-in agent's, the runner's checks of the caller and budget,
+ * and `trial_not_stopped` for a case run that could not be stopped.
+ */
+export type EvalRefusalCode =
+  | EvaluationProblemCode
+  | RunStartProblemCode
+  | BuiltinAgentProblemCode
+  | 'no_caller'
+  | 'forbidden'
+  | 'invalid_run_limits'
+  | 'trial_not_stopped';
+
 /** An evaluation as the console stores it, or the refusal the console route would have answered. */
 export type EvalResult =
   | { readonly ok: true; readonly evaluation: EvaluationResource }
-  | { readonly ok: false; readonly code: string; readonly message: string };
+  | { readonly ok: false; readonly code: EvalRefusalCode; readonly message: string };
 
 /** A trial run as it ended, or the refusal the run route would have answered. `output` is untrusted data. */
 export type TrialResult =
@@ -148,12 +166,15 @@ export type TrialResult =
 export interface RunnerPort {
   /**
    * Scores `cases` against a saved version as the caller, through the evaluations route's own
-   * handler and RBAC: whoever may not evaluate the agent in the console may not here either.
+   * handler and RBAC: whoever may not evaluate the agent in the console may not here either. Each
+   * case's run is started under `budgetUsd`, capped at `BUILDER_DEFAULT_LIMITS.trialBudgetUsd` and
+   * able only to lower the agent's own budget, and no case is left running when this answers.
    */
   evaluate(
     ctx: CallContext,
     agentId: string,
     version: number,
+    budgetUsd: number,
     cases?: readonly EvalCase[],
   ): Promise<EvalResult>;
   /**

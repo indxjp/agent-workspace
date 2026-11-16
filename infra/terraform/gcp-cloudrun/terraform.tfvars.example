@@ -1,0 +1,47 @@
+project_id            = "replace-with-project-id"
+region                = "asia-northeast1"
+name                  = "agent-workspace"
+bootstrap_admin_email = "admin@example.com"
+
+# "small" (default): shared-core Cloud SQL, gateway and runner manager scale to zero.
+# "standard": db-custom-2-7680 with REGIONAL high availability, minimum 1 instance everywhere.
+# size = "standard"
+
+# On by default: protects Cloud SQL, both buckets and the three long-lived Cloud Run services.
+# Set to false only for a disposable test stack, and deploy that first, so that aw deploy destroy can delete them.
+# data_protection = false
+
+images = {
+  web     = "asia-northeast1-docker.pkg.dev/example/agent-workspace/web@sha256:REPLACE"
+  gateway = "asia-northeast1-docker.pkg.dev/example/agent-workspace/gateway@sha256:REPLACE"
+  runner  = "asia-northeast1-docker.pkg.dev/example/agent-workspace/runner@sha256:REPLACE"
+  runtime = "asia-northeast1-docker.pkg.dev/example/agent-workspace/runtime@sha256:REPLACE"
+}
+
+# Adopt an existing network instead of creating one (set both). It must already have Private
+# Services Access and a private run.app zone.
+# network    = "projects/PROJECT/global/networks/NAME"
+# subnetwork = "projects/PROJECT/regions/REGION/subnetworks/NAME"
+
+# Single sign-on (set both). aw deploy stores the client secret in Secret Manager.
+# oidc_issuer    = "https://login.example.com"
+# oidc_client_id = "CLIENT_ID"
+
+# A custom domain behind an HTTPS load balancer (managed certificate, HTTP to HTTPS redirect). Point
+# the domain's A record at the load_balancer_ip output. armor and iap both require domain.
+# domain = "app.example.com"
+# armor  = true  # Cloud Armor OWASP rules on the load balancer
+# iap    = true  # Identity-Aware Proxy in front of web
+
+# Where alert notifications go. Leave it unset to create no notification channel, no alert policy and
+# no uptime check (the log-based metrics and the dashboard are always created).
+# alerts_email = "oncall@example.com"
+
+# Give sandboxes internet through an egress proxy VM (needs images.egress_proxy, and a module-created
+# network). Leave it unset and sandboxes reach only the gateway.
+# sandbox_internet = true
+
+# Apps and code-tool sandboxes (aw deploy renders these). tool_host goes in the images object above.
+# apps = {
+#   crm = { image = "asia-northeast1-docker.pkg.dev/example/agent-workspace/crm@sha256:REPLACE", url = "https://crm.example.com", role_sql = "..." }
+# }

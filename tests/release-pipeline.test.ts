@@ -43,6 +43,13 @@ describe('Wave 6 release pipeline', () => {
       expect(ignored, entry).toContain(entry);
     }
   });
+  it.each(['**/*.test.ts', '**/*.test.tsx', '**/*.test-support.ts'])(
+    'keeps test-only sources matching %s out of every image',
+    (pattern) => {
+      const ignored = readFileSync('.dockerignore', 'utf8').split('\n');
+      expect(ignored).toContain(pattern);
+    },
+  );
   it('keeps nested env files and Terraform variables, plans and state out of every image', () => {
     const ignored = readFileSync('.dockerignore', 'utf8').split('\n');
     for (const entry of ['**/.env', '**/.env.*', '**/*.tfvars', '**/*.tfplan', '**/*.tfstate']) {

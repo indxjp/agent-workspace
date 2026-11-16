@@ -42,7 +42,7 @@ import {
 import { sql } from 'drizzle-orm';
 
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
-import { membershipRoles } from './memberships.js';
+import { conferrableRoles } from './memberships.js';
 import { oneOf } from './one-of.js';
 import { workspaces } from './workspaces.js';
 
@@ -56,7 +56,7 @@ export const apiKeys = pgTable(
     /** §22's "Production", "CI". Unique in the workspace so the list is unambiguous. */
     name: text('name').notNull(),
     /** §22's "permissions", as one of §21's four roles. */
-    role: text('role', { enum: membershipRoles }).notNull(),
+    role: text('role', { enum: conferrableRoles }).notNull(),
     /** The displayable head of the key, §22's `ak_live_` prefix. Never enough to authenticate. */
     keyPrefix: text('key_prefix').notNull(),
     /** §22: "Store only a secure hash." Globally unique, because presentation looks a key up by it. */
@@ -80,7 +80,7 @@ export const apiKeys = pgTable(
     uniqueIndex('api_keys_key_hash_key').on(table.keyHash),
     // "Which keys are live", the query the admin screen and every request path run.
     index('api_keys_workspace_revoked_idx').on(table.workspaceId, table.revokedAt),
-    oneOf('api_keys_role_valid', table.role, membershipRoles),
+    oneOf('api_keys_role_valid', table.role, conferrableRoles),
     check('api_keys_name_not_blank', sql`length(btrim(${table.name})) > 0`),
     check('api_keys_key_prefix_not_blank', sql`length(btrim(${table.keyPrefix})) > 0`),
     check('api_keys_key_hash_not_blank', sql`length(btrim(${table.keyHash})) > 0`),

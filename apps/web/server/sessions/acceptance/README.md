@@ -1,8 +1,8 @@
 # W2-CP-07 acceptance — a real process kill, a real resume, a real model
 
-> **ACCEPT** (the Wave 2 plan): *"Kill the runtime mid-session, start a fresh one, resume,
+> **ACCEPT** (the Wave 2 plan): _"Kill the runtime mid-session, start a fresh one, resume,
 > and the conversation continues — demonstrated against a real process kill, not a mocked one. This
-> is plan §10's release blocker."*
+> is plan §10's release blocker."_
 
 Everything in this directory exists to execute that sentence. It is a probe fixture, not product
 code, and nothing under `apps/web` imports it.
@@ -20,8 +20,8 @@ runner, not a transpiled copy of its source.
 **Neither half of that command is decoration.** The file is named `resume.acceptance.ts`, not
 `*.test.ts`, so `pnpm test` never collects it and `--config` is the only way in; and the environment
 variable is checked in `beforeAll`, which **throws** rather than skipping. That shape is forced by
-CI: the workflow’s *"No test in the run was skipped"* step fails the job on any test that did not
-execute, because *"a skipped test is not a passed test"*. A `describe.skipIf(…)` here was tried
+CI: the workflow’s _"No test in the run was skipped"_ step fails the job on any test that did not
+execute, because _"a skipped test is not a passed test"_. A `describe.skipIf(…)` here was tried
 first and turned CI red, which is the gate working. `vitest.config.mjs` beside this file records the
 whole of it.
 
@@ -47,16 +47,16 @@ at the config directory that already works and isolates itself inside it with a 
   └──────────────────────────────┘                 → a real model         → a real model
 ```
 
-* The **store and the handlers are the shipped ones**, imported directly. Vitest transpiles them;
+- The **store and the handlers are the shipped ones**, imported directly. Vitest transpiles them;
   `apps/web` has no importable build output, which is why this is a test file rather than a `.mjs`
   script beside `../../runs/acceptance/run-acceptance.mjs`.
-* The **runner is the shipped one**. The child's entry module imports `startLocalAgent` from
+- The **runner is the shipped one**. The child's entry module imports `startLocalAgent` from
   `apps/runner/dist/runtime.js`, `runnerBaseEnvironment` from `dist/index.js` and the mirror from
   `dist/session.js`. The only thing it does that `startAgentInThisContainer` does not is pass
   `{ sessionStore }` — which is exactly the wiring gap declared in
   [`W2-CP-07-the-two-wiring-lines-this-task-does-not-own.md`](../../../../../docs/adr/W2-CP-07-the-two-wiring-lines-this-task-does-not-own.md),
   made visible here rather than hidden.
-* The child's entry file is **written to a temporary directory at run time**, for the reason
+- The child's entry file is **written to a temporary directory at run time**, for the reason
   `../../runs/acceptance/README.md` gives about its own temporary file: a committed `.mjs` importing
   `apps/runner/dist/**` would be a tracked file with a module reference into a gitignored directory,
   which `tests/no-sdk-import.test.ts` refuses by name (ADR-0032 clause 2). Its exact bytes are the
@@ -74,7 +74,7 @@ at the config directory that already works and isolates itself inside it with a 
 
 2. **`rm -rf <CLAUDE_CONFIG_DIR>/projects/<projectKey>`.** This is the sandbox's own copy of the
    transcript. R-01 §6 verified live that a session lives there by default, and §14.9 calls a session
-   that lives *only* there the release blocker. With it gone, the store is the only surviving copy,
+   that lives _only_ there the release blocker. With it gone, the store is the only surviving copy,
    so a passing turn 2 cannot be explained by local disk. The harness asserts the directory's name
    begins with the prefix it generated before it removes anything.
 
@@ -91,30 +91,30 @@ that has read this repository.
 
 Proven, by executed output:
 
-* an Agent SDK session's state reaches durable storage outside the sandbox, through
+- an Agent SDK session's state reaches durable storage outside the sandbox, through
   `apps/runner/src/session.ts` and the §20 routes;
-* `claude.ts`'s `sessionDurability()` answers `durable: true` with a mirrored-batch count, because
+- `claude.ts`'s `sessionDurability()` answers `durable: true` with a mirrored-batch count, because
   the appends resolved, no batch was dropped, and the stream reached a `result`;
-* the process holding that session can be destroyed by the operating system, and its local transcript
+- the process holding that session can be destroyed by the operating system, and its local transcript
   deleted, and a **different** process can resume the conversation from the store alone;
-* the resumed model answers with a fact stated only in the destroyed process's conversation.
+- the resumed model answers with a fact stated only in the destroyed process's conversation.
 
 **Not** proven, and not claimed anywhere:
 
-* **PostgreSQL.** The backend here is `InMemoryTranscriptStore`. §20 prefers PostgreSQL and the adapter is
+- **PostgreSQL.** The backend here is `InMemoryTranscriptStore`. §20 prefers PostgreSQL and the adapter is
   a declared gap — [`W2-CP-07-session-state-has-no-table-in-section-27.md`](../../../../../docs/adr/W2-CP-07-session-state-has-no-table-in-section-27.md).
-* **A deployment.** This run installs the session API itself, as a test domain of the application
+- **A deployment.** This run installs the session API itself, as a test domain of the application
   context; it does not boot the composition root (`apps/web/server/composition/session-rbac.ts`) or
   the runner's (`apps/runner/src/index.ts`).
-* **Next.js.** The handlers are driven through a plain `node:http` server that makes the same calls
+- **Next.js.** The handlers are driven through a plain `node:http` server that makes the same calls
   the App Router files make. The route files themselves are covered by `../routes.test.ts` and by
   `tests/route-inventory.test.ts`, not by this run.
-* **A second machine.** One host, one operating system. R-01 flags multi-host resume as *documented,
-  not probed*; this run makes it *probed on one host*, which is a mechanism established and not a
+- **A second machine.** One host, one operating system. R-01 flags multi-host resume as _documented,
+  not probed_; this run makes it _probed on one host_, which is a mechanism established and not a
   platform contract.
-* **Subagent transcripts.** `listSubkeys` is implemented and unit-tested, but this run's agent has no
+- **Subagent transcripts.** `listSubkeys` is implemented and unit-tested, but this run's agent has no
   subagents, so no subagent transcript was mirrored or restored.
-* **Anything about cost or latency.** The run is two single-turn prompts; the numbers it prints are
+- **Anything about cost or latency.** The run is two single-turn prompts; the numbers it prints are
   identifiers, not measurements.
 
 ## What the run printed

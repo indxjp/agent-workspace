@@ -13,14 +13,19 @@ import type { ComposerPrefill } from '../run/run-view';
 import { initialsFrom } from '../shell/identity';
 import { loadAgents } from './agent-requests-model';
 import { BTN, BTN_DEFAULT } from './agent-form';
-import { BuilderApproval } from './builder-approval';
+import { BuilderApproval, NOT_SENT_CODE, type DecisionProblem } from './builder-approval';
+import { builderStrings, detailText, refusalText, type BuilderStrings } from './builder-messages';
 import { BuilderSaved } from './builder-saved';
-import { builderRefusalIn, draftsFrom, type SavedDraft } from './definition-from-run';
-import type { DefinitionSection } from '@indx-workspace/sdk/portable';
+import {
+  builderRefusalIn,
+  draftsFrom,
+  type DraftView,
+  type SavedDraft,
+} from './definition-from-run';
+import { diffBodies, type DefinitionSection } from '@indx-workspace/sdk/portable';
 import { DefinitionPreview } from './definition-preview';
 import type { RequestProblem } from './model';
-
-const UNAVAILABLE = 'The Builder is not available in this workspace';
+import type { VersionsLocale } from './versions-messages';
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -43,17 +48,30 @@ interface RunEvent {
 
 type BuilderIdentity = Pick<AgentResource, 'id' | 'name'>;
 
-function composerAgentFor(builder: BuilderIdentity): ComposerAgent {
+function composerAgentFor(builder: BuilderIdentity, strings: BuilderStrings): ComposerAgent {
   return {
     id: builder.id,
     name: builder.name,
-    detail: 'Builds an agent with you, one question at a time.',
+    detail: strings.composerDetail,
     files: [],
     connectors: [],
     sandbox: 'Builder',
     runTarget: { kind: 'unknown' },
     drivableProviders: [],
   };
+}
+
+/**
+ * The body the person last saw before the latest draft: the last earlier draft that reads
+ * differently. The Builder checks a body and then saves that same body, and comparing the save with
+ * its own check would hide every change just when the approval card asks about them (UX-11).
+ */
+function previousBody(drafts: readonly DraftView[], latest: DraftView): DraftView['body'] | null {
+  for (let index = drafts.length - 2; index >= 0; index -= 1) {
+    const draft = drafts[index];
+    if (draft !== undefined && diffBodies(draft.body, latest.body).length > 0) return draft.body;
+  }
+  return null;
 }
 
 /**
@@ -65,21 +83,22 @@ export function BuilderPreviewPanel({
   events,
   saved = null,
   onAskBuilder,
+  locale = 'en',
 }: Readonly<{
   events: readonly AgentEvent[];
   saved?: SavedDraft | null;
   onAskBuilder: (section: DefinitionSection) => void;
+  locale?: VersionsLocale;
 }>) {
+  const strings = builderStrings(locale);
   const drafts = draftsFrom(events);
   const latest = drafts.at(-1);
-  const header = saved === null ? null : <BuilderSaved saved={saved} />;
+  const header = saved === null ? null : <BuilderSaved saved={saved} locale={locale} />;
   if (latest === undefined) {
     return (
       <>
         {header}
-        <p className="text-[13px] text-muted">
-          The definition appears here once the Builder checks a draft.
-        </p>
+        <p className="text-[13px] text-muted">{strings.previewEmpty}</p>
       </>
     );
   }
@@ -93,22 +112,28 @@ export function BuilderPreviewPanel({
           className="mb-3 rounded-(--radius) border border-border-strong bg-danger-soft p-3 text-[13px]"
         >
           <p className="font-semibold">
-            The last check failed: <code>{failure.code}</code>
+            {latest.source === 'save' ? strings.saveFailed : strings.checkFailed}{' '}
+            {/* The check's own sentence comes from the server, in English. */}
+            <span lang="en">{failure.message ?? ''}</span>
           </p>
           {failure.details.length === 0 ? null : (
             <ul className="mt-1 list-disc pl-5">
               {failure.details.map((detail, index) => (
                 // Two details may read the same; the position keeps their keys apart.
-                <li key={`${String(index)}:${detail}`}>{detail}</li>
+                <li key={`${String(index)}:${detail}`}>{detailText(detail, strings)}</li>
               ))}
             </ul>
           )}
+          <p className="mt-1 text-[12px] text-muted">
+            {strings.code} <code>{failure.code}</code>
+          </p>
         </div>
       )}
       <DefinitionPreview
         body={latest.body}
-        previous={drafts.at(-2)?.body ?? null}
+        previous={previousBody(drafts, latest)}
         onAskBuilder={onAskBuilder}
+        locale={locale}
       />
     </>
   );
@@ -117,7 +142,15 @@ export function BuilderPreviewPanel({
 export function BuilderChat({
   builder,
   user,
-}: Readonly<{ builder: BuilderIdentity; user: Speaker }>) {
+  filesEnabled = true,
+  locale = 'en',
+}: Readonly<{
+  builder: BuilderIdentity;
+  user: Speaker;
+  filesEnabled?: boolean;
+  locale?: VersionsLocale;
+}>) {
+  const strings = builderStrings(locale);
   const [entries, setEntries] = useState<readonly RunEvent[]>([]);
   const [decided, setDecided] = useState<readonly string[]>([]);
   // The continuation runs the person approved: only their saves count as saved.
@@ -142,7 +175,10 @@ export function BuilderChat({
       ? asked.runId
       : null;
 
-  async function decide(runId: string, decision: 'approve' | 'reject'): Promise<string | null> {
+  async function decide(
+    runId: string,
+    decision: 'approve' | 'reject',
+  ): Promise<DecisionProblem | null> {
     const runs = browserClient().runs;
     try {
       const { run } = await (decision === 'approve' ? runs.approve(runId) : runs.reject(runId));
@@ -151,18 +187,27 @@ export function BuilderChat({
       setFollow((current) => ({ runId: run.id, nonce: (current?.nonce ?? 0) + 1 }));
       return null;
     } catch (error) {
-      return error instanceof ApiProblemError ? error.code : 'request_failed';
+      return error instanceof ApiProblemError
+        ? { message: error.message, code: error.code }
+        : { message: strings.notSent, code: NOT_SENT_CODE };
     }
   }
 
   function askBuilder(section: DefinitionSection) {
-    const title = `${section.charAt(0).toUpperCase()}${section.slice(1)}`;
-    setPrefill((current) => ({ text: `Change ${title}: `, nonce: (current?.nonce ?? 0) + 1 }));
+    // English names the section by its key, capitalised, as it always has; Japanese by its title.
+    const title =
+      locale === 'en'
+        ? `${section.charAt(0).toUpperCase()}${section.slice(1)}`
+        : strings.sections[section];
+    setPrefill((current) => ({
+      text: strings.askPrefill(title),
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
   }
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-      <section aria-label="Definition" className="min-w-0 lg:order-2">
+      <section aria-label={strings.definition} className="min-w-0 lg:order-2">
         <button
           type="button"
           aria-expanded={open}
@@ -170,25 +215,36 @@ export function BuilderChat({
           onClick={() => setOpen((current) => !current)}
           className={`${BTN} ${BTN_DEFAULT} lg:hidden`}
         >
-          Definition
+          {strings.definition}
         </button>
         <div
           id="builder-definition"
           className={`${open ? 'block' : 'hidden'} mt-3 lg:mt-0 lg:block`}
         >
-          <BuilderPreviewPanel events={events} saved={saved} onAskBuilder={askBuilder} />
+          <BuilderPreviewPanel
+            events={events}
+            saved={saved}
+            onAskBuilder={askBuilder}
+            locale={locale}
+          />
         </div>
       </section>
       <div className="min-w-0 lg:order-1">
         {refusal === null ? null : (
           <p role="alert" className="mb-3 text-[13px]">
-            {UNAVAILABLE} · <code>{refusal}</code>
+            {strings.unavailableSentence} {refusalText(refusal, strings)}{' '}
+            <span className="text-muted">
+              {strings.code} <code>{refusal}</code>
+            </span>
           </p>
         )}
         <HomeChat
-          agents={{ kind: 'agents', agents: [composerAgentFor(builder)] }}
+          landmark={false}
+          agents={{ kind: 'agents', agents: [composerAgentFor(builder, strings)] }}
+          locale={locale}
           recent={[]}
           user={user}
+          filesEnabled={filesEnabled}
           agent={{ id: builder.id, locked: true }}
           {...(prefill === undefined ? {} : { prefill })}
           {...(follow === undefined ? {} : { follow })}
@@ -199,6 +255,7 @@ export function BuilderChat({
                 key={waitingRun}
                 events={events}
                 onDecide={(decision) => decide(waitingRun, decision)}
+                locale={locale}
               />
             )
           }
@@ -209,18 +266,19 @@ export function BuilderChat({
 }
 
 /** `/agents/new?mode=chat`: the chat with the built-in Builder beside the definition it writes. */
-export function BuilderMode({ modeSwitch }: Readonly<{ modeSwitch: ReactNode }>) {
+export function BuilderMode({
+  modeSwitch,
+  filesEnabled,
+  locale = 'en',
+}: Readonly<{ modeSwitch: ReactNode; filesEnabled: boolean; locale?: VersionsLocale }>) {
+  const strings = builderStrings(locale);
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
     const client = browserClient();
     void Promise.all([
       loadAgents(client),
-      requestOutcome(
-        client.me(),
-        'The request to load your profile failed',
-        'Your profile was not the published contract.',
-      ),
+      requestOutcome(client.me(), strings.profileFailed, strings.profileUnreadable),
     ]).then(([agents, me]) => {
       if (!active) return;
       if (!agents.ok) {
@@ -240,23 +298,31 @@ export function BuilderMode({ modeSwitch }: Readonly<{ modeSwitch: ReactNode }>)
     return () => {
       active = false;
     };
-  }, []);
+  }, [strings]);
 
+  // The page's one <main> in every state, as the form mode's, with the heading and mode switch
+  // inside it; the chat it holds draws a plain <div> (`landmark={false}`). "Skip to content" lands
+  // here (UX-23).
   return (
-    <div className="w-full max-w-[1320px] px-5 pt-[26px] pb-[90px] sm:px-8">
-      <h1 className="mb-[22px] text-[21px]">New Agent</h1>
+    <main lang={locale} className="w-full max-w-[1320px] px-5 pt-[26px] pb-[90px] sm:px-8">
+      <h1 className="mb-[22px] text-[21px]">{strings.heading}</h1>
       {modeSwitch}
       {loaded.kind === 'loading' ? (
-        <p className="text-[13px] text-muted">Loading the Builder…</p>
+        <p className="text-[13px] text-muted">{strings.loading}</p>
       ) : loaded.kind === 'failed' ? (
         <p role="alert" className="text-[13px]">
           {problemText(loaded.problem)}
         </p>
       ) : loaded.builder === undefined ? (
-        <p className="text-[13px] text-muted">{UNAVAILABLE}</p>
+        <p className="text-[13px] text-muted">{strings.unavailable}</p>
       ) : (
-        <BuilderChat builder={loaded.builder} user={loaded.user} />
+        <BuilderChat
+          builder={loaded.builder}
+          user={loaded.user}
+          filesEnabled={filesEnabled}
+          locale={locale}
+        />
       )}
-    </div>
+    </main>
   );
 }

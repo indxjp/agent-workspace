@@ -25,9 +25,9 @@
  * `postgres:17-alpine` (17.11) with the migration applied: a row whose `wrapped_data_key`,
  * nonces and tags are all zeroes and whose `ciphertext` is `convert_to('sk-ant-…','UTF8')` was
  * accepted, and `convert_from(ciphertext,'UTF8')` read the secret straight back. This file's own
- * test fixture is the same counterexample — `seed.test.ts`'s `goodEnvelope` fabricates every
- * companion with `Buffer.alloc` and sets `ciphertext` to `'not-really-encrypted'`, and the suite
- * asserts that row is accepted.
+ * test fixture is the same counterexample — `seed.resource-shapes.test-support.ts`'s
+ * `goodEnvelope` fabricates every companion with `Buffer.alloc` and sets `ciphertext` to
+ * `'not-really-encrypted'`, and the suite in `seed.test.ts` asserts that row is accepted.
  *
  * What the shape is, then, is a positive assertion about the PARTS an envelope has — the row
  * must carry all seven of them, at the right sizes, naming a master key — and never a proof

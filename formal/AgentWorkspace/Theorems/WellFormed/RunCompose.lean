@@ -62,7 +62,7 @@ theorem project_gate :
     projectUsable true true true = false ∧ projectUsable true false false = false := by decide +kernel
 
 /-- Existing-session acceptance requires both the exact owner and a usable project. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/composition/wiring/run-api.ts#openSession")]
+@[aw_spec (tier := T0) (ts := "apps/web/server/composition/wiring/run-api-sessions.ts#openRunSession")]
 theorem existing_session_checks_owner_and_project :
     let valid : ExistingSession :=
       { found := true, agentMatches := true, ownerMatches := true, projectUsable := true, active := true, engineSessionIdKnown := true }

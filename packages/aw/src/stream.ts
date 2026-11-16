@@ -1,5 +1,6 @@
 import { ContractViolationError } from '@indx-workspace/sdk';
 import { toAgentEvent, type AgentEvent, type RunEventFrame } from '@indx-workspace/sdk/events';
+import { stripControlSequences } from '@indx-workspace/sdk/portable';
 
 import type { CliIo } from './io.js';
 import type { OutputMode } from './output.js';
@@ -86,7 +87,7 @@ export function renderFrame(frame: RunEventFrame, mode: OutputMode): readonly st
   if (frame.kind !== 'runtime') {
     if (mode.raw) return [JSON.stringify(frame)];
     if (mode.json || mode.jsonl) return frame.kind === 'done' ? [] : [JSON.stringify(frame)];
-    const line = renderPlatformFrame(frame);
+    const line = stripControlSequences(renderPlatformFrame(frame));
     return line === '' ? [] : [line];
   }
   if (mode.raw) {
@@ -104,7 +105,8 @@ export function renderFrame(frame: RunEventFrame, mode: OutputMode): readonly st
   const event = toAgentEvent(frame);
   if (event === null) return [];
   if (mode.json || mode.jsonl) return [JSON.stringify(event)];
-  const line = renderAgentEvent(event);
+  // A model, a tool or the server wrote this text: a terminal must not act on it.
+  const line = stripControlSequences(renderAgentEvent(event));
   return line === '' ? [] : [line];
 }
 

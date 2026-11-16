@@ -13,6 +13,7 @@ import {
   type MessageListProps,
   type MessageProps,
   sendsOnEnter,
+  SurfaceComposer,
 } from './surface-chat.js';
 import {
   surfaceAgentSpeaker,
@@ -514,5 +515,47 @@ describe('Chat renders assistant text as Markdown and user text literally (ADR-0
   it('renders a partial stream, and an unclosed fence does not swallow the next block', () => {
     expect(() => render(['```bash\nnpm i'])).not.toThrow();
     expect(render(['```js\nx', 'after **b**'])).toContain('<strong>b</strong>');
+  });
+});
+
+describe('the surface composer chips are unchanged by the AttachmentChips lift (R-F5a, #1489)', () => {
+  function composerHtml(disabled: boolean, language: 'en' | 'ja'): string {
+    const strings = surfaceStrings(language);
+    return renderToStaticMarkup(
+      createElement(SurfaceComposer, {
+        value: '',
+        onChange: () => undefined,
+        onSubmit: () => undefined,
+        disabled,
+        canSend: false,
+        label: 'Message',
+        sendLabel: 'Send',
+        attachments: {
+          files: [new File(['a'], 'a.txt'), new File(['b'], '<b>.csv'), new File(['c'], 'a.txt')],
+          onAdd: () => undefined,
+          onRemove: () => undefined,
+          attachLabel: strings.attachFiles,
+          removeLabel: strings.removeFile,
+        },
+      }),
+    );
+  }
+
+  it('renders the same composer markup, byte for byte, in English', () => {
+    expect(composerHtml(false, 'en')).toBe(
+      '<form class="aw-composer"><textarea aria-label="Message" class="aw-input" rows="2"></textarea>' +
+        '<div class="aw-attachments"><button type="button" class="aw-attach">Attach files</button>' +
+        '<input type="file" multiple="" hidden=""/>' +
+        '<span class="aw-chip">a.txt<button type="button" aria-label="Remove a.txt">×</button></span>' +
+        '<span class="aw-chip">&lt;b&gt;.csv<button type="button" aria-label="Remove &lt;b&gt;.csv">×</button></span>' +
+        '<span class="aw-chip">a.txt<button type="button" aria-label="Remove a.txt">×</button></span>' +
+        '</div><button type="submit" class="aw-send" disabled="">Send</button></form>',
+    );
+  });
+
+  it('renders the same disabled chips in Japanese', () => {
+    expect(composerHtml(true, 'ja')).toContain(
+      '<span class="aw-chip">a.txt<button type="button" aria-label="a.txtを削除" disabled="">×</button></span>',
+    );
   });
 });

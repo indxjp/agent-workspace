@@ -247,6 +247,50 @@ below, and the hearing's decision D15 with it.
   and the isolation it buys is already given by the version pin, the per-run sandbox and the
   policy ceiling.
 
+## Amendment — production apps (issue #1512, 2026-10-31)
+
+Accepted on 2026-10-31 by the implementing agent of U3.7 (issue #1512) on the Owner's delegation
+for the Agent Portal programme. It changes "`environments.production` is `{ target, url }` and
+nothing else" in the #621 amendment: a portal app built with `@indx-workspace/app` is one more
+image in the production deployment.
+
+- **`environments.production` is `{ target, url, apps? }`.** `apps` is an optional map keyed by app
+  name, the name of the app's `app:<name>` entry in `aw-generated.json`, with the same name-key and
+  `__proto__` handling as `connectors`. Each value is `{ image, url }` and nothing else (a strict
+  object): `image` is a digest-pinned reference (`<repository>@sha256:<64 hex>`, not the all-zero
+  placeholder), the same gate as the platform's images; `url` is the app's own `https:` origin,
+  with no credential, path, query or fragment. Both are defined in
+  `@indx-workspace/contracts/project-file` (`ProductionAppSchema`).
+- **The schema name is derived, not configured.** An app's data lives in schema
+  `app_<name with hyphens as underscores>` (`appSchemaName` in
+  `@indx-workspace/contracts/project-file`), the name the app kit's `migrateApp` creates; a parity
+  test in `packages/app` keeps the two equal. `aw deploy` prints it.
+- **Each app gets its own database role**, named like its schema and owning it. A production app is
+  never handed the platform's `DATABASE_URL`, which can read and write every platform table.
+  References from app rows to platform rows stay ids without foreign keys.
+- **Only the `single-vm` and `kubernetes` targets deploy apps.** `gcp-cloudrun` and `vercel`
+  refuse a non-empty `apps` at `environments.production.apps` (no Terraform module and no Vercel
+  project has an app slot yet; a Cloud Run service per app is a follow-up). `aw deploy production`
+  also refuses a project whose `aw-generated.json` names an `app:<name>` that `apps` does not list,
+  before any deploy step; a project with no `aw-generated.json` has no apps.
+- **`compose.apps.yaml` is written by `aw deploy` beside the deployment's state**, in
+  `~/.config/agent-workspace/deployments/<project>/<env>/`, and selected through `COMPOSE_FILE` in
+  `.env`. It is not written by `render`: `render` reads v1 profiles, which have no apps, so
+  ADR-0090's owned set (`deploy/**`, the verbatim `compose.yaml` and the image keys of `.env`) is
+  unchanged. On `kubernetes` the Helm overlay lists the apps and the chart renders one workload per
+  app, reading an operator-created Secret, as the chart's other Secrets are.
+- `aw deploy` neither builds nor pushes an app image, registers the app's connector in production,
+  nor removes an app's containers when the app is dropped from `apps` (it never destroys).
+
+Alternatives rejected: an `apps:` list with a configured schema (it could disagree with the schema
+`migrateApp` creates); rendering apps into `compose.yaml` (it is copied verbatim, ADR-0090);
+`compose.override.yaml` (the generated-project and apps test lanes already use that name); silently
+skipping `apps` on the Terraform and Vercel targets.
+
+Proof: the contract tests in `packages/contracts/src/project-file.test.ts`, the parity test
+`packages/app/src/db/schema-name-parity.test.ts`, `packages/aw/src/commands/deploy.test.ts` and
+`packages/cli/src/deploy/recipes.test.ts`.
+
 ## Context
 
 Today `agent-workspace.yaml` is `kind: Deployment` (ADR-0089): one file describes one deployment —

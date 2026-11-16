@@ -24,6 +24,7 @@ import {
   scoreOf,
 } from './harness/benchmark.ts';
 import { PROBES } from './harness/probes.ts';
+import { assertContractEvidence } from './harness/benchmark-evidence.ts';
 import { GALLERY_DIR, loadUseCases, REPOSITORY_ROOT, TUTORIALS_DIR } from './harness/registry.ts';
 
 const START = '{/* benchmark:start */}';
@@ -105,7 +106,8 @@ describe('gallery benchmarks', () => {
     '%s',
     (id, useCase) => {
       it('names evidence that exists for every verdict', async () => {
-        const testSource = await readFile(path.join(useCase.dir, `${id}.test.ts`), 'utf8');
+        // Every gallery keeps a suite entry point even when its assertions have separate owners.
+        await readFile(path.join(useCase.dir, `${id}.test.ts`), 'utf8');
         const evalSources = await Promise.all(
           useCase.benchmark.cells.eval === null
             ? []
@@ -121,7 +123,7 @@ describe('gallery benchmarks', () => {
             `${where}: put < > { } in backticks`,
           ).not.toMatch(/[<>{}]/u);
           if (cell.evidence === 'contract') {
-            expect(testSource, `${where}: no test titled "${cell.ref}"`).toContain(`'${cell.ref}'`);
+            await assertContractEvidence({ directory: useCase.dir, id, capability, cell });
           } else if (cell.evidence === 'probe') {
             expect(Object.keys(PROBES), `${where}: no probe "${cell.ref}"`).toContain(cell.ref);
           } else if (cell.evidence === 'source') {

@@ -1,0 +1,878 @@
+/*
+ * The default look of the app kit's resource pages (issue #1508): plain CSS, no Tailwind, no build
+ * step. Import it once: `import '@indx-workspace/app/react/styles.css'`.
+ *
+ * It is driven by the hosted surface's custom properties. `AppTheme` sets --accent,
+ * --accent-foreground, --radius, --surface-gap, --surface-pad and --surface-text on the `.aw-app`
+ * root with `surfaceThemeStyle` from `@indx-workspace/react/theme`, and the palette too when the
+ * theme forces a mode. The palette below is the `system` mode's, light and dark under
+ * prefers-color-scheme, equal to the one theme.ts forces; styles.test checks it, and checks that
+ * the text and danger colours keep WCAG AA contrast on both backgrounds in both modes.
+ */
+.aw-app {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --surface-2: #f4f3f0;
+  --border: #e3e0da;
+  --text: #1b1a18;
+  --text-2: #4a4842;
+  --muted: #7d7a72;
+  --aw-app-danger: #b42318;
+  --aw-app-danger-surface: #fef3f2;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    var(--surface-text, 14px) / 1.5 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Hiragino Kaku Gothic ProN',
+    'Yu Gothic UI',
+    Meiryo,
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .aw-app {
+    --bg: #141416;
+    --surface: #1c1c1f;
+    --surface-2: #232327;
+    --border: #303036;
+    --text: #ececef;
+    --text-2: #c2c2c8;
+    --muted: #8e8e98;
+    --aw-app-danger: #ff9c94;
+    --aw-app-danger-surface: #2a1715;
+  }
+}
+
+.aw-app *,
+.aw-app *::before,
+.aw-app *::after {
+  box-sizing: border-box;
+}
+
+.aw-app :where(h1, h3, p, ul, dl, dd) {
+  margin: 0;
+}
+
+.aw-app :where(ul) {
+  padding: 0;
+  list-style: none;
+}
+
+.aw-app :where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+}
+
+.aw-app :where(a) {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* One visible focus ring for every interactive element: the keyboard path is always seen. */
+.aw-app :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.aw-app :disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.aw-app-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.aw-app-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.aw-app-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.aw-app-empty {
+  color: var(--text-2);
+}
+
+/* The list. */
+.aw-app-list,
+.aw-app-board-frame,
+.aw-app-form,
+.aw-app-record {
+  display: flex;
+  flex-direction: column;
+  gap: var(--surface-gap);
+}
+
+.aw-app-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--surface-gap);
+}
+
+.aw-app-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aw-app-filter :where(select, input),
+.aw-app-field :where(input:not([type='checkbox']), select, textarea) {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-app-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.aw-app-table :where(th, td) {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.aw-app-table th {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.aw-app-table [data-cell='number'],
+.aw-app-table [data-cell='formatted'] {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-app-pages {
+  display: flex;
+  align-items: center;
+  gap: var(--surface-gap);
+}
+
+.aw-app-status {
+  color: var(--text-2);
+}
+
+.aw-app-badge {
+  display: inline-block;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.aw-app-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aw-app-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 11px;
+}
+
+.aw-app-chips,
+.aw-app-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.aw-app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.aw-app-chip-remove {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The board. */
+.aw-app-board {
+  display: grid;
+  grid-auto-columns: minmax(220px, 1fr);
+  grid-auto-flow: column;
+  gap: var(--surface-gap);
+  overflow-x: auto;
+}
+
+.aw-app-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.aw-app-column-heading {
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.aw-app-count {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.aw-app-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aw-app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-app-card-title {
+  font-weight: 600;
+}
+
+.aw-app-card-facets,
+.aw-app-fields {
+  display: grid;
+  gap: 4px;
+}
+
+.aw-app-card-facets div,
+.aw-app-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.aw-app-card-facets dt,
+.aw-app-fields dt {
+  min-width: 8em;
+  color: var(--text-2);
+}
+
+/* The form. */
+.aw-app-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aw-app-label {
+  font-weight: 600;
+}
+
+.aw-app-required,
+.aw-app-hint {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.aw-app-field [aria-invalid='true'] {
+  border-color: var(--aw-app-danger);
+}
+
+.aw-app-field-error {
+  color: var(--aw-app-danger);
+}
+
+.aw-app-alert {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: var(--surface-pad);
+  border: 1px solid var(--aw-app-danger);
+  border-radius: var(--radius);
+  background: var(--aw-app-danger-surface);
+  color: var(--text);
+}
+
+.aw-app-alert-heading {
+  color: var(--aw-app-danger);
+  font-weight: 600;
+}
+
+.aw-app-actions {
+  display: flex;
+  gap: var(--surface-gap);
+}
+
+/* The detail. */
+.aw-app-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--surface-gap);
+}
+
+.aw-app-record-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--surface-gap);
+}
+
+.aw-app-record-header h1 {
+  font-size: 1.4em;
+}
+
+.aw-app-history,
+.aw-app-aside {
+  padding: var(--surface-pad);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-app-aside {
+  width: min(380px, 100%);
+}
+
+/* The agent panel (issue #1509). */
+.aw-app-panel {
+  display: grid;
+  gap: var(--surface-gap);
+}
+
+.aw-app-panel-heading {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.aw-app-panel-transcript {
+  display: grid;
+  gap: var(--surface-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aw-app-panel-message {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.aw-app-panel-message[data-kind='user'] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.aw-app-panel-speaker {
+  color: var(--text-2);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.aw-app-panel-prose :where(p, ul, ol) {
+  margin: 0 0 0.5em;
+}
+
+.aw-app-panel-note {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  color: var(--text-2);
+}
+
+.aw-app-panel-composer {
+  display: grid;
+  gap: 8px;
+}
+
+/* The recipe graph and the recipe run list (issue #1514): a vertical list with connectors. */
+.aw-app-recipe {
+  display: grid;
+  gap: var(--surface-gap);
+}
+
+.aw-app-recipe-head,
+.aw-app-recipe-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-app-recipe-heading,
+.aw-app-recipe-step-key {
+  margin: 0;
+  font-size: 1.1em;
+  overflow-wrap: anywhere;
+}
+
+.aw-app-recipe-step-key {
+  font-size: 1em;
+}
+
+.aw-app-recipe-steps {
+  display: grid;
+  gap: var(--surface-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aw-app-recipe-step {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: var(--surface-pad);
+  padding-inline-start: calc(var(--surface-pad) + 16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* The step's node, and the connector down to the next step. */
+.aw-app-recipe-step::before {
+  content: '';
+  position: absolute;
+  inset-block-start: calc(var(--surface-pad) + 4px);
+  inset-inline-start: 10px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.aw-app-recipe-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-block: calc(var(--surface-pad) + 16px) calc(-1 * var(--surface-gap) - 1px);
+  inset-inline-start: 15px;
+  border-inline-start: 2px solid var(--border);
+}
+
+.aw-app-recipe-step[data-status='completed']::before {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.aw-app-recipe-step[data-status='failed']::before {
+  border-color: var(--aw-app-danger);
+}
+
+.aw-app-recipe-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.aw-app-recipe-facts dt {
+  color: var(--text-2);
+  font-size: 0.85em;
+}
+
+.aw-app-recipe-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-app-recipe-error {
+  color: var(--aw-app-danger);
+}
+
+.aw-app-recipe-run-link {
+  justify-self: start;
+  color: var(--text);
+  text-underline-offset: 2px;
+}
+
+.aw-app-recipe-approval {
+  display: grid;
+  gap: 8px;
+  padding: var(--surface-pad);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.aw-app-recipe-approval-heading {
+  font-weight: 600;
+}
+
+.aw-app-recipe-call {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.aw-app-recipe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aw-app-badge[data-tone='danger'] {
+  border-color: var(--aw-app-danger);
+  background: var(--aw-app-danger-surface);
+}
+
+/* The dashboard (issue #1522): four sections in one column, each table scrolling on its own. */
+.aw-app-dashboard {
+  display: grid;
+  gap: calc(var(--surface-gap) * 2);
+}
+
+.aw-app-dashboard-section {
+  display: grid;
+  gap: var(--surface-gap);
+  min-width: 0;
+}
+
+.aw-app-dashboard-section h2 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.aw-app-dashboard-frame {
+  overflow-x: auto;
+}
+
+.aw-app-dashboard-lead {
+  display: block;
+  color: var(--text-2);
+  font-size: 0.9em;
+}
+
+/* The channel view (issue #1519): the list and composer, the thread pane beside them when wide. */
+.aw-app-channel {
+  display: grid;
+  gap: var(--surface-gap);
+}
+
+.aw-app-channel-presence,
+.aw-app-channel-status {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.aw-app-channel-panes {
+  display: grid;
+  gap: calc(var(--surface-gap) * 2);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .aw-app-channel-panes:has(.aw-app-channel-thread) {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+.aw-app-channel-main,
+.aw-app-channel-thread {
+  display: grid;
+  gap: var(--surface-gap);
+  align-content: start;
+  min-width: 0;
+}
+
+.aw-app-channel-list {
+  display: grid;
+  gap: var(--surface-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aw-app-channel-message {
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.aw-app-channel-byline {
+  margin: 0;
+}
+
+.aw-app-channel-byline time {
+  color: var(--text-2);
+  font-size: 0.9em;
+}
+
+.aw-app-channel-body > :first-child {
+  margin-top: 0;
+}
+
+.aw-app-channel-body > :last-child {
+  margin-bottom: 0;
+}
+
+.aw-app-channel-thread-button {
+  justify-self: start;
+}
+
+.aw-app-channel-composer,
+.aw-app-channel-attach {
+  display: grid;
+  gap: 4px;
+}
+
+.aw-app-channel-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The wiki's parts (issue #1521): the page tree, the block editor and the page view. */
+.aw-app-page-tree-nav {
+  display: grid;
+  gap: var(--surface-gap);
+  align-content: start;
+  min-width: 0;
+}
+
+.aw-app-page-tree {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-app-page-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-block: 4px;
+  padding-inline-end: 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.aw-app-page-tree-item[aria-selected='true'] {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.aw-app-page-tree-toggle {
+  display: inline-block;
+  width: 1em;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.aw-app-page-tree-title {
+  overflow-wrap: anywhere;
+}
+
+.aw-app-dialog {
+  max-width: min(32rem, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.aw-app-page-move {
+  display: grid;
+  gap: var(--surface-gap);
+}
+
+.aw-app-page-move h2 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.aw-app-rich-text {
+  display: grid;
+  gap: 8px;
+}
+
+.aw-app-rich-text-blocks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aw-app-rich-text-block {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: start;
+}
+
+.aw-app-rich-text-block select,
+.aw-app-rich-text-input {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.aw-app-rich-text-input {
+  width: 100%;
+  resize: vertical;
+}
+
+.aw-app-rich-text-block[data-type='heading1'] .aw-app-rich-text-input {
+  font-size: 1.5em;
+  font-weight: 600;
+}
+
+.aw-app-rich-text-block[data-type='heading2'] .aw-app-rich-text-input {
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.aw-app-rich-text-block[data-type='heading3'] .aw-app-rich-text-input {
+  font-size: 1.15em;
+  font-weight: 600;
+}
+
+.aw-app-rich-text-block[data-type='code'] .aw-app-rich-text-input {
+  font-family: ui-monospace, monospace;
+}
+
+.aw-app-rich-text-block[data-type='quote'] .aw-app-rich-text-input {
+  border-inline-start: 3px solid var(--border);
+}
+
+.aw-app-rich-text-block .aw-app-hint {
+  grid-column: 2;
+  margin: 0;
+}
+
+.aw-app-rich-text-divider {
+  align-self: center;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.aw-app-rich-text-remove {
+  padding-inline: 8px;
+}
+
+.aw-app-rich-text-prose {
+  overflow-wrap: anywhere;
+}
+
+.aw-app-page-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  gap: calc(var(--surface-gap) * 2);
+  align-items: start;
+}
+
+.aw-app-page-main,
+.aw-app-page-drawer {
+  display: grid;
+  gap: var(--surface-gap);
+  min-width: 0;
+}
+
+.aw-app-page-aside {
+  min-width: 0;
+}
+
+.aw-app-page-drawer h2 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.aw-app-page-revisions {
+  display: grid;
+  gap: var(--surface-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aw-app-page-revision {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-app-page-revision p {
+  margin: 0;
+}
+
+.aw-app-page-revision-preview {
+  overflow-wrap: anywhere;
+}
+
+.aw-app-page-revision-title {
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .aw-app-page-view {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aw-app-rich-text-block {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .aw-app-rich-text-block .aw-app-rich-text-input,
+  .aw-app-rich-text-block .aw-app-hint {
+    grid-column: 1 / -1;
+  }
+}

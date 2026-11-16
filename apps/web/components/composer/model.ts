@@ -28,9 +28,10 @@
  * input unchanged, so a caller cannot mistake "refused" for "nothing to do".
  */
 import { UuidSchema } from '@indx-workspace/contracts';
-import type { BuiltinAgentKey } from '@indx-workspace/contracts/agents';
 import { StartRunRequestSchema } from '@indx-workspace/contracts/runs';
 import type { Badge } from '@indx-workspace/react/run-model';
+
+import { composerStrings, type RunTargetSource, type RunTargetWords } from './composer-messages';
 
 export type { Badge } from '@indx-workspace/react/run-model';
 
@@ -60,7 +61,7 @@ export type ComposerRunTarget =
        * applies, and the deployment's default model for the provider of the agent's connection (or
        * of the workspace's connection named `default`) applies (issue #506).
        */
-      readonly source: 'agent' | 'project' | 'workspace' | 'deployment';
+      readonly source: RunTargetSource;
       readonly connectionName: string;
       readonly model: string;
     }
@@ -100,8 +101,6 @@ export interface ComposerAgent {
    * only models on these (`../models/engine-models.ts`).
    */
   readonly drivableProviders: readonly string[];
-  /** Present only on a built-in agent, such as the Builder: listed, but never picked by default. */
-  readonly builtin?: BuiltinAgentKey;
 }
 
 /**
@@ -245,6 +244,34 @@ export function pinnedAgentFrom(params: {
   return agentId.success && number.success ? { agentId: agentId.data, version: number.data } : null;
 }
 
+/** The most characters a chat's title takes from its first message. */
+export const CHAT_TITLE_MAX = 80;
+
+/**
+ * A new chat's title, from its first message (UX-05 in #2086): one line, spaces collapsed, cut to
+ * {@link CHAT_TITLE_MAX} characters with an ellipsis. `null` when the message has no text to show.
+ */
+export function chatTitleFrom(message: string): string | null {
+  const line = message.replace(/\s+/gu, ' ').trim();
+  if (line === '') return null;
+  return line.length <= CHAT_TITLE_MAX ? line : `${line.slice(0, CHAT_TITLE_MAX - 1).trimEnd()}…`;
+}
+
+/**
+ * The session `/?session=<id>` asks to continue (UX-05 in #2086), or `null` when the parameter is
+ * absent or is not one UUID. Whether the caller may continue it is the page's question, not this one.
+ */
+export function resumedSessionFrom(params: { readonly session?: SearchValue }): string | null {
+  // A repeated parameter (an array) or an absent one is not a UUID either.
+  const id = UuidSchema.safeParse(params.session);
+  return id.success ? id.data : null;
+}
+
+/** The home chat, continuing `sessionId`; {@link resumedSessionFrom} reads it back (UX-05). */
+export function continueChatHref(sessionId: string): string {
+  return `/?${new URLSearchParams({ session: sessionId }).toString()}`;
+}
+
 /** The home chat route, pinned to `version` of `agentId`; {@link pinnedAgentFrom} reads it back. */
 export function pinnedChatHref({ agentId, version }: PinnedAgent): string {
   return `/?${new URLSearchParams({ agent: agentId, version: String(version) }).toString()}`;
@@ -276,9 +303,6 @@ function isRunnable(agent: ComposerAgent): boolean {
  * 4. the first agent that can run at all;
  * 5. the remembered agent, the setup agent, then the first agent — so the screen still opens on
  *    something, and the composer says why it cannot run rather than hiding the agent.
- *
- * Steps 3 to 5 skip a built-in agent such as the Builder (#2012): every workspace has one, so it is
- * never the default unless it was remembered or is the only agent listed.
  */
 export function preferredAgent(
   agents: readonly ComposerAgent[],
@@ -289,16 +313,13 @@ export function preferredAgent(
   if (remembered !== null && isRunnable(remembered)) return remembered;
   const setup = findAgent(agents, setupAgentId);
   if (setup !== null && isRunnable(setup)) return setup;
-  const own = agents.filter((agent) => agent.builtin === undefined);
   return (
-    own.find(
+    agents.find(
       (agent) => agent.runTarget.kind === 'runnable' && agent.runTarget.source === 'agent',
     ) ??
-    own.find(isRunnable) ??
+    agents.find(isRunnable) ??
     remembered ??
     setup ??
-    own[0] ??
-    // Only a built-in agent is listed: open on it, because a screen with no session disables the picker.
     agents[0] ??
     null
   );
@@ -354,15 +375,6 @@ export function projectStartRefusal(
   return { code: target.code, reason: target.reason };
 }
 
-const SOURCE_LABEL: Readonly<
-  Record<Extract<ComposerRunTarget, { kind: 'runnable' }>['source'], string>
-> = {
-  agent: 'the agent’s model',
-  project: 'the project default',
-  workspace: 'the workspace default',
-  deployment: 'the deployment default',
-};
-
 /** Whether the run-target line is a warning: the agent cannot run, and no override fixes that. */
 export function runTargetWarns(target: ComposerRunTarget, hasOverride: boolean): boolean {
   return target.kind === 'unrunnable' && (!hasOverride || overrideCannotFix(target));
@@ -373,28 +385,33 @@ export function runTargetWarns(target: ComposerRunTarget, hasOverride: boolean):
  * and where the model comes from — the run override when one is chosen, otherwise the run ladder:
  * the agent's own model, then the selected project's default, then the workspace default. For an
  * agent that cannot run, the reason instead — even with an override, when the override cannot fix
- * it (a missing runtime profile).
+ * it (a missing runtime profile). In the reader's language (`words`); English when not given.
  */
 export function runTargetLine(
   agent: ComposerAgent,
   override: { readonly connectionName: string; readonly model: string } | null,
   projectId: string | null = null,
+  words: RunTargetWords = composerStrings('en').runTarget,
 ): string {
   const target = runTargetIn(agent, projectId);
   if (override !== null && !overrideCannotFix(target)) {
-    return `Runs as ${agent.name} on ${override.model} (${override.connectionName}, this message only).`;
+    return words.override(agent.name, override.model, override.connectionName);
   }
   switch (target.kind) {
     case 'runnable':
       // The deployment default is a configured id the description does not check with the
       // provider, and a run on a list of dated releases only uses the newest of them (#506).
-      return `Runs as ${agent.name} on ${target.model}${
-        target.source === 'deployment' ? ' or its newest dated release' : ''
-      } (${target.connectionName}, ${SOURCE_LABEL[target.source]}).`;
+      return words.runnable(
+        agent.name,
+        target.model,
+        target.connectionName,
+        target.source,
+        target.source === 'deployment',
+      );
     case 'unrunnable':
-      return `${agent.name} cannot run yet — ${target.reason}`;
+      return words.unrunnable(agent.name, target.code, target.reason);
     case 'unknown':
-      return `Runs as ${agent.name}.`;
+      return words.unknown(agent.name);
     default: {
       const unknown: never = target;
       throw new TypeError(`no run target of kind ${JSON.stringify(unknown)}`);

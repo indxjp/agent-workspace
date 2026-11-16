@@ -1,30 +1,44 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import { BUILTIN_AGENT_PROBLEM_CODES } from '@indx-workspace/contracts/agents';
 import { BUILDER_DEFAULT_LIMITS } from '@indx-workspace/contracts/builder';
-import { EvaluationResourceSchema } from '@indx-workspace/contracts/evaluations';
-import { RUN_IDEMPOTENCY_PROBLEM_CODES } from '@indx-workspace/contracts/runs';
+import {
+  EVALUATION_PROBLEM_CODES,
+  EvaluationResourceSchema,
+} from '@indx-workspace/contracts/evaluations';
+import {
+  RUN_IDEMPOTENCY_PROBLEM_CODES,
+  RUN_START_PROBLEM_CODES,
+} from '@indx-workspace/contracts/runs';
 
 import { isUuid } from '../../../agents/contract';
 import { agentNotFound, refuseBuiltinWrite } from '../../../agents/handlers';
-import { ownershipOf, type RunOwnershipPrincipal } from '../../../agents/run-ownership';
+import { ownershipOf } from '../../../agents/run-ownership';
 import { agentVersionNotFound } from '../../../agent-versions/problems';
 import type { AgentVersionStoreProvider } from '../../../agent-versions/store';
 import type { AgentStoreProvider } from '../../../agents/store';
 import { evaluateAgentVersion, EVALUATION_DEADLINE_MS } from '../../../evaluations/handlers';
+import { systemClock, type Clock } from '../../../clock';
 import type { ApiResult } from '../../../http/result';
-import type { Role } from '../../../rbac/roles';
-import type { RunApiEnvironment, RunPrincipal } from '../../../runs/environment';
-import { MAX_IDEMPOTENCY_KEY_CHARS } from '../../../runs/api';
-import { MAX_PROMPT_CHARS, startRunOnSession } from '../../../runs/service';
+import type { Role, RunOwnershipPrincipal } from '../../../identity';
 import {
   IdempotencyKeyTakenError,
   isStoppedRunStatus,
   isTerminalRunStatus,
+  type RunReadEnvironment,
+  type RunStartEnvironment,
+  type RunPrincipal,
   type RunRecord,
-} from '../../../runs/store';
+} from '../../../execution';
+import {
+  MAX_IDEMPOTENCY_KEY_CHARS,
+  MAX_PROMPT_CHARS,
+  startRunOnSession,
+} from '../../../runs/service';
 import { log } from '../../../telemetry/logger';
-import type { EvalResult, RunnerPort, TrialResult } from '../../ports';
+import { safeErrorFields } from '../../../telemetry/safe-error';
+import type { EvalRefusalCode, EvalResult, RunnerPort, TrialResult } from '../../ports';
 import { mayEvaluate, mayRun } from '../checker/access';
 import { failureOf } from '../checker/production';
 
@@ -32,13 +46,15 @@ export interface RunnerDependencies {
   readonly agents: AgentStoreProvider;
   readonly versions: AgentVersionStoreProvider;
   /** The deployment's run API, or `null` when it has none (the evaluation then answers 503). */
-  readonly runApi: () => RunApiEnvironment | null;
+  readonly runApi: () => (RunReadEnvironment & RunStartEnvironment) | null;
   /** Who was granted which agent; without it only an agent's owner (and the built-in Builder) is run-able. */
   readonly grants?: {
     forWorkspace(workspaceId: string): {
       hasGrant(agentId: string, userId: string): Promise<boolean>;
     };
   };
+  /** Where a trial's evaluation deadline reads the time; the system clock by default. */
+  readonly clock?: Clock;
 }
 
 export const NO_CALLER = {
@@ -108,15 +124,18 @@ export function trialArgumentRefusal(
       message: `The idempotency key must be 1 to ${String(MAX_IDEMPOTENCY_KEY_CHARS)} characters.`,
     };
   }
-  if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) {
-    return {
-      ok: false,
-      code: 'invalid_run_limits',
-      message: 'The trial budget must be a positive number of US dollars.',
-    };
-  }
-  return null;
+  return budgetRefusal(budgetUsd);
 }
+
+const INVALID_BUDGET = {
+  ok: false,
+  code: 'invalid_run_limits',
+  message: 'The trial budget must be a positive number of US dollars.',
+} satisfies EvalResult;
+
+/** The refusal of a budget that is not a positive number of US dollars, or `null`. */
+export const budgetRefusal = (budgetUsd: number): typeof INVALID_BUDGET | null =>
+  Number.isFinite(budgetUsd) && budgetUsd > 0 ? null : INVALID_BUDGET;
 
 /** The most one trial may spend, whatever it asked for; the agent's own budget can only lower it further. */
 export const cappedBudget = (budgetUsd: number): number =>
@@ -144,11 +163,38 @@ export const trialRequestHash = (
     .update(JSON.stringify({ agentId, version, input, budgetUsd: cappedBudget(budgetUsd) }))
     .digest('hex');
 
-/** 201 is the stored evaluation; a 4xx is the route's `{error}` passed through. Anything else is not the model's to see. */
+/** The runtime form of {@link EvalRefusalCode}, built from the same contract tables its type is. */
+const EVAL_REFUSAL_CODES: ReadonlySet<string> = new Set([
+  ...Object.keys(EVALUATION_PROBLEM_CODES),
+  ...Object.keys(RUN_START_PROBLEM_CODES),
+  ...Object.keys(BUILTIN_AGENT_PROBLEM_CODES),
+  'no_caller',
+  'forbidden',
+  'invalid_run_limits',
+  'trial_not_stopped',
+]);
+
+/** Whether `code` is one a refused evaluation may carry: the vocabulary {@link EvalRefusalCode} names. */
+export const isEvalRefusalCode = (code: string): code is EvalRefusalCode =>
+  EVAL_REFUSAL_CODES.has(code);
+
+/**
+ * 201 is the stored evaluation; a 4xx is the route's `{error}` passed through when its code is one
+ * the route is known to answer. Anything else is not the model's to see.
+ */
 function toEvalResult(result: ApiResult): EvalResult {
   const evaluation = EvaluationResourceSchema.safeParse(result.body);
   if (result.status === 201 && evaluation.success) return { ok: true, evaluation: evaluation.data };
-  return refusalOf(result, 'evaluations');
+  return evalRefusalOf(result);
+}
+
+/** A 4xx `{error}` as an evaluation's refusal, when its code is one {@link EvalRefusalCode} names. */
+export function evalRefusalOf(result: ApiResult): Extract<EvalResult, { ok: false }> {
+  const refused = refusalOf(result, 'evaluations');
+  if (!isEvalRefusalCode(refused.code)) {
+    throw new Error(`The evaluations handler answered ${String(result.status)}.`);
+  }
+  return { ok: false, code: refused.code, message: refused.message };
 }
 
 /** A 4xx `{error}` as the refusal the model sees; any other status is not the model's to see. */
@@ -194,23 +240,24 @@ const POLL_MS = 100;
  * ponytail: polls the run row; read its event stream instead when 100 ms of latency matters.
  */
 async function stoppedRun(
-  runs: RunApiEnvironment,
+  runs: RunReadEnvironment & RunStartEnvironment,
   principal: RunPrincipal,
   runId: string,
+  clock: Clock = systemClock,
 ): Promise<RunRecord | null> {
-  const deadline = Date.now() + EVALUATION_DEADLINE_MS;
+  const deadline = clock.now().getTime() + EVALUATION_DEADLINE_MS;
   for (;;) {
     const run = await runs.store.get(runId);
     if (run === null) throw new Error(`Run ${runId} is missing from the run store.`);
     if (isTerminalRunStatus(run.status)) return run;
-    if (isStoppedRunStatus(run.status) || Date.now() >= deadline) {
+    if (isStoppedRunStatus(run.status) || clock.now().getTime() >= deadline) {
       try {
         if (runs.interruptRun === undefined) return null;
         await runs.interruptRun(principal, run);
       } catch (cause) {
-        log.error(`[builder] interrupting trial run ${runId} failed`, {
-          errorName: cause instanceof Error ? cause.name : typeof cause,
-        });
+        // The class and a system code only: an adapter's message can carry a credential too short
+        // for redaction to match.
+        log.error(`[builder] interrupting trial run ${runId} failed`, safeErrorFields(cause));
         return null;
       }
       const after = await runs.store.get(runId);
@@ -220,12 +267,51 @@ async function stoppedRun(
   }
 }
 
+/**
+ * The answer of the trial run `started`. Whatever throws between the start and the answer (a read
+ * of the run row, the event poll) would leave the run going under the full policy budget, with
+ * nobody waiting for it: it is interrupted by id, best effort, and then the failure propagates, so
+ * no result is accepted.
+ */
 async function trialResult(
-  runs: RunApiEnvironment,
+  runs: RunReadEnvironment & RunStartEnvironment,
+  principal: RunPrincipal,
+  started: RunRecord,
+  clock: Clock = systemClock,
+): Promise<TrialResult> {
+  try {
+    return await stoppedTrial(runs, principal, started.id, clock);
+  } catch (cause) {
+    await interruptAfterFailure(runs, principal, started);
+    throw cause;
+  }
+}
+
+/** Interrupts `run` after its trial failed; a failure of the interrupt is logged and does not replace the first one. */
+async function interruptAfterFailure(
+  runs: RunReadEnvironment & RunStartEnvironment,
+  principal: RunPrincipal,
+  run: RunRecord,
+): Promise<void> {
+  try {
+    // The row as it is now, when it can still be read; the one the start returned otherwise.
+    const current = await runs.store.get(run.id).catch(() => null);
+    await runs.interruptRun?.(principal, current ?? run);
+  } catch (cause) {
+    log.error(
+      `[builder] interrupting trial run ${run.id} after a failure failed`,
+      safeErrorFields(cause),
+    );
+  }
+}
+
+async function stoppedTrial(
+  runs: RunReadEnvironment & RunStartEnvironment,
   principal: RunPrincipal,
   runId: string,
+  clock: Clock = systemClock,
 ): Promise<TrialResult> {
-  const run = await stoppedRun(runs, principal, runId);
+  const run = await stoppedRun(runs, principal, runId, clock);
   if (run === null) return TRIAL_NOT_STOPPED;
   return {
     ok: true,
@@ -244,10 +330,12 @@ async function trialResult(
  */
 export function createRunner(deps: RunnerDependencies): RunnerPort {
   return {
-    async evaluate(ctx, agentId, version, cases) {
+    async evaluate(ctx, agentId, version, budgetUsd, cases) {
       if (ctx.caller.kind === 'none') return NO_CALLER;
       const { principal } = ctx.caller;
       if (!isUuid(agentId)) return INVALID_AGENT_ID;
+      const invalidBudget = budgetRefusal(budgetUsd);
+      if (invalidBudget !== null) return invalidBudget;
       const agent = await deps.agents.forWorkspace(ctx.workspaceId).get(agentId);
       if (agent === null) return toEvalResult(agentNotFound());
       const readOnly = refuseBuiltinWrite(agent, 'evaluate');
@@ -265,8 +353,7 @@ export function createRunner(deps: RunnerDependencies): RunnerPort {
           {
             store,
             runs: deps.runApi(),
-            // ponytail: the contracts trial cap, not ports.policy.limits; pass the policy's trialBudgetUsd once workspaces can lower it.
-            limits: { maxBudgetUsd: BUILDER_DEFAULT_LIMITS.trialBudgetUsd },
+            limits: { maxBudgetUsd: cappedBudget(budgetUsd) },
           },
         ),
       );
@@ -316,7 +403,7 @@ export function createRunner(deps: RunnerDependencies): RunnerPort {
         );
         if (held === null) return null;
         return held.requestHash === idempotency.requestHash
-          ? trialResult(runs, runPrincipal, held.run.id)
+          ? trialResult(runs, runPrincipal, held.run, deps.clock)
           : RUN_IDEMPOTENCY_CONFLICT;
       };
       const earlier = await replay();
@@ -341,7 +428,7 @@ export function createRunner(deps: RunnerDependencies): RunnerPort {
       if (started.kind === 'refused') {
         return { ok: false, code: started.code, message: started.message };
       }
-      return trialResult(runs, runPrincipal, started.run.id);
+      return trialResult(runs, runPrincipal, started.run, deps.clock);
     },
   };
 }

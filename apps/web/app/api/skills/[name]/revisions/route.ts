@@ -1,7 +1,7 @@
 /**
  * `POST /api/skills/:name/revisions` — publish the skill as the next immutable, numbered revision an
  * agent can pin (SDK-19, N-1). Gated as `PATCH /api/skills/:name` is: a Builder publishes a skill
- * they own, an Admin any skill, a Viewer none (`rbac/declarations/SDK-19-SKILL-REVISIONS-251.ts`).
+ * they own, an Admin any skill, a Viewer none (`rbac/core/declarations/SDK-19-SKILL-REVISIONS-251.ts`).
  */
 import { requireResourceAccess } from '../../../../../server/resources/authorise';
 import { requireSkillName } from '../../../../../server/skills/handlers';

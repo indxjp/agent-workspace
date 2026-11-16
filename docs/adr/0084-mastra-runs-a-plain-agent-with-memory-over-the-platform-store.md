@@ -127,7 +127,10 @@ asks for an approval is refused by name. Their tools (`<server>_<tool>`) are `ag
 {kind: 'mcp'}`. `limits.maxTurns` is Mastra's native `maxSteps`, and a run whose last allowed step
 still asked for tools ends `max_turns`. `limits.maxBudgetUsd` is priced per step from the port's
 provisional table (ADR-0074 D7, shared by ADR-0081) and aborts the stream `max_budget`; billing
-stays the gateway's `run_usage_records`, and `agent.result.engineCostUsd` is `null`. A fork is
+stays the gateway's `run_usage_records`, and `agent.result.engineCostUsd` is `null`. (Amended
+2026-11-01: [ADR-0162](0162-the-gateway-stops-a-run-at-its-spend-ceiling.md) retires that cap; since
+U5.4b, #1524, the gateway enforces `maxBudgetUsd`, the adapter prices nothing and has no
+`max_budget` stop, and a cap on any model compiles.) A fork is
 refused (`fork: false`): a Mastra thread is continued, not branched. Interrupt is `abortSignal`.
 
 <a id="d8--the-policy-arm"></a>

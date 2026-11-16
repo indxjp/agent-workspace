@@ -21,6 +21,7 @@ import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 import { noStoreResultResponse } from '../../http/result';
 import type { SurfaceConditionEnvironment } from '../public/conditions';
 import { readSurfacePage, surfaceModeOfQuery, surfaceNotFound } from '../public/handlers';
+import { installedEnvironment } from '../public/installed';
 import { renderWidgetLoader, type WidgetLook } from './render';
 
 /** The headers a served loader carries. */
@@ -51,7 +52,7 @@ export async function serveWidgetLoader(
   request: Request,
   name: string,
   lookOf: WidgetLookOf,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<Response> {
   const mode = surfaceModeOfQuery(new URL(request.url).searchParams.get('environment'));
   const page = await readSurfacePage(name, request.headers, env, mode);

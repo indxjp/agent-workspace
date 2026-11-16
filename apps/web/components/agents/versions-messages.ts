@@ -19,6 +19,7 @@ export interface VersionsStrings {
   readonly tabConfiguration: string;
   readonly tabVersions: string;
   readonly tabPlatforms: string;
+  readonly tabSchedules: string;
   readonly heading: string;
   readonly loading: string;
   readonly loadFailed: string;
@@ -87,6 +88,7 @@ const EN: VersionsStrings = {
   tabConfiguration: 'Configuration',
   tabVersions: 'Versions',
   tabPlatforms: 'Platforms',
+  tabSchedules: 'Schedules',
   heading: 'Versions',
   loading: 'Loading versions…',
   loadFailed: 'The versions could not be loaded.',
@@ -200,6 +202,7 @@ const JA: VersionsStrings = {
   tabConfiguration: '設定',
   tabVersions: 'バージョン',
   tabPlatforms: 'プラットフォーム',
+  tabSchedules: 'スケジュール',
   heading: 'バージョン',
   loading: 'バージョンを読み込んでいます…',
   loadFailed: 'バージョンを読み込めませんでした。',
@@ -296,7 +299,7 @@ const JA: VersionsStrings = {
       'このバージョンが指定するツールバンドルが、このワークスペースにまだありません。aw push --yes でアップロードしてください。',
     tool_bundles_not_configured: 'この環境にはツールバンドルの保存先がありません。',
     storage_connection_prefix_not_allowed:
-      'ストレージの許可が、接続の許可フォルダの外を指しています。',
+      'ストレージの許可が、接続の許可フォルダーの外を指しています。',
     storage_connection_write_not_allowed:
       '読み取り専用の接続に、読み書きのストレージ許可が求められています。',
   },

@@ -59,6 +59,9 @@ jobs:
   # Which version to test, and which commit's harness to test it with. A publish run waits for the
   # registry to serve the new version, and refuses one that is not the `latest` tag: the docs
   # of that tag describe `latest`, and an older or pre-release version would fail them for no reason.
+  # The docs, the gallery and the harness are those of the commit the release was cut from: the tag
+  # here, or the `Source-Commit` of the tag in the public repository. The docs of `main` describe
+  # what the next release will ship, so testing them against `latest` fails every claim about it.
   resolve:
     name: resolve the published version
     if: github.repository_owner == 'INDXDev' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
@@ -80,6 +83,7 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           INPUT_VERSION: ${{ inputs.version }}
           DEFAULT_REF: ${{ github.sha }}
+          PUBLIC_REPOSITORY: https://github.com/indxjp/agent-workspace.git
         run: |
           set -euo pipefail
           case "$EVENT" in
@@ -126,18 +130,37 @@ jobs:
           ref="$DEFAULT_REF"
           tag="packages-v$version"
           harness='tests/docs-claims/run.mjs tests/docs-claims/host.mjs tests/docs-claims/use-cases.mjs tests/docs-claims/scan-secrets.mjs'
-          if git fetch --depth=1 origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null; then
-            ref="$tag"
+          # The commit of this repository that the release was cut from. Since 0.6.11 the tag is
+          # pushed to the public repository only (docs/release/README.md, "Where releases run"), on
+          # a snapshot commit whose message names its source here as `Source-Commit: <sha>`
+          # (oss-export.yml). Older releases were tagged here.
+          source=
+          if git fetch --depth=1 --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null; then
+            source="$tag"
+          elif git fetch --depth=1 --no-tags "$PUBLIC_REPOSITORY" "refs/tags/$tag" 2>/dev/null; then
+            commit="$(git log -1 --format=%B FETCH_HEAD | sed -n 's/^Source-Commit: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
+            if [ -z "$commit" ]; then
+              echo "::notice title=Harness from the workflow's commit::$tag in $PUBLIC_REPOSITORY names no Source-Commit, so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
+            elif git fetch --depth=1 --no-tags origin "$commit" 2>/dev/null; then
+              source="$commit"
+              echo "$tag in $PUBLIC_REPOSITORY is the snapshot of $commit"
+            else
+              echo "::notice title=Harness from the workflow's commit::$tag in $PUBLIC_REPOSITORY names Source-Commit $commit, which is not in this repository, so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
+            fi
+          else
+            echo "::notice title=Harness from the workflow's commit::the tag $tag is in neither this repository nor $PUBLIC_REPOSITORY, so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
+          fi
+          if [ -n "$source" ]; then
+            ref="$source"
             for file in $harness; do
-              if ! git cat-file -e "$tag:$file" 2>/dev/null; then
+              if ! git cat-file -e "$source:$file" 2>/dev/null; then
                 ref="$DEFAULT_REF"
                 echo "::notice title=Harness from the workflow's commit::$tag has no $file (it predates install-live), so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
                 break
               fi
             done
-          else
-            echo "::notice title=Harness from the workflow's commit::the tag $tag is not in this repository, so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
           fi
+          echo "Docs, gallery and harness from $ref"
           {
             echo "version=$version"
             echo "ref=$ref"

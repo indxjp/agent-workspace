@@ -32,7 +32,9 @@ inductive IdKind where
   | file | fileText
   | connector | modelConnection | runtimeProfile | runtimeVerification | secret | project | session | run | runToken
   | runUsageRecord | runFeedback | share | shareView | auditEvent | trigger | triggerDelivery
-  | storageConnection | storageMigrationRun | builderToolCall | workspaceFeature
+  | loginToken | demoRunAdmission | storeLead | storageConnection | storageMigrationRun | builderToolCall | workspaceFeature
+  | webhook | webhookDelivery
+  | agentTeam | agentTeamVersion
   deriving DecidableEq, Repr, Inhabited, Hashable, Ord
 
 namespace IdKind
@@ -43,7 +45,8 @@ def all : List IdKind :=
     cliSession, agent, agentFile, agentGrant, agentConnector, agentSkill, agentStorageGrant, agentVersion, agentVersionStorageGrant, agentVersionEvaluation, agentPointerMove, endpointClient, oauthToken, skill, skillRevision, file, fileText,
     connector, modelConnection, runtimeProfile, runtimeVerification, secret, project, session, run, runToken,
     runUsageRecord, runFeedback, share, shareView, auditEvent, trigger, triggerDelivery,
-    storageConnection, storageMigrationRun, builderToolCall, workspaceFeature]
+    loginToken, demoRunAdmission, storeLead, storageConnection, storageMigrationRun, builderToolCall, workspaceFeature, webhook,
+    webhookDelivery, agentTeam, agentTeamVersion]
 
 theorem mem_all (k : IdKind) : k ∈ all := by cases k <;> decide
 
@@ -90,10 +93,17 @@ def toWire : IdKind → String
   | auditEvent => "audit-event"
   | trigger => "trigger"
   | triggerDelivery => "trigger-delivery"
+  | loginToken => "login-token"
+  | demoRunAdmission => "demo-run-admission"
+  | storeLead => "store-lead"
   | storageConnection => "storage-connection"
   | storageMigrationRun => "storage-migration-run"
   | builderToolCall => "builder-tool-call"
   | workspaceFeature => "workspace-feature"
+  | webhook => "webhook"
+  | webhookDelivery => "webhook-delivery"
+  | agentTeam => "agent-team"
+  | agentTeamVersion => "agent-team-version"
 
 /-- The kind a wire spelling denotes, if any. -/
 def ofWire? : String → Option IdKind
@@ -138,10 +148,17 @@ def ofWire? : String → Option IdKind
   | "audit-event" => some auditEvent
   | "trigger" => some trigger
   | "trigger-delivery" => some triggerDelivery
+  | "login-token" => some loginToken
+  | "demo-run-admission" => some demoRunAdmission
+  | "store-lead" => some storeLead
   | "storage-connection" => some storageConnection
   | "storage-migration-run" => some storageMigrationRun
   | "builder-tool-call" => some builderToolCall
   | "workspace-feature" => some workspaceFeature
+  | "webhook" => some webhook
+  | "webhook-delivery" => some webhookDelivery
+  | "agent-team" => some agentTeam
+  | "agent-team-version" => some agentTeamVersion
   | _ => none
 
 private theorem ofWire?_toWire (k : IdKind) : ofWire? (toWire k) = some k := by
@@ -233,12 +250,28 @@ abbrev TriggerDeliveryId := Id .triggerDelivery
 /-- One verify pass of the move off the old object naming (`storage_migration_runs`, the storage
 design, §06). -/
 abbrev StorageMigrationRunId := Id .storageMigrationRun
+/-- One single-use sign-in link (`login_tokens`, the Agent Store's email-link sign-in). -/
+abbrev LoginTokenId := Id .loginToken
+
+/-- One admitted demo run start (`demo_run_admissions`, the Agent Store's run caps). -/
+abbrev DemoRunAdmissionId := Id .demoRunAdmission
+
+/-- One visitor lead (`store_leads`, the Agent Store's lead retention). -/
+abbrev StoreLeadId := Id .storeLead
 /-- A bucket or folder a workspace connected (`storage_connections`, the storage design, §05). -/
 abbrev StorageConnectionId := Id .storageConnection
 /-- One tool call of a Builder run, as the journal keeps it (`builder_tool_calls`, issue #1845). -/
 abbrev BuilderToolCallId := Id .builderToolCall
 /-- One feature a workspace has switched off (`workspace_features`, ADR-0160 D6). -/
 abbrev WorkspaceFeatureId := Id .workspaceFeature
+/-- An endpoint a workspace has run outcomes posted to (`webhooks`, ADR-SDK-18-N3-250 D1). -/
+abbrev WebhookId := Id .webhook
+/-- One run outcome owed to one webhook, and its event id (`webhook_deliveries`, D3, D4). -/
+abbrev WebhookDeliveryId := Id .webhookDelivery
+/-- A lead agent and its member agents, published as one unit (`agent_teams`, ADR-0104). -/
+abbrev AgentTeamId := Id .agentTeam
+/-- One immutable, numbered version of an agent team (`agent_team_versions`, ADR-0104). -/
+abbrev AgentTeamVersionId := Id .agentTeamVersion
 
 /-- `run_events` is keyed by `(run_id, sequence)` (`run_events_pkey`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]

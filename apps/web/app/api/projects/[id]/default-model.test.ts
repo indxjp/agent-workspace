@@ -4,12 +4,13 @@
  * refuse a connection id this workspace cannot see, without revealing whether that id belongs to
  * another workspace or names nothing at all.
  *
- * Mirrors `apps/web/server/files/routes.test.ts`'s DB-backed shape: `createIsolatedTestDatabase`
- * plus `openDatabaseRoot`, seeded fixture rows, and the route handlers imported and called exactly
- * as Next.js would call them. The actor authenticates as workspace Owner throughout — Owner's RBAC
- * fallback is `any` on every resource (`permissions.ts`), so these tests are about the model-default
- * write path itself, not `apps/web/server/resources/authorise.ts`'s own/other split, which
- * `apps/web/server/files/routes.test.ts` already covers.
+ * Mirrors `apps/web/server/files/ownership.postgres.routes.test.ts`'s DB-backed shape:
+ * `createIsolatedTestDatabase` plus `openDatabaseRoot`, seeded fixture rows, and the route handlers
+ * imported and called exactly as Next.js would call them. The actor authenticates as workspace
+ * Owner throughout — Owner's RBAC fallback is `any` on every resource (`permissions.ts`), so these
+ * tests are about the model-default write path itself, not
+ * `apps/web/server/resources/authorise.ts`'s own/other split, which
+ * `apps/web/server/files/ownership.postgres.routes.test.ts` already covers.
  */
 import crypto from 'node:crypto';
 

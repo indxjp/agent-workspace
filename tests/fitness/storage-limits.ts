@@ -12,7 +12,11 @@ export const STORAGE_LIMITS = [
     owner: 'packages/contracts/src/files.ts',
     bytes: 5 * 1024 * MiB,
   },
-  { name: 'RUN_FILES_MAX_BYTES', owner: 'packages/runtime/src/transfer.ts', bytes: 128 * MiB },
+  {
+    name: 'RUN_FILES_MAX_BYTES',
+    owner: 'packages/runtime/src/transfer/model.ts',
+    bytes: 128 * MiB,
+  },
   {
     name: 'SESSION_STATE_BLOB_MAX_BYTES',
     owner: 'packages/engine/src/session-state.ts',
@@ -114,6 +118,32 @@ function isTestCode(path: string): boolean {
   );
 }
 
+/**
+ * The scopes around a node, nearest first: only the nodes {@link declaredIn} can find a name in.
+ * The trees are parsed without parent pointers, so the walk carries these down instead.
+ */
+interface Scopes {
+  readonly node: ts.Node;
+  readonly outer: Scopes | undefined;
+}
+
+const SCOPE_KINDS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.ForStatement,
+  ts.SyntaxKind.ForOfStatement,
+  ts.SyntaxKind.ForInStatement,
+  ts.SyntaxKind.CatchClause,
+  ts.SyntaxKind.SourceFile,
+  ts.SyntaxKind.Block,
+  ts.SyntaxKind.ModuleBlock,
+  ts.SyntaxKind.CaseClause,
+  ts.SyntaxKind.DefaultClause,
+]);
+
+/** A node that can declare a name, in the sense of {@link declaredIn}; every other node declares none. */
+function isScope(node: ts.Node): boolean {
+  return SCOPE_KINDS.has(node.kind) || ts.isFunctionLike(node);
+}
+
 /** A name bound to an initializer: a variable, an object or class property, or a default parameter. */
 interface Binding {
   readonly name: string;
@@ -121,6 +151,8 @@ interface Binding {
   readonly exported: boolean;
   /** Only a variable can be named by a bare identifier elsewhere in the file. */
   readonly variable: boolean;
+  /** The scopes around the initializer, where its identifiers resolve. */
+  readonly scopes: Scopes | undefined;
 }
 
 /** One parse per path and text for the whole process: every scan reads the same tree. */
@@ -129,11 +161,13 @@ const parsed = new Map<string, { readonly text: string; readonly source: ts.Sour
 function parse(file: SourceFile): ts.SourceFile {
   const cached = parsed.get(file.path);
   if (cached?.text === file.text) return cached.source;
+  // The parse is most of the scan's time. JSDoc is never read, and parent pointers are not needed
+  // because the walk carries each binding's scopes (`Scopes`); skipping both keeps the scan fast.
   const source = ts.createSourceFile(
     file.path,
     file.text,
-    ts.ScriptTarget.Latest,
-    true,
+    { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode: ts.JSDocParsingMode.ParseNone },
+    false,
     ts.ScriptKind.TS,
   );
   parsed.set(file.path, { text: file.text, source });
@@ -144,33 +178,55 @@ function bindingName(name: ts.Node): string | null {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : null;
 }
 
-function bindings(source: ts.SourceFile): Binding[] {
+/** One walk per tree: the scan reads every file in scope twice, once per pass. */
+const bindingsOf = new WeakMap<ts.SourceFile, readonly Binding[]>();
+
+function bindings(source: ts.SourceFile): readonly Binding[] {
+  const cached = bindingsOf.get(source);
+  if (cached !== undefined) return cached;
   const found: Binding[] = [];
-  const add = (name: ts.Node, initializer: ts.Expression | undefined, variable = false) => {
+  const add = (
+    name: ts.Node,
+    initializer: ts.Expression | undefined,
+    scopes: Scopes | undefined,
+    variable = false,
+  ) => {
     const text = bindingName(name);
     if (text !== null && initializer !== undefined) {
-      found.push({ name: text, initializer, exported: false, variable });
+      found.push({ name: text, initializer, exported: false, variable, scopes });
     }
   };
-  const visit = (node: ts.Node): void => {
+  // Each node gets its parent and grandparent from the walk: a declaration list's own parent tells
+  // a `const` statement (bound above, with its export) from a `for` or `catch` declaration.
+  const visit = (
+    node: ts.Node,
+    parent: ts.Node | undefined,
+    grandparent: ts.Node | undefined,
+    scopes: Scopes | undefined,
+  ): void => {
     if (ts.isVariableStatement(node)) {
       const exported = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
       for (const decl of node.declarationList.declarations) {
         const name = bindingName(decl.name);
         if (name !== null && decl.initializer !== undefined) {
-          found.push({ name, initializer: decl.initializer, exported, variable: true });
+          found.push({ name, initializer: decl.initializer, exported, variable: true, scopes });
         }
       }
-    } else if (ts.isVariableDeclaration(node) && !ts.isVariableStatement(node.parent.parent)) {
-      add(node.name, node.initializer, true);
+    } else if (
+      ts.isVariableDeclaration(node) &&
+      (grandparent === undefined || !ts.isVariableStatement(grandparent))
+    ) {
+      add(node.name, node.initializer, scopes, true);
     } else if (ts.isPropertyAssignment(node) || ts.isPropertyDeclaration(node)) {
-      add(node.name, node.initializer);
+      add(node.name, node.initializer, scopes);
     } else if (ts.isParameter(node)) {
-      add(node.name, node.initializer);
+      add(node.name, node.initializer, scopes);
     }
-    ts.forEachChild(node, visit);
+    const inner = isScope(node) ? { node, outer: scopes } : scopes;
+    ts.forEachChild(node, (child) => visit(child, node, parent, inner));
   };
-  visit(source);
+  visit(source, undefined, undefined, undefined);
+  bindingsOf.set(source, found);
   return found;
 }
 
@@ -262,30 +318,37 @@ function numericBindings(
   const imports = namedImports(source);
   const resolving = new Set<ts.Expression>();
   let usesLimit = false;
-  const resolve: Resolve = (identifier) => {
-    const name = identifier.text;
-    for (let scope = identifier.parent; scope !== undefined; scope = scope.parent) {
-      const initializer = declaredIn(scope, name);
-      if (initializer === null) continue;
-      // The name's own default (`cap = cap * 2`) or an unvalued declaration does not resolve.
-      if (initializer === undefined || resolving.has(initializer)) return null;
+  // `fold` only descends through expressions that declare nothing, so an identifier it reaches
+  // resolves in the scopes of the initializer it started from, and a declaration found in a scope
+  // has its own initializer resolve from that scope outwards.
+  const resolveIn =
+    (scopes: Scopes | undefined): Resolve =>
+    (identifier) => {
+      const name = identifier.text;
+      for (let scope = scopes; scope !== undefined; scope = scope.outer) {
+        const initializer = declaredIn(scope.node, name);
+        if (initializer === null) continue;
+        // The name's own default (`cap = cap * 2`) or an unvalued declaration does not resolve.
+        if (initializer === undefined || resolving.has(initializer)) return null;
+        resolving.add(initializer);
+        const value = fold(initializer, resolveIn(scope));
+        resolving.delete(initializer);
+        return value;
+      }
+      const original = imports.get(name);
+      if (original === undefined) return null;
+      if (LIMIT_NAMES.has(original)) usesLimit = true;
+      return exported.get(original) ?? null;
+    };
+  return bindings(source).flatMap(
+    ({ name, initializer, exported: isExported, variable, scopes }) => {
+      usesLimit = false;
       resolving.add(initializer);
-      const value = fold(initializer, resolve);
+      const value = fold(initializer, resolveIn(scopes));
       resolving.delete(initializer);
-      return value;
-    }
-    const original = imports.get(name);
-    if (original === undefined) return null;
-    if (LIMIT_NAMES.has(original)) usesLimit = true;
-    return exported.get(original) ?? null;
-  };
-  return bindings(source).flatMap(({ name, initializer, exported: isExported, variable }) => {
-    usesLimit = false;
-    resolving.add(initializer);
-    const value = fold(initializer, resolve);
-    resolving.delete(initializer);
-    return value === null ? [] : [{ name, value, exported: isExported, variable, usesLimit }];
-  });
+      return value === null ? [] : [{ name, value, exported: isExported, variable, usesLimit }];
+    },
+  );
 }
 
 interface Exported {
@@ -424,10 +487,11 @@ function onlyTestsImport(path: string, files: readonly SourceFile[]): boolean {
 
 /**
  * Constants in scope whose value equals a limit's bytes outside that limit's owner file.
- * Returns sorted, unique `path::NAME` keys.
+ * Returns sorted `path::NAME` keys, one per site: two copies under one name in a file give the
+ * key twice, so an allowlisted name cannot hide a second copy.
  */
 export function findLimitCopies(files: readonly SourceFile[]): string[] {
-  const hits = new Set<string>();
+  const hits: string[] = [];
   const exported = exportedValues(files).values;
   const exports = exportTargets(files);
   for (const file of files.filter(({ path }) => inStorageScope(path))) {
@@ -436,9 +500,9 @@ export function findLimitCopies(files: readonly SourceFile[]): string[] {
         !usesLimit && STORAGE_LIMITS.some((l) => l.bytes === value && l.owner !== file.path),
     );
     if (copies.length === 0 || isTestSupport(file.path, files, exports)) continue;
-    for (const { name } of copies) hits.add(`${file.path}::${name}`);
+    for (const { name } of copies) hits.push(`${file.path}::${name}`);
   }
-  return [...hits].sort();
+  return hits.sort();
 }
 
 /** `owner::NAME` for each limit whose owner file does not export that name with that value. */

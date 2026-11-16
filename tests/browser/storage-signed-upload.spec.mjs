@@ -169,7 +169,7 @@ test('[US-STO-02][browser][web] a 70 MiB upload appears in the list', async ({
     if (route.request().method() === 'PUT') await putHeld;
     await route.continue();
   });
-  await page.getByLabel('Upload a file to this folder').setInputFiles(bigFile);
+  await page.getByLabel('Upload files to this folder').setInputFiles(bigFile);
   await page.getByRole('button', { name: 'Upload here' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Uploading big.bin' })).toBeVisible();
   releasePut();

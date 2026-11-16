@@ -90,6 +90,18 @@ def state : State
   | .invitations =>
     [⟨[("id", "v1"), ("workspace_id", "w1"), ("email", "carol@example.com"), ("role", "viewer"),
        ("invited_by", "u1"), ("token_hash", "h-v1"), ("expires_at", "5000")] ++ ts⟩]
+  | .loginTokens =>
+    [⟨[("id", "lt1"), ("token_hash", AgentWorkspace.Er.Current.Identity.rep 64 'a'), ("email_hash", AgentWorkspace.Er.Current.Identity.rep 64 'b'),
+       ("expires_at", "1900"), ("created_at", "1000")]⟩]
+  | .demoRunAdmissions =>
+    [⟨[("id", "dra1"), ("user_id", "u1"), ("client_key", "client-bucket-1"), ("created_at", "1000")]⟩]
+  | .demoDailyCosts =>
+    [⟨[("day", "2026-11-16"), ("cost_usd", "0.5"), ("unpriced_usage", "false"), ("updated_at", "1000")]⟩]
+  | .demoEntryStates =>
+    [⟨[("entry", "quotation"), ("state", "maintenance"), ("reason", "a tool did not run"), ("updated_at", "1000")]⟩]
+  | .storeLeads =>
+    [⟨[("id", "sl1"), ("email", "ada@example.com"), ("entries", "{expense-triage}"), ("launch_notices", "{}"),
+       ("created_at", "1000"), ("last_contact_at", "1500")]⟩]
   | .modelConnections =>
     [⟨[("id", "c1"), ("workspace_id", "w1"), ("name", "default"), ("provider", "anthropic"),
        ("config", "{}")] ++ ts⟩]
@@ -234,7 +246,7 @@ elab "aw_identity_relationship_theorems" : command => do
         elabCommand (← `(command|
           $doc:docComment
           @[aw_spec (tier := $(mkIdent `T2)) (doc := $(Syntax.mkStrLit erDoc)) (ts := $(cite n))
-            (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+            (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
           theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : Er.Core.consistent catalogue st = true) {r r' : Row}
               (h : References catalogue st $tT (fkOf $tT $nL) r r') :
               tenantOf catalogue $tT r = tenantOf catalogue (fkOf $tT $nL).refTable r' :=

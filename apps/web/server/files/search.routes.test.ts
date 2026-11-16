@@ -7,13 +7,16 @@ import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET as searchRoute } from '../../app/api/files/search/route';
+import { decide } from '../rbac/decide';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
+import { ROLES } from '../rbac/core/roles';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { createCatalogFilesWorld } from './catalog-runtime-fixtures';
 import type { FileTextStore } from './store';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
@@ -56,10 +59,9 @@ async function seedCatalogs() {
   for (const workspaceId of [WORKSPACE_A, WORKSPACE_B]) {
     const catalog = catalogs.forWorkspaceSync(workspaceId);
     const put = (path: string) =>
-      catalog.putFile({
+      seedCatalogFile(catalog, {
         path,
         kind: 'file',
-        storageKey: path,
         sizeBytes: 1,
         contentType: 'text/plain',
         ownerPrincipalId: crypto.randomUUID(),
@@ -202,5 +204,13 @@ describe('GET /api/files/search', () => {
     expect(text).toContain('search_unavailable');
     expect(text).not.toContain('hunter2');
     expect(text).not.toContain('file_texts');
+  });
+
+  // Issue #2090 (#1584 "search ignores per-path ownership"): search filters by no owner, so a role
+  // may search only if it may open every member's file. The Files screen's search box relies on it.
+  it.each(ROLES)('admits %s only if it may download another member’s file', (role) => {
+    const allowed = (path: string, ownership: 'other' | 'not-applicable') =>
+      decide({ role, method: 'GET', path, ownership, scope: null }).effect === 'allow';
+    expect(allowed('/api/files/search', 'not-applicable')).toBe(allowed('/api/files/:id', 'other'));
   });
 });

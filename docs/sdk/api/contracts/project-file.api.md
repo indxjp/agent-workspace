@@ -7,6 +7,9 @@
 import { z } from 'zod';
 
 // @public
+export function appSchemaName(name: string): string;
+
+// @public
 export const BOOTSTRAP_ADMIN_MAX_LENGTH = 320;
 
 // @public
@@ -137,6 +140,38 @@ export type PlatformOptions = z.infer<typeof PlatformOptionsSchema>;
 // @public
 export const PlatformOptionsSchema: z.ZodPipe<z.ZodUnknown, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodUnknown>>>;
 
+// @public
+export const PRODUCTION_APP_CLOUD_RUN_KEYS: readonly ["workspaceId", "connectorId", "apiKeySecret", "signIn"];
+
+// @public (undocumented)
+export type ProductionApp = z.infer<typeof ProductionAppSchema>;
+
+// @public
+export const ProductionAppSchema: z.ZodReadonly<z.ZodObject<{
+    image: z.ZodString;
+    url: z.ZodURL;
+    workspaceId: z.ZodOptional<z.ZodUUID>;
+    connectorId: z.ZodOptional<z.ZodString>;
+    apiKeySecret: z.ZodOptional<z.ZodString>;
+    signIn: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+        oidcClientId: z.ZodString;
+        oidcClientSecret: z.ZodString;
+        appClientId: z.ZodString;
+        appClientSecret: z.ZodString;
+    }, z.core.$strict>>>;
+}, z.core.$strict>>;
+
+// @public (undocumented)
+export type ProductionAppSignIn = z.infer<typeof ProductionAppSignInSchema>;
+
+// @public
+export const ProductionAppSignInSchema: z.ZodReadonly<z.ZodObject<{
+    oidcClientId: z.ZodString;
+    oidcClientSecret: z.ZodString;
+    appClientId: z.ZodString;
+    appClientSecret: z.ZodString;
+}, z.core.$strict>>;
+
 // @public (undocumented)
 export type ProductionEnvironment = z.infer<typeof ProductionEnvironmentSchema>;
 
@@ -149,6 +184,102 @@ export const ProductionEnvironmentSchema: z.ZodReadonly<z.ZodObject<{
         vercel: "vercel";
     }>;
     url: z.ZodURL;
+    apps: z.ZodOptional<z.ZodPipe<z.ZodUnknown, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodReadonly<z.ZodObject<{
+        image: z.ZodString;
+        url: z.ZodURL;
+        workspaceId: z.ZodOptional<z.ZodUUID>;
+        connectorId: z.ZodOptional<z.ZodString>;
+        apiKeySecret: z.ZodOptional<z.ZodString>;
+        signIn: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+            oidcClientId: z.ZodString;
+            oidcClientSecret: z.ZodString;
+            appClientId: z.ZodString;
+            appClientSecret: z.ZodString;
+        }, z.core.$strict>>>;
+    }, z.core.$strict>>>>>>;
+    gcp: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+        project: z.ZodString;
+        region: z.ZodString;
+        domain: z.ZodOptional<z.ZodString>;
+        armor: z.ZodOptional<z.ZodBoolean>;
+        iap: z.ZodOptional<z.ZodBoolean>;
+        oidc: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+            issuer: z.ZodURL;
+            clientId: z.ZodString;
+        }, z.core.$strict>>>;
+        modelLocation: z.ZodOptional<z.ZodEnum<{
+            global: "global";
+            us: "us";
+            eu: "eu";
+        }>>;
+        size: z.ZodOptional<z.ZodEnum<{
+            small: "small";
+            standard: "standard";
+        }>>;
+        dataProtection: z.ZodOptional<z.ZodBoolean>;
+        alertsEmail: z.ZodOptional<z.ZodEmail>;
+        sandboxInternet: z.ZodOptional<z.ZodBoolean>;
+        settings: z.ZodOptional<z.ZodReadonly<z.ZodRecord<z.ZodEnum<{
+            AW_DEPLOYMENT_DEFAULT_MODELS: "AW_DEPLOYMENT_DEFAULT_MODELS";
+            AW_DEMO_RUNS_PER_PERSON_PER_DAY: "AW_DEMO_RUNS_PER_PERSON_PER_DAY";
+            AW_DEMO_RUNS_PER_CLIENT_PER_DAY: "AW_DEMO_RUNS_PER_CLIENT_PER_DAY";
+            AW_DEMO_MAX_TURNS_PER_RUN: "AW_DEMO_MAX_TURNS_PER_RUN";
+            AW_DEMO_MAX_COST_PER_RUN_USD: "AW_DEMO_MAX_COST_PER_RUN_USD";
+            AW_DEMO_SITE_MAX_COST_PER_DAY_USD: "AW_DEMO_SITE_MAX_COST_PER_DAY_USD";
+            AW_STORE_LEAD_RETENTION_DAYS: "AW_STORE_LEAD_RETENTION_DAYS";
+            AW_EMAIL_LINK_BASE_URL: "AW_EMAIL_LINK_BASE_URL";
+            AW_EMAIL_LINK_SENDER: "AW_EMAIL_LINK_SENDER";
+            AW_EMAIL_LINK_CHALLENGE: "AW_EMAIL_LINK_CHALLENGE";
+        }> & z.core.$partial, z.ZodString>>>;
+        secretSettings: z.ZodOptional<z.ZodReadonly<z.ZodRecord<z.ZodEnum<{
+            AW_DEMO_OPERATOR_TOKEN: "AW_DEMO_OPERATOR_TOKEN";
+            AW_DEMO_ANTHROPIC_API_KEY: "AW_DEMO_ANTHROPIC_API_KEY";
+        }> & z.core.$partial, z.ZodString>>>;
+    }, z.core.$strict>>>;
+}, z.core.$strict>>;
+
+// @public (undocumented)
+export type ProductionGcp = z.infer<typeof ProductionGcpSchema>;
+
+// @public
+export const ProductionGcpSchema: z.ZodReadonly<z.ZodObject<{
+    project: z.ZodString;
+    region: z.ZodString;
+    domain: z.ZodOptional<z.ZodString>;
+    armor: z.ZodOptional<z.ZodBoolean>;
+    iap: z.ZodOptional<z.ZodBoolean>;
+    oidc: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+        issuer: z.ZodURL;
+        clientId: z.ZodString;
+    }, z.core.$strict>>>;
+    modelLocation: z.ZodOptional<z.ZodEnum<{
+        global: "global";
+        us: "us";
+        eu: "eu";
+    }>>;
+    size: z.ZodOptional<z.ZodEnum<{
+        small: "small";
+        standard: "standard";
+    }>>;
+    dataProtection: z.ZodOptional<z.ZodBoolean>;
+    alertsEmail: z.ZodOptional<z.ZodEmail>;
+    sandboxInternet: z.ZodOptional<z.ZodBoolean>;
+    settings: z.ZodOptional<z.ZodReadonly<z.ZodRecord<z.ZodEnum<{
+        AW_DEPLOYMENT_DEFAULT_MODELS: "AW_DEPLOYMENT_DEFAULT_MODELS";
+        AW_DEMO_RUNS_PER_PERSON_PER_DAY: "AW_DEMO_RUNS_PER_PERSON_PER_DAY";
+        AW_DEMO_RUNS_PER_CLIENT_PER_DAY: "AW_DEMO_RUNS_PER_CLIENT_PER_DAY";
+        AW_DEMO_MAX_TURNS_PER_RUN: "AW_DEMO_MAX_TURNS_PER_RUN";
+        AW_DEMO_MAX_COST_PER_RUN_USD: "AW_DEMO_MAX_COST_PER_RUN_USD";
+        AW_DEMO_SITE_MAX_COST_PER_DAY_USD: "AW_DEMO_SITE_MAX_COST_PER_DAY_USD";
+        AW_STORE_LEAD_RETENTION_DAYS: "AW_STORE_LEAD_RETENTION_DAYS";
+        AW_EMAIL_LINK_BASE_URL: "AW_EMAIL_LINK_BASE_URL";
+        AW_EMAIL_LINK_SENDER: "AW_EMAIL_LINK_SENDER";
+        AW_EMAIL_LINK_CHALLENGE: "AW_EMAIL_LINK_CHALLENGE";
+    }> & z.core.$partial, z.ZodString>>>;
+    secretSettings: z.ZodOptional<z.ZodReadonly<z.ZodRecord<z.ZodEnum<{
+        AW_DEMO_OPERATOR_TOKEN: "AW_DEMO_OPERATOR_TOKEN";
+        AW_DEMO_ANTHROPIC_API_KEY: "AW_DEMO_ANTHROPIC_API_KEY";
+    }> & z.core.$partial, z.ZodString>>>;
 }, z.core.$strict>>;
 
 // @public
@@ -167,10 +298,22 @@ export const PROJECT_CONNECTOR_TRANSPORTS: readonly ["http", "sse"];
 export const PROJECT_DEPLOY_TARGETS: readonly ["single-vm", "gcp-cloudrun", "kubernetes", "vercel"];
 
 // @public
+export const PROJECT_FILE_CONFIG_FIELDS: ("apiVersion" | "baseUrl" | "deployment")[];
+
+// @public
 export const PROJECT_KIND = "Project";
 
 // @public
 export const PROJECT_RESOURCE_MAP_MAX_ENTRIES = 64;
+
+// @public
+export const PROJECT_WEB_SECRET_SETTINGS: readonly ["AW_DEMO_OPERATOR_TOKEN", "AW_DEMO_ANTHROPIC_API_KEY"];
+
+// @public
+export const PROJECT_WEB_SETTING_MAX_LENGTH = 2048;
+
+// @public
+export const PROJECT_WEB_SETTINGS: readonly ["AW_DEPLOYMENT_DEFAULT_MODELS", "AW_DEMO_RUNS_PER_PERSON_PER_DAY", "AW_DEMO_RUNS_PER_CLIENT_PER_DAY", "AW_DEMO_MAX_TURNS_PER_RUN", "AW_DEMO_MAX_COST_PER_RUN_USD", "AW_DEMO_SITE_MAX_COST_PER_DAY_USD", "AW_STORE_LEAD_RETENTION_DAYS", "AW_EMAIL_LINK_BASE_URL", "AW_EMAIL_LINK_SENDER", "AW_EMAIL_LINK_CHALLENGE"];
 
 // @public (undocumented)
 export type ProjectCloud = (typeof PROJECT_CLOUDS)[number];
@@ -229,6 +372,7 @@ export const ProjectDocumentSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>;
         credential: z.ZodReadonly<z.ZodObject<{
             secret: z.ZodString;
@@ -401,6 +545,58 @@ export const ProjectDocumentSchema: z.ZodReadonly<z.ZodObject<{
                 vercel: "vercel";
             }>;
             url: z.ZodURL;
+            apps: z.ZodOptional<z.ZodPipe<z.ZodUnknown, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodReadonly<z.ZodObject<{
+                image: z.ZodString;
+                url: z.ZodURL;
+                workspaceId: z.ZodOptional<z.ZodUUID>;
+                connectorId: z.ZodOptional<z.ZodString>;
+                apiKeySecret: z.ZodOptional<z.ZodString>;
+                signIn: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+                    oidcClientId: z.ZodString;
+                    oidcClientSecret: z.ZodString;
+                    appClientId: z.ZodString;
+                    appClientSecret: z.ZodString;
+                }, z.core.$strict>>>;
+            }, z.core.$strict>>>>>>;
+            gcp: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+                project: z.ZodString;
+                region: z.ZodString;
+                domain: z.ZodOptional<z.ZodString>;
+                armor: z.ZodOptional<z.ZodBoolean>;
+                iap: z.ZodOptional<z.ZodBoolean>;
+                oidc: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+                    issuer: z.ZodURL;
+                    clientId: z.ZodString;
+                }, z.core.$strict>>>;
+                modelLocation: z.ZodOptional<z.ZodEnum<{
+                    global: "global";
+                    us: "us";
+                    eu: "eu";
+                }>>;
+                size: z.ZodOptional<z.ZodEnum<{
+                    small: "small";
+                    standard: "standard";
+                }>>;
+                dataProtection: z.ZodOptional<z.ZodBoolean>;
+                alertsEmail: z.ZodOptional<z.ZodEmail>;
+                sandboxInternet: z.ZodOptional<z.ZodBoolean>;
+                settings: z.ZodOptional<z.ZodReadonly<z.ZodRecord<z.ZodEnum<{
+                    AW_DEPLOYMENT_DEFAULT_MODELS: "AW_DEPLOYMENT_DEFAULT_MODELS";
+                    AW_DEMO_RUNS_PER_PERSON_PER_DAY: "AW_DEMO_RUNS_PER_PERSON_PER_DAY";
+                    AW_DEMO_RUNS_PER_CLIENT_PER_DAY: "AW_DEMO_RUNS_PER_CLIENT_PER_DAY";
+                    AW_DEMO_MAX_TURNS_PER_RUN: "AW_DEMO_MAX_TURNS_PER_RUN";
+                    AW_DEMO_MAX_COST_PER_RUN_USD: "AW_DEMO_MAX_COST_PER_RUN_USD";
+                    AW_DEMO_SITE_MAX_COST_PER_DAY_USD: "AW_DEMO_SITE_MAX_COST_PER_DAY_USD";
+                    AW_STORE_LEAD_RETENTION_DAYS: "AW_STORE_LEAD_RETENTION_DAYS";
+                    AW_EMAIL_LINK_BASE_URL: "AW_EMAIL_LINK_BASE_URL";
+                    AW_EMAIL_LINK_SENDER: "AW_EMAIL_LINK_SENDER";
+                    AW_EMAIL_LINK_CHALLENGE: "AW_EMAIL_LINK_CHALLENGE";
+                }> & z.core.$partial, z.ZodString>>>;
+                secretSettings: z.ZodOptional<z.ZodReadonly<z.ZodRecord<z.ZodEnum<{
+                    AW_DEMO_OPERATOR_TOKEN: "AW_DEMO_OPERATOR_TOKEN";
+                    AW_DEMO_ANTHROPIC_API_KEY: "AW_DEMO_ANTHROPIC_API_KEY";
+                }> & z.core.$partial, z.ZodString>>>;
+            }, z.core.$strict>>>;
         }, z.core.$strict>>>;
     }, z.core.$strict>>;
 }, z.core.$strict>>;
@@ -461,6 +657,7 @@ export const ProjectModelConnectionSchema: z.ZodReadonly<z.ZodObject<{
         openai: "openai";
         "azure-openai": "azure-openai";
         "openai-compatible": "openai-compatible";
+        vertex: "vertex";
     }>;
     credential: z.ZodReadonly<z.ZodObject<{
         secret: z.ZodString;
@@ -608,6 +805,12 @@ export const ProjectStorageSchema: z.ZodReadonly<z.ZodObject<{
     objects: z.ZodString;
     secrets: z.ZodString;
 }, z.core.$strict>>;
+
+// @public (undocumented)
+export type ProjectWebSecretSetting = (typeof PROJECT_WEB_SECRET_SETTINGS)[number];
+
+// @public (undocumented)
+export type ProjectWebSetting = (typeof PROJECT_WEB_SETTINGS)[number];
 
 // @public
 export function readProjectDocument(value: unknown): ProjectReadResult;

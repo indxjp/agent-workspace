@@ -14,10 +14,9 @@
  * on any other target exposes nothing; with it, only the exact bearer runs the pass.
  */
 import { log } from '../telemetry/logger';
-import { createHash, timingSafeEqual } from 'node:crypto';
 
 import type { SessionRetentionResult } from './retention';
-import { problemBody } from '../http/result';
+import { bearerMatches, cronSecretFrom, problem } from '../http/cron';
 
 export type RetentionCronPass = () => Promise<readonly SessionRetentionResult[]>;
 
@@ -39,20 +38,9 @@ export function wireSessionRetention(
     startScheduler: () => void;
   }>,
 ): RetentionDriver {
-  if ((deps.env['CRON_SECRET'] ?? '') !== '') return { kind: 'cron', pass: deps.runPass };
+  if (cronSecretFrom(deps.env) !== null) return { kind: 'cron', pass: deps.runPass };
   deps.startScheduler();
   return { kind: 'interval' };
-}
-
-export function problem(status: number, code: string, message: string): Response {
-  return Response.json(problemBody(code, message), { status });
-}
-
-/** Compare digests, so the comparison takes the same time whatever the length of the guess. */
-export function bearerMatches(header: string | null, secret: string): boolean {
-  const supplied = header?.startsWith('Bearer ') === true ? header.slice('Bearer '.length) : '';
-  const digest = (value: string) => createHash('sha256').update(value).digest();
-  return timingSafeEqual(digest(supplied), digest(secret));
 }
 
 export async function handleRetentionCron(
@@ -62,8 +50,8 @@ export async function handleRetentionCron(
     pass: RetentionCronPass | null;
   }>,
 ): Promise<Response> {
-  const secret = deps.env['CRON_SECRET'];
-  if (secret === undefined || secret === '') {
+  const secret = cronSecretFrom(deps.env);
+  if (secret === null) {
     return problem(404, 'not_found', 'There is nothing at this path.');
   }
   if (!bearerMatches(request.headers.get('authorization'), secret)) {

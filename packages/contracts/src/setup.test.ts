@@ -8,6 +8,7 @@ import { MODEL_PROVIDERS } from './runs.js';
 import {
   CompleteSetupAnswersSchema,
   HEX_COLOUR_PATTERN,
+  SETUP_PROVIDERS,
   SETUP_AUDIENCES,
   SETUP_FILE_PATHS,
   SETUP_PLATFORM_CHOICES,
@@ -208,9 +209,14 @@ describe('SETUP_QUESTIONS', () => {
     ).toBe(false);
   });
 
-  it('offers exactly the model providers and recommends anthropic', () => {
+  it('offers the model providers a project file can declare, never vertex, and recommends anthropic', () => {
     const provider = questionFor('admin.modelProvider');
-    expect(provider.answer).toEqual({ kind: 'choice', choices: MODEL_PROVIDERS });
+    expect(provider.answer).toEqual({
+      kind: 'choice',
+      choices: MODEL_PROVIDERS.filter((candidate) => candidate !== 'vertex'),
+    });
+    expect(MODEL_PROVIDERS).toContain('vertex');
+    expect(SETUP_PROVIDERS).toContain('vertex');
     expect(provider.recommended).toBe('anthropic');
   });
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { IsoDateTimeSchema } from './identifiers.js';
-import { MEMBERSHIP_ROLES, type MembershipRoleName } from './team.js';
+import { CONFERRABLE_ROLES, type ConferrableRoleName } from './team.js';
 
 /** The longest name `POST /api/api-keys` accepts, after trimming. */
 export const API_KEY_NAME_MAX_LENGTH = 120;
@@ -45,7 +45,7 @@ export const ApiKeyResourceSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
-    role: z.enum(MEMBERSHIP_ROLES),
+    role: z.enum(CONFERRABLE_ROLES),
     keyPrefix: z.string().regex(API_KEY_DISPLAY_PREFIX_PATTERN),
     lastUsedAt: IsoDateTimeSchema.nullable(),
     expiresAt: IsoDateTimeSchema.nullable(),
@@ -99,6 +99,6 @@ export type MintedApiKeyResponse = z.infer<typeof MintedApiKeyResponseSchema>;
  */
 export interface CreateApiKeyInput {
   readonly name: string;
-  readonly role: MembershipRoleName;
+  readonly role: ConferrableRoleName;
   readonly expiresAt?: string | null;
 }

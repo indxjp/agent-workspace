@@ -206,6 +206,9 @@ export function formatResolvedModel(entry: CatalogModel): string {
   return `${providerLabel(entry.provider)} / ${entry.displayName}`;
 }
 
+const englishStaleModel = (model: string, connectionId: string): string =>
+  `${model} (connection ${connectionId} is no longer available)`;
+
 /**
  * One line naming where a value comes from and what it resolves to — the card's own example,
  * `"Project default → Anthropic / claude-sonnet-4-5"`. A selection whose connection or model the
@@ -216,21 +219,12 @@ export function describeInheritance(
   sourceLabel: string,
   value: ModelSelectionValue,
   catalog: readonly CatalogModel[],
+  /** The stale-selection words in the reader's language; English when absent. */
+  staleModel: (model: string, connectionId: string) => string = englishStaleModel,
 ): string {
   if (value === null) return `${sourceLabel} → not set`;
   const entry = findCatalogEntry(catalog, value);
   const resolved =
-    entry === undefined
-      ? `${value.model} (connection ${value.connectionId} is no longer available)`
-      : formatResolvedModel(entry);
+    entry === undefined ? staleModel(value.model, value.connectionId) : formatResolvedModel(entry);
   return `${sourceLabel} → ${resolved}`;
 }
-
-/**
- * `docs/spec.md` §12's own warning, shown only when the *selected catalog entry's own reported*
- * `capabilities.promptCaching` is `false` — never guessed from the provider id. `#130`'s "no
- * capability badges beyond what the catalog reports" applies to this string too: it is real
- * discovery data or it is not shown.
- */
-export const PROMPT_CACHING_WARNING =
-  '⚠ This model does not fully support Claude prompt caching.\nThe agent can still run, but behavior may differ.';

@@ -123,14 +123,14 @@ theorem other_member_fails_list_postcondition (p : Principal) (row : RunRow)
   rcases hrole with h | h <;> simp [listRowAllowed, listGrantAny, h, howner]
 
 /-- A run token refuses a different row, including after canonical UUID comparison. -/
-@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_browser_scope_rejects_other_id (runId otherId : String) (sub : Option String)
     (h : sameRunId (some otherId) runId = false) :
     checkTokenScope (.run ⟨runId⟩) .runs .read sub (some otherId) = some .runIdMismatch := by
   simp [checkTokenScope, inGrammar, grammar, Scope.kind, Scope.id, h]
 
 /-- Run-scoped browser tokens cannot reach the collection or minting route. -/
-@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_browser_scope_cannot_list_or_mint (runId : String) (sub : Option String) :
     checkTokenScope (.run ⟨runId⟩) .runs .read sub none = some .collectionRead ∧
     checkTokenScope (.run ⟨runId⟩) .tokens .write sub none = some .notInGrammar := by
@@ -145,7 +145,7 @@ theorem session_browser_scope_rejects_other_session (p : Principal)
 
 /-- A session scope admits the agent run verb and a matching session for later role checks,
 but refuses collection reads, token minting, and agent writes. -/
-@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")
+@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")
   (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")]
 theorem session_browser_scope_grammar (p : Principal) (sessionId agentId : String)
     (sub : Option String) :
@@ -183,7 +183,7 @@ private def viewerGrantedStart : Request :=
 explicitly permitted agents. The handler-established ownership answer distinguishes an absent
 grant (`other`) from a present grant (`permitted`) at the real route's RBAC gate. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#startRun")
-  (ts := "apps/web/server/rbac/decide.ts#applyGrant")
+  (ts := "apps/web/server/rbac/core/decide.ts#applyGrant")
   (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")]
 theorem viewer_other_agent_start_denied_but_granted_start_admitted (s : State) :
     (step s viewerPrincipal viewerOtherStart).reply.status = 403 ∧

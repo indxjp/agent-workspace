@@ -5,7 +5,7 @@
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import type { ModelProvider } from '@indx-workspace/contracts/runs';
 
-import type { DeploymentDefaultModels } from '../models/deployment-default';
+import type { DeploymentDefaultModels } from '../integrations';
 import { createCeilingFor, type CeilingAuditEvent, type CeilingFor } from './ceiling';
 
 export const CEILING_ACTOR = {

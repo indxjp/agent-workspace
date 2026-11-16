@@ -1,3 +1,4 @@
+import type { IdGenerator } from '../../ids';
 import type { BuilderToolName, BuilderToolOutputs } from '@indx-workspace/contracts/builder';
 
 import type { ToolCall } from '../core/call';
@@ -32,6 +33,8 @@ export type BuilderPorts = {
   readonly audit: AuditPort;
   /** The only clock the Builder reads, so the quota's UTC day is fixed in a test and never read by the core. */
   readonly clock: () => Date;
+  /** Where the shell mints ids it needs itself; the random generator when absent. */
+  readonly ids?: IdGenerator;
 };
 
 /** An expected failure, returned and never thrown (design §08 Errors rule 1). */

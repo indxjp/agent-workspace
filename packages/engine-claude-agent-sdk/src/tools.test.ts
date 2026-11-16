@@ -18,15 +18,16 @@ import { RESERVED_MCP_SERVER_KEYS } from '@indx-workspace/contracts/tool-connect
 import {
   CLAUDE_SHELL_TOOLS,
   CLAUDE_WRITE_TOOLS,
+  claudeCommandApprovalRules,
+  claudeWriteFilesApprovals,
   claudeFileGrantDenials,
   claudeMcpAutoApprovals,
-  claudeOptionsAllowPermission,
-  claudeOptionsAllowWrite,
   compileClaudeToolPolicy,
   splitApprovals,
   unapprovableRules,
 } from './tools.js';
 import type { CompiledSdkOptions } from './options.js';
+import { claudeOptionsAllowPermission, claudeOptionsAllowWrite } from './options-readback.js';
 import { CLAUDE_SKILL_SCRIPT_SERVER } from './skill-script.js';
 
 const ALL_ON: AgentPermissions = {
@@ -348,4 +349,123 @@ describe('splitApprovals (ADR-0145)', () => {
       deferred: [],
     });
   });
+});
+
+describe('claudeCommandApprovalRules (#2091)', () => {
+  const PRESET: AgentToolPolicy = {
+    base: 'claude_code_preset',
+    autoApprove: [],
+    deny: [],
+    permissionMode: 'default',
+    allowDangerouslySkipPermissions: false,
+  };
+
+  it('asks about Bash when Run commands is on and nothing else decides it', () => {
+    expect(claudeCommandApprovalRules(ALL_ON, PRESET, [])).toEqual(['Bash']);
+    expect(claudeCommandApprovalRules(ALL_ON, { ...PRESET, base: ['Read', 'Bash'] }, [])).toEqual([
+      'Bash',
+    ]);
+  });
+
+  it('keeps asking when an allowed command is listed, which still runs without asking', () => {
+    const allowed = { ...PRESET, autoApprove: ['Bash(npm test)'] };
+    expect(claudeCommandApprovalRules(ALL_ON, allowed, [])).toEqual(['Bash']);
+  });
+
+  it('adds nothing when Bash is auto-approved whole, so every command already runs', () => {
+    expect(claudeCommandApprovalRules(ALL_ON, { ...PRESET, autoApprove: ['Bash'] }, [])).toEqual(
+      [],
+    );
+  });
+
+  it('adds nothing when Run commands is off', () => {
+    expect(claudeCommandApprovalRules(NO_SHELL, PRESET, [])).toEqual([]);
+  });
+
+  it('adds nothing when Bash is denied, for example by a read-only file grant', () => {
+    expect(
+      claudeCommandApprovalRules(ALL_ON, { ...PRESET, deny: [...CLAUDE_SHELL_TOOLS] }, []),
+    ).toEqual([]);
+  });
+
+  it('adds nothing when the base list does not offer Bash', () => {
+    expect(claudeCommandApprovalRules(ALL_ON, { ...PRESET, base: ['Read', 'Write'] }, [])).toEqual(
+      [],
+    );
+  });
+
+  it('adds nothing when a stored gate already asks about Bash', () => {
+    expect(claudeCommandApprovalRules(ALL_ON, PRESET, ['Bash'])).toEqual([]);
+    expect(claudeCommandApprovalRules(ALL_ON, PRESET, ['Write'])).toEqual(['Bash']);
+  });
+
+  it.each(['acceptEdits', 'bypassPermissions', 'dontAsk', 'plan'] as const)(
+    'adds nothing in permissionMode %s, which never asks canUseTool for a command',
+    (permissionMode) => {
+      expect(claudeCommandApprovalRules(ALL_ON, { ...PRESET, permissionMode }, [])).toEqual([]);
+    },
+  );
+});
+
+describe('claudeWriteFilesApprovals (Write files without a prompt nobody answers)', () => {
+  const PRESET: AgentToolPolicy = {
+    base: 'claude_code_preset',
+    autoApprove: [],
+    deny: [],
+    permissionMode: 'default',
+    allowDangerouslySkipPermissions: false,
+  };
+  const NO_WRITE: AgentPermissions = { ...ALL_ON, writeFiles: false };
+
+  it('allows editing inside the workspace when Write files is on', () => {
+    expect(claudeWriteFilesApprovals(ALL_ON, PRESET, [], CWD)).toEqual([`Edit(/${CWD}/**)`]);
+    expect(
+      claudeWriteFilesApprovals(ALL_ON, { ...PRESET, base: ['Read', 'Write'] }, [], CWD),
+    ).toEqual([`Edit(/${CWD}/**)`]);
+  });
+
+  it('writes the rule in Claude Code path form, with a trailing slash dropped', () => {
+    expect(claudeWriteFilesApprovals(ALL_ON, PRESET, [], '/workspace/')).toEqual([
+      'Edit(//workspace/**)',
+    ]);
+  });
+
+  it('adds nothing when Write files is off', () => {
+    expect(claudeWriteFilesApprovals(NO_WRITE, PRESET, [], CWD)).toEqual([]);
+  });
+
+  it.each(['Write', 'Edit', 'NotebookEdit'])('adds nothing when %s is denied by name', (tool) => {
+    expect(claudeWriteFilesApprovals(ALL_ON, { ...PRESET, deny: [tool] }, [], CWD)).toEqual([]);
+  });
+
+  it('still adds the rule beside a read-only grant, whose path deny wins over it', () => {
+    const deny = [`Edit(/${CWD}/docs/**)`, ...CLAUDE_SHELL_TOOLS];
+    expect(claudeWriteFilesApprovals(ALL_ON, { ...PRESET, deny }, [], CWD)).toEqual([
+      `Edit(/${CWD}/**)`,
+    ]);
+  });
+
+  it('adds nothing when the base list offers no write tool', () => {
+    expect(
+      claudeWriteFilesApprovals(ALL_ON, { ...PRESET, base: ['Read', 'Bash'] }, [], CWD),
+    ).toEqual([]);
+  });
+
+  it.each(['Write', 'Edit', 'NotebookEdit'])(
+    'adds nothing when a stored gate asks about %s, so the gate is still asked',
+    (tool) => {
+      expect(claudeWriteFilesApprovals(ALL_ON, PRESET, [tool], CWD)).toEqual([]);
+    },
+  );
+
+  it('still adds the rule when the stored gate asks about something else', () => {
+    expect(claudeWriteFilesApprovals(ALL_ON, PRESET, ['Bash'], CWD)).toEqual([`Edit(/${CWD}/**)`]);
+  });
+
+  it.each(['acceptEdits', 'bypassPermissions', 'dontAsk', 'plan'] as const)(
+    'adds nothing in permissionMode %s',
+    (permissionMode) => {
+      expect(claudeWriteFilesApprovals(ALL_ON, { ...PRESET, permissionMode }, [], CWD)).toEqual([]);
+    },
+  );
 });

@@ -94,11 +94,11 @@ interface Held {
 /** The anonymous pages: they conceal as the not-found an unknown link or name answers. */
 const CONCEALED: Readonly<Record<string, Held>> = {
   'GET /p/:token': {
-    file: 'apps/web/server/shares/core/public-share-feature.test.ts',
+    file: 'apps/web/server/shares/public-share-feature.test.ts',
     title: 'answers the unknown-link 404 from the public routes, never feature_disabled',
   },
   'POST /p/:token/messages': {
-    file: 'apps/web/server/shares/core/public-share-feature.test.ts',
+    file: 'apps/web/server/shares/public-share-feature.test.ts',
     title: 'answers the unknown-link 404 from the public routes, never feature_disabled',
   },
   'GET /p/s/:name': {

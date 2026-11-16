@@ -157,6 +157,18 @@ export function MyChat() {
 
 </Accordion>
 
+## Ask a person before a tool call
+
+When an agent requires approval for a tool (`engine.requireApproval`), its run stops as
+`awaiting_approval` and the last frame, `agent.approval.requested`, names the tool and the exact
+call. `ApprovalPrompt` shows that call as text, with an optional comment and Approve and Reject:
+pass it `call` (`{ toolName, canonicalCall }`), `strings` from `surfaceStrings(locale)` in
+`@indx-workspace/react/locale`, `pending`, and `onDecide(decision, comment)`, and send the decision
+with `client.runs.approve(runId, { comment })` or `client.runs.reject(...)`. The answer is the
+continuation run; follow it with `client.runs.follow(run.id)`. `approvalProblemMessage` in
+`@indx-workspace/react/run-model` words its three `409` refusals for the reader. The console chat
+uses the same part.
+
 ## Beyond localhost
 
 `baseUrl` takes an `http:` or `https:` URL. A deployed page works the same way once its origin is in

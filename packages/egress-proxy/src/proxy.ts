@@ -5,6 +5,7 @@ import type { Duplex } from 'node:stream';
 
 import { classifyAddress, type DeniedAddressReason } from './address.js';
 import { isHostAllowed, normalizeHost, type Allowlist } from './allowlist.js';
+import { verifyCredential, type CredentialRefusal } from './credential.js';
 
 export type DenialReason =
   | DeniedAddressReason
@@ -12,11 +13,10 @@ export type DenialReason =
   | 'port_not_allowed'
   | 'resolves_to_denied_address'
   | 'resolution_failed'
-  | 'bad_request';
+  | 'bad_request'
+  | CredentialRefusal;
 
-export interface EgressProxyOptions {
-  readonly sessionId: string;
-  readonly allowlist: Allowlist;
+interface CommonOptions {
   /** Ports a sandbox may reach on an allowed host. Defaults to 80 and 443. */
   readonly allowedPorts?: readonly number[];
   /** Every address `host` resolves to. Called at most once per request. */
@@ -27,11 +27,30 @@ export interface EgressProxyOptions {
   readonly writeLog?: (line: string) => void;
 }
 
+/** One proxy per session: the allowlist is fixed at start. */
+interface SessionProxyOptions extends CommonOptions {
+  readonly sessionId: string;
+  readonly allowlist: Allowlist;
+}
+
+/** One proxy for every session: each request carries a credential signed with this key. */
+interface SharedProxyOptions extends CommonOptions {
+  readonly credentialKey: Buffer;
+  /** Unix seconds; defaults to the wall clock. */
+  readonly now?: () => number;
+}
+
+export type EgressProxyOptions = SessionProxyOptions | SharedProxyOptions;
+
+type Principal =
+  | { readonly ok: true; readonly sid: string; readonly allowlist: Allowlist }
+  | { readonly ok: false; readonly reason: CredentialRefusal };
+
 type Decision =
   | { readonly allowed: true; readonly address: string }
   | { readonly allowed: false; readonly reason: DenialReason };
 
-const DEFAULT_PORTS: readonly number[] = [80, 443];
+export const DEFAULT_PORTS: readonly number[] = [80, 443];
 const IDLE_TIMEOUT_MS = 120_000;
 const HEADERS_TIMEOUT_MS = 15_000;
 const HOP_BY_HOP = [
@@ -58,7 +77,11 @@ const STATUS: Readonly<Record<DenialReason, number>> = {
   resolves_to_denied_address: 403,
   resolution_failed: 502,
   bad_request: 400,
+  credential_required: 407,
+  credential_invalid: 407,
+  credential_expired: 407,
 };
+const PROXY_AUTHENTICATE = 'Basic realm="aw-egress"';
 
 async function defaultResolve(host: string): Promise<readonly string[]> {
   const records = await dnsLookup(host, { all: true, verbatim: true });
@@ -81,7 +104,8 @@ function withoutHopByHop(headers: http.IncomingHttpHeaders): http.OutgoingHttpHe
 }
 
 /**
- * One HTTP forward + CONNECT proxy for one sandbox session (docs/adr/0117).
+ * One HTTP forward + CONNECT proxy for one sandbox session, or for all of them when each request
+ * carries a signed credential (docs/adr/0117).
  *
  * The decision is made once per request: the host is normalised, checked against the port list and
  * the allowlist, resolved once, and every resolved address must be public. The upstream connection
@@ -94,7 +118,7 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
   const dial = options.dial ?? defaultDial;
   const writeLog = options.writeLog ?? ((line: string) => process.stdout.write(`${line}\n`));
 
-  async function decide(rawHost: string, port: number): Promise<Decision> {
+  async function decide(allowlist: Allowlist, rawHost: string, port: number): Promise<Decision> {
     const host = normalizeHost(rawHost);
     if (host === null || !Number.isInteger(port) || port < 1 || port > 65535) {
       return { allowed: false, reason: 'bad_request' };
@@ -105,8 +129,7 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
       const reason = classifyAddress(host);
       if (reason !== null) return { allowed: false, reason };
     }
-    if (!isHostAllowed(options.allowlist, host))
-      return { allowed: false, reason: 'host_not_allowed' };
+    if (!isHostAllowed(allowlist, host)) return { allowed: false, reason: 'host_not_allowed' };
     if (literal) return { allowed: true, address: host };
     let addresses: readonly string[];
     try {
@@ -122,44 +145,63 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
     return { allowed: true, address };
   }
 
-  function logDenial(host: string | null, port: number | null, reason: DenialReason): void {
-    writeLog(
-      JSON.stringify({ event: 'egress_denied', sessionId: options.sessionId, host, port, reason }),
-    );
+  /** Who is asking: the configured session, or the session the signed credential names. */
+  function authenticate(req: http.IncomingMessage): Principal {
+    if ('credentialKey' in options) {
+      const nowSeconds = options.now?.() ?? Math.floor(Date.now() / 1000);
+      return verifyCredential(
+        req.headers['proxy-authorization'],
+        options.credentialKey,
+        nowSeconds,
+      );
+    }
+    return { ok: true, sid: options.sessionId, allowlist: options.allowlist };
   }
 
-  function deny(host: string | null, port: number | null, reason: DenialReason): string {
-    logDenial(host, port, reason);
+  function deny(
+    sid: string | null,
+    host: string | null,
+    port: number | null,
+    reason: DenialReason,
+  ): string {
+    writeLog(JSON.stringify({ event: 'egress_denied', sessionId: sid, host, port, reason }));
     return JSON.stringify({ error: 'egress_denied', reason });
   }
 
   function forward(req: http.IncomingMessage, res: http.ServerResponse): void {
     const requestUrl = req.url ?? '';
+    if (req.method === 'GET' && requestUrl === '/healthz') {
+      res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
+      return;
+    }
+    const principal = authenticate(req);
+    if (!principal.ok) {
+      respond(res, 407, deny(null, null, null, principal.reason), {
+        'proxy-authenticate': PROXY_AUTHENTICATE,
+      });
+      return;
+    }
     if (requestUrl.startsWith('/')) {
-      if (req.method === 'GET' && requestUrl === '/healthz') {
-        res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
-        return;
-      }
-      respond(res, 400, deny(null, null, 'bad_request'));
+      respond(res, 400, deny(principal.sid, null, null, 'bad_request'));
       return;
     }
     let target: URL;
     try {
       target = new URL(requestUrl);
     } catch {
-      respond(res, 400, deny(null, null, 'bad_request'));
+      respond(res, 400, deny(principal.sid, null, null, 'bad_request'));
       return;
     }
     if (target.protocol !== 'http:') {
-      respond(res, 400, deny(null, null, 'bad_request'));
+      respond(res, 400, deny(principal.sid, null, null, 'bad_request'));
       return;
     }
     const port = target.port === '' ? 80 : Number(target.port);
-    void decide(target.hostname, port).then(
+    void decide(principal.allowlist, target.hostname, port).then(
       (decision) => {
         if (!decision.allowed) {
           const host = normalizeHost(target.hostname);
-          respond(res, STATUS[decision.reason], deny(host, port, decision.reason));
+          respond(res, STATUS[decision.reason], deny(principal.sid, host, port, decision.reason));
           return;
         }
         relay(req, res, target, port, decision.address);
@@ -208,16 +250,25 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
 
   function tunnel(req: http.IncomingMessage, client: Duplex, head: Buffer): void {
     client.on('error', () => client.destroy());
-    const refuse = (status: number, body: string): void => {
+    const refuse = (status: number, body: string, extraHeaders = ''): void => {
       client.end(
-        `HTTP/1.1 ${status} ${http.STATUS_CODES[status] ?? 'Error'}\r\n` +
+        `HTTP/1.1 ${status} ${http.STATUS_CODES[status] ?? 'Error'}\r\n${extraHeaders}` +
           `content-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n` +
           `connection: close\r\n\r\n${body}`,
       );
     };
+    const principal = authenticate(req);
+    if (!principal.ok) {
+      refuse(
+        407,
+        deny(null, null, null, principal.reason),
+        `proxy-authenticate: ${PROXY_AUTHENTICATE}\r\n`,
+      );
+      return;
+    }
     const match = CONNECT_AUTHORITY.exec(req.url ?? '');
     if (match === null) {
-      refuse(400, deny(null, null, 'bad_request'));
+      refuse(400, deny(principal.sid, null, null, 'bad_request'));
       return;
     }
     const rawHost = match[1] ?? match[2] ?? '';
@@ -228,11 +279,14 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
       client.destroy();
     };
     client.once('end', abandon);
-    void decide(rawHost, port).then(
+    void decide(principal.allowlist, rawHost, port).then(
       (decision) => {
         client.off('end', abandon);
         if (!decision.allowed) {
-          refuse(STATUS[decision.reason], deny(normalizeHost(rawHost), port, decision.reason));
+          refuse(
+            STATUS[decision.reason],
+            deny(principal.sid, normalizeHost(rawHost), port, decision.reason),
+          );
           return;
         }
         if (client.destroyed) return;
@@ -271,6 +325,13 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
   return server;
 }
 
-function respond(res: http.ServerResponse, status: number, body: string): void {
-  res.writeHead(status, { 'content-type': 'application/json', connection: 'close' }).end(body);
+function respond(
+  res: http.ServerResponse,
+  status: number,
+  body: string,
+  headers: http.OutgoingHttpHeaders = {},
+): void {
+  res
+    .writeHead(status, { 'content-type': 'application/json', connection: 'close', ...headers })
+    .end(body);
 }

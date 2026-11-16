@@ -4,6 +4,7 @@ import { EvaluationRunResourceSchema, type EvalCase } from '@indx-workspace/cont
 import { describe, expect, it, vi } from 'vitest';
 
 import type { LaunchContext, RunPrincipal, RunApiEnvironment } from '../runs/environment';
+import { renderRunDetail } from '../runs/api';
 import { InMemoryRunStore } from '../runs/memory-store';
 import { assistantSays, ORDER_STATUS_FRAMES } from './fixtures';
 import {
@@ -482,5 +483,29 @@ describe('getEvaluationRun (issue #799)', () => {
     expect(await h.get(run.id, OTHER_AGENT)).toMatchObject({ status: 404 });
     expect(await h.get('nope')).toMatchObject({ status: 404 });
     expect(await h.get(null)).toMatchObject({ status: 404 });
+  });
+});
+
+describe('an evaluation of a team run (ADR-0104 acceptance decision 7, #1517)', () => {
+  it("scores the root run, whose read answers the tree's cost", async () => {
+    const h = setUp();
+    const run = await started(h, [passing('a')]);
+    const body = EvaluationRunResourceSchema.parse((await h.advance(run.id)).body);
+    const rootId = body.results[0]?.runId ?? '';
+    // A member call the lead made while the case ran: a child run of the case's run, with a cost.
+    const child = await h.store.create({
+      id: crypto.randomUUID(),
+      workspaceId: WORKSPACE,
+      agentId: OTHER_AGENT,
+      sessionId: crypto.randomUUID(),
+      engine: 'claude-agent-sdk',
+    });
+    h.store.seedChildForTests(child.id, rootId, '0.250000');
+    const root = await h.store.get(rootId);
+    if (root === null) throw new Error('the evaluated run is not stored');
+    // The evaluation targets `runs.id` of the root, and the root's read sums the whole tree.
+    const detail = await renderRunDetail(h.store, root);
+    expect(detail['children']).toHaveLength(1);
+    expect(detail['treeCost']).toEqual({ amount: '0.250000', currency: 'USD' });
   });
 });

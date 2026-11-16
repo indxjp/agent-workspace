@@ -3,9 +3,42 @@ import type { ShareListItem } from '@indx-workspace/contracts/shares';
 import { useCallback, useEffect, useState } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { adminStrings, type AdminStrings } from '../resources/admin-messages';
 import { loadSharing, revokeShare, setPublicSharing } from './shared-links-model';
 
-export function SharedLinksScreen() {
+type ShareRowFacts = Pick<
+  ShareListItem,
+  | 'subjectType'
+  | 'mode'
+  | 'visibility'
+  | 'viewCount'
+  | 'spentUsd'
+  | 'budgetCapUsd'
+  | 'revokedAt'
+  | 'suspendedAt'
+  | 'stopped'
+>;
+
+/** A link's state chip: revoked, then suspended, then stopped, else active. */
+export function shareState(share: ShareRowFacts, strings: AdminStrings): string {
+  if (share.revokedAt) return strings.shareRevoked;
+  if (share.suspendedAt) return strings.shareSuspended;
+  if (share.stopped) return strings.shareStopped;
+  return strings.shareActive;
+}
+
+/** The line under a link's label. Its kind and mode are the server's words, shown as they come. */
+export function shareMeta(share: ShareRowFacts, strings: AdminStrings): string {
+  const parts = [share.subjectType, share.mode ?? share.visibility, strings.views(share.viewCount)];
+  if (share.budgetCapUsd) {
+    parts.push(strings.spentOf(share.spentUsd, share.budgetCapUsd));
+  }
+  return parts.join(' · ');
+}
+
+export function SharedLinksScreen({ locale = 'en' }: { readonly locale?: VersionsLocale }) {
+  const strings = adminStrings(locale);
   const [shares, setShares] = useState<readonly ShareListItem[] | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
@@ -35,17 +68,15 @@ export function SharedLinksScreen() {
     } else setProblem(refused);
   }
   return (
-    <main className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-5 flex items-start justify-between">
         <div>
-          <h1 className="text-[21px]">Shared links</h1>
-          <p className="text-[13px] text-muted">
-            Every definition, snapshot and runnable link in this workspace.
-          </p>
+          <h1 className="text-[21px]">{strings.sharesTitle}</h1>
+          <p className="text-[13px] text-muted">{strings.sharesIntro}</p>
         </div>
         <label className="flex items-center gap-2 text-[13px]">
           <input type="checkbox" checked={enabled} onChange={() => void toggle()} />
-          Public sharing
+          {strings.publicSharing}
         </label>
       </div>
       {problem ? (
@@ -61,19 +92,10 @@ export function SharedLinksScreen() {
           >
             <div className="min-w-[240px] flex-1">
               <div className="font-semibold">{share.subjectLabel}</div>
-              <div className="text-[12px] text-muted">
-                {share.subjectType} · {share.mode ?? share.visibility} · {share.viewCount} views
-                {share.budgetCapUsd ? ` · $${share.spentUsd} of $${share.budgetCapUsd}` : ''}
-              </div>
+              <div className="text-[12px] text-muted">{shareMeta(share, strings)}</div>
             </div>
             <span className="rounded-full bg-surface-2 px-2 py-1 text-[11px]">
-              {share.revokedAt
-                ? 'Revoked'
-                : share.suspendedAt
-                  ? 'Suspended'
-                  : share.stopped
-                    ? 'Stopped'
-                    : 'Active'}
+              {shareState(share, strings)}
             </span>
             {share.revokedAt ? (
               <span />
@@ -83,15 +105,17 @@ export function SharedLinksScreen() {
                 onClick={() => void revoke(share.id)}
                 className="rounded border border-border-strong px-3 py-1.5 text-[12px]"
               >
-                {share.mode === 'runnable' ? 'Stop' : 'Revoke'}
+                {share.mode === 'runnable' ? strings.stop : strings.revoke}
               </button>
             )}
           </div>
         ))}
         {shares?.length === 0 ? (
-          <div className="p-5 text-[13px] text-muted">No links have been shared.</div>
+          <div className="p-5 text-[13px] text-muted">{strings.noShares}</div>
         ) : null}
-        {shares === null ? <div className="p-5 text-[13px] text-muted">Loading…</div> : null}
+        {shares === null ? (
+          <div className="p-5 text-[13px] text-muted">{strings.loading}</div>
+        ) : null}
       </div>
     </main>
   );

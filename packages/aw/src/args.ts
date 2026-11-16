@@ -42,6 +42,8 @@ const VALUE_FLAGS = [
   'download',
   // `aw runs start <agent> --output-schema <path>`: a JSON Schema file for the run's structured output
   'output-schema',
+  // issue #250 (S-6): `aw runs start <agent> --idempotency-key <key>`, sent as Idempotency-Key
+  'idempotency-key',
   // issue #236 (SDK-04, S-1): `aw tokens mint --scope run|session --id <id> [--ttl <seconds>]`
   'scope',
   'id',
@@ -100,6 +102,25 @@ const VALUE_FLAGS = [
   'credential-file',
   // issue #1850: `aw agents export <id> --format json|ts`
   'format',
+  // issue #1505: `aw generate resource <name> <field:type>... --board <enumField>`
+  'board',
+  // issue #1507: `aw generate page <name> --kind list --resource <resource>`
+  'resource',
+  // issue #250 (N-3): `aw webhooks create --webhook-url <url>`; `--url` is the control plane's,
+  // as for `--storage-url`
+  'webhook-url',
+  // issue #1514: `aw generate recipe <name> --on resource:<r>.<event>|'schedule:<cron>' [--tz <iana>]`
+  'on',
+  'tz',
+  // issue #1516: `aw agent-teams create <name> --description <text> --lead <agent>[@<version>]`
+  'description',
+  'lead',
+  // ADR-0162: `aw runs start <agent> --spend-ceiling-usd <usd>` lowers the run's spend ceiling
+  'spend-ceiling-usd',
+  // issue #1519: `aw generate channel <resource> --key <refField>`
+  'key',
+  // ADR-0166: `aw blueprint diff|update <name> --to <version>` names the version to propose
+  'to',
 ] as const;
 
 const SWITCH_FLAGS = [
@@ -126,6 +147,8 @@ const SWITCH_FLAGS = [
   'yes',
   // issue #621: `aw deploy <env> --plan` says the default out loud; `--plan --yes` is refused
   'plan',
+  // BYOC GCP P1: `aw deploy production --show-owner-password` prints the generated Owner password
+  'show-owner-password',
   // issue #620: `aw feedback --negative` lists thumbs-down ratings only
   'negative',
   // issue #665: `aw runs rate <id> --up|--down`
@@ -170,6 +193,10 @@ const REPEATABLE_VALUE_FLAGS = [
   'redirect-uri',
   // issue #1692: `aw storage connections create --allow <prefix> [--allow …]`
   'allow',
+  // issue #250 (N-3): `aw webhooks create --webhook-url <url> --event <type> [--event …]`
+  'event',
+  // issue #1516: `aw agent-teams versions create <team> --member <agent>[@<version>] [--member …]`
+  'member',
 ] as const;
 
 export type ValueFlag = (typeof VALUE_FLAGS)[number];

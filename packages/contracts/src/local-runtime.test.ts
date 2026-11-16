@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  LOCAL_CONSOLE_OIDC_CLIENT_ID,
   LOCAL_RUNTIME_MESSAGE_TYPES,
   LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES,
   LocalRuntimeChildMessageSchema,
@@ -10,6 +11,7 @@ import {
   LocalRuntimeParentMessageSchema,
   LocalRuntimeReadyMessageSchema,
   LocalRuntimeStartMessageSchema,
+  localConsoleRedirectUri,
 } from './local-runtime.js';
 
 const start = {
@@ -248,6 +250,47 @@ describe('local-runtime review regressions (#439)', () => {
   });
 });
 
+describe('ready.databaseUrl (issue #1506)', () => {
+  const DATABASE_URL =
+    'postgresql://agent_workspace:agent_workspace_local@127.0.0.1:25432/postgres';
+
+  it('parses a ready message without databaseUrl, as before', () => {
+    expect(LocalRuntimeReadyMessageSchema.parse(ready)).toStrictEqual(ready);
+  });
+
+  it.each([
+    DATABASE_URL,
+    'postgres://user:pass@localhost:5432/app',
+    'postgresql://user@[::1]:5432/postgres',
+    'postgresql://127.0.0.1/postgres',
+  ])('accepts the loopback database url %s', (databaseUrl) => {
+    expect(LocalRuntimeReadyMessageSchema.parse({ ...ready, databaseUrl })).toStrictEqual({
+      ...ready,
+      databaseUrl,
+    });
+  });
+
+  it.each([
+    'postgresql://agent_workspace:pw@db.example.com:5432/postgres',
+    'postgresql://user:pw@10.0.0.5:5432/postgres',
+    'postgresql://user:pw@127.0.0.1.example.com/postgres',
+    'postgresql://user:pw@LOCALHOST/postgres',
+    'postgresql://user:pw@127.1/postgres',
+    'postgresql://user:pw@0x7f000001/postgres',
+    'mysql://user:pw@127.0.0.1/app',
+    'http://127.0.0.1:25432/postgres',
+    'not a url',
+    '',
+  ])('refuses the database url %j, which is not a loopback postgres url', (databaseUrl) => {
+    expect(LocalRuntimeReadyMessageSchema.safeParse({ ...ready, databaseUrl }).success).toBe(false);
+  });
+
+  it('keeps a ready message with a database url a child message', () => {
+    const message = { ...ready, databaseUrl: DATABASE_URL };
+    expect(LocalRuntimeChildMessageSchema.safeParse(message).success).toBe(true);
+  });
+});
+
 describe('start.environment.policy (C13, issue #524)', () => {
   it('parses a start message with no policy, as before', () => {
     expect(LocalRuntimeStartMessageSchema.parse(start)).toEqual(start);
@@ -276,6 +319,35 @@ describe('start.environment.policy (C13, issue #524)', () => {
     const result = LocalRuntimeStartMessageSchema.safeParse(message);
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.path)).toEqual([path]);
+  });
+});
+
+describe('start.environment.features (ADR-0160 D5, issue #1495)', () => {
+  it('parses a start message with no features, as before', () => {
+    expect(LocalRuntimeStartMessageSchema.parse(start)).toEqual(start);
+  });
+
+  it('parses a start message carrying the project features, in order', () => {
+    const message = {
+      ...start,
+      environment: { ...start.environment, features: ['files', 'chat'] },
+    };
+    expect(LocalRuntimeStartMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it.each<[string, unknown]>([
+    ['an empty list', []],
+    ['a repeated feature', ['chat', 'chat']],
+    ['a feature without its dependency', ['surfaces']],
+    ['an unknown feature', ['nope']],
+    ['a comma-separated string', 'chat,files'],
+  ])('refuses %s under environment.features', (_name, features) => {
+    const message = { ...start, environment: { ...start.environment, features } };
+    const result = LocalRuntimeStartMessageSchema.safeParse(message);
+    expect(result.success).toBe(false);
+    for (const issue of result.error?.issues ?? []) {
+      expect(issue.path.slice(0, 2)).toEqual(['environment', 'features']);
+    }
   });
 });
 
@@ -368,5 +440,60 @@ describe('start.environment.withheld (issue #564)', () => {
     const message = withWithheld(['GITHUB_TOKEN']);
     expect(LocalRuntimeParentMessageSchema.safeParse(message).success).toBe(true);
     expect(LocalRuntimeChildMessageSchema.safeParse(message).success).toBe(false);
+  });
+});
+
+describe('start.environment.devIssuer (ADR-0161 amendment, issue #2075)', () => {
+  const devIssuer = {
+    issuer: 'http://127.0.0.1:3200',
+    clientId: LOCAL_CONSOLE_OIDC_CLIENT_ID,
+    clientSecret: 'c'.repeat(43),
+    redirectUri: localConsoleRedirectUri(3000),
+    ownerSubject: `local:${'o'.repeat(43)}`,
+  };
+  const withIssuer = (value: unknown) => ({
+    ...start,
+    environment: { ...start.environment, devIssuer: value },
+  });
+
+  it('is optional: a start message without it parses unchanged', () => {
+    expect(LocalRuntimeStartMessageSchema.parse(start)).toStrictEqual(start);
+  });
+
+  it('accepts the issuer on 127.0.0.1 with the console client and its redirect URI', () => {
+    const parsed = LocalRuntimeStartMessageSchema.parse(withIssuer(devIssuer));
+    expect(parsed.environment.devIssuer).toEqual(devIssuer);
+    expect(localConsoleRedirectUri(3000)).toBe('http://127.0.0.1:3000/api/auth/callback');
+  });
+
+  it('is strict: an unknown key is refused', () => {
+    const message = withIssuer({ ...devIssuer, extra: true });
+    expect(LocalRuntimeStartMessageSchema.safeParse(message).success).toBe(false);
+  });
+
+  it.each([
+    'https://127.0.0.1:3200',
+    'http://localhost:3200',
+    'http://[::1]:3200',
+    'http://127.0.0.2:3200',
+    'http://127.0.0.1:3200/',
+    'http://127.0.0.1:3200/realms/x',
+    'http://127.0.0.1:70000',
+    'http://127.0.0.1',
+  ])('refuses the issuer %s: http on 127.0.0.1 only', (issuer) => {
+    const message = withIssuer({ ...devIssuer, issuer });
+    expect(LocalRuntimeStartMessageSchema.safeParse(message).success).toBe(false);
+  });
+
+  it('refuses a redirect URI on another port, another client id, a short secret or a bad sub', () => {
+    for (const changed of [
+      { redirectUri: localConsoleRedirectUri(3001) },
+      { clientId: 'other' },
+      { clientSecret: 'short' },
+      { ownerSubject: 'someone' },
+    ]) {
+      const message = withIssuer({ ...devIssuer, ...changed });
+      expect(LocalRuntimeStartMessageSchema.safeParse(message).success).toBe(false);
+    }
   });
 });

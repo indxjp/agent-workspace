@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS "app_wiki"."recipe_runs" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "workspace_id" text NOT NULL,
+  "recipe" text NOT NULL,
+  "status" text NOT NULL,
+  "input" jsonb NOT NULL,
+  "dedupe_key" text NOT NULL,
+  "started_by" text,
+  "lease_owner" text,
+  "lease_expires_at" timestamptz,
+  "error" text,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "recipe_runs_dedupe_key" UNIQUE ("workspace_id", "recipe", "dedupe_key"),
+  CONSTRAINT "recipe_runs_workspace_id_id" UNIQUE ("workspace_id", "id"),
+  CONSTRAINT "recipe_runs_status_check" CHECK ("status" IN ('running', 'waiting', 'completed', 'failed', 'cancelled')),
+  CONSTRAINT "recipe_runs_error_check" CHECK ("error" IS NULL OR "error" ~ '^[a-z][a-z0-9_]{0,63}$')
+);
+CREATE INDEX IF NOT EXISTS "recipe_runs_list_idx" ON "app_wiki"."recipe_runs" ("workspace_id", "created_at" DESC, "id" DESC);
+CREATE INDEX IF NOT EXISTS "recipe_runs_status_idx" ON "app_wiki"."recipe_runs" ("workspace_id", "status");
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "app_wiki"."recipe_steps" (
+  "workspace_id" text NOT NULL,
+  "recipe_run_id" uuid NOT NULL,
+  "key" text NOT NULL,
+  "status" text NOT NULL,
+  "run_id" text,
+  "continuation_run_id" text,
+  "decision" text,
+  "output" jsonb,
+  "error" text,
+  "started_at" timestamptz NOT NULL DEFAULT now(),
+  "ended_at" timestamptz,
+  CONSTRAINT "recipe_steps_pkey" PRIMARY KEY ("recipe_run_id", "key"),
+  CONSTRAINT "recipe_steps_recipe_run_fk" FOREIGN KEY ("workspace_id", "recipe_run_id") REFERENCES "app_wiki"."recipe_runs" ("workspace_id", "id") ON DELETE CASCADE,
+  CONSTRAINT "recipe_steps_status_check" CHECK ("status" IN ('running', 'awaiting_approval', 'completed', 'failed')),
+  CONSTRAINT "recipe_steps_error_check" CHECK ("error" IS NULL OR "error" ~ '^[a-z][a-z0-9_]{0,63}$'),
+  CONSTRAINT "recipe_steps_decision_check" CHECK ("decision" IS NULL OR "decision" IN ('approve', 'reject')),
+  CONSTRAINT "recipe_steps_continuation_check" CHECK (("continuation_run_id" IS NULL) = ("decision" IS NULL) AND ("decision" IS NULL OR "run_id" IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS "recipe_steps_run_id_idx" ON "app_wiki"."recipe_steps" ("workspace_id", "run_id");
+CREATE INDEX IF NOT EXISTS "recipe_steps_continuation_run_id_idx" ON "app_wiki"."recipe_steps" ("workspace_id", "continuation_run_id");

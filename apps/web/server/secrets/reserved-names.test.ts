@@ -120,6 +120,17 @@ describe('the generic secrets routes and storage-connection credential names', (
     });
   });
 
+  it('[#2283][api] refuses to replace a reserved secret addressed by an upper-case id', async () => {
+    const store = useRuntime();
+    await store.connect();
+    const id = await seeded(store, RESERVED);
+    const upper = id.toUpperCase();
+    const refused = await replaceRoute(call('PUT', `/api/secrets/${upper}`, { value: VALUE }), {
+      params: Promise.resolve({ id: upper }),
+    });
+    expect(refused.status).toBe(409);
+  });
+
   it("[US-STO-12][api][sdk] refuses to delete a storage connection's credential while the connection exists", async () => {
     const store = useRuntime();
     await store.connect();
@@ -172,5 +183,41 @@ describe('the generic secrets routes and storage-connection credential names', (
       params: Promise.resolve({ id }),
     });
     expect(deleted.status).toBe(204);
+  });
+});
+
+describe('the generic secrets routes and webhook signing secret names', () => {
+  const SIGNING = 'WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET';
+
+  it('refuses to create a secret under a webhook signing secret name', async () => {
+    useRuntime();
+    const refused = await createRoute(
+      call('POST', '/api/secrets', { name: SIGNING, value: 'whsec_' }),
+    );
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: 'secret_name_conflict' } });
+    expect(await (await listRoute(call('GET', '/api/secrets'))).json()).toEqual({ secrets: [] });
+  });
+
+  it('refuses to replace a webhook signing secret, and still deletes it', async () => {
+    const store = useRuntime();
+    const id = await seeded(store, SIGNING);
+    const refused = await replaceRoute(call('PUT', `/api/secrets/${id}`, { value: 'whsec_' }), {
+      params: Promise.resolve({ id }),
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: 'secret_in_use' } });
+    const deleted = await deleteRoute(call('DELETE', `/api/secrets/${id}`), {
+      params: Promise.resolve({ id }),
+    });
+    expect(deleted.status).toBe(204);
+  });
+
+  it('treats a name of another shape as an ordinary secret', async () => {
+    useRuntime();
+    const created = await createRoute(
+      call('POST', '/api/secrets', { name: 'WEBHOOK_STRIPE_SIGNING_SECRET', value: VALUE }),
+    );
+    expect(created.status).toBe(201);
   });
 });

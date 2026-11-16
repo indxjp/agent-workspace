@@ -9,11 +9,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { resolveMigrationsDir, runMigrations } from '../migrate.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
-import { workspaces } from '../schema/workspaces.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createDatabaseSessionStateRepositoryProvider } from './session-state.js';
 import { createDatabaseSessionTranscriptRepositoryProvider } from './session-transcripts.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { insertPriorWorkspaces } from './prior-workspaces.test-support.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -47,7 +47,7 @@ describe.skipIf(!hasDatabase)('0026/0027 session-state migration', () => {
   const subpath = 'subagents/agent-1';
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0026-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 
@@ -75,9 +75,11 @@ describe.skipIf(!hasDatabase)('0026/0027 session-state migration', () => {
       databaseUrl,
       priorMigrationsDir,
     );
-    await isolated.db
-      .insert(workspaces)
-      .values({ id: workspaceId, slug: workspaceId, name: 'Pre-migration workspace' });
+    await insertPriorWorkspaces(isolated.db, {
+      id: workspaceId,
+      slug: workspaceId,
+      name: 'Pre-migration workspace',
+    });
     await isolated.db
       .insert(users)
       .values({ id: userId, email: `${userId}@example.test`, name: 'Pre-migration owner' });
@@ -173,7 +175,10 @@ describe.skipIf(!hasDatabase)('0026/0027 session-state migration', () => {
   });
 
   it('is re-runnable: applying the migration set again inserts nothing twice', async () => {
-    await runMigrations({ url: isolated.url, maxConnections: 4 }, resolveMigrationsDir());
+    await runMigrations(
+      { url: isolated.url, maxConnections: 4 },
+      resolveMigrationsDir(process.env),
+    );
     const store = await stateStore();
     await expect(
       store.list({ sessionId, engine: 'claude-agent-sdk', streamKey: `${workspaceId}/` }, {}),

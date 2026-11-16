@@ -16,16 +16,21 @@ export const CreateEndpointClientRequestSchema: z.ZodReadonly<z.ZodObject<{
         builder: "builder";
         "mcp-project": "mcp-project";
         "a2a-agent": "a2a-agent";
+        "app-backend": "app-backend";
     }>;
     agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
     toolNames: z.ZodOptional<z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>>;
+    oidcAudience: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public
 export const ENDPOINT_CLIENT_AGENTS_MAX = 64;
 
 // @public
-export const ENDPOINT_CLIENT_KINDS: readonly ["mcp-project", "a2a-agent", "builder"];
+export const ENDPOINT_CLIENT_KINDS: readonly ["mcp-project", "a2a-agent", "builder", "app-backend"];
+
+// @public
+export const ENDPOINT_CLIENT_OIDC_AUDIENCE_MAX_LENGTH = 255;
 
 // @public
 export const ENDPOINT_CLIENT_PROBLEM_CODES: {
@@ -60,10 +65,12 @@ export const EndpointClientListResponseSchema: z.ZodReadonly<z.ZodObject<{
             builder: "builder";
             "mcp-project": "mcp-project";
             "a2a-agent": "a2a-agent";
+            "app-backend": "app-backend";
         }>;
         agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
         toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+        oidcAudience: z.ZodNullable<z.ZodString>;
         hasClientSecret: z.ZodBoolean;
         actsForPrincipalId: z.ZodString;
         apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -87,10 +94,12 @@ export const EndpointClientResourceSchema: z.ZodReadonly<z.ZodObject<{
         builder: "builder";
         "mcp-project": "mcp-project";
         "a2a-agent": "a2a-agent";
+        "app-backend": "app-backend";
     }>;
     agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
     toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+    oidcAudience: z.ZodNullable<z.ZodString>;
     hasClientSecret: z.ZodBoolean;
     actsForPrincipalId: z.ZodString;
     apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -111,10 +120,12 @@ export const EndpointClientResponseSchema: z.ZodReadonly<z.ZodObject<{
             builder: "builder";
             "mcp-project": "mcp-project";
             "a2a-agent": "a2a-agent";
+            "app-backend": "app-backend";
         }>;
         agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
         toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+        oidcAudience: z.ZodNullable<z.ZodString>;
         hasClientSecret: z.ZodBoolean;
         actsForPrincipalId: z.ZodString;
         apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -132,6 +143,9 @@ export const MintEndpointKeyRequestSchema: z.ZodReadonly<z.ZodObject<{
     name: z.ZodString;
     expiresAt: z.ZodOptional<z.ZodNullable<z.ZodISODateTime>>;
 }, z.core.$strict>>;
+
+// @public
+export const OidcAudienceSchema: z.ZodString;
 
 // @public
 export const RedirectUriSchema: z.ZodString;
@@ -154,6 +168,7 @@ export const UpdateEndpointClientRequestSchema: z.ZodReadonly<z.ZodObject<{
     agentIds: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     toolNames: z.ZodOptional<z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>>;
     redirectUris: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+    oidcAudience: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // (No @packageDocumentation comment for this package)

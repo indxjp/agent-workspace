@@ -1,0 +1,193 @@
+name: Agent Store deploy
+
+# The Agent Store's GCP deployment (spec, "GCP deployment"): a merge to main deploys the staging
+# project, and only a `store-v*` tag a person pushes deploys production, through the GitHub
+# environment `store-production` and its required reviewers. One job serves both: the environment
+# decides which variables and secrets it reads. It deploys infra/agent-store/agent-workspace.yaml with
+# `aw deploy production` (the Terraform state is in the project's own bucket, `<project>-aw-tfstate`,
+# which `aw` creates and which holds the stack's generated secrets, so a run on a fresh runner continues
+# from the last one; `aw`'s own directory holds only the rendered profile and the pinned images, and
+# every run gives it the digests again), then makes the two
+# read-only Anthropic key checks and seeds the demo templates.
+#
+# It is inert until a person has done the one-time Google Cloud setup (the Agent Store runbook, kept in the private repository)
+# and set STORE_STAGING_GCP_PROJECT or STORE_PRODUCTION_GCP_PROJECT as a repository variable: while
+# the variable is empty the job is skipped. It authenticates with Workload Identity Federation and
+# holds no key. The operator token is read from Secret Manager into the one step that uses it; the
+# Anthropic key is never read here, only its version metadata. It is not a required check and no
+# ci-success need.
+
+on:
+  push:
+    branches: [main]
+    tags: ['store-v*']
+
+concurrency:
+  group: store-deploy-${{ startsWith(github.ref, 'refs/tags/store-v') && 'production' || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: deploy ${{ startsWith(github.ref, 'refs/tags/store-v') && 'production' || 'staging' }}
+    if: github.repository_owner == 'INDXDev' && ((github.ref == 'refs/heads/main' && vars.STORE_STAGING_GCP_PROJECT != '') || (startsWith(github.ref, 'refs/tags/store-v') && vars.STORE_PRODUCTION_GCP_PROJECT != ''))
+    environment: ${{ startsWith(github.ref, 'refs/tags/store-v') && 'store-production' || 'store-staging' }}
+    runs-on: [self-hosted, ms-a2]
+    timeout-minutes: 120
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      GCP_PROJECT: ${{ startsWith(github.ref, 'refs/tags/store-v') && vars.STORE_PRODUCTION_GCP_PROJECT || vars.STORE_STAGING_GCP_PROJECT }}
+      GCP_REGION: asia-northeast1
+      STORE_GCP_PROJECT: ${{ startsWith(github.ref, 'refs/tags/store-v') && vars.STORE_PRODUCTION_GCP_PROJECT || vars.STORE_STAGING_GCP_PROJECT }}
+      STORE_DOMAIN: ${{ vars.STORE_DOMAIN }}
+      STORE_ALERTS_EMAIL: ${{ vars.STORE_ALERTS_EMAIL }}
+      STORE_OWNER_EMAIL: ${{ vars.STORE_OWNER_EMAIL }}
+      STORE_SETTINGS_JSON: ${{ vars.STORE_SETTINGS_JSON }}
+      STORE_APPS_WORKSPACE_ID: ${{ vars.STORE_APPS_WORKSPACE_ID }}
+      STORE_API_KEY_SECRET_STORE: ${{ vars.STORE_API_KEY_SECRET_STORE }}
+      STORE_API_KEY_SECRET_CRM: ${{ vars.STORE_API_KEY_SECRET_CRM }}
+      STORE_API_KEY_SECRET_SERVICE_DESK: ${{ vars.STORE_API_KEY_SECRET_SERVICE_DESK }}
+      STORE_API_KEY_SECRET_WIKI: ${{ vars.STORE_API_KEY_SECRET_WIKI }}
+      STORE_API_KEY_SECRET_TEAM_CHAT: ${{ vars.STORE_API_KEY_SECRET_TEAM_CHAT }}
+      STORE_OIDC_ISSUER: ${{ vars.STORE_OIDC_ISSUER }}
+      STORE_OIDC_CLIENT_ID: ${{ vars.STORE_OIDC_CLIENT_ID }}
+      STORE_APP_OIDC_CLIENT_ID_STORE: ${{ vars.STORE_APP_OIDC_CLIENT_ID_STORE }}
+      STORE_APP_OIDC_CLIENT_ID_CRM: ${{ vars.STORE_APP_OIDC_CLIENT_ID_CRM }}
+      STORE_APP_OIDC_CLIENT_ID_SERVICE_DESK: ${{ vars.STORE_APP_OIDC_CLIENT_ID_SERVICE_DESK }}
+      STORE_APP_OIDC_CLIENT_ID_WIKI: ${{ vars.STORE_APP_OIDC_CLIENT_ID_WIKI }}
+      STORE_APP_OIDC_CLIENT_ID_TEAM_CHAT: ${{ vars.STORE_APP_OIDC_CLIENT_ID_TEAM_CHAT }}
+      STORE_APP_CLIENT_ID_STORE: ${{ vars.STORE_APP_CLIENT_ID_STORE }}
+      STORE_APP_CLIENT_ID_CRM: ${{ vars.STORE_APP_CLIENT_ID_CRM }}
+      STORE_APP_CLIENT_ID_SERVICE_DESK: ${{ vars.STORE_APP_CLIENT_ID_SERVICE_DESK }}
+      STORE_APP_CLIENT_ID_WIKI: ${{ vars.STORE_APP_CLIENT_ID_WIKI }}
+      STORE_APP_CLIENT_ID_TEAM_CHAT: ${{ vars.STORE_APP_CLIENT_ID_TEAM_CHAT }}
+      STORE_PLATFORM_URL: https://app.${{ vars.STORE_DOMAIN }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Refuse a production tag that is not on main
+        if: startsWith(github.ref, 'refs/tags/store-v')
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::a store-v tag must point at a commit that is on main"; exit 1; }
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets.STORE_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.STORE_GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.7
+          # The wrapper exits 0 for `plan -detailed-exitcode`'s 2; aw must see Terraform's own status.
+          terraform_wrapper: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Install and build aw and the packages the store scripts and app images use
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          # The nine packages scripts/release/pack-packages.mjs packs: tests/apps/app-image.mjs packs
+          # them for each app image, so they are built first (as gcp-cloudrun-preview.yml does).
+          scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/app,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=2 --output-style=static
+          # A fresh HOME gives aw an empty local state; what must last is in the project's state bucket.
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/aw-home" "$RUNNER_TEMP/project"
+          {
+            echo '#!/bin/sh'
+            echo "HOME=\"$RUNNER_TEMP/aw-home\" exec node \"$GITHUB_WORKSPACE/packages/aw/dist/index.js\" \"\$@\""
+          } > "$RUNNER_TEMP/bin/aw"
+          chmod +x "$RUNNER_TEMP/bin/aw"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Check both secrets have an enabled version before deploying (metadata only, never the value)
+        run: |
+          set -euo pipefail
+          for secret in store-anthropic-api-key store-demo-operator-token; do
+            enabled="$(gcloud secrets versions list "$secret" --project "$GCP_PROJECT" --filter='state:enabled' --limit=1 --format='value(name)')"
+            test -n "$enabled" || { echo "::error::the secret $secret has no enabled version"; exit 1; }
+            echo "$secret has an enabled version"
+          done
+
+      - name: Build the images from this commit
+        # The release images predate the commit and lack the demo operator routes, so the platform's
+        # five images (web, gateway, runner, runtime, tool-host) and the store's five app images are
+        # built from it and staged in the project's Artifact Registry; `aw deploy` copies them by
+        # digest into the stack's own registry. The apps are built from locked copies of the
+        # examples (tests/apps/app-image.mjs).
+        timeout-minutes: 60
+        run: |
+          set -euo pipefail
+          staging="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/agent-store-images"
+          gcloud artifacts repositories describe agent-store-images --project "$GCP_PROJECT" --location "$GCP_REGION" >/dev/null 2>&1 \
+            || gcloud artifacts repositories create agent-store-images --project "$GCP_PROJECT" --location "$GCP_REGION" --repository-format docker --quiet
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          tag="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          meta="$RUNNER_TEMP/meta"
+          mkdir -p "$meta"
+          digest_of() { node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'))['containerimage.digest']" "$1"; }
+          require_digest() { printf '%s' "$1" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo "::error::no digest for the $2 image"; exit 1; }; }
+          # name:file:target; the five platform images build one after another to share the server politely.
+          for spec in web:Dockerfile:web gateway:gateway.Dockerfile:gateway runner:Dockerfile:runner runtime:runtime.Dockerfile:runtime tool-host:tool-host.Dockerfile:tool-host; do
+            IFS=: read -r name file target <<< "$spec"
+            docker buildx build --platform linux/amd64 --file "$file" --target "$target" --tag "$staging/$name:$tag" --push --metadata-file "$meta/$name.json" . > "$meta/$name.log" 2>&1 \
+              || { echo "::error::the $name image build failed"; tail -n 40 "$meta/$name.log"; exit 1; }
+            digest="$(digest_of "$meta/$name.json")"
+            require_digest "$digest" "$name"
+            case "$name" in
+              tool-host) var=AW_TOOL_HOST_IMAGE ;;
+              *) var="AW_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE" ;;
+            esac
+            echo "$var=$staging/$name@$digest" >> "$GITHUB_ENV"
+          done
+          for app in store crm service-desk wiki team-chat; do
+            node tests/apps/app-image.mjs --app "$app" --work "$RUNNER_TEMP/app-image" -- \
+              --platform linux/amd64 --tag "$staging/app-$app:$tag" --push --metadata-file "$meta/app-$app.json" > "$meta/app-$app.log" 2>&1 \
+              || { echo "::error::the $app image build failed"; tail -n 40 "$meta/app-$app.log"; exit 1; }
+            digest="$(digest_of "$meta/app-$app.json")"
+            require_digest "$digest" "$app"
+            echo "STORE_IMAGE_$(printf '%s' "$app" | tr '[:lower:]-' '[:upper:]_')=$staging/app-$app@$digest" >> "$GITHUB_ENV"
+          done
+
+      - name: Render the project file
+        run: node tests/store/deploy/render.ts "$RUNNER_TEMP/project"
+
+      - name: Deploy
+        working-directory: ${{ runner.temp }}/project
+        timeout-minutes: 45
+        # With single sign-on, aw stores the platform's client secret in the stack's own secret the
+        # first time, from AW_OIDC_CLIENT_SECRET; it is read into this one step and masked.
+        run: |
+          set -euo pipefail
+          if [ -n "${STORE_OIDC_ISSUER:-}" ]; then
+            AW_OIDC_CLIENT_SECRET="$(gcloud secrets versions access latest --secret store-oidc-client-secret --project "$GCP_PROJECT")"
+            echo "::add-mask::$AW_OIDC_CLIENT_SECRET"
+            export AW_OIDC_CLIENT_SECRET
+          fi
+          aw deploy production --yes
+
+      - name: Check the platform reaches the Anthropic API with the key
+        run: |
+          set -euo pipefail
+          token="$(gcloud secrets versions access latest --secret store-demo-operator-token --project "$GCP_PROJECT")"
+          echo "::add-mask::$token"
+          STORE_OPERATOR_TOKEN="$token" node tests/store/deploy/readiness.ts
+
+      - name: Seed the demo templates
+        run: |
+          set -euo pipefail
+          token="$(gcloud secrets versions access latest --secret store-demo-operator-token --project "$GCP_PROJECT")"
+          echo "::add-mask::$token"
+          STORE_OPERATOR_TOKEN="$token" node tests/store/seed/run.ts

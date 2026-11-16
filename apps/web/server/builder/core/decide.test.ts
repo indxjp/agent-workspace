@@ -216,6 +216,11 @@ describe('the Builder gets more power than the person (design §05)', () => {
       write: everywhere(NOT_PERMITTED),
       spend: everywhere(NOT_PERMITTED),
     },
+    guest: {
+      read: everywhere(RUN),
+      write: everywhere(NOT_PERMITTED),
+      spend: everywhere(NOT_PERMITTED),
+    },
     none: { read: everywhere(RUN), write: everywhere(NO_CALLER), spend: everywhere(NO_CALLER) },
   };
   const TOOL_OF_KIND: Record<Kind, BuilderToolName> = {
@@ -259,6 +264,17 @@ describe('a document tells an agent to build a stronger one (design §05)', () =
       expect(decide(callOf(tool, ['erp', AW_CONTROL_SERVER]), factsWith())).toEqual(
         refusal('not_allowed_to_build'),
       );
+    },
+  );
+
+  it.each(['draft_check', 'draft_save'] as const)(
+    'refuses %s whose body spells aw-control with another case or surrounding space',
+    (tool) => {
+      for (const spelling of ['AW-Control', ' aw-control ', '\taw-CONTROL\n']) {
+        expect(decide(callOf(tool, ['erp', spelling]), factsWith()), spelling).toEqual(
+          refusal('not_allowed_to_build'),
+        );
+      }
     },
   );
 

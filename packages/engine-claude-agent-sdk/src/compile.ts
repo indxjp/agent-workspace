@@ -63,31 +63,41 @@
  * `sandboxEnvironmentVerdict`, which states the rule as a property of the environment rather
  * than as this one provider's spelling of a key, so a second adapter inherits it.
  */
-import {
-  CLAUDE_CODE_PROJECT_DIR_NAME_ENV,
-  CLAUDE_CONFIG_DIR_ENV,
-  RunRequest,
-  type SdkSettingSource,
-} from '@agent-workspace/run-protocol';
-import { sandboxEnvironmentVerdict } from '@agent-workspace/engine';
-import { claudeDeniedToolsFor, type AgentToolPolicy } from '@indx-workspace/contracts/agents';
+import { RunRequest, type SdkSettingSource } from '@agent-workspace/run-protocol';
+import { AGENT_MEMORY_FILE, agentMemoryEnabled } from '@indx-workspace/contracts/agents';
 
+import { compileApprovals, compileToolsWithWriteApprovals } from './compile-approvals.js';
+import { compileRunEnvironment } from './compile-environment.js';
+import { assertSubagentsCallable, compileSubagents } from './compile-subagents.js';
 import { CLAUDE_HANDOFF_TOOL } from './handoff.js';
-import type {
-  CompiledClaudeRun,
-  CompiledMcpServerConfig,
-  CompiledSdkAgent,
-  CompiledSdkOptions,
-} from './options.js';
+import type { CompiledClaudeRun, CompiledSdkOptions } from './options.js';
 import { ClaudeRunPolicy } from './policy.js';
 import { claudeSessionScope } from './scope.js';
-import {
-  CLAUDE_APPROVABLE_TOOLS,
-  CLAUDE_PRESET_TOOLS,
-  compileClaudeToolPolicy,
-  splitApprovals,
-  unapprovableRules,
-} from './tools.js';
+import { CLAUDE_PRESET_TOOLS } from './tools.js';
+
+export {
+  A11_IDENTITY_ENV_VARS,
+  ANTHROPIC_API_KEY_ENV,
+  SESSION_SCOPE_ENV_VARS,
+} from './compile-environment.js';
+export { CLAUDE_DELEGATION_TOOL, SubagentToolRemovedError } from './compile-subagents.js';
+
+/**
+ * The one system-prompt line a run that keeps a memory folder is given (ADR-0163): it names the
+ * file and nothing else. The engine reads and writes the file with its own tools; the platform
+ * searches, ranks and injects nothing.
+ */
+export const CLAUDE_MEMORY_INSTRUCTION =
+  `Keep durable facts for later sessions in ${AGENT_MEMORY_FILE}: read it before you start, ` +
+  'and update it when you learn something worth remembering.';
+
+/** The instructions the system prompt appends: the agent's, then the memory line when it is on. */
+function appendedInstructions(portable: RunRequest['portable']): string {
+  if (!agentMemoryEnabled(portable.permissions)) return portable.instructions;
+  return portable.instructions.trim().length === 0
+    ? CLAUDE_MEMORY_INSTRUCTION
+    : `${portable.instructions}\n\n${CLAUDE_MEMORY_INSTRUCTION}`;
+}
 
 /**
  * `settingSources` for every platform-launched run.
@@ -114,43 +124,6 @@ export const PLATFORM_SETTING_SOURCES: readonly SdkSettingSource[] = ['project']
  */
 export const PLATFORM_STRICT_MCP_CONFIG = true;
 
-/** The two environment variables {@link compileRunRequest} derives, never copies. */
-export const SESSION_SCOPE_ENV_VARS = [
-  CLAUDE_CONFIG_DIR_ENV,
-  CLAUDE_CODE_PROJECT_DIR_NAME_ENV,
-] as const;
-
-/**
- * A.11's `AGENT_WORKSPACE_RUN_ID` / `AGENT_WORKSPACE_SESSION_ID` — the platform's own run and
- * Claude-session identifiers, "echoed in every event and log line" and "for resume" respectively.
- * Named here rather than folded into {@link SESSION_SCOPE_ENV_VARS}: that constant is the tenant
- * *session scope* pair (`apps/runner/src/index.ts`'s `runnerBaseEnvironment` documents it as
- * exactly two keys), and these two are a different A.11 concern — identity, not scope — so
- * extending the existing constant would make that file's own comment wrong without this task
- * being able to fix it (`index.ts` is outside this task's `Owns` globs). A future task that wants
- * a container's base environment to also exclude these two can filter by this array without
- * either file needing to change the other's meaning.
- */
-export const A11_IDENTITY_ENV_VARS = [
-  'AGENT_WORKSPACE_RUN_ID',
-  'AGENT_WORKSPACE_SESSION_ID',
-] as const;
-
-const AGENT_WORKSPACE_RUN_ID_ENV = A11_IDENTITY_ENV_VARS[0];
-const AGENT_WORKSPACE_SESSION_ID_ENV = A11_IDENTITY_ENV_VARS[1];
-
-/**
- * A.11: *"Provider master credentials never enter a sandbox."*
- *
- * Kept as a named export because `compile.test.ts` and `packages/core`'s `RunEnvironment` both
- * spell it, and one spelling of a forbidden key is the point. The *check* is no longer written
- * here, though: ENG-04 moved it to `@agent-workspace/engine`'s `sandboxEnvironmentVerdict`,
- * which states the rule as a property of the environment — no `ANTHROPIC_API_KEY`, and every
- * `*_API_KEY` / `*_AUTH_TOKEN` holding this run's own gateway token — rather than as one
- * provider's spelling. A second adapter inherits the rule instead of re-deriving it.
- */
-export const ANTHROPIC_API_KEY_ENV = 'ANTHROPIC_API_KEY';
-
 /**
  * Compile one stored run request into the SDK options object.
  *
@@ -166,7 +139,7 @@ export const ANTHROPIC_API_KEY_ENV = 'ANTHROPIC_API_KEY';
  */
 export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
   const parsed = RunRequest.parse(request);
-  const { portable, session } = parsed;
+  const { portable } = parsed;
 
   // ENG-04b: the engine arm, parsed here and not cast. `compile` in `./engine.ts` parses it too
   // and answers `engine_policy_invalid` from the result; this parse is the one that runs on every
@@ -180,85 +153,19 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
   if (!derived.ok) {
     throw new Error(`compileRunRequest: refusing to compile this run — ${derived.reason}`);
   }
-  const scope = derived.scope;
 
-  // The Claude tool policy, compiled from the portable permissions, the stored arm, the grant
-  // denials and the assigned connectors. `./tools.ts` documents the order, which is the surface
-  // ENG-04b's refinement theorem is about.
-  const tools = compileClaudeToolPolicy(portable.permissions, {
-    stored: policy.tools,
-    fileGrantDeny: policy.fileGrantDeny,
-    mcpServers: portable.mcpServers,
-  });
-
-  // ADR-0145: a gated call must reach `canUseTool`, which only `default` mode consults for every
-  // call. `bypassPermissions` and `dontAsk` never call it, and `acceptEdits` approves edits first,
-  // so the call would run unapproved or be denied without ever asking.
-  if (policy.requireApproval.length > 0 && tools.permissionMode !== 'default') {
-    throw new Error(
-      `requireApproval needs permissionMode 'default', but this policy uses '${tools.permissionMode}', which would run or deny a gated call without asking. Set the stored policy's permissionMode to 'default' or remove requireApproval.`,
-    );
-  }
-  const unasked = unapprovableRules(policy.requireApproval);
-  if (unasked.length > 0) {
-    throw new Error(
-      `requireApproval cannot gate ${unasked.map((rule) => JSON.stringify(rule)).join(', ')}: the SDK runs that tool without calling canUseTool, or Claude Code's permission rules cannot match that connector glob, so the call could run unapproved. Gate only ${CLAUDE_APPROVABLE_TOOLS.join(', ')}, an exact connector tool (mcp__<server>__<tool>) or a whole server (mcp__<server>__*).`,
-    );
-  }
-  const split = splitApprovals(tools.autoApprove, policy.requireApproval);
-
-  // `options.env` REPLACES the subprocess environment — it is not merged with `process.env`
-  // (R-01 §3, a breaking change in SDK 0.2.113). `parsed.env` is therefore the complete
-  // environment the runner decided on, and this function adds four derived values on top: the
-  // two-variable tenant session scope `RunEnvironment` already refuses to let the caller set for
-  // itself, plus A.11's `AGENT_WORKSPACE_RUN_ID` / `AGENT_WORKSPACE_SESSION_ID`, read off this
-  // same `RunRequest`'s own `runId` / `sessionId` fields rather than copied from `parsed.env`
-  // (which cannot set them: they are derived, always last, so they always win).
-  const env: Record<string, string> = {
-    // Since SDK 0.3.304 Claude Code defers MCP tools behind ToolSearch, so a connector tool is
-    // absent from the request's `tools` until the model searches for it. That needs the Messages
-    // API's tool-reference support, which the model gateway does not promise for every upstream;
-    // every connector tool is sent up front instead, as before. The runner may still override it.
-    ENABLE_TOOL_SEARCH: 'false',
-    ...parsed.env,
-    [CLAUDE_CONFIG_DIR_ENV]: scope.configDir,
-    [CLAUDE_CODE_PROJECT_DIR_NAME_ENV]: scope.projectKey,
-    [AGENT_WORKSPACE_RUN_ID_ENV]: parsed.runId,
-    [AGENT_WORKSPACE_SESSION_ID_ENV]: parsed.sessionId,
-  };
-
-  // A.11: "Provider master credentials never enter a sandbox." ADR-0015's explicit `else`: this
-  // is not a warning and not a strip-and-continue, because either of those would start a run
-  // whose environment the caller believed was safe. The check is written against the assembled
-  // `env`, not against `parsed.env` alone, so it also catches a future edit to this function
-  // that adds a derived entry without noticing what it collides with.
-  //
-  // `gateway.token` is what the second half of the rule compares against: a variable spelled
-  // like a credential and holding something other than this run's own gateway token is a
-  // provider credential by definition, whatever it is called. A request with no `gateway` — the
-  // shape every pre-ENG-04 caller sends — is checked against the `ANTHROPIC_AUTH_TOKEN` it
-  // already carries, so the rule applies to today's requests rather than waiting for the
-  // private contract's v2. See `packages/engine/src/sandbox-env.ts`.
-  const runToken = parsed.gateway?.token ?? env['ANTHROPIC_AUTH_TOKEN'] ?? '';
-  const sandbox = sandboxEnvironmentVerdict(env, runToken);
-  if (!sandbox.ok) {
-    throw new Error(`compileRunRequest: refusing to compile this run — ${sandbox.reason}`);
-  }
-
-  const mcpServers: Record<string, CompiledMcpServerConfig> = { ...portable.mcpServers };
+  const tools = compileToolsWithWriteApprovals(parsed, policy);
+  const approvals = compileApprovals(parsed, policy, tools);
+  const env = compileRunEnvironment(parsed, derived.scope);
   const subagents = portable.subagents ?? [];
-  if (subagents.length > 0 && removesDelegationTool(tools)) {
-    throw new SubagentToolRemovedError(
-      "the agent's tool policy removes Agent, so its subagents could never be called",
-    );
-  }
+  assertSubagentsCallable(subagents, tools);
 
-  const options: CompiledClaudeRun = {
+  return {
     cwd: parsed.cwd,
     env,
     settingSources: PLATFORM_SETTING_SOURCES,
     strictMcpConfig: PLATFORM_STRICT_MCP_CONFIG,
-    mcpServers,
+    mcpServers: { ...portable.mcpServers },
     permissionMode: tools.permissionMode,
     // §6 maps "Tool permissions → allowedTools". R-01 §10 established that is incomplete:
     // `allowedTools` auto-approves and does not restrict. All three lists are emitted, and
@@ -268,34 +175,15 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
     // `allowedTools` bypasses `canUseTool`, so a rule that could approve a gated tool is moved
     // out of it by `splitApprovals` and decided by the callback instead.
     allowedTools: policy.handoff
-      ? [...split.allowedTools, CLAUDE_HANDOFF_TOOL]
-      : split.allowedTools,
+      ? [...approvals.allowedTools, CLAUDE_HANDOFF_TOOL]
+      : approvals.allowedTools,
     disallowedTools: tools.deny,
     tools: tools.base === 'claude_code_preset' ? [...CLAUDE_PRESET_TOOLS] : tools.base,
     skills: portable.skills.mode === 'all' ? 'all' : portable.skills.names,
-    ...(subagents.length === 0
-      ? {}
-      : {
-          agents: Object.fromEntries(
-            subagents.map((subagent) => [subagent.name, compileSubagent(subagent, tools.deny)]),
-          ),
-        }),
+    ...compileSubagents(subagents, tools.deny),
     ...(tools.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
     ...(portable.model === null ? {} : { model: portable.model }),
-    // §17 Step 1's "Instructions" is an *addition* to Claude Code's own system prompt, not a
-    // replacement: a tenant writing "You help employees answer questions..." is not asking for
-    // an agent that has forgotten how to use its tools. R-01 §3 option 63 gives the preset
-    // shape that appends. An empty instructions field emits nothing at all rather than an
-    // empty append, matching what the `agents.instructions` column means by "".
-    ...(portable.instructions.trim().length === 0
-      ? {}
-      : {
-          systemPrompt: {
-            type: 'preset' as const,
-            preset: 'claude_code' as const,
-            append: portable.instructions,
-          },
-        }),
+    ...compileSystemPrompt(appendedInstructions(portable)),
     ...(portable.limits.maxTurns === null ? {} : { maxTurns: portable.limits.maxTurns }),
     ...(portable.limits.maxBudgetUsd === null
       ? {}
@@ -303,57 +191,24 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
     // R-01 §6: `sessionId` cannot be combined with `resume` unless `forkSession` is also set.
     // The three arms of `RunSessionMode` are exactly the three legal combinations, so this
     // switch is total and cannot emit an illegal pair.
-    ...compileSessionMode(session),
+    ...compileSessionMode(parsed.session),
     ...(policy.handoff ? { handoff: true as const } : {}),
-    ...(policy.requireApproval.length === 0
-      ? {}
-      : {
-          approval: {
-            requireApproval: policy.requireApproval,
-            deferred: split.deferred,
-            approvedToolCalls: policy.approvedToolCalls,
-          },
-        }),
+    ...(approvals.gate === null ? {} : { approval: approvals.gate }),
   };
-
-  return options;
-}
-
-/** Thrown when subagents are declared but the parent's tool policy removes the tool that calls them. */
-export class SubagentToolRemovedError extends Error {}
-
-/**
- * The SDK's delegation tool: the model reaches an `agents` entry only by calling it.
- *
- * VERIFY: the pinned `sdk.d.ts` types tool names as `string`, so no type can pin this one. The
- * name is from https://code.claude.com/docs/en/agent-sdk/subagents, and `./boundary.test.ts`
- * checks it against the pinned `sdk-tools.d.ts` (`AgentInput` in `ToolInputSchemas`).
- */
-export const CLAUDE_DELEGATION_TOOL = 'Agent';
-
-function removesDelegationTool(tools: AgentToolPolicy): boolean {
-  return (
-    tools.deny.includes(CLAUDE_DELEGATION_TOOL) ||
-    (tools.base !== 'claude_code_preset' && !tools.base.includes(CLAUDE_DELEGATION_TOOL))
-  );
 }
 
 /**
- * One subagent as an `agents` entry. It inherits the parent's tools, so only what its own
- * permissions deny beyond the parent's is listed; the parent's denials already apply.
+ * §17 Step 1's "Instructions" is an *addition* to Claude Code's own system prompt, not a
+ * replacement: a tenant writing "You help employees answer questions..." is not asking for
+ * an agent that has forgotten how to use its tools. R-01 §3 option 63 gives the preset
+ * shape that appends. An empty instructions field emits nothing at all rather than an
+ * empty append, matching what the `agents.instructions` column means by "". A run that keeps
+ * a memory folder appends one more line naming its file (ADR-0163).
  */
-function compileSubagent(
-  subagent: NonNullable<RunRequest['portable']['subagents']>[number],
-  parentDeny: readonly string[],
-): CompiledSdkAgent {
-  const own = claudeDeniedToolsFor(subagent.permissions).filter(
-    (rule) => !parentDeny.includes(rule),
-  );
+function compileSystemPrompt(appended: string): Pick<CompiledSdkOptions, 'systemPrompt'> {
+  if (appended.trim().length === 0) return {};
   return {
-    description: subagent.description,
-    prompt: subagent.instructions,
-    ...(subagent.model === null ? {} : { model: subagent.model }),
-    ...(own.length === 0 ? {} : { disallowedTools: own }),
+    systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: appended },
   };
 }
 

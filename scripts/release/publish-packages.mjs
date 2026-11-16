@@ -16,8 +16,8 @@
  *   a lookup that fails any other way (network, registry error), refuses the whole release with a
  *   `ReleaseRefusedError` before anything is published; an unknown answer is never read as
  *   "known". There is no in-workflow bootstrap path: the placeholder is published by hand.
- * - The list must name exactly `PUBLISHED_PACKAGES` (contracts, platforms, sdk, react, aw, cli,
- *   embedded, create),
+ * - The list must name exactly `PUBLISHED_PACKAGES` (contracts, platforms, sdk, react, app, aw,
+ *   cli, embedded, create),
  *   in that order and at one version (ADR-0082 D3), or nothing is published: a sibling must be on
  *   npm before a package that depends on it, and a partial list would release a partial set.
  * - Each line is a tarball path resolved against the list file's directory, so the publish job can
@@ -25,7 +25,7 @@
  * - A version is skipped only when `npm view <name>@<version> version` prints exactly that version.
  *   npm prints nothing, and may still exit 0, when the package exists but the version does not; an
  *   exit status alone would skip every tarball silently.
- * - After the loop every package, all eight, must be served at its version, or the run fails: a
+ * - After the loop every package, all nine, must be served at its version, or the run fails: a
  *   skip or a publish that did not land is never reported as success.
  * - `NPM_PROVENANCE` is the one provenance switch: `true` publishes with `--provenance`, and is
  *   refused before anything is published unless the repository is public (npm's registry rejects a

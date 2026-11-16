@@ -3,7 +3,11 @@ import path from 'node:path';
 
 import type {
   DeployProjectEnvironmentOptions,
+  DeployStatusOptions,
+  DeployStatusReport,
+  DestroyProjectEnvironmentOptions,
   ProjectDeployOutcome,
+  ShowOwnerPasswordOptions,
 } from '@indx-workspace/cli/deploy';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,7 +17,21 @@ import { runCli, tempDirectory, tempFile } from '../testing.js';
 const deployProjectEnvironment = vi.hoisted(() =>
   vi.fn<(options: DeployProjectEnvironmentOptions) => Promise<ProjectDeployOutcome>>(),
 );
-vi.mock('@indx-workspace/cli/deploy', () => ({ deployProjectEnvironment }));
+const showOwnerPassword = vi.hoisted(() =>
+  vi.fn<(options: ShowOwnerPasswordOptions) => Promise<string>>(),
+);
+const destroyProjectEnvironment = vi.hoisted(() =>
+  vi.fn<(options: DestroyProjectEnvironmentOptions) => Promise<void>>(),
+);
+const deployStatus = vi.hoisted(() =>
+  vi.fn<(options: DeployStatusOptions) => Promise<DeployStatusReport>>(),
+);
+vi.mock('@indx-workspace/cli/deploy', () => ({
+  deployStatus,
+  deployProjectEnvironment,
+  showOwnerPassword,
+  destroyProjectEnvironment,
+}));
 
 const PROJECT = [
   'apiVersion: agentworkspace.dev/v2',
@@ -34,6 +52,9 @@ const temporary: string[] = [];
 
 afterEach(async () => {
   deployProjectEnvironment.mockReset();
+  showOwnerPassword.mockReset();
+  destroyProjectEnvironment.mockReset();
+  deployStatus.mockReset();
   for (const directory of temporary.splice(0)) await rm(directory, { recursive: true });
 });
 
@@ -63,6 +84,45 @@ function deployedWith(): DeployProjectEnvironmentOptions {
 }
 
 describe('aw deploy (#621)', () => {
+  it('says nothing was applied when --yes stopped after the image copy', async () => {
+    deployProjectEnvironment.mockResolvedValue(outcome(true, false));
+    const cwd = await project();
+
+    const run = await runCli(['deploy', 'production', '--yes'], { cwd, homeDir: '/home/owner' });
+
+    expect(run.code).toBe(EXIT_CODE.contract);
+    expect(run.stderr).toBe(
+      'error: nothing was applied; run --plan to review the changes, then --yes\n',
+    );
+  });
+
+  it('hands the deploy a hidden-input prompt only at a terminal', async () => {
+    deployProjectEnvironment.mockResolvedValue(outcome(false, true));
+    const asked: string[] = [];
+    const promptSecret = (question: string) => {
+      asked.push(question);
+      return Promise.resolve('s3cret');
+    };
+
+    await runCli(['deploy', 'production', '--yes'], {
+      cwd: await project(),
+      homeDir: '/home/owner',
+      isTty: true,
+      promptSecret,
+    });
+    const answer = await deployedWith().readSecret?.('Sign-in client secret');
+    expect(answer).toBe('s3cret');
+    expect(asked).toEqual(['Sign-in client secret: ']);
+
+    deployProjectEnvironment.mockClear();
+    await runCli(['deploy', 'production', '--yes'], {
+      cwd: await project(),
+      homeDir: '/home/owner',
+      promptSecret,
+    });
+    expect(deployedWith().readSecret).toBeUndefined();
+  });
+
   it('plans by default, into the state directory, and exits 3 when changes are pending', async () => {
     deployProjectEnvironment.mockResolvedValue(outcome(true, false));
     const cwd = await project();
@@ -99,17 +159,176 @@ describe('aw deploy (#621)', () => {
     );
   });
 
-  it('sends --yes back to --plan when it stopped before applying, as after a Cloud Run image copy (#794)', async () => {
-    deployProjectEnvironment.mockResolvedValue(outcome(true, false));
-    const cwd = await project();
+  it('does not send --yes back to --plan: a Cloud Run deploy copies the images and applies in one run', async () => {
+    deployProjectEnvironment.mockResolvedValue(outcome(true, true));
 
-    const run = await runCli(['deploy', 'production', '--yes'], { cwd, homeDir: '/home/owner' });
+    const run = await runCli(['deploy', 'production', '--yes'], {
+      cwd: await project(),
+      homeDir: '/home/owner',
+    });
 
-    expect(run.code).toBe(EXIT_CODE.contract);
-    expect(run.stderr).toBe(
-      'error: nothing was applied; run --plan to review the changes, then --yes\n',
-    );
-    expect(run.stdout).not.toContain('deployed');
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(run.stderr).not.toContain('run --plan');
+  });
+
+  it('prints only the Owner password for --show-owner-password, and deploys nothing', async () => {
+    showOwnerPassword.mockResolvedValue('S3cretPassw0rd');
+
+    const run = await runCli(['deploy', 'production', '--show-owner-password'], {
+      cwd: await project(),
+      homeDir: '/home/owner',
+    });
+
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(run.stdout).toBe('S3cretPassw0rd\n');
+    expect(deployProjectEnvironment).not.toHaveBeenCalled();
+  });
+
+  it('refuses --show-owner-password beside --yes', async () => {
+    const run = await runCli(['deploy', 'production', '--show-owner-password', '--yes'], {
+      cwd: await project(),
+    });
+
+    expect(run.code).toBe(EXIT_CODE.usage);
+    expect(run.stderr).toContain('--show-owner-password stands alone');
+  });
+
+  describe('destroy production', () => {
+    it('reads the typed project id from one line of standard input when not interactive', async () => {
+      let typed = '';
+      destroyProjectEnvironment.mockImplementation(async (options) => {
+        typed = await options.confirm('Type the Google Cloud project id to delete everything');
+      });
+
+      const run = await runCli(['deploy', 'destroy', 'production'], {
+        cwd: await project(),
+        homeDir: '/home/owner',
+        stdin: 'acme-prod\nignored\n',
+      });
+
+      expect(run.code).toBe(EXIT_CODE.ok);
+      expect(typed).toBe('acme-prod');
+      expect(destroyProjectEnvironment).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: 'production' }),
+      );
+    });
+
+    it('asks at the terminal when interactive', async () => {
+      const questions: string[] = [];
+      destroyProjectEnvironment.mockImplementation(async (options) => {
+        await options.confirm('Type the Google Cloud project id to delete everything');
+      });
+
+      await runCli(['deploy', 'destroy', 'production'], {
+        cwd: await project(),
+        isTty: true,
+        prompt: (question) => {
+          questions.push(question);
+          return Promise.resolve('acme-prod');
+        },
+      });
+
+      expect(questions).toEqual(['Type the Google Cloud project id to delete everything: ']);
+    });
+
+    it('refuses what the CLI refuses, as a problem', async () => {
+      destroyProjectEnvironment.mockRejectedValue(
+        new Error('"acme" is not the project id. Nothing was destroyed.'),
+      );
+
+      const run = await runCli(['deploy', 'destroy', 'production'], {
+        cwd: await project(),
+        stdin: 'acme\n',
+      });
+
+      expect(run.code).toBe(EXIT_CODE.problem);
+      expect(run.stderr).toContain('Nothing was destroyed.');
+    });
+
+    it('takes production only', async () => {
+      const run = await runCli(['deploy', 'destroy', 'staging'], { cwd: await project() });
+
+      expect(run.code).toBe(EXIT_CODE.usage);
+      expect(destroyProjectEnvironment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('status production', () => {
+    const report = (overrides: Partial<DeployStatusReport> = {}): DeployStatusReport => ({
+      text: 'Drift: none\n',
+      ready: true,
+      changes: false,
+      ...overrides,
+    });
+
+    it('prints the report and exits 0 when every service is ready and the plan is empty', async () => {
+      deployStatus.mockResolvedValue(report());
+
+      const run = await runCli(['deploy', 'status', 'production'], {
+        cwd: await project(),
+        homeDir: '/home/owner',
+      });
+
+      expect(run.code).toBe(EXIT_CODE.ok);
+      expect(run.stdout).toContain('Drift: none');
+      expect(deployStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          environment: 'production',
+          stateDirectory: path.join(
+            '/home/owner',
+            '.config',
+            'agent-workspace',
+            'deployments',
+            'acme-ai',
+            'production',
+          ),
+        }),
+      );
+    });
+
+    it('exits 3 when the plan has changes', async () => {
+      deployStatus.mockResolvedValue(report({ text: 'Drift: 2 change(s)\n', changes: true }));
+
+      const run = await runCli(['deploy', 'status', 'production'], { cwd: await project() });
+
+      expect(run.code).toBe(EXIT_CODE.contract);
+      expect(run.stdout).toContain('Drift: 2 change(s)');
+    });
+
+    it('refuses when a service is not ready, even with an empty plan', async () => {
+      deployStatus.mockResolvedValue(report({ ready: false }));
+
+      const run = await runCli(['deploy', 'status', 'production'], { cwd: await project() });
+
+      expect(run.code).toBe(EXIT_CODE.problem);
+      expect(run.stderr).toContain('a service is not ready');
+    });
+
+    it('refuses what the CLI refuses, as a problem', async () => {
+      deployStatus.mockRejectedValue(new Error('Nothing was deployed from this machine.'));
+
+      const run = await runCli(['deploy', 'status', 'production'], { cwd: await project() });
+
+      expect(run.code).toBe(EXIT_CODE.problem);
+      expect(run.stderr).toContain('Nothing was deployed from this machine.');
+    });
+
+    it('takes production only', async () => {
+      const run = await runCli(['deploy', 'status', 'staging'], { cwd: await project() });
+
+      expect(run.code).toBe(EXIT_CODE.usage);
+      expect(deployStatus).not.toHaveBeenCalled();
+    });
+
+    it('takes no extra argument', async () => {
+      const run = await runCli(['deploy', 'status', 'production', 'now'], {
+        cwd: await project(),
+      });
+
+      expect(run.code).toBe(EXIT_CODE.usage);
+      expect(run.stderr).toContain('unexpected argument');
+      expect(deployStatus).not.toHaveBeenCalled();
+    });
   });
 
   it('passes --infra resolved from the project directory', async () => {
@@ -185,6 +404,74 @@ describe('aw deploy (#621)', () => {
     expect(run.stderr).toContain(message);
     expect(run.stderr).toContain(fix);
     expect(deployProjectEnvironment).not.toHaveBeenCalled();
+  });
+
+  describe('apps in aw-generated.json (#1512)', () => {
+    const IMAGE = `ghcr.io/acme/desk@sha256:${'a1'.repeat(32)}`;
+    const MANIFEST = JSON.stringify({
+      version: 1,
+      entries: {
+        'app:desk': { files: {}, edits: [] },
+        'resource:ticket': { files: {}, edits: [] },
+      },
+    });
+    const withApps = (apps: string): string =>
+      PROJECT.replace(
+        '    url: https://agents.acme.example\n',
+        `    url: https://agents.acme.example\n${apps}`,
+      );
+
+    it('refuses an app in aw-generated.json missing from environments.production.apps', async () => {
+      const cwd = await project();
+      await tempFile(cwd, 'aw-generated.json', MANIFEST);
+
+      const run = await runCli(['deploy', 'production'], { cwd, homeDir: '/home/owner' });
+
+      expect(run.code).toBe(EXIT_CODE.problem);
+      expect(run.stderr).toContain(
+        'the project has app desk but environments.production.apps.desk is not set',
+      );
+      expect(run.stderr).toContain(
+        'fix: add apps: { desk: { image: <registry>/desk@sha256:…, url: https://<host> } } under environments.production',
+      );
+      expect(deployProjectEnvironment).not.toHaveBeenCalled();
+    });
+
+    it('deploys when every generated app is listed', async () => {
+      deployProjectEnvironment.mockResolvedValue(outcome(false, false));
+      const cwd = await project(
+        withApps(
+          `    apps:\n      desk:\n        image: ${IMAGE}\n        url: https://desk.acme.example\n`,
+        ),
+      );
+      await tempFile(cwd, 'aw-generated.json', MANIFEST);
+
+      const run = await runCli(['deploy', 'production'], { cwd, homeDir: '/home/owner' });
+
+      expect(run.stderr).toBe('');
+      expect(deployedWith().project.environments.production?.apps).toEqual({
+        desk: { image: IMAGE, url: 'https://desk.acme.example' },
+      });
+    });
+
+    it('deploys a project with no aw-generated.json as one with no apps', async () => {
+      deployProjectEnvironment.mockResolvedValue(outcome(false, false));
+
+      const run = await runCli(['deploy', 'production'], { cwd: await project() });
+
+      expect(run.code).toBe(EXIT_CODE.ok);
+    });
+
+    it('refuses an aw-generated.json the manifest parser refuses, before any deploy step', async () => {
+      const cwd = await project();
+      await tempFile(cwd, 'aw-generated.json', '{"version":1,"entries":{},"extra":true}');
+
+      const run = await runCli(['deploy', 'production'], { cwd, homeDir: '/home/owner' });
+
+      expect(run.code).toBe(EXIT_CODE.usage);
+      expect(run.stderr).toContain('aw-generated.json');
+      expect(deployProjectEnvironment).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses a directory with no project file', async () => {

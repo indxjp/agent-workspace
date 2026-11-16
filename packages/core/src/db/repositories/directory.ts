@@ -1,6 +1,7 @@
 import type { Database } from '../client.js';
-import type { MembershipRole } from '../schema/memberships.js';
+import type { ConferrableRole, MembershipRole } from '../schema/memberships.js';
 import { LOCAL_RUNTIME_API_KEY_NAME_PREFIX } from './directory/queries.js';
+import { createGuestBinder } from './directory/guest.js';
 import { createDatabaseDirectoryRootQueries } from './directory/root.js';
 import { createDatabaseWorkspaceDirectory } from './directory/workspace.js';
 
@@ -43,7 +44,7 @@ export interface DirectoryApiKeyRecord {
   readonly principalId: string;
   readonly workspaceId: string;
   readonly name: string;
-  readonly role: MembershipRole;
+  readonly role: ConferrableRole;
   readonly keyPrefix: string;
   readonly keyHash: string;
   readonly lastUsedAt: Date | null;
@@ -64,7 +65,7 @@ export interface DirectoryInvitationRecord {
   readonly id: string;
   readonly workspaceId: string;
   readonly email: string;
-  readonly role: MembershipRole;
+  readonly role: ConferrableRole;
   readonly invitedBy: string | null;
   readonly tokenHash: string;
   readonly expiresAt: Date;
@@ -114,6 +115,11 @@ export interface DatabaseWorkspaceDirectory {
     | { kind: 'email-taken'; email: string }
   >;
   listMemberships(): Promise<readonly DirectoryMembershipRecord[]>;
+  /**
+   * The workspace's membership whose live principal is `principalId`, or `null` when there is none:
+   * the id names another workspace's principal, an API key, a revoked principal or nothing at all.
+   */
+  findMembershipByPrincipal(principalId: string): Promise<DirectoryMembershipRecord | null>;
   createMembership(input: {
     email: string;
     role: MembershipRole;
@@ -148,7 +154,7 @@ export interface DatabaseWorkspaceDirectory {
   listApiKeys(): Promise<readonly DirectoryApiKeyRecord[]>;
   createApiKey(input: {
     name: string;
-    role: MembershipRole;
+    role: ConferrableRole;
     keyPrefix: string;
     keyHash: string;
     expiresAt: Date | null;
@@ -167,7 +173,7 @@ export interface DatabaseWorkspaceDirectory {
    */
   createEndpointApiKey(input: {
     name: string;
-    role: MembershipRole;
+    role: ConferrableRole;
     keyPrefix: string;
     keyHash: string;
     expiresAt: Date | null;
@@ -207,7 +213,7 @@ export interface DatabaseWorkspaceDirectory {
   listInvitations(): Promise<readonly DirectoryInvitationRecord[]>;
   createInvitation(input: {
     email: string;
-    role: MembershipRole;
+    role: ConferrableRole;
     invitedBy: string | null;
     tokenHash: string;
     expiresAt: Date;
@@ -271,6 +277,29 @@ export interface DirectoryPrincipalRecord {
   readonly actsForPrincipalId: string | null;
 }
 
+/** What binding an address to a demo workspace needs; every id and time comes from the caller. */
+export interface BindGuestWorkspaceInput {
+  readonly email: string;
+  readonly now: Date;
+  /** The id and slug a new demo workspace gets. Unused when a younger one is returned. */
+  readonly workspaceId: string;
+  readonly slug: string;
+  /**
+   * How long a new demo workspace lasts: it is marked to end this many seconds after `now`
+   * (`demo_expires_at`, set once), and is returned to its guest until then.
+   */
+  readonly lifetimeSeconds: number;
+}
+
+/** The user and the demo workspace they are bound to as `guest`. */
+interface GuestBindingRecord {
+  readonly userId: string;
+  readonly workspaceId: string;
+  readonly workspaceSlug: string;
+  /** `false` when a workspace younger than `lifetimeSeconds` was returned. */
+  readonly created: boolean;
+}
+
 export interface DatabaseDirectoryRoot {
   forWorkspace(workspaceId: string): DatabaseWorkspaceDirectory;
   authenticateApiKeyHash(keyHash: string, now: Date): Promise<DirectoryApiKeyRecord | null>;
@@ -301,6 +330,13 @@ export interface DatabaseDirectoryRoot {
   /** Every CURRENT membership this user holds, across every workspace (issue #118). */
   membershipsForUser(userId: string): Promise<readonly DirectoryUserMembershipRecord[]>;
   /**
+   * Bind an address to its demo workspace as `guest`, in one transaction. The one place a `guest`
+   * membership is written: it finds or creates the user by lower-cased address, returns the guest's
+   * workspace younger than `lifetimeSeconds` or makes a new one, and touches no other membership. `null`, binding nothing, when the user holds a current
+   * membership with any role but `guest`.
+   */
+  bindGuestWorkspace(input: BindGuestWorkspaceInput): Promise<GuestBindingRecord | null>;
+  /**
    * Redeem an invitation — issue #121's one atomic transaction. Unscoped, the way
    * {@link authenticateApiKeyHash} is: the caller does not yet know which workspace the invitation
    * names, because that is exactly what this call establishes. `tokenHash` is computed by the
@@ -322,5 +358,5 @@ export function createDatabaseDirectoryRoot(db: Database): DatabaseDirectoryRoot
   const forWorkspace = (workspaceId: string): DatabaseWorkspaceDirectory =>
     createDatabaseWorkspaceDirectory(db, workspaceId);
 
-  return { forWorkspace, ...createDatabaseDirectoryRootQueries(db) };
+  return { forWorkspace, ...createDatabaseDirectoryRootQueries(db), ...createGuestBinder(db) };
 }

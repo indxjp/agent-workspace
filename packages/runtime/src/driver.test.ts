@@ -6,7 +6,10 @@ import { describe, expect, it } from 'vitest';
 
 import { createAcaSessionsCapabilities } from './aca-sessions.js';
 import { cloudflareSandboxRuntimeCapabilities } from './cloudflare-sandbox.js';
-import { CLOUD_RUN_RUNTIME_CAPABILITIES } from './cloud-run.js';
+import {
+  CLOUD_RUN_PROXIED_RUNTIME_CAPABILITIES,
+  CLOUD_RUN_RUNTIME_CAPABILITIES,
+} from './cloud-run.js';
 import { DOCKER_PROXIED_RUNTIME_CAPABILITIES, DOCKER_RUNTIME_CAPABILITIES } from './docker.js';
 import type { RuntimeCapabilities } from './driver.js';
 import { e2bRuntimeCapabilities } from './external/e2b.js';
@@ -22,6 +25,7 @@ const CAPABILITIES: Readonly<Record<string, RuntimeCapabilities>> = {
   'aca-sessions#createAcaSessionsCapabilities': createAcaSessionsCapabilities('EgressEnabled'),
   'cloudflare-sandbox#cloudflareSandboxRuntimeCapabilities': cloudflareSandboxRuntimeCapabilities(),
   'cloud-run#CLOUD_RUN_RUNTIME_CAPABILITIES': CLOUD_RUN_RUNTIME_CAPABILITIES,
+  'cloud-run#CLOUD_RUN_PROXIED_RUNTIME_CAPABILITIES': CLOUD_RUN_PROXIED_RUNTIME_CAPABILITIES,
   'docker#DOCKER_RUNTIME_CAPABILITIES': DOCKER_RUNTIME_CAPABILITIES,
   'docker#DOCKER_PROXIED_RUNTIME_CAPABILITIES': DOCKER_PROXIED_RUNTIME_CAPABILITIES,
   'external/e2b#e2bRuntimeCapabilities': e2bRuntimeCapabilities(),

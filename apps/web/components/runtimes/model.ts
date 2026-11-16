@@ -83,7 +83,7 @@ export const RUNTIME_OPTIONS: readonly RuntimeOption[] = [
     id: 'cloud-run-service',
     label: 'Google Cloud Run (per-session service)',
     description:
-      'One private Cloud Run v2 service per session, deployed by the runner manager. Used in place of the unimplemented cloud-run-sandbox driver — see docs/adr/ADR-cloud-run-service-driver.md.',
+      'One private Cloud Run v2 service per session, deployed by the runner manager. Used instead of Google Cloud Run sandboxes, which are not available yet.',
     managed: true,
     defaultReason: 'Not configured — the runner manager is not set to this driver.',
   },
@@ -105,7 +105,7 @@ export const RUNTIME_OPTIONS: readonly RuntimeOption[] = [
     id: 'cloudflare-sandbox',
     label: 'Cloudflare Sandbox',
     description:
-      'One Cloudflare container per session behind a bridge Worker. Refuses every network policy until its egress denial is proven, so it cannot create sandboxes yet (ADR-0131). Not yet verified live.',
+      'One Cloudflare container per session behind a bridge Worker. It cannot create sandboxes yet: it refuses every network setting until it is proven to block outside traffic. Not yet verified live.',
     managed: true,
     defaultReason: 'Not configured — the runner manager is not set to this driver.',
   },

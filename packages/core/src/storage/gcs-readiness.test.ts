@@ -18,7 +18,8 @@ vi.mock('@google-cloud/storage', () => ({
   },
 }));
 
-import { createGcsObjectStoreProviderFromConfig, GcsBucketUnavailableError } from './gcs-store.js';
+import { GcsBucketUnavailableError } from './gcs-safe-client.js';
+import { createGcsObjectStoreProviderFromConfig } from './gcs-store.js';
 import { listAll } from './streams.js';
 
 describe('native GCS readiness', () => {

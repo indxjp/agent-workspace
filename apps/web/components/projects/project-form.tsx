@@ -30,7 +30,7 @@ import { loadProjectCatalogs } from './project-requests-model';
 
 // ── Transcribed class strings — the same tokens `../agents/agent-form.tsx` spends ─────────────
 export const BTN =
-  'inline-flex h-8 items-center justify-center gap-[7px] whitespace-nowrap rounded-(--radius-sm) border px-[13px] text-[13px] font-medium no-underline';
+  'inline-flex h-8 items-center justify-center gap-[7px] whitespace-nowrap rounded-(--radius-sm) border px-[13px] text-[13px] font-medium no-underline disabled:cursor-not-allowed disabled:opacity-[.45]';
 export const BTN_DEFAULT = 'border-border-strong bg-surface text-text';
 export const BTN_PRIMARY = 'border-accent bg-accent text-white dark:text-[#10131c]';
 export const BTN_DISABLED = 'pointer-events-none opacity-[.45]';

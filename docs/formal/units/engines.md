@@ -84,8 +84,8 @@ asked for today. Later units append.
   subset a caller would read as the whole catalogue. `the_engine_flag_is_resolved_or_refused` adds
   `aw agents create|update --engine`, which has exactly three answers and no silent default.
 - **T1, the RBAC row** (`Theorems/Normative/AuthzDecide.lean`, ENG-02c #319):
-  `engine_catalogue_is_read_by_every_role` — `GET /api/engines` is allowed for all four roles under
-  every ownership answer, and refused as a write to admin, builder and viewer. The `engines`
+  `engine_catalogue_is_read_by_the_conferrable_roles` — `GET /api/engines` is allowed for the four conferrable roles under
+  every ownership answer, refused to the guest, and refused as a write to admin, builder and viewer. The `engines`
   resource joins `RESOURCES` (now 26), §3.3's documented table and the four generated role-table
   cells, and `ENG-02C-ENGINES-319`'s route joins `declaredRoutes` (now 102).
 - `Vectors/Engines.lean` emits `sdk.json`, `cli.json`, `catalog.json`, `schemas.json`,

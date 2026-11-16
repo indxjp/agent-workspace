@@ -218,15 +218,27 @@ export const networkPolicyMapping: readonly DriverNetworkPolicyRow[] = [
 /**
  * The drivers that can enforce `restricted`: `docker` and `kubernetes` route sandbox egress through
  * the per-session allowlist proxy (ADR-0117 decision 7, #784), but only when the deployment sets
- * `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE`. Every other driver, the Cloud Run and ACA ones included,
- * still refuses it. The same set decides whether the tool sandbox can enforce a code tool's
+ * `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE`; `cloud-run-service` does so through the shared egress proxy
+ * that `gcp.sandboxInternet: true` adds, announced by `RUNTIME_EGRESS_PROXY_URL`. Every other
+ * driver, the ACA one included, still refuses it. The same set decides whether the tool sandbox can enforce a code tool's
  * `allowedDomains` (#1018): `external` stays out until the E7 live lane proves the always-denied
  * ranges hold.
  */
 export const RESTRICTED_PROXY_DRIVERS: ReadonlySet<string> = new Set<string>([
   'docker',
   'kubernetes',
+  'cloud-run-service',
 ] as const satisfies readonly RuntimeDriver[]);
+
+/** Whether this deployment has an egress proxy: the docker/kubernetes image or the Cloud Run URL. */
+export function egressProxyConfiguredFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return (
+    (env['AGENT_WORKSPACE_EGRESS_PROXY_IMAGE']?.trim() ?? '') !== '' ||
+    (env['RUNTIME_EGRESS_PROXY_URL']?.trim() ?? '') !== ''
+  );
+}
 
 /** Why `driver` cannot enforce `restricted` in this deployment, or `null` when it can. */
 export function restrictedUnenforceableReason(
@@ -234,8 +246,9 @@ export function restrictedUnenforceableReason(
   egressProxyConfigured: boolean,
 ): string | null {
   if (!RESTRICTED_PROXY_DRIVERS.has(driver)) return 'cannot enforce restricted yet';
-  return egressProxyConfigured
-    ? null
+  if (egressProxyConfigured) return null;
+  return driver === 'cloud-run-service'
+    ? 'cannot enforce restricted without an egress proxy (gcp.sandboxInternet: true)'
     : 'cannot enforce restricted without an egress proxy (AGENT_WORKSPACE_EGRESS_PROXY_IMAGE)';
 }
 

@@ -9,7 +9,7 @@
  * (docs/formal/00-orchestrator-prompt.md §10).
  *
  * The vocabulary is compared against the runner's own copy of it (`packages/core`'s
- * `agentFrameNames`); `apps/web/server/sdk-conformance.test.ts` is where that copy is held to
+ * `agentFrameNames`); `apps/web/server/sdk-conformance.*.test.ts` is where that copy is held to
  * `packages/contracts`' published one.
  */
 import {

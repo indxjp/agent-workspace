@@ -1,4 +1,4 @@
-import type { ProbeSignal } from '../classify';
+import { isProtocolErrorRange, type ProbeSignal } from '../classify';
 
 /** Thrown by a transport probe on any failure. Carries the positive fact the wire code
  *  established — see `classify.ts` for why this is a closed set of signals, not a message. */
@@ -39,4 +39,20 @@ export function createDeadline(timeoutMs: number): {
     },
     signal: controller.signal,
   };
+}
+
+/** Every fetch the probes make. Production binds this to the egress guard (`guardedFetch`), so a
+ *  caller-supplied URL can never reach an internal address from the control plane. */
+export type ProbeFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * A JSON-RPC error object the peer sent. Only JSON-RPC's OWN pre-defined range (-32700..-32600)
+ * means "speaks JSON-RPC but is not MCP"; any other code (MCP's -32000..-32099, HTTP-style
+ * numbers, vendor codes) is an application error from a server that did answer.
+ */
+export function classifyJsonRpcError(code: number, message: string): ProbeError {
+  if (isProtocolErrorRange(code)) {
+    return new ProbeError({ kind: 'json-rpc-protocol-error', code }, message);
+  }
+  return new ProbeError({ kind: 'json-rpc-app-error', code, message }, message);
 }

@@ -28,6 +28,8 @@ export interface SavedDraft {
 interface DraftFailure {
   readonly ok: false;
   readonly code: string;
+  /** The gateway's own sentence for the code, when it sent one. */
+  readonly message?: string;
   readonly details: readonly string[];
 }
 
@@ -41,12 +43,18 @@ const ResultSchema = z.union([
     .object({
       ok: z.literal(false),
       code: z.string().min(1),
+      message: z.string().min(1).optional(),
       details: z.array(z.string()).optional(),
     })
     .passthrough(),
 ]);
 
-const UNREADABLE: DraftFailure = { ok: false, code: 'unreadable_result', details: [] };
+const UNREADABLE: DraftFailure = {
+  ok: false,
+  code: 'unreadable_result',
+  message: "This page could not read the tool's answer.",
+  details: [],
+};
 
 /**
  * The Builder tool a call names: the bare wire name or the `mcp__aw-control__` form, matched
@@ -70,9 +78,11 @@ function parseJson(output: string): unknown {
 function readResult(parsed: unknown): { readonly ok: true } | DraftFailure {
   const result = ResultSchema.safeParse(parsed);
   if (!result.success) return UNREADABLE;
-  return result.data.ok
-    ? { ok: true }
-    : { ok: false, code: result.data.code, details: result.data.details ?? [] };
+  if (result.data.ok) return { ok: true };
+  const { code, message, details = [] } = result.data;
+  return message === undefined
+    ? { ok: false, code, details }
+    : { ok: false, code, message, details };
 }
 
 function savedIn(parsed: unknown): SavedDraft | null {
@@ -80,11 +90,22 @@ function savedIn(parsed: unknown): SavedDraft | null {
   return result.success ? { agentId: result.data.agentId, version: result.data.version } : null;
 }
 
-/** The output of each tool call, by call id. */
+/**
+ * The output of each tool call, by call id. A call the run paused on for approval has none: the
+ * engine answers it with its own stop text, which is not the tool's answer, and the tool runs only
+ * in the run that continues after the decision.
+ */
 function outputsById(events: readonly AgentEvent[]): ReadonlyMap<string, string> {
+  const paused = new Set(
+    events.flatMap((event) =>
+      event.frame === 'agent.approval.requested' ? [event.toolCallId] : [],
+    ),
+  );
   const outputs = new Map<string, string>();
   for (const event of events) {
-    if (event.frame === 'agent.tool.result') outputs.set(event.toolCallId, event.output);
+    if (event.frame === 'agent.tool.result' && !paused.has(event.toolCallId)) {
+      outputs.set(event.toolCallId, event.output);
+    }
   }
   return outputs;
 }

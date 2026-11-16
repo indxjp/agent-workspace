@@ -34,8 +34,8 @@ export const ApiKeyListResponseSchema: z.ZodReadonly<z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
         }>;
         keyPrefix: z.ZodString;
@@ -55,8 +55,8 @@ export const ApiKeyResourceSchema: z.ZodReadonly<z.ZodObject<{
     name: z.ZodString;
     role: z.ZodEnum<{
         builder: "builder";
-        admin: "admin";
         owner: "owner";
+        admin: "admin";
         viewer: "viewer";
     }>;
     keyPrefix: z.ZodString;
@@ -76,8 +76,8 @@ export const ApiKeyResponseSchema: z.ZodReadonly<z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
         }>;
         keyPrefix: z.ZodString;
@@ -89,24 +89,24 @@ export const ApiKeyResponseSchema: z.ZodReadonly<z.ZodObject<{
 }, z.core.$strict>>;
 
 // @public
+const CONFERRABLE_ROLES: readonly ["owner", "admin", "builder", "viewer"];
+
+// Warning: (ae-forgotten-export) The symbol "CONFERRABLE_ROLES" needs to be exported by the entry point api-keys.d.ts
+//
+// @public
+type ConferrableRoleName = (typeof CONFERRABLE_ROLES)[number];
+
+// @public
 export interface CreateApiKeyInput {
     // (undocumented)
     readonly expiresAt?: string | null;
     // (undocumented)
     readonly name: string;
-    // Warning: (ae-forgotten-export) The symbol "MembershipRoleName" needs to be exported by the entry point api-keys.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ConferrableRoleName" needs to be exported by the entry point api-keys.d.ts
     //
     // (undocumented)
-    readonly role: MembershipRoleName;
+    readonly role: ConferrableRoleName;
 }
-
-// @public
-const MEMBERSHIP_ROLES: readonly ["owner", "admin", "builder", "viewer"];
-
-// Warning: (ae-forgotten-export) The symbol "MEMBERSHIP_ROLES" needs to be exported by the entry point api-keys.d.ts
-//
-// @public
-type MembershipRoleName = (typeof MEMBERSHIP_ROLES)[number];
 
 // @public (undocumented)
 export type MintedApiKeyResponse = z.infer<typeof MintedApiKeyResponseSchema>;
@@ -118,8 +118,8 @@ export const MintedApiKeyResponseSchema: z.ZodReadonly<z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
         }>;
         keyPrefix: z.ZodString;

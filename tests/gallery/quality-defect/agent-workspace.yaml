@@ -6,7 +6,7 @@ engine: claude-agent-sdk
 # apis/qms.openapi.json and registers it, taking QMS_TOKEN from its environment. The caller
 # assertion the tool opts in with is signed with the workspace secret QMS_IDENTITY_SECRET, so the
 # QMS shows only the 工程 whose past cases the person who entered the defect may see:
-#   aw secrets set QMS_IDENTITY_SECRET
+#   printf '%s' "$QMS_IDENTITY_SECRET" | aw secrets create --name QMS_IDENTITY_SECRET --value-stdin
 #   QMS_TOKEN=... aw dev
 # The document's `servers` is the company's QMS (qms.example.co.jp), which is not reachable from
 # here. To try the project, run the bundled stand-in with the same token and set

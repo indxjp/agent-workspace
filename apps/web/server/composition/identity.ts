@@ -1,4 +1,4 @@
-import { sessionCookieName } from '../auth/session';
+import { installedSessionCookieName as sessionCookieName } from '../auth-settings';
 
 /** Read the configured session cookie value from a raw Cookie header. */
 export function sessionCookieValue(header: string | null): string | undefined {

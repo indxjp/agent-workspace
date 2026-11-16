@@ -1,10 +1,14 @@
 import type { ModelProvider, RunStartProblemCode } from '@indx-workspace/contracts/runs';
 
-import type { ModelDiscovery } from '../models/discovery';
-import type { ModelConnectionResource } from '../models/contract';
-import type { DeploymentDefaultModels } from '../models/deployment-default';
-import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
-import type { ModelSelection } from '../runs/environment';
+import {
+  type DeploymentDefaultModels,
+  type ModelConnectionResource,
+  type ModelDiscovery,
+  type ResolvedModelConnection,
+  selectPreferredModel,
+  type WorkspaceModelsStore,
+} from '../integrations';
+import type { ModelSelection } from '../execution';
 
 // ── Model resolution (issue #129) ────────────────────────────────────────────────────────────────
 //
@@ -223,4 +227,49 @@ export async function validateModel(
     validated,
     connectionName: connection.name,
   };
+}
+
+/**
+ * The deployment default layer (issue #506): the layer's connection, checked like every other
+ * layer's, with the deployment's configured id for that connection's provider. No connection, or
+ * no id for the provider, is a `model_connection_unresolved` refusal decided before any provider
+ * call; a readable model list picks the exact id or its newest dated release.
+ */
+export async function resolveDeploymentDefault(
+  deployment: DeploymentLayer,
+  store: WorkspaceModelsStore,
+  discover: ModelDiscovery,
+  warn: (message: string) => void,
+): Promise<ModelResolution> {
+  if (deployment.connectionId === null) {
+    return {
+      ok: false,
+      layer: 'deployment',
+      code: 'model_connection_unresolved',
+      reason: NO_DEFAULT_CONNECTION_REASON,
+    };
+  }
+  const ready = await readyConnectionFor('deployment', deployment.connectionId, store);
+  if (!ready.ok) return ready;
+  const provider = ready.connection.provider;
+  const configured = deployment.defaults[provider];
+  if (configured === undefined) {
+    return {
+      ok: false,
+      layer: 'deployment',
+      code: 'model_connection_unresolved',
+      reason:
+        `the agent's model connection "${ready.connection.name}" names no model, no project or ` +
+        'workspace default model is configured, and this deployment sets no default model for ' +
+        `provider "${provider}".`,
+    };
+  }
+  return validateModel(
+    'deployment',
+    ready,
+    configured,
+    (ids) => selectPreferredModel(configured, ids),
+    discover,
+    warn,
+  );
 }

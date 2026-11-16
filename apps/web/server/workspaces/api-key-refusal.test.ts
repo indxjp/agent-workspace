@@ -12,9 +12,9 @@ import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { conferredBy } from '../rbac/conferral';
+import { conferredBy } from '../rbac/core/conferral';
 import { installRbacHarness } from '../rbac/testing';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 import { createMemoryWorkspaceRepository } from './testing';
 import { GET as GET_COLLECTION, POST } from '../../app/api/workspaces/route';
 import { GET as GET_ITEM, PATCH } from '../../app/api/workspaces/[id]/route';

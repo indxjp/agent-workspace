@@ -173,5 +173,30 @@ export async function loadGalleryProject(
     if (!isBuiltinSkillName(name)) throw new Error(`${dir}: skill ${name} is not under skills/`);
     skills.push({ name, files: [...builtinSkillFiles(name)] });
   }
+  refuseConnectorsOutsideProjectTools(dir, project, agents);
   return { dir, project, agents, surfaces, skills };
+}
+
+/**
+ * The project file's `policy.tools` is the ceiling on the connectors its agents may use: `aw push`
+ * refuses an agent that names any other with `403 policy_cannot_widen [tool:<name>]` (issue #890).
+ * An `mcp()` connector counts as much as an `openapiTool()`, so both must be listed.
+ */
+function refuseConnectorsOutsideProjectTools(
+  dir: string,
+  project: ProjectDocument,
+  agents: readonly GalleryAgent[],
+): void {
+  const allowed = project.policy?.tools;
+  if (allowed === undefined) return;
+  for (const agent of agents) {
+    const outside = agent.body.definition.resources.connectors.filter(
+      (name) => !allowed.includes(name),
+    );
+    if (outside.length > 0) {
+      throw new Error(
+        `${dir}/${agent.file}: policy.tools in agent-workspace.yaml does not list ${outside.join(', ')}`,
+      );
+    }
+  }
 }

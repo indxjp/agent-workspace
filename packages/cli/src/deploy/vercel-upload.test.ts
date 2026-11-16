@@ -184,6 +184,8 @@ describe('the upload `aw deploy` makes to Vercel', () => {
     await put(web, 'package.json', '{}');
     await put(web, 'src/main.tsx');
     await put(web, 'src/main.test.tsx');
+    await put(web, 'src/fixture.test-support.ts');
+    await put(web, 'src/view.test-support.tsx');
     await put(web, 'node_modules/react/index.js');
     await put(web, 'dist/index.html');
     await put(web, '.env');

@@ -4,7 +4,7 @@
  * workspace and it is enabled. The decision is a pure function of facts the resolver gathers on
  * every request, so a revocation, a run ending or a disable takes effect on the next call.
  */
-import type { DatabaseRoot, RunRecord, ToolConnectorRecord } from '@agent-workspace/core/db';
+import type { RunRecord, ToolConnectorRecord } from '@agent-workspace/core/db';
 import { terminalRunStatuses } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
 import { canonicalCall, needsApproval } from '@indx-workspace/contracts/agents';
@@ -26,6 +26,7 @@ import {
 } from '@indx-workspace/contracts/tool-connectors';
 import { z } from 'zod';
 
+import type { GatewayConnectors, GatewayRuns, GatewayToolStore } from '../ports.js';
 import type { RunTokenClaims } from '../tokens/run-token.js';
 
 type ToolRefusalCode = 'tool_run_not_active' | 'tool_not_in_run';
@@ -215,8 +216,8 @@ export interface ToolConnectorResolver {
 
 /** The connector's server key in `run`, the run's approved calls and how to consume one. */
 async function runApproval(
-  connectors: ReturnType<DatabaseRoot['mcpServers']['forScope']>,
-  runs: ReturnType<DatabaseRoot['runs']['forScope']>,
+  connectors: GatewayConnectors,
+  runs: GatewayRuns,
   run: RunRecord | null,
   connectorId: string,
 ): Promise<ToolApproval> {
@@ -241,7 +242,7 @@ async function runApproval(
  * credential. It never reads a model connection or the model key.
  */
 export function createDatabaseToolResolver(
-  database: DatabaseRoot,
+  database: GatewayToolStore,
   secrets: SecretsService,
   now: () => number = () => Math.floor(Date.now() / 1000),
 ): ToolConnectorResolver {

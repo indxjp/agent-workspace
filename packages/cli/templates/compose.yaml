@@ -221,6 +221,8 @@ services:
       AW_TRUSTED_PROXY_HOPS: ${AW_TRUSTED_PROXY_HOPS:-0}
       # The project's policy ceiling (`aw deploy` writes it); blank means no ceiling.
       AW_DEPLOYMENT_POLICY: ${AW_DEPLOYMENT_POLICY:-}
+      # The features this deployment installs (`aw deploy` writes them, ADR-0160 D5); blank installs every feature.
+      AW_DEPLOYMENT_FEATURES: ${AW_DEPLOYMENT_FEATURES:-}
       # The deployment's public https origin (`aw deploy` writes it); blank keeps A2A cards off.
       AW_PUBLIC_URL: ${AW_PUBLIC_URL:-}
     ports: ['${PORT:-3000}:3000']

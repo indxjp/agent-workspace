@@ -5,8 +5,7 @@
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
 
-import { resolveAgentRunOwnership } from '../agents/run-ownership';
-import { Principal } from '../rbac/principal';
+import { Principal, type ResolveRunOwnership } from '../identity';
 import type { TriggersRuntime, ZoomSecretTokens } from './runtime';
 
 type StoreRoot = Pick<DatabaseRoot, 'scopes' | 'triggers' | 'directory' | 'findTriggerForIngress'>;
@@ -53,6 +52,8 @@ function createZoomTokens(root: StoreRoot, secrets: SecretsService): ZoomSecretT
 export function createRepositoryTriggersRuntime(
   root: StoreRoot,
   secrets: SecretsService | null,
+  /** Who may run an agent: the agents implementation, handed in by the composition root. */
+  agentOwnership: ResolveRunOwnership,
   now: () => Date = () => new Date(),
 ): TriggersRuntime {
   return {
@@ -76,7 +77,7 @@ export function createRepositoryTriggersRuntime(
         actsForPrincipalId: record.actsForPrincipalId,
       });
     },
-    agentOwnership: (principal, agentId) => resolveAgentRunOwnership(principal, agentId),
+    agentOwnership: (principal, agentId) => agentOwnership(principal, agentId),
     zoomTokens: secrets === null ? null : createZoomTokens(root, secrets),
     now,
   };

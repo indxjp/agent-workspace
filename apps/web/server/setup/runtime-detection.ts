@@ -1,4 +1,4 @@
-import { currentWebRuntimeRegistry, type RuntimeRegistryEntry } from '../runtimes/registry';
+import { currentWebRuntimeRegistry, type RuntimeRegistryEntry } from '../execution';
 import { defineSlot } from '../runtime-slot';
 
 /** One driver the first-run wizard offers, as `GET /api/setup/runtime-detect` reports it. */

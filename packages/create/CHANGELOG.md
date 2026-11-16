@@ -3,6 +3,10 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/cli`, with the
 same version (ADR-0082).
 
+## 0.6.13 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.13 release.
+
 ## 0.6.12 — unreleased
 
 No changes to this package. Released in lock-step with the 0.6.12 storage proof release.

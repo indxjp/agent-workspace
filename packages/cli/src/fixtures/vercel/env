@@ -8,7 +8,7 @@ RUNNER_IMAGE=registry.example/runner@sha256:333333333333333333333333333333333333
 AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK=registry.example/runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
 # The release the images above were resolved for. `deploy` refuses a source checkout at
 # another release, because the migrations run from WEB_IMAGE and the code from the checkout.
-AGENT_WORKSPACE_VERSION=0.6.12
+AGENT_WORKSPACE_VERSION=0.6.13
 DOCKER_GID=0
 # Relational store: neon
 # The Vercel Marketplace Neon integration supplies DATABASE_URL as a project environment variable.

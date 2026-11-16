@@ -34,9 +34,12 @@ import { createMemoryDirectory } from '../../rbac/memory-directory';
 import { Principal } from '../../rbac/principal';
 import { startRun } from '../../runs/api';
 import type { RunPrincipal } from '../../runs/environment';
-import { installDeliveringRunApi, type RunWorld } from '../../runs/run-delivery-fixtures';
+import {
+  installDeliveringRunApi,
+  type RunWorld,
+} from '../../runs/run-delivery-fixtures.test-support';
 import { InMemoryRunStore } from '../../runs/memory-store';
-import { createResourceCatalogStoreProvider } from '../../resources/catalog-store';
+import { createResourceCatalogStoreProvider } from '../../storage/store';
 import { createInMemoryCatalogStore } from '../../resources/catalog-store.memory';
 import { createStorageService } from '../../storage/service';
 import { resetSurfaceLimits } from './limits';
@@ -135,6 +138,7 @@ function install(world: RunWorld) {
     surfaces: {
       kind: 'serving',
       runtime: {
+        env: () => process.env,
         resolve: () => Promise.reject(new Error('unused')),
         open: () => Promise.reject(new Error('unused')),
         checkModel: () => Promise.reject(new Error('unused')),

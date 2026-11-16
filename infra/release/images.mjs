@@ -43,16 +43,9 @@ const PROCESS_TARGETS = {
   web: { dockerfile: 'Dockerfile', target: 'web' },
   gateway: { dockerfile: 'gateway.Dockerfile', target: 'gateway' },
   runner: { dockerfile: 'Dockerfile', target: 'runner' },
+  egressProxy: { dockerfile: 'egress-proxy.Dockerfile', target: 'egress-proxy' },
+  toolHost: { dockerfile: 'tool-host.Dockerfile', target: 'tool-host' },
 };
-
-/**
- * Images the platform publishes that the generator does not pin: nothing resolves them through
- * `create` yet. They are built, scanned, signed and recorded in the release manifest like the rest.
- */
-const PLATFORM_ONLY_IMAGES = [
-  { name: 'egress-proxy', dockerfile: 'egress-proxy.Dockerfile', target: 'egress-proxy' },
-  { name: 'tool-host', dockerfile: 'tool-host.Dockerfile', target: 'tool-host' },
-];
 
 /** @param {string} [root] */
 export function readReleaseImages(root = REPOSITORY_ROOT) {
@@ -90,9 +83,6 @@ export function releasePlan(root = REPOSITORY_ROOT) {
       throw new Error(`${RELEASE_IMAGES_FILE} must name the ${field} image`);
     }
     plan.push({ name, ...build, engine: null, engineVersion: null });
-  }
-  for (const image of PLATFORM_ONLY_IMAGES) {
-    plan.push({ ...image, engine: null, engineVersion: null });
   }
   for (const engine of engineImages(root)) {
     plan.push({

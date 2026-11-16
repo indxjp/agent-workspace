@@ -64,7 +64,7 @@ describe('@indx-workspace/sdk/testing fixtures (issue #246, P-2)', () => {
   });
 
   it('answers a client with a fixture the SDK accepts unchanged', async () => {
-    const run = fixtures.run({ status: 'completed' });
+    const run = fixtures.runDetail(fixtures.run({ status: 'completed' }));
     const api = fetchDouble(() => jsonResponse(200, { run }));
     const aw = createClient({
       baseUrl: 'https://aw.example.com',

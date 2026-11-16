@@ -10,23 +10,27 @@ description: "The @indx-workspace/contracts/endpoint-clients exports, sorted alp
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent" \| "app-backend"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `undefined \| null \| readonly string[]` | No |  |
+| `oidcAudience` | `undefined \| string` | No |  |
 
 ## CreateEndpointClientRequestSchema
 
 The body of `POST /api/endpoint-clients`. An `a2a-agent` client lists exactly one agent and no
 `toolNames`; an `mcp-project` client lists 1 to `ENDPOINT_CLIENT_AGENTS_MAX` agents and may
 narrow the tools with `toolNames` (`null` or absent means every code tool of those agents); a
-`builder` client lists no agent and no `toolNames`.
+`builder` client lists no agent and no `toolNames`; an `app-backend` client lists 1 to
+`ENDPOINT_CLIENT_AGENTS_MAX` agents, no `toolNames`, and requires `oidcAudience`, which
+every other kind refuses.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent" \| "app-backend"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `undefined \| null \| readonly string[]` | No |  |
+| `oidcAudience` | `undefined \| string` | No |  |
 
 ## ENDPOINT_CLIENT_AGENTS_MAX
 
@@ -37,13 +41,22 @@ Value: `64`
 ## ENDPOINT_CLIENT_KINDS
 
 What an endpoint client names (ADR-0134): an MCP project tool endpoint, one agent's A2A endpoint,
-or the Builder's MCP door (`/mcp/builder`, issue #1846). A credential is bound to exactly one
-client, so revoking the client revokes everything that could reach the resource. A `builder`
-client binds no agent: the member who consents to it is the principal of its tokens.
+the Builder's MCP door (`/mcp/builder`, issue #1846), or an app's backend acting as the person
+signed in to it (`app-backend`, ADR-0161). A credential is bound to exactly one client, so
+revoking the client revokes everything that could reach the resource. A `builder` client binds no
+agent: the member who consents to it is the principal of its tokens. An `app-backend` client binds
+the agents its exchanged tokens may run, and names the app's OIDC `client_id` (`oidcAudience`).
 
 - `'mcp-project'`
 - `'a2a-agent'`
 - `'builder'`
+- `'app-backend'`
+
+## ENDPOINT_CLIENT_OIDC_AUDIENCE_MAX_LENGTH
+
+The longest `oidcAudience` (the app's OIDC `client_id` at the issuer) accepted, ADR-0161 D4.
+
+Value: `255`
 
 ## ENDPOINT_CLIENT_PROBLEM_CODES
 
@@ -80,6 +93,7 @@ Value: `64`
 - `"builder"`
 - `"mcp-project"`
 - `"a2a-agent"`
+- `"app-backend"`
 
 ## EndpointClientListResponse
 
@@ -107,10 +121,11 @@ Value: `64`
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent" \| "app-backend"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `null \| readonly string[]` | Yes |  |
 | `redirectUris` | `readonly string[]` | Yes |  |
+| `oidcAudience` | `null \| string` | Yes | The ID token audience of an `app-backend` client; `null` for every other kind. |
 | `hasClientSecret` | `false \| true` | Yes |  |
 | `actsForPrincipalId` | `string` | Yes |  |
 | `apiKeyIds` | `readonly string[]` | Yes |  |
@@ -128,10 +143,11 @@ shown once, by the mint answer.
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent" \| "app-backend"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `null \| readonly string[]` | Yes |  |
 | `redirectUris` | `readonly string[]` | Yes |  |
+| `oidcAudience` | `null \| string` | Yes | The ID token audience of an `app-backend` client; `null` for every other kind. |
 | `hasClientSecret` | `false \| true` | Yes |  |
 | `actsForPrincipalId` | `string` | Yes |  |
 | `apiKeyIds` | `readonly string[]` | Yes |  |
@@ -168,6 +184,13 @@ unchanged: the key is the only response in the platform that carries the plainte
 | `name` | `string` | Yes |  |
 | `expiresAt` | `undefined \| null \| string` | No |  |
 
+## OidcAudienceSchema
+
+The ID token audience an `app-backend` client accepts: the app's own `client_id` at the
+deployment's OIDC issuer. Exactly the `aud` (or `azp`) the exchange compares, never normalised.
+
+`string`
+
 ## RedirectUriSchema
 
 A registered OAuth redirect URI: absolute, `https` (or `http` on a loopback host), with no
@@ -201,16 +224,19 @@ The answer of `POST /api/endpoint-clients/:id/secret` (ADR-0134 part 3): the OAu
 | `agentIds` | `undefined \| readonly string[]` | No |  |
 | `toolNames` | `undefined \| null \| readonly string[]` | No |  |
 | `redirectUris` | `undefined \| readonly string[]` | No |  |
+| `oidcAudience` | `undefined \| string` | No |  |
 
 ## UpdateEndpointClientRequestSchema
 
-The body of `PATCH /api/endpoint-clients/:id`: the agents, the tool allow-list and/or the OAuth
-redirect URIs. Whether
-the new list fits the client's kind (one agent for `a2a-agent`, no `toolNames`) depends on the
-stored client, so the server checks that and answers `400 endpoint_client_invalid`.
+The body of `PATCH /api/endpoint-clients/:id`: the agents, the tool allow-list, the OAuth
+redirect URIs and/or an `app-backend` client's `oidcAudience`. Whether the change fits the
+client's kind (one agent for `a2a-agent`, no `toolNames`, `oidcAudience` and no redirect URIs
+for `app-backend` only) depends on the stored client, so the server checks that and answers
+`400 endpoint_client_invalid`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `agentIds` | `undefined \| readonly string[]` | No |  |
 | `toolNames` | `undefined \| null \| readonly string[]` | No |  |
 | `redirectUris` | `undefined \| readonly string[]` | No |  |
+| `oidcAudience` | `undefined \| string` | No |  |

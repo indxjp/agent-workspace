@@ -14,11 +14,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   mintSelectionToken,
   mintSessionToken,
+  newEmailLinkSessionClaims,
   newSessionClaims,
   selectionCookieName,
   sessionCookieName,
+  verifySessionToken,
 } from '../../../../server/auth';
-import { conferredBy } from '../../../../server/rbac/conferral';
+import { conferredBy } from '../../../../server/rbac/core/conferral';
 import { createMemoryDirectory } from '../../../../server/rbac/memory-directory';
 import { type RbacRuntime } from '../../../../server/rbac/runtime';
 import type { WorkspaceRepositoryPort } from '../../../../server/workspaces/runtime';
@@ -578,5 +580,92 @@ describe('POST /api/auth/workspace (application/json)', () => {
         detail: expect.any(String) as unknown,
       },
     });
+  });
+});
+
+describe('POST /api/auth/workspace for a session the email-link sign-in minted', () => {
+  const GUEST = 'guest@example.test';
+  let directory: ReturnType<typeof createMemoryDirectory>;
+
+  beforeEach(async () => {
+    process.env['SESSION_SECRET'] = SECRET;
+    directory = createMemoryDirectory({
+      workspaces: [
+        { id: 'ws-demo', slug: 'demo-1', name: 'Demo' },
+        { id: 'ws-real', slug: 'acme', name: 'Acme' },
+      ],
+      users: [{ email: GUEST, name: 'Guest', workspaceId: 'ws-demo', role: 'guest' }],
+    });
+    // The same address joins a real workspace through the identity provider after the link was
+    // opened: the case the mark exists for.
+    await directory.forWorkspace('ws-real').createMembership({ email: GUEST, role: viewer });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
+  });
+
+  afterEach(() => {
+    delete process.env['SESSION_SECRET'];
+    clearApplicationContext();
+  });
+
+  const marked = () => mintSessionToken(newEmailLinkSessionClaims(GUEST, 'demo-1'), SECRET);
+  const unmarked = () => mintSessionToken(newSessionClaims(GUEST, 'demo-1'), SECRET);
+  const switchTo = async (session: string, workspace: string, json = false) =>
+    POST(
+      json
+        ? jsonRequest({
+            method: 'POST',
+            cookies: { [sessionCookieName()]: session },
+            body: { workspace },
+          })
+        : request({
+            method: 'POST',
+            cookies: { [sessionCookieName()]: session },
+            form: { workspace },
+          }),
+    );
+
+  it.each(['acme', 'ws-real'])(
+    'refuses a switch to the real workspace %s the address joined, and sets no cookie (form)',
+    async (workspace) => {
+      const response = await switchTo(await marked(), workspace);
+      expect(response.status).toBe(303);
+      expect(response.headers.get('location')).toBe(
+        '/api/auth/workspace?error=workspace_not_available',
+      );
+      expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
+    },
+  );
+
+  it('refuses the same switch in the JSON branch with 404 workspace_not_available and no cookie', async () => {
+    const response = await switchTo(await marked(), 'acme', true);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'workspace_not_available' } });
+    expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
+  });
+
+  it('answers a refused real workspace exactly as it answers one that does not exist', async () => {
+    const real = await switchTo(await marked(), 'acme');
+    const missing = await switchTo(await marked(), 'no-such-workspace');
+    expect(real.status).toBe(missing.status);
+    expect(real.headers.get('location')).toBe(missing.headers.get('location'));
+  });
+
+  it('allows a switch to its own demo workspace and the new session is still marked', async () => {
+    const response = await switchTo(await marked(), 'demo-1');
+    expect(response.status).toBe(303);
+    const token = setCookieValue(response, sessionCookieName());
+    expect(token).toBeDefined();
+    const verified = await verifySessionToken(decodeURIComponent(token ?? ''), SECRET);
+    expect(verified.ok && verified.claims.via).toBe('email_link');
+    expect(verified.ok && verified.claims.ws).toBe('demo-1');
+  });
+
+  it('leaves an unmarked session free to switch to a workspace it belongs to, and mints it unmarked', async () => {
+    const response = await switchTo(await unmarked(), 'acme');
+    expect(response.status).toBe(303);
+    const token = setCookieValue(response, sessionCookieName());
+    const verified = await verifySessionToken(decodeURIComponent(token ?? ''), SECRET);
+    expect(verified.ok && verified.claims.ws).toBe('acme');
+    expect(verified.ok && 'via' in verified.claims).toBe(false);
   });
 });

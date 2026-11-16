@@ -48,3 +48,15 @@ export async function signedHeaders(input: SignedHeadersInput): Promise<Record<s
     ),
   };
 }
+
+/** The call options a test passes a connector's server for a run started with `subject`. */
+export function headersAs(
+  connector: Pick<SignedHeadersInput, 'key' | 'connectorId'>,
+): (
+  subject: string,
+  more?: Partial<SignedHeadersInput>,
+) => Promise<{ headers: Record<string, string> }> {
+  return async (subject, more = {}) => ({
+    headers: await signedHeaders({ ...connector, subject, ...more }),
+  });
+}

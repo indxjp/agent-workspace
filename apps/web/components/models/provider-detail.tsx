@@ -15,9 +15,11 @@
  *                `DELETE /api/model-connections/:id` (only after the caller types the connection's
  *                 name — `confirmationMatches` — so cancelling never issues the delete request at all)
  */
+import { VERTEX_LOCATIONS, isKeylessProvider } from '@indx-workspace/contracts/models';
 import { useState, type FormEvent } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
 import { CREDENTIAL_INPUT_PROPS } from '../shell/credential-input';
 
 import {
@@ -32,17 +34,11 @@ import {
   connectionStatus,
   editableConfigFields,
   isEditFormValid,
-  providerLabel,
   type EditFormValues,
   type ModelConnectionView,
   type ReferencingAgent,
 } from './model';
-
-const FIELD_LABEL: Record<'baseUrl' | 'deployment' | 'apiVersion', string> = {
-  baseUrl: 'Base URL',
-  deployment: 'Deployment',
-  apiVersion: 'API version',
-};
+import { modelsStrings } from './models-messages';
 
 const CARD = 'rounded-(--radius-sm) border border-border-strong bg-surface-2 p-4';
 const CONTROL =
@@ -60,6 +56,8 @@ function editValuesFrom(connection: ModelConnectionView): EditFormValues {
     baseUrl: connection.config.baseUrl ?? '',
     deployment: connection.config.deployment ?? '',
     apiVersion: connection.config.apiVersion ?? '',
+    projectId: connection.config.projectId ?? '',
+    location: connection.config.location ?? 'global',
   };
 }
 
@@ -68,12 +66,16 @@ export function ProviderDetailPanel({
   onUpdated,
   onRemoved,
   onClose,
+  locale = 'en',
 }: Readonly<{
   connection: ModelConnectionView;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
   onUpdated: (next: ModelConnectionView) => void;
   onRemoved: (id: string) => void;
   onClose: () => void;
 }>) {
+  const strings = modelsStrings(locale);
   const [values, setValues] = useState<EditFormValues>(() => editValuesFrom(connection));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -124,8 +126,8 @@ export function ProviderDetailPanel({
         // Never pre-filled, never redisplayed: the value that was just typed is discarded the
         // moment the request that consumes it succeeds, not kept around for a retry to reuse.
         setRotateKey('');
-        setRotateMessage('Credential rotated. Testing the connection…');
-        return testAfterRotation(client, connection.id);
+        setRotateMessage(strings.rotatedTesting);
+        return testAfterRotation(client, connection.id, strings);
       })
       .then(setRotateMessage)
       .catch((error: unknown) =>
@@ -157,25 +159,28 @@ export function ProviderDetailPanel({
   }
 
   const status = connectionStatus(connection);
+  const keyless = isKeylessProvider(connection.provider);
   const fields = editableConfigFields(connection.provider);
   const removeReady = confirmationMatches(confirmText, connection.name);
 
   return (
-    <div className="space-y-4 border-t border-border bg-surface-2 p-4">
+    <div lang={locale} className="space-y-4 border-t border-border bg-surface-2 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-[14px] font-semibold">
           {connection.name}{' '}
-          <span className="font-normal text-muted">· {providerLabel(connection.provider)}</span>
+          <span className="font-normal text-muted">
+            · {strings.providerLabel[connection.provider]}
+          </span>
         </h2>
         <button type="button" className={BUTTON} onClick={onClose}>
-          Close
+          {strings.close}
         </button>
       </div>
 
       <form onSubmit={save} className={`${CARD} space-y-3`}>
-        <h3 className="text-[13px] font-semibold">Connection settings</h3>
+        <h3 className="text-[13px] font-semibold">{strings.connectionSettings}</h3>
         <label htmlFor={`name-${connection.id}`} className="block text-[13px] font-semibold">
-          Display name
+          {strings.displayName}
           <input
             id={`name-${connection.id}`}
             className={`${CONTROL} mt-1`}
@@ -189,13 +194,28 @@ export function ProviderDetailPanel({
             htmlFor={`${field}-${connection.id}`}
             className="block text-[13px] font-semibold"
           >
-            {FIELD_LABEL[field]}
-            <input
-              id={`${field}-${connection.id}`}
-              className={`${CONTROL} mt-1 font-mono`}
-              value={values[field]}
-              onChange={(event) => set(field, event.target.value)}
-            />
+            {strings.fieldLabel[field]}
+            {field === 'location' ? (
+              <select
+                id={`${field}-${connection.id}`}
+                className={`${CONTROL} mt-1`}
+                value={values[field]}
+                onChange={(event) => set(field, event.target.value)}
+              >
+                {VERTEX_LOCATIONS.map((location) => (
+                  <option key={location} value={location}>
+                    {location}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={`${field}-${connection.id}`}
+                className={`${CONTROL} mt-1 font-mono`}
+                value={values[field]}
+                onChange={(event) => set(field, event.target.value)}
+              />
+            )}
           </label>
         ))}
         {saveError === null ? null : (
@@ -209,58 +229,71 @@ export function ProviderDetailPanel({
             disabled={saving || !isEditFormValid(values, connection.provider)}
             className={`${BUTTON} border-accent bg-accent text-white`}
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? strings.saving : strings.saveChanges}
           </button>
         </div>
       </form>
 
-      <form onSubmit={rotate} className={`${CARD} space-y-3`}>
-        <h3 className="text-[13px] font-semibold">
-          Rotate credential{' '}
-          <span
-            className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${status.tone === 'ok' ? 'bg-ok-soft text-ok' : status.tone === 'warn' ? 'bg-warn-soft text-warn' : 'bg-danger-soft text-danger'}`}
-          >
-            {status.text}
-          </span>
-        </h3>
-        <label htmlFor={`rotate-${connection.id}`} className="block text-[13px] font-semibold">
-          New API key
-          <input
-            id={`rotate-${connection.id}`}
-            type="password"
-            {...CREDENTIAL_INPUT_PROPS}
-            className={`${CONTROL} mt-1 font-mono`}
-            value={rotateKey}
-            onChange={(event) => setRotateKey(event.target.value)}
-          />
-          <span className="mt-1 block text-[11.5px] font-normal text-muted">
-            The current key is never shown. Saving replaces it and retests the connection
-            immediately.
-          </span>
-        </label>
-        {rotateError === null ? null : (
-          <p role="alert" className={ALERT}>
-            {rotateError}
-          </p>
-        )}
-        {rotateMessage === null ? null : (
-          <p role="status" className={NOTICE}>
-            {rotateMessage}
-          </p>
-        )}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={rotating || rotateKey === ''}
-            className={`${BUTTON} border-accent bg-accent text-white`}
-          >
-            {rotating ? 'Rotating…' : 'Rotate credential'}
-          </button>
+      {keyless ? (
+        <div className={`${CARD} space-y-3`}>
+          <h3 className="text-[13px] font-semibold">
+            {strings.signIn}{' '}
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${status.tone === 'ok' ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'}`}
+            >
+              {strings.status[status.kind]}
+            </span>
+          </h3>
+          <p className={NOTICE}>{strings.keylessNotice}</p>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={rotate} className={`${CARD} space-y-3`}>
+          <h3 className="text-[13px] font-semibold">
+            {strings.rotateCredential}{' '}
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${status.tone === 'ok' ? 'bg-ok-soft text-ok' : status.tone === 'warn' ? 'bg-warn-soft text-warn' : 'bg-danger-soft text-danger'}`}
+            >
+              {strings.status[status.kind]}
+            </span>
+          </h3>
+          <label htmlFor={`rotate-${connection.id}`} className="block text-[13px] font-semibold">
+            {strings.newApiKey}
+            <input
+              id={`rotate-${connection.id}`}
+              type="password"
+              {...CREDENTIAL_INPUT_PROPS}
+              className={`${CONTROL} mt-1 font-mono`}
+              value={rotateKey}
+              onChange={(event) => setRotateKey(event.target.value)}
+            />
+            <span className="mt-1 block text-[11.5px] font-normal text-muted">
+              {strings.rotateHelp}
+            </span>
+          </label>
+          {rotateError === null ? null : (
+            <p role="alert" className={ALERT}>
+              {rotateError}
+            </p>
+          )}
+          {rotateMessage === null ? null : (
+            <p role="status" className={NOTICE}>
+              {rotateMessage}
+            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={rotating || rotateKey === ''}
+              className={`${BUTTON} border-accent bg-accent text-white`}
+            >
+              {rotating ? strings.rotating : strings.rotateCredential}
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className={`${CARD} space-y-3`}>
-        <h3 className="text-[13px] font-semibold text-danger">Remove connection</h3>
+        <h3 className="text-[13px] font-semibold text-danger">{strings.removeConnection}</h3>
         {!confirmOpen ? (
           <div className="flex justify-end">
             <button
@@ -268,29 +301,31 @@ export function ProviderDetailPanel({
               className={`${BUTTON} border-danger text-danger`}
               onClick={openRemoveConfirm}
             >
-              Remove connection…
+              {strings.removeConnectionOpen}
             </button>
           </div>
         ) : (
           <div className="space-y-3">
             {preview.kind === 'loading' ? (
-              <p className={NOTICE}>Checking which agents use this connection…</p>
+              <p className={NOTICE}>{strings.checkingAgents}</p>
             ) : preview.kind === 'error' ? (
               <p role="alert" className={ALERT}>
-                Could not check which agents use this connection. The removal will still report it.
+                {strings.checkFailed}
               </p>
             ) : preview.referencing.length === 0 ? (
-              <p className={NOTICE}>No agent currently uses this connection.</p>
+              <p className={NOTICE}>{strings.noAgent}</p>
             ) : (
               <div role="alert" className={ALERT}>
-                This connection is used by {preview.referencing.length} agent
-                {preview.referencing.length === 1 ? '' : 's'}:{' '}
-                {preview.referencing.map((agent) => agent.agentName).join(', ')}. Removing it falls
-                those agents back to the workspace default model.
+                {strings.usedBy(
+                  preview.referencing.length,
+                  preview.referencing.map((agent) => agent.agentName).join(', '),
+                )}
               </div>
             )}
             <label htmlFor={`confirm-${connection.id}`} className="block text-[13px] font-semibold">
-              Type <span className="font-mono">{connection.name}</span> to confirm
+              {strings.typeToConfirmBefore}
+              <span className="font-mono">{connection.name}</span>
+              {strings.typeToConfirmAfter}
               <input
                 id={`confirm-${connection.id}`}
                 className={`${CONTROL} mt-1`}
@@ -313,7 +348,7 @@ export function ProviderDetailPanel({
                   setDeleteError(null);
                 }}
               >
-                Cancel
+                {strings.cancel}
               </button>
               <button
                 type="button"
@@ -321,7 +356,7 @@ export function ProviderDetailPanel({
                 className={`${BUTTON} border-danger bg-danger text-white`}
                 onClick={confirmRemove}
               >
-                {deleting ? 'Removing…' : 'Remove connection'}
+                {deleting ? strings.removing : strings.removeConnection}
               </button>
             </div>
           </div>

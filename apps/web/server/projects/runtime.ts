@@ -7,7 +7,7 @@ export type ProjectActor =
       readonly principalId: string;
       /**
        * The owner of what this actor writes (`Principal.ownerPrincipalId`, issue #509). Every
-       * composition root sets it, so it is required (`rbac/owner-principal.ts`).
+       * composition root sets it, so it is required (`rbac/core/owner-principal.ts`).
        */
       readonly ownerPrincipalId: string;
       readonly userId: string | null;

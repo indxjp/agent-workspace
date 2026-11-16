@@ -68,6 +68,11 @@ export const SURFACE_RESUME_KEY_PATTERN: RegExp;
 
 // @public
 export const SURFACE_SESSION_PROBLEM_CODES: {
+    readonly demo_person_runs_reached: 429;
+    readonly demo_client_runs_reached: 429;
+    readonly demo_site_cost_reached: 429;
+    readonly demo_caps_unconfigured: 503;
+    readonly demo_expired: 409;
     readonly agent_runtime_profile_missing: 422;
     readonly model_connection_unresolved: 422;
     readonly model_connection_failed: 422;
@@ -168,8 +173,8 @@ export const SurfaceDefinitionSchema: z.ZodReadonly<z.ZodObject<{
             comfortable: "comfortable";
         }>>;
         locale: z.ZodOptional<z.ZodEnum<{
-            en: "en";
             ja: "ja";
+            en: "en";
         }>>;
         logo: z.ZodOptional<z.ZodUnion<readonly [z.ZodReadonly<z.ZodObject<{
             text: z.ZodString;
@@ -246,8 +251,8 @@ export type SurfaceLocale = (typeof SURFACE_LOCALES)[number];
 
 // @public
 export const SurfaceLocaleSchema: z.ZodEnum<{
-    en: "en";
     ja: "ja";
+    en: "en";
 }>;
 
 // @public (undocumented)
@@ -336,8 +341,8 @@ export const SurfaceThemeSchema: z.ZodReadonly<z.ZodObject<{
         comfortable: "comfortable";
     }>>;
     locale: z.ZodOptional<z.ZodEnum<{
-        en: "en";
         ja: "ja";
+        en: "en";
     }>>;
     logo: z.ZodOptional<z.ZodUnion<readonly [z.ZodReadonly<z.ZodObject<{
         text: z.ZodString;

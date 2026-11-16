@@ -67,7 +67,7 @@ example :
         grants := [], connectors := [] }) =
       .ok { tools := [.readFile, .listFiles, .searchFiles, .shell], networkEgress := false,
             connection := connectionFor .openaiResponses "http://gw" "tok", connectors := [],
-            maxTurns := some 2, budgetCap := false, grants := [], tracingDisabled := true } := by
+            maxTurns := some 2, grants := [], tracingDisabled := true } := by
     decide +kernel
 
 /-- No compiled tool is vendor-hosted: every one is sent as a function tool, which the gateway's
@@ -148,43 +148,13 @@ theorem a_fork_is_refused_by_name {r : Request} {grants : List Grant}
   unfold compile
   simp [hp, hg, hs, hf]
 
-/-- A per-run budget cap the provisional price table cannot price — an unlisted model, or none
-named — is refused naming `maxBudget`: a cap that could never stop the run is not accepted
-(ADR-0074 D7). -/
+/-- A per-run budget cap never changes the compile: it is neither refused, whatever the model,
+nor carried into the configuration, because the gateway enforces it from the deployment's
+catalogue (ADR-0162, #342). The adapter-side provisional cap (ADR-0074 D7) is retired. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
-theorem an_unpriced_budget_cap_is_refused_by_name {r : Request} {grants : List Grant}
-    (hp : r.policyReadable = true)
-    (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
-    (hs : r.skills = []) (hf : r.session ≠ .fork) (hb : r.budgetCap = true)
-    (hpr : priced r.model = false) :
-    compile r = .refused (.capabilityUnsupported "maxBudget") := by
-  unfold compile
-  simp [hp, hg, hs, hf, hb, hpr]
-
-/-- Every accepted compile carries the request's cap into the configuration the boundary enforces
-it from, and a cap is only ever accepted on a model the provisional table prices: the cap is
-neither dropped nor accepted unenforceable (ADR-0074 D7). -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
-  (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
-theorem an_accepted_budget_cap_is_priced_and_compiled {r : Request} {c : Compiled}
-    (h : compile r = .ok c) :
-    c.budgetCap = r.budgetCap ∧ (r.budgetCap = true → priced r.model = true) := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, hbc⟩ := compile_ok_shape h
-  refine ⟨hbc, fun hb => ?_⟩
-  cases hpr : priced r.model
-  · exfalso
-    unfold compile at h
-    split at h
-    · cases h
-    · split at h
-      · cases h
-      · split at h
-        · cases h
-        · split at h
-          · cases h
-          · simp [hb, hpr] at h
-  · rfl
+theorem a_budget_cap_never_changes_the_compile (r : Request) (cap : Bool) :
+    compile { r with budgetCap := cap } = compile r := rfl
 
 /-- A protocol the engine does not speak is refused naming `wireProtocols`. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
@@ -193,11 +163,11 @@ theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Gra
     {b t w : String}
     (hp : r.policyReadable = true)
     (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
-    (hs : r.skills = []) (hf : r.session ≠ .fork) (hb : r.budgetCap = false)
+    (hs : r.skills = []) (hf : r.session ≠ .fork)
     (hgw : r.gateway = some (b, t, w)) (hw : Protocol.ofWire? w = none) :
     compile r = .refused (.capabilityUnsupported "wireProtocols") := by
   unfold compile
-  simp [hp, hg, hs, hf, hb, hgw, hw]
+  simp [hp, hg, hs, hf, hgw, hw]
 
 /-- An Anthropic-family connection with no model named is refused naming `model`: the AI SDK
 adapter has no default model, and the adapter does not invent one. -/
@@ -207,11 +177,11 @@ theorem anthropic_without_a_model_is_refused_by_name {r : Request} {grants : Lis
     {b t : String}
     (hp : r.policyReadable = true)
     (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
-    (hs : r.skills = []) (hf : r.session ≠ .fork) (hb : r.budgetCap = false)
+    (hs : r.skills = []) (hf : r.session ≠ .fork)
     (hgw : r.gateway = some (b, t, "anthropic-messages")) (hm : r.model = none) :
     compile r = .refused (.capabilityUnsupported "model") := by
   unfold compile
-  simp [hp, hg, hs, hf, hb, hgw, hm]
+  simp [hp, hg, hs, hf, hgw, hm]
   rfl
 
 /-- A connector whose tool asks for a human approval is refused naming `approvals`; it is not
@@ -233,8 +203,9 @@ theorem a_remote_connector_needs_no_network_switch (c : Connector) (rest : List 
     compileConnectors (c :: rest) = (compileConnectors rest).map (c.name :: ·) := by
   simp [compileConnectors, ha]
 
-/-- Witness for the refusal theorems: a skill, a fork, an unpriced cap and an unknown protocol are
-each refused by name on otherwise acceptable requests, and a cap on a priced model compiles. -/
+/-- Witness for the refusal theorems: a skill, a fork and an unknown protocol are each refused by
+name on otherwise acceptable requests, and a cap compiles on a priced model, an unlisted one and
+none named alike. -/
 example :
     let base : Request :=
       { policyReadable := true,
@@ -246,11 +217,11 @@ example :
         grants := [], connectors := [] }
     compile { base with skills := ["support"] } = .refused (.capabilityUnsupported "skills") ∧
       compile { base with session := .fork } = .refused (.capabilityUnsupported "fork") ∧
-      compile { base with budgetCap := true } = .refused (.capabilityUnsupported "maxBudget") ∧
+      compile { base with budgetCap := true } = compile base ∧
       compile { base with budgetCap := true, model := some "gpt-unlisted" } =
-        .refused (.capabilityUnsupported "maxBudget") ∧
+        compile { base with model := some "gpt-unlisted" } ∧
       (match compile { base with budgetCap := true, model := some "gpt-5" } with
-        | .ok c => c.budgetCap
+        | .ok _ => true
         | .refused _ => false) = true ∧
       compile { base with gateway := some ("http://gw", "tok", "gemini") } =
         .refused (.capabilityUnsupported "wireProtocols") ∧

@@ -75,4 +75,23 @@ describe('@agent-workspace/gateway', () => {
       ).rejects.toThrow('PORT must be an integer from 1 through 65535.');
     },
   );
+
+  it('refuses to start with an unknown GATEWAY_TOOL_SANDBOX_AUTH', async () => {
+    await expect(
+      startGateway({ GATEWAY_TOKEN_SECRET: TOKEN_SECRET, GATEWAY_TOOL_SANDBOX_AUTH: 'iap' }),
+    ).rejects.toThrow("GATEWAY_TOOL_SANDBOX_AUTH must be unset or 'google-id-token'.");
+  });
+
+  it('refuses a missing price catalogue before the database opens', async () => {
+    // No DATABASE_URL either: a gateway that opened the database first would fail on that instead.
+    await expect(startGateway({ GATEWAY_TOKEN_SECRET: TOKEN_SECRET })).rejects.toThrow(
+      'GATEWAY_PRICING_JSON is required for authoritative usage settlement.',
+    );
+  });
+
+  it('reads the scripted models at start-up, before the database, and refuses a relative folder', async () => {
+    await expect(
+      startGateway({ GATEWAY_TOKEN_SECRET: TOKEN_SECRET, AW_SCRIPTED_MODELS_DIR: 'scripts' }),
+    ).rejects.toThrow('AW_SCRIPTED_MODELS_DIR must be an absolute path.');
+  });
 });

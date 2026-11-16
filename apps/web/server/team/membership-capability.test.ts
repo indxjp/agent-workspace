@@ -10,7 +10,7 @@
  * code ones: Builder and Viewer cannot list members at all, and an Admin may confer exactly Admin
  * and Viewer.
  *
- * `ROLES` is `rbac/roles.ts`'s own list rather than four literals, so a fifth role added later is
+ * `ROLES` is `rbac/core/roles.ts`'s own list rather than four literals, so a fifth role added later is
  * covered the moment it exists.
  *
  * The directory reads moved to `./team-viewer.ts` when issue #186 gave this screen a second
@@ -21,10 +21,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { NO_MEMBERSHIP_CAPABILITY } from '../../contracts/team';
-import { conferRole } from '../rbac/conferral';
+import { conferRole } from '../rbac/core/conferral';
 import { decide, type Ownership } from '../rbac/decide';
 import { createMemoryDirectory } from '../rbac/memory-directory';
-import { ROLES, type Role } from '../rbac/roles';
+import { isConferrable, ROLES, type Role } from '../rbac/core/roles';
 import {
   conferrableRolesFor,
   membershipCapabilityForViewer,
@@ -118,8 +118,8 @@ describe('conferrableRolesFor', () => {
     expect(conferrableRolesFor('admin')).toEqual(['admin', 'builder', 'viewer']);
   });
 
-  it('lets an Owner confer every role', () => {
-    expect(conferrableRolesFor('owner')).toEqual([...ROLES]);
+  it('lets an Owner confer every role but guest', () => {
+    expect(conferrableRolesFor('owner')).toEqual(ROLES.filter(isConferrable));
   });
 
   it('offers nothing for a role the table does not recognise', () => {

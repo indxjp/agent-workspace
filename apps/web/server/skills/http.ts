@@ -18,8 +18,9 @@ import { problem } from './handlers';
 import type { SkillRowsAccess } from './tree';
 import { applicationContext } from '../application-context';
 import { jsonBodyResponse, readRouteParam } from '../http/json-transport';
-import type { SkillObjects } from '../storage/store';
-import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
+import type { SkillObjects } from '../storage-and-sharing';
+import type { SkillCatalog } from './ports';
+import { skillCatalogOf } from './store';
 
 export function tooLarge(observed: string): ApiResult {
   return problem(
@@ -137,7 +138,7 @@ export async function withWorkspaceSkillsStore(
   request: Request,
   run: (
     store: SkillObjects,
-    catalog: ResourceCatalogRepository | null,
+    catalog: SkillCatalog | null,
     rows: SkillRowsAccess,
   ) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
@@ -157,7 +158,9 @@ export async function withWorkspaceSkillsStore(
   const runIn = async (workspaceId: string): Promise<ApiResult> =>
     run(
       runtime.store.forWorkspace(workspaceId),
-      runtime.catalog === undefined ? null : await runtime.catalog.forWorkspace(workspaceId),
+      runtime.catalog === undefined
+        ? null
+        : skillCatalogOf(await runtime.catalog.forWorkspace(workspaceId)),
       { storage, workspaceId },
     );
 

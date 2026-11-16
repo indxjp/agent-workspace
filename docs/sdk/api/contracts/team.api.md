@@ -11,14 +11,20 @@ export interface AddMemberInput {
     // (undocumented)
     readonly email: string;
     // (undocumented)
-    readonly role: MembershipRoleName;
+    readonly role: ConferrableRoleName;
 }
 
 // @public
 export interface ChangeMembershipRoleInput {
     // (undocumented)
-    readonly role: MembershipRoleName;
+    readonly role: ConferrableRoleName;
 }
+
+// @public
+export const CONFERRABLE_ROLES: readonly ["owner", "admin", "builder", "viewer"];
+
+// @public
+export type ConferrableRoleName = (typeof CONFERRABLE_ROLES)[number];
 
 // @public (undocumented)
 export type CreatedUserResponse = z.infer<typeof CreatedUserResponseSchema>;
@@ -39,9 +45,10 @@ export const CreatedUserResponseSchema: z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         createdAt: z.ZodISODateTime;
     }, z.core.$strict>;
@@ -54,11 +61,11 @@ export interface CreateUserInput {
     // (undocumented)
     readonly name: string;
     // (undocumented)
-    readonly role: MembershipRoleName;
+    readonly role: ConferrableRoleName;
 }
 
 // @public
-export const MEMBERSHIP_ROLES: readonly ["owner", "admin", "builder", "viewer"];
+export const MEMBERSHIP_ROLES: readonly ["owner", "admin", "builder", "viewer", "guest"];
 
 // @public (undocumented)
 export type MembershipListResponse = z.infer<typeof MembershipListResponseSchema>;
@@ -73,9 +80,10 @@ export const MembershipListResponseSchema: z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         createdAt: z.ZodISODateTime;
     }, z.core.$strict>>;
@@ -93,9 +101,10 @@ export const MembershipResourceSchema: z.ZodObject<{
     name: z.ZodString;
     role: z.ZodEnum<{
         builder: "builder";
-        admin: "admin";
         owner: "owner";
+        admin: "admin";
         viewer: "viewer";
+        guest: "guest";
     }>;
     createdAt: z.ZodISODateTime;
 }, z.core.$strict>;
@@ -113,9 +122,10 @@ export const MembershipResponseSchema: z.ZodObject<{
         name: z.ZodString;
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         createdAt: z.ZodISODateTime;
     }, z.core.$strict>;
@@ -136,9 +146,10 @@ export const MeResponseSchema: z.ZodObject<{
     }>;
     role: z.ZodEnum<{
         builder: "builder";
-        admin: "admin";
         owner: "owner";
+        admin: "admin";
         viewer: "viewer";
+        guest: "guest";
     }>;
     workspaceId: z.ZodString;
     userId: z.ZodNullable<z.ZodString>;
