@@ -12,7 +12,13 @@ import path from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { LOCKFILE, copyExample, lockArguments, parseArguments } from '../apps/app-image.mjs';
+import {
+  CHECKOUT_VERSION,
+  LOCKFILE,
+  copyExample,
+  lockArguments,
+  parseArguments,
+} from '../apps/app-image.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const PREVIEW = readFileSync(path.join(ROOT, '.github/workflows/gcp-cloudrun-preview.yml'), 'utf8');
@@ -126,6 +132,32 @@ describe('the images the live preview builds', () => {
       work: path.resolve('w'),
       build: ['--push', '.'],
     });
+  });
+
+  it("pins every copied example to the checkout's packed version, whatever it was written at", () => {
+    const work = mkdtempSync(path.join(tmpdir(), 'app-image-pins-'));
+    try {
+      const examples = readdirSync(path.join(ROOT, 'examples')).filter((id) =>
+        existsSync(path.join(ROOT, 'examples', id, 'package.json')),
+      );
+      const stale = examples.flatMap((id) => {
+        const copy = path.join(work, id);
+        copyExample(id, copy);
+        const manifest = JSON.parse(readFileSync(path.join(copy, 'package.json'), 'utf8')) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        };
+        return Object.entries({ ...manifest.dependencies, ...manifest.devDependencies })
+          .filter(
+            ([name, spec]) => name.startsWith('@indx-workspace/') && spec !== CHECKOUT_VERSION,
+          )
+          .map(([name, spec]) => `${id}: ${name}@${spec}`);
+      });
+      expect(examples.length).toBeGreaterThan(0);
+      expect(stale).toEqual([]);
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   });
 
   it('gives every example Dockerfile a context that holds what it copies once locked', () => {

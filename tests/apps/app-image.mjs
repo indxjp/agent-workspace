@@ -19,13 +19,14 @@
  * <context>`, and stops the registry. It exits with the build's status.
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, rmSync } from 'node:fs';
+import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { packPackages } from '../app-kit/run.mjs';
 import { spawnPackageServer } from './package-server.mjs';
+import { scopeVersionOf, withScopeVersion } from './regenerate.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const EXAMPLES = path.join(ROOT, 'examples');
@@ -48,6 +49,28 @@ export function copyExample(id, copy) {
     recursive: true,
     filter: (source) => !SKIPPED.test(source),
   });
+  pinCheckoutVersion(copy);
+}
+
+/** The lock-step `@indx-workspace/*` version of this checkout, which the packed tarballs carry. */
+export const CHECKOUT_VERSION = JSON.parse(
+  readFileSync(path.join(ROOT, 'packages/contracts/package.json'), 'utf8'),
+).version;
+
+/**
+ * Moves the copy's `@indx-workspace/*` pins to {@link CHECKOUT_VERSION}. An example keeps the
+ * version it was written at until it is regenerated (`regenerate.mjs`), so after a release bump it
+ * pins a version the loopback registry does not serve, and the lock step would fall through to the
+ * public registry for it.
+ *
+ * @param {string} copy
+ */
+function pinCheckoutVersion(copy) {
+  const file = path.join(copy, 'package.json');
+  const text = readFileSync(file, 'utf8');
+  const pinned = scopeVersionOf(text);
+  if (pinned === undefined) return;
+  writeFileSync(file, withScopeVersion(text, pinned, CHECKOUT_VERSION));
 }
 
 /**
