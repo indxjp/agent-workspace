@@ -162,11 +162,15 @@ def runResource : JValue → Bool := object
    ("engine", nullable (enum Engines.engineIds)),
    ("engineVersion", nullable (fun j => (Codec.string.decode j).isSome)),
    ("usage", runUsage), ("cost", runCost),
+   -- ADR-0162 (#1524): the run's spend ceiling, a decimal string like `cost.amount`, else null.
+   ("spendCeilingUsd", nullable (fun j => (Codec.string.decode j).isSome)),
    ("error", nullable (fun j => (Codec.string.decode j).isSome)),
    ("output", nullable runOutput),
    ("pendingApproval", nullable runApprovalCall),
    ("accountingState", enum accountingStates),
-   ("accountingError", nullable (fun j => (Codec.string.decode j).isSome))]
+   ("accountingError", nullable (fun j => (Codec.string.decode j).isSome)),
+   -- ADR-0104 acceptance (#1516): the lead run a member call started this run from, else null.
+   ("parentRunId", nullable (stringMin 1))]
 
 def noRepeats : List JValue → Bool
   | [] => true

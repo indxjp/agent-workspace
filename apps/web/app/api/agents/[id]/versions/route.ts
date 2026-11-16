@@ -7,7 +7,10 @@ import {
   serveAgentVersionRoute,
 } from '../../../../../server/agent-versions/http';
 import { route } from '../../../../../server/http/route';
-import { installBuiltinSkillsNamedBy } from '../../../../../server/skills/builtin';
+import {
+  builtinSkillsASaveInstalls,
+  installBuiltinSkillsNamedBy,
+} from '../../../../../server/skills/builtin';
 
 /**
  * `GET`/`POST /api/agents/:id/versions` (S1-05, issue #443; ADR-0101). Authorisation, the
@@ -49,8 +52,10 @@ async function servePost(
       const body = await readAgentVersionBody(request);
       if (!body.ok) return body.result;
       const draft = body.value as { body?: unknown; dryRun?: unknown } | null;
-      // A dry run has no side effects, so it does not install the built-in it names.
-      if (draft?.dryRun !== true) await installBuiltinSkillsNamedBy(draft?.body, principal);
+      // A dry run has no side effects, so it does not install the built-in it names; it checks the
+      // body as if the save had installed it (issue #890).
+      const dryRun = draft?.dryRun === true;
+      if (!dryRun) await installBuiltinSkillsNamedBy(draft?.body, principal);
       return createAgentVersion(body.value, agent, principal.principalId, {
         store,
         ceiling,
@@ -58,6 +63,7 @@ async function servePost(
         storageConnections,
         toolHost,
         toolDomainsRefusal,
+        ...(dryRun ? { skillsASaveInstalls: builtinSkillsASaveInstalls(draft.body) } : {}),
       });
     },
   );

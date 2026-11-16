@@ -84,6 +84,7 @@ describe('contracts-runs: real Zod exports', () => {
       'openai',
       'azure-openai',
       'openai-compatible',
+      'vertex',
     ]);
     expect(ACCOUNTING_STATES).toEqual(['pending', 'complete', 'partial', 'failed', 'unavailable']);
     expect([MAX_PROMPT_CHARS, RUN_LIST_DEFAULT_LIMIT, RUN_LIST_MAX_LIMIT]).toEqual([

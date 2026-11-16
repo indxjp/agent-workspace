@@ -3,12 +3,12 @@ import { applicationContext } from '../application-context';
 import { problem, type ApiResult } from '../http/result';
 import type { DiscoverModelsResult } from './discovery';
 import type { WorkspaceModelsStore } from './store';
+import type { VertexDefaults } from './vertex-defaults';
 import type { TestConnectionResult } from './probe';
 // Read-only, per issue #149's card: `decide()` is the one place in the program that answers "may
 // this role do this to this route?" and this file adds no second one. `apps/web/server/rbac/**`
 // is not edited by this task — W9-WS-119 owns that directory this wave.
-import { decide, type Ownership } from '../rbac/decide';
-import type { Role } from '../rbac/roles';
+import { decide, type Ownership, type Role } from '../identity';
 
 export async function readJsonBody(
   request: Request,
@@ -37,6 +37,8 @@ export function toResponse(result: ApiResult): Response {
 
 export type ModelsRequestContext = {
   readonly store: WorkspaceModelsStore;
+  /** The install's `vertex` defaults; empty when the composition root passes none. */
+  readonly vertexDefaults: VertexDefaults;
   readonly actor: {
     readonly workspaceId: string;
     readonly userId: string | null;
@@ -121,6 +123,7 @@ export async function withModelsRuntime(
   }
   return run({
     store: runtime.models.forWorkspace(actor.workspaceId),
+    vertexDefaults: runtime.vertexDefaults ?? {},
     actor,
     probe: (resolved) => runtime.probe(resolved),
     discover: (resolved) => runtime.discover(resolved),

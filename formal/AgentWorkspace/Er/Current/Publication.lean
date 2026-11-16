@@ -151,7 +151,7 @@ def consistent (st : State) : Bool := Er.Core.consistent catalogue st && cluster
 namespace Target
 
 /-- Proposed `shares_agent_has_mode`: an agent share has a mode (the service always writes one). -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2063-publishing-an-agent")]
 def agentHasMode (r : Row) : Bool :=
   r.get "subject_type" != some "agent" || (r.get "mode").isSome

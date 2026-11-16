@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { createElement, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import type {
-  AgentPermissions,
+  AgentPermissionKey,
   AgentResource,
   AgentResourceAssignments,
 } from '../../contracts/agents';
 import type { EngineDescriptor } from '../../contracts/engines';
+import { agentDetailStrings, type AgentDetailStrings } from './agent-detail-messages';
+import { PERMISSION_ORDER } from './new-agent-messages';
+import { ProblemLine } from './problem-line';
 import {
   describeHalf,
   resolveSaveOutcome,
@@ -26,6 +29,7 @@ import {
 import { AgentResourcesEditor, useAgentProjects, useResourceCatalogs } from './resource-editor';
 import { describeInheritance, type ModelSelectionValue } from '../models/catalog';
 import { ModelSelector, ModelUnavailableNotice, useModelCatalog } from '../models/model-selector';
+import type { VersionsLocale } from './versions-messages';
 
 type Loaded = { agent: AgentResource; assignments: AgentResourceAssignments };
 
@@ -44,11 +48,15 @@ export function AgentModelSection({
   catalogState,
   value,
   onChange,
+  locale = 'en',
 }: Readonly<{
   catalogState: ReturnType<typeof useModelCatalog>;
   value: ModelSelectionValue;
   onChange: (value: ModelSelectionValue) => void;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const words = agentDetailStrings(locale);
   const catalogModels = catalogState.kind === 'ready' ? catalogState.catalog.models : [];
   const catalogUnavailable = catalogState.kind === 'ready' ? catalogState.catalog.unavailable : [];
   return (
@@ -57,27 +65,31 @@ export function AgentModelSection({
       aria-labelledby="model-heading"
     >
       <h2 id="model-heading" className="mb-1 text-[15px] font-semibold">
-        Model
+        {words.model}
       </h2>
-      <p className="mb-3 text-[12.5px] text-muted">
-        Overrides the project and workspace default for every run of this agent.
-      </p>
+      <p className="mb-3 text-[12.5px] text-muted">{words.modelHelp}</p>
       {catalogState.kind === 'loading' ? (
-        <p className="text-[13px] text-muted">Loading model connections…</p>
+        <p className="text-[13px] text-muted">{words.loadingModels}</p>
       ) : catalogState.kind === 'failed' ? (
         <p className="text-[13px] text-danger" role="alert">
-          {catalogState.reason}
+          <ProblemLine
+            locale={locale}
+            english={catalogState.reason}
+            lead={words.modelsFailed}
+            detail={catalogState.detail}
+          />
         </p>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <ModelSelector
             id="agent-detail-model"
-            label="Override"
+            label={words.override}
             models={catalogModels}
             value={value}
             onChange={onChange}
-            inheritLabel="No override"
+            inheritLabel={words.noOverride}
             ariaDescribedBy="model-inheritance-line"
+            words={{ connection: words.connection, noModels: words.noModelsAvailable }}
           />
           <button
             type="button"
@@ -85,16 +97,16 @@ export function AgentModelSection({
             disabled={value === null}
             onClick={() => onChange(null)}
           >
-            Clear override
+            {words.clearOverride}
           </button>
         </div>
       )}
       <p id="model-inheritance-line" className="mt-1.5 text-[12px] text-muted">
         {value === null
-          ? 'Agent override → not set — resolves to the project default when run in a project, otherwise the workspace default.'
-          : describeInheritance('Agent override', value, catalogModels)}
+          ? words.overrideNotSet
+          : describeInheritance(words.agentOverride, value, catalogModels, words.staleModel)}
       </p>
-      <ModelUnavailableNotice unavailable={catalogUnavailable} />
+      <ModelUnavailableNotice unavailable={catalogUnavailable} dismissLabel={words.dismiss} />
     </section>
   );
 }
@@ -126,7 +138,15 @@ export type EngineCatalogState =
  * can only be asserted in its pre-fetch state by a static render, so the states that matter are
  * tested against this component with `catalog` supplied by the test.
  */
-export function AgentEngineSection({ catalog }: Readonly<{ catalog: EngineCatalogState }>) {
+export function AgentEngineSection({
+  catalog,
+  locale = 'en',
+}: Readonly<{
+  catalog: EngineCatalogState;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
+}>) {
+  const words = agentDetailStrings(locale);
   const installed = catalog.kind === 'ready' ? catalog.engines.filter((e) => e.installed) : [];
   return (
     <section
@@ -134,41 +154,44 @@ export function AgentEngineSection({ catalog }: Readonly<{ catalog: EngineCatalo
       aria-labelledby="engine-heading"
     >
       <h2 id="engine-heading" className="mb-1 text-[15px] font-semibold">
-        Engine
+        {words.engine}
       </h2>
-      <p className="mb-3 text-[12.5px] text-muted">
-        The harness that runs this agent&rsquo;s loop. Not the model provider.
-      </p>
+      <p className="mb-3 text-[12.5px] text-muted">{words.engineHelp}</p>
       {catalog.kind === 'loading' ? (
-        <p className="text-[13px] text-muted">Loading engines…</p>
+        <p className="text-[13px] text-muted">{words.loadingEngines}</p>
       ) : catalog.kind === 'failed' ? (
         <p className="text-[13px] text-danger" role="alert">
-          {catalog.reason}
+          <ProblemLine
+            locale={locale}
+            english={catalog.reason}
+            lead={words.enginesFailed}
+            detail={catalog.reason}
+          />
         </p>
       ) : installed.length === 0 ? (
         <p className="text-[13px] text-danger" role="alert">
-          This deployment installs no engine, so no agent can run. Ask an administrator which engine
-          adapter the runtime image should carry.
+          {words.noEngine}
         </p>
       ) : (
         <>
           <ul className="text-[13px] text-text">
             {installed.map((engine) => (
               <li key={engine.id}>
-                {engine.displayName} <span className="text-muted">({engine.id})</span>, version{' '}
-                {engine.version}
+                {engine.displayName} <span className="text-muted">({engine.id})</span>,{' '}
+                {words.engineVersion(engine.version)}
                 {engine.capabilities.skills ? null : (
-                  <span className="text-muted"> — skills unavailable on this engine</span>
+                  <span className="text-muted">{words.skillsUnavailable}</span>
                 )}
                 {engine.capabilities.mcp ? null : (
-                  <span className="text-muted"> — connectors unavailable on this engine</span>
+                  <span className="text-muted">{words.connectorsUnavailable}</span>
                 )}
               </li>
             ))}
           </ul>
           <p className="mt-2 text-[12.5px] text-muted">
-            Read-only here: an agent&rsquo;s engine is the discriminant of its policy. Set it with{' '}
-            <code>aw agents update --engine</code>.
+            {words.engineReadOnlyBefore}
+            <code>aw agents update --engine</code>
+            {words.engineReadOnlyAfter}
           </p>
         </>
       )}
@@ -179,6 +202,28 @@ export function AgentEngineSection({ catalog }: Readonly<{ catalog: EngineCatalo
 /** The one line a {@link RequestProblem} shows, whichever arm it is. */
 function problemText(problem: RequestProblem): string {
   return problem.kind === 'api' ? problem.message : problem.reason;
+}
+
+/**
+ * One half of the save report: saved, not attempted, or refused with the server's own reason.
+ * English is `describeHalf`'s sentence, as before; another language marks the reason English.
+ */
+function halfLine(
+  locale: VersionsLocale,
+  words: AgentDetailStrings,
+  label: string,
+  outcome: SaveReport['definition'],
+  problem: RequestProblem | null,
+) {
+  if (locale === 'en') return describeHalf(label, outcome, problem);
+  if (outcome === 'saved') return words.halfSaved(label);
+  if (outcome === 'not-attempted') return words.halfNotAttempted(label);
+  return (
+    <>
+      {words.halfNotSaved(label)}{' '}
+      <span lang="en">{problem === null ? '' : problemText(problem)}</span>
+    </>
+  );
 }
 
 /** `GET /api/engines`, read once per mount. */
@@ -201,7 +246,15 @@ function useEngineCatalog(): EngineCatalogState {
   return state;
 }
 
-export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
+export function AgentDetailScreen({
+  agentId,
+  locale = 'en',
+}: Readonly<{
+  agentId: string;
+  /** The reader's language (UX-15 in #2086); English when absent. */
+  locale?: VersionsLocale;
+}>) {
+  const words = agentDetailStrings(locale);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   // The editable working copy of `loaded.assignments`. Kept separate so a failed `PUT` (verifier
   // attack #3) never overwrites `loaded.assignments` with an optimistic view of what was
@@ -249,7 +302,7 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
       model: value === null ? null : value.model,
     });
   };
-  const changePermission = (key: keyof AgentPermissions, value: boolean) => {
+  const changePermission = (key: AgentPermissionKey, value: boolean) => {
     if (loaded === null) return;
     changeAgent({ permissions: { ...loaded.agent.permissions, [key]: value } });
   };
@@ -309,32 +362,33 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
 
   if (problem !== null && loaded === null) {
     return (
-      <main className="w-full max-w-[760px] px-8 pt-[26px]" role="alert">
-        {problem.kind === 'api' ? problem.message : problem.reason}
+      <main className="w-full max-w-[760px] px-8 pt-[26px]" role="alert" lang={locale}>
+        <ProblemLine
+          locale={locale}
+          english={problemText(problem)}
+          lead={words.loadFailed}
+          detail={problemText(problem)}
+        />
       </main>
     );
   }
   if (loaded === null) {
-    return <main className="px-8 pt-[26px] text-muted">Loading agent…</main>;
+    return (
+      <main className="px-8 pt-[26px] text-muted" lang={locale}>
+        {words.loadingAgent}
+      </main>
+    );
   }
 
-  const permissionLabels: ReadonlyArray<[keyof AgentPermissions, string]> = [
-    ['readFiles', 'Read assigned files and folders'],
-    ['writeFiles', 'Write to read/write assignments'],
-    ['runCommands', 'Run commands in the selected runtime'],
-    ['unrestrictedNetwork', 'Use unrestricted network access'],
-  ];
   return (
-    <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
+    <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]" lang={locale}>
       <div className="mb-5 flex items-center gap-3">
         <div>
           <h1 className="text-[21px]">{loaded.agent.name}</h1>
-          <p className="mt-1 text-[13px] text-muted">
-            Agent configuration and explicit permissions
-          </p>
+          <p className="mt-1 text-[13px] text-muted">{words.subtitle}</p>
         </div>
-        <Link className="ml-auto text-[13px] text-accent" href="/agents">
-          Back to agents
+        <Link className="ml-auto text-[13px] whitespace-nowrap text-accent" href="/agents">
+          {words.backToAgents}
         </Link>
       </div>
       <form
@@ -348,10 +402,10 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
           aria-labelledby="definition-heading"
         >
           <h2 id="definition-heading" className="mb-4 text-[15px] font-semibold">
-            Definition
+            {words.definition}
           </h2>
           <label className="mb-4 block text-[13px] font-semibold" htmlFor="agent-detail-name">
-            Name
+            {words.name}
             <input
               id="agent-detail-name"
               className={`${CONTROL} mt-1`}
@@ -360,7 +414,7 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
             />
           </label>
           <label className="block text-[13px] font-semibold" htmlFor="agent-detail-instructions">
-            Instructions
+            {words.instructions}
             {createElement('textarea', {
               id: 'agent-detail-instructions',
               rows: 8,
@@ -379,26 +433,25 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
               : { connectionId: loaded.agent.modelConnectionId, model: loaded.agent.model }
           }
           onChange={changeModel}
+          locale={locale}
         />
-        <AgentEngineSection catalog={engineCatalogState} />
+        <AgentEngineSection catalog={engineCatalogState} locale={locale} />
         <fieldset className="rounded-(--radius) border border-border bg-surface p-4">
-          <legend className="px-1 text-[15px] font-semibold">Permissions</legend>
-          <p className="mb-3 text-[12px] text-muted">
-            Every capability is explicit. Network and command access default off.
-          </p>
-          {permissionLabels.map(([key, label]) => (
+          <legend className="px-1 text-[15px] font-semibold">{words.permissions}</legend>
+          <p className="mb-3 text-[12px] text-muted">{words.permissionsHelp}</p>
+          {PERMISSION_ORDER.map((key) => (
             <label className="flex items-center gap-2 py-1.5 text-[13px]" key={key}>
               <input
                 type="checkbox"
                 checked={loaded.agent.permissions[key]}
                 onChange={(event) => changePermission(key, event.target.checked)}
               />
-              {label}
+              {words.permissionLabels[key]}
             </label>
           ))}
         </fieldset>
         {assignmentsDraft === null ? (
-          <p className="text-[13px] text-muted">Loading resource assignments…</p>
+          <p className="text-[13px] text-muted">{words.loadingAssignments}</p>
         ) : (
           <AgentResourcesEditor
             agentId={agentId}
@@ -407,6 +460,7 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
             catalogsState={catalogsState}
             projectsState={projectsState}
             onChange={setAssignmentsDraft}
+            locale={locale}
           />
         )}
         {problem === null ? null : (
@@ -414,7 +468,12 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
             role="alert"
             className="rounded border border-danger bg-danger-soft p-3 text-[13px] text-danger"
           >
-            {problem.kind === 'api' ? problem.message : problem.reason}
+            <ProblemLine
+              locale={locale}
+              english={problemText(problem)}
+              lead={words.saveFailed}
+              detail={problemText(problem)}
+            />
           </div>
         )}
         {saveReport === null ? null : (
@@ -426,10 +485,20 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
                 : 'border-danger bg-danger-soft text-danger'
             }`}
           >
-            <p>{describeHalf('Definition', saveReport.definition, saveReport.definitionProblem)}</p>
             <p>
-              {describeHalf(
-                'Resource assignments',
+              {halfLine(
+                locale,
+                words,
+                words.definitionHalf,
+                saveReport.definition,
+                saveReport.definitionProblem,
+              )}
+            </p>
+            <p>
+              {halfLine(
+                locale,
+                words,
+                words.assignmentsHalf,
                 saveReport.assignments,
                 saveReport.assignmentsProblem,
               )}
@@ -442,7 +511,7 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
             disabled={saving || loaded.agent.name.trim() === '' || assignmentsDraft === null}
             type="submit"
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? words.saving : words.save}
           </button>
         </div>
       </form>

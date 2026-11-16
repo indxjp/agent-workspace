@@ -2,13 +2,19 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ModelConnectionConfigField } from '@indx-workspace/contracts/models';
+import {
+  VERTEX_LOCATIONS,
+  isKeylessProvider,
+  type ModelConnectionConfigField,
+} from '@indx-workspace/contracts/models';
 import { useState, type FormEvent } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
 import { CREDENTIAL_INPUT_PROPS } from '../shell/credential-input';
 
 import { createConnection } from './connections-model';
+import { modelsStrings } from './models-messages';
 import {
   PROVIDER_CHOICES,
   editableConfigFields,
@@ -31,13 +37,19 @@ const initialValues = (provider: ProviderId): ProviderFormValues => ({
   baseUrl: '',
   deployment: '',
   apiVersion: '',
+  projectId: '',
+  location: 'global',
 });
 
 export function AddProviderScreen({
   initialProvider = 'anthropic',
+  locale = 'en',
 }: {
   initialProvider?: ProviderId;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
 }) {
+  const strings = modelsStrings(locale);
   const router = useRouter();
   const [values, setValues] = useState<ProviderFormValues>(() => initialValues(initialProvider));
   const [submitting, setSubmitting] = useState(false);
@@ -69,21 +81,20 @@ export function AddProviderScreen({
   }
 
   const fields = editableConfigFields(values.provider);
+  const keyless = isKeylessProvider(values.provider);
   const required = requiredConfigFields(values.provider);
   const optional = (field: ModelConnectionConfigField) =>
-    required.includes(field) ? '' : ' (optional)';
+    required.includes(field) ? '' : strings.optional;
 
   return (
-    <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-[22px]">
-        <h1 className="text-[21px]">Add Provider</h1>
-        <p className="mt-[3px] text-[13px] text-muted">
-          Choose a provider, then answer only the questions that provider actually needs.
-        </p>
+        <h1 className="text-[21px]">{strings.addTitle}</h1>
+        <p className="mt-[3px] text-[13px] text-muted">{strings.addIntro}</p>
       </div>
 
       <form onSubmit={submit}>
-        <h2 className="mb-3 text-[15px] font-semibold">Choose provider</h2>
+        <h2 className="mb-3 text-[15px] font-semibold">{strings.chooseProvider}</h2>
         <div className={CARD}>
           {PROVIDER_CHOICES.map((provider) => (
             <button
@@ -105,26 +116,28 @@ export function AddProviderScreen({
               />
               <span>
                 <span className="block text-[13.5px] font-semibold">
-                  {provider.label}
+                  {strings.providerLabel[provider.id]}
                   {provider.id === 'anthropic' ? (
                     <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent">
-                      Recommended
+                      {strings.recommended}
                     </span>
                   ) : null}
                 </span>
-                <span className="mt-0.5 block text-[12px] text-muted">{provider.description}</span>
+                <span className="mt-0.5 block text-[12px] text-muted">
+                  {strings.providerDescription[provider.id]}
+                </span>
               </span>
             </button>
           ))}
         </div>
 
         <h2 className="mt-6 mb-3 text-[15px] font-semibold">
-          {PROVIDER_CHOICES.find((provider) => provider.id === values.provider)?.label}
+          {strings.providerLabel[values.provider]}
         </h2>
         <div className={`${CARD} space-y-4 p-4`}>
           {fields.includes('baseUrl') ? (
             <label className="block text-[13px] font-semibold">
-              {values.provider === 'azure-openai' ? 'Endpoint' : 'Base URL'}
+              {values.provider === 'azure-openai' ? strings.endpoint : strings.baseUrl}
               {optional('baseUrl')}
               <input
                 className={`${CONTROL} mt-1 font-mono`}
@@ -139,24 +152,57 @@ export function AddProviderScreen({
               />
             </label>
           ) : null}
-          <label className="block text-[13px] font-semibold">
-            API Key
-            <input
-              className={`${CONTROL} mt-1 font-mono`}
-              type="password"
-              {...CREDENTIAL_INPUT_PROPS}
-              value={values.apiKey}
-              onChange={(event) => set('apiKey', event.target.value)}
-            />
-            <span className="mt-1 block text-[11.5px] font-normal text-muted">
-              Stored encrypted. After saving, this secret is write-only and is never displayed
-              again.
-            </span>
-          </label>
+          {keyless ? (
+            <>
+              <label className="block text-[13px] font-semibold">
+                {strings.gcpProjectOptional}
+                <input
+                  className={`${CONTROL} mt-1 font-mono`}
+                  value={values.projectId}
+                  onChange={(event) => set('projectId', event.target.value)}
+                />
+                <span className="mt-1 block text-[11.5px] font-normal text-muted">
+                  {strings.gcpProjectHelp}
+                </span>
+              </label>
+              <label className="block text-[13px] font-semibold">
+                {strings.location}
+                <select
+                  className={`${CONTROL} mt-1`}
+                  value={values.location}
+                  onChange={(event) => set('location', event.target.value)}
+                >
+                  {VERTEX_LOCATIONS.map((location) => (
+                    <option key={location} value={location}>
+                      {strings.locationLabel[location]}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11.5px] font-normal text-muted">
+                  {strings.locationHelp}
+                </span>
+              </label>
+            </>
+          ) : (
+            <label className="block text-[13px] font-semibold">
+              {strings.apiKey}
+              <input
+                className={`${CONTROL} mt-1 font-mono`}
+                type="password"
+                {...CREDENTIAL_INPUT_PROPS}
+                value={values.apiKey}
+                onChange={(event) => set('apiKey', event.target.value)}
+              />
+              <span className="mt-1 block text-[11.5px] font-normal text-muted">
+                {strings.apiKeyHelp}
+              </span>
+            </label>
+          )}
           {fields.includes('deployment') && fields.includes('apiVersion') ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-[13px] font-semibold">
-                Deployment{optional('deployment')}
+                {strings.deployment}
+                {optional('deployment')}
                 <input
                   className={`${CONTROL} mt-1 font-mono`}
                   value={values.deployment}
@@ -164,7 +210,8 @@ export function AddProviderScreen({
                 />
               </label>
               <label className="block text-[13px] font-semibold">
-                API Version{optional('apiVersion')}
+                {strings.apiVersion}
+                {optional('apiVersion')}
                 <input
                   className={`${CONTROL} mt-1 font-mono`}
                   value={values.apiVersion}
@@ -174,20 +221,19 @@ export function AddProviderScreen({
             </div>
           ) : null}
           <label className="block text-[13px] font-semibold">
-            Display name
+            {strings.displayName}
             <input
               className={`${CONTROL} mt-1`}
               value={values.name}
               onChange={(event) => set('name', event.target.value)}
-              placeholder="What people choose in the agent editor"
+              placeholder={strings.displayNamePlaceholder}
             />
           </label>
         </div>
 
         {values.provider === 'azure-openai' || values.provider === 'openai-compatible' ? (
           <div className="mt-4 rounded-(--radius) border border-warn bg-warn-soft p-4 text-[13px] text-warn">
-            Compatibility varies by endpoint. The agent editor shows capability warnings before an
-            agent is saved.
+            {strings.compatibilityWarning}
           </div>
         ) : null}
         {problem === null ? null : (
@@ -201,14 +247,14 @@ export function AddProviderScreen({
 
         <div className="mt-6 flex justify-end gap-2">
           <Link href="/admin/models" className={`${BUTTON} bg-surface no-underline`}>
-            Cancel
+            {strings.cancel}
           </Link>
           <button
             type="submit"
             disabled={!canSubmit}
             className={`${BUTTON} border-accent bg-accent text-white`}
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? strings.saving : strings.save}
           </button>
         </div>
       </form>

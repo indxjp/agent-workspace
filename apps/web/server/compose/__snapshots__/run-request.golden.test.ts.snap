@@ -1,0 +1,401 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildRunRequestFor, the whole RunRequest > a legacy model connection id with no model of its own 1`] = `
+{
+  "request": {
+    "cwd": "/workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444",
+    "engine": "claude-agent-sdk",
+    "env": {
+      "ANTHROPIC_AUTH_TOKEN": "run-token",
+      "ANTHROPIC_BASE_URL": "http://gateway:4000",
+      "AW_SESSION_MIRROR_TOKEN": "run-token",
+      "NODE_USE_ENV_PROXY": "1",
+    },
+    "gateway": {
+      "baseUrl": "http://gateway:4000",
+      "protocol": "anthropic-messages",
+      "token": "run-token",
+    },
+    "policy": {
+      "fileGrantDeny": [],
+      "tools": null,
+    },
+    "portable": {
+      "instructions": "",
+      "limits": {
+        "maxBudgetUsd": null,
+        "maxTurns": null,
+      },
+      "mcpServers": {},
+      "model": null,
+      "name": "General",
+      "permissions": {
+        "readFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false,
+        "writeFiles": false,
+      },
+      "skills": {
+        "mode": "allowlist",
+        "names": [],
+      },
+    },
+    "projectKey": "22222222-2222-4222-8222-222222222222",
+    "prompt": "say pong",
+    "resources": {
+      "files": [],
+      "skills": [],
+    },
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "session": {
+      "kind": "fresh",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+    },
+    "sessionId": "44444444-4444-4444-8444-444444444444",
+  },
+  "tokenClaims": [
+    {
+      "agentId": "<agent-id>",
+      "modelConnectionId": "99999999-9999-4999-8999-999999999999",
+      "runId": "11111111-1111-4111-8111-111111111111",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+    },
+  ],
+}
+`;
+
+exports[`buildRunRequestFor, the whole RunRequest > a plain fresh run 1`] = `
+{
+  "request": {
+    "cwd": "/workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444",
+    "engine": "claude-agent-sdk",
+    "env": {
+      "ANTHROPIC_AUTH_TOKEN": "run-token",
+      "ANTHROPIC_BASE_URL": "http://gateway:4000",
+      "AW_SESSION_MIRROR_TOKEN": "run-token",
+      "NODE_USE_ENV_PROXY": "1",
+    },
+    "gateway": {
+      "baseUrl": "http://gateway:4000",
+      "protocol": "anthropic-messages",
+      "token": "run-token",
+    },
+    "policy": {
+      "fileGrantDeny": [],
+      "tools": null,
+    },
+    "portable": {
+      "instructions": "",
+      "limits": {
+        "maxBudgetUsd": null,
+        "maxTurns": null,
+      },
+      "mcpServers": {},
+      "model": null,
+      "name": "General",
+      "permissions": {
+        "readFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false,
+        "writeFiles": false,
+      },
+      "skills": {
+        "mode": "allowlist",
+        "names": [],
+      },
+    },
+    "projectKey": "22222222-2222-4222-8222-222222222222",
+    "prompt": "say pong",
+    "resources": {
+      "files": [],
+      "skills": [],
+    },
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "session": {
+      "kind": "fresh",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+    },
+    "sessionId": "44444444-4444-4444-8444-444444444444",
+  },
+  "tokenClaims": [
+    {
+      "agentId": "<agent-id>",
+      "modelConnectionId": "77777777-7777-4777-8777-777777777777",
+      "runId": "11111111-1111-4111-8111-111111111111",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+    },
+  ],
+}
+`;
+
+exports[`buildRunRequestFor, the whole RunRequest > a resolved model wins over an override 1`] = `
+{
+  "request": {
+    "cwd": "/workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444",
+    "engine": "claude-agent-sdk",
+    "env": {
+      "ANTHROPIC_AUTH_TOKEN": "run-token",
+      "ANTHROPIC_BASE_URL": "http://gateway:4000",
+      "AW_SESSION_MIRROR_TOKEN": "run-token",
+      "NODE_USE_ENV_PROXY": "1",
+    },
+    "gateway": {
+      "baseUrl": "http://gateway:4000",
+      "protocol": "anthropic-messages",
+      "token": "run-token",
+    },
+    "policy": {
+      "fileGrantDeny": [],
+      "tools": null,
+    },
+    "portable": {
+      "instructions": "",
+      "limits": {
+        "maxBudgetUsd": null,
+        "maxTurns": null,
+      },
+      "mcpServers": {},
+      "model": "claude-sonnet-5-5",
+      "name": "General",
+      "permissions": {
+        "readFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false,
+        "writeFiles": false,
+      },
+      "skills": {
+        "mode": "allowlist",
+        "names": [],
+      },
+    },
+    "projectKey": "22222222-2222-4222-8222-222222222222",
+    "prompt": "say pong",
+    "resources": {
+      "files": [],
+      "skills": [],
+    },
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "session": {
+      "kind": "fresh",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+    },
+    "sessionId": "44444444-4444-4444-8444-444444444444",
+  },
+  "tokenClaims": [
+    {
+      "agentId": "<agent-id>",
+      "modelConnectionId": "55555555-5555-4555-8555-555555555555",
+      "runId": "11111111-1111-4111-8111-111111111111",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+    },
+  ],
+}
+`;
+
+exports[`buildRunRequestFor, the whole RunRequest > a resumed run with a model override, agent secrets and an output schema 1`] = `
+{
+  "request": {
+    "cwd": "/workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444",
+    "engine": "claude-agent-sdk",
+    "env": {
+      "ANTHROPIC_AUTH_TOKEN": "run-token",
+      "ANTHROPIC_BASE_URL": "http://gateway:4000",
+      "AW_SESSION_MIRROR_TOKEN": "run-token",
+      "CRM_TOKEN": "secret",
+      "NODE_USE_ENV_PROXY": "1",
+    },
+    "gateway": {
+      "baseUrl": "http://gateway:4000",
+      "protocol": "anthropic-messages",
+      "token": "run-token",
+    },
+    "outputSchema": {
+      "type": "object",
+    },
+    "policy": {
+      "fileGrantDeny": [],
+      "tools": null,
+    },
+    "portable": {
+      "instructions": "",
+      "limits": {
+        "maxBudgetUsd": null,
+        "maxTurns": null,
+      },
+      "mcpServers": {},
+      "model": "claude-haiku-5-5",
+      "name": "General",
+      "permissions": {
+        "readFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false,
+        "writeFiles": false,
+      },
+      "skills": {
+        "mode": "allowlist",
+        "names": [],
+      },
+    },
+    "projectKey": "22222222-2222-4222-8222-222222222222",
+    "prompt": "say pong",
+    "resources": {
+      "files": [],
+      "skills": [],
+    },
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "session": {
+      "kind": "resume",
+      "resume": "44444444-4444-4444-8444-444444444444",
+    },
+    "sessionId": "44444444-4444-4444-8444-444444444444",
+  },
+  "tokenClaims": [
+    {
+      "agentId": "<agent-id>",
+      "modelConnectionId": "88888888-8888-4888-8888-888888888888",
+      "runId": "11111111-1111-4111-8111-111111111111",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+    },
+  ],
+}
+`;
+
+exports[`buildRunRequestFor, the whole RunRequest > an all-permissions agent with attachments: read grants, and no shell 1`] = `
+{
+  "request": {
+    "cwd": "/workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444",
+    "engine": "claude-agent-sdk",
+    "env": {
+      "ANTHROPIC_AUTH_TOKEN": "run-token",
+      "ANTHROPIC_BASE_URL": "http://gateway:4000",
+      "AW_SESSION_MIRROR_TOKEN": "run-token",
+      "NODE_USE_ENV_PROXY": "1",
+    },
+    "gateway": {
+      "baseUrl": "http://gateway:4000",
+      "protocol": "anthropic-messages",
+      "token": "run-token",
+    },
+    "policy": {
+      "fileGrantDeny": [
+        "Edit(//workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444/.attachments/a/report.pdf)",
+        "Edit(//workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444/.attachments/a/folder/**)",
+        "Bash",
+        "BashOutput",
+        "KillShell",
+      ],
+      "tools": null,
+    },
+    "portable": {
+      "instructions": "",
+      "limits": {
+        "maxBudgetUsd": null,
+        "maxTurns": null,
+      },
+      "mcpServers": {},
+      "model": null,
+      "name": "General",
+      "permissions": {
+        "readFiles": true,
+        "runCommands": false,
+        "unrestrictedNetwork": true,
+        "writeFiles": true,
+      },
+      "skills": {
+        "mode": "allowlist",
+        "names": [],
+      },
+    },
+    "projectKey": "22222222-2222-4222-8222-222222222222",
+    "prompt": "say pong",
+    "resources": {
+      "files": [],
+      "skills": [],
+    },
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "session": {
+      "kind": "fresh",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+    },
+    "sessionId": "44444444-4444-4444-8444-444444444444",
+  },
+  "tokenClaims": [
+    {
+      "agentId": "<agent-id>",
+      "modelConnectionId": "77777777-7777-4777-8777-777777777777",
+      "runId": "11111111-1111-4111-8111-111111111111",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+    },
+  ],
+}
+`;
+
+exports[`buildRunRequestFor, the whole RunRequest > an override wins over the legacy id and the agent 1`] = `
+{
+  "request": {
+    "cwd": "/workspace/22222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444",
+    "engine": "claude-agent-sdk",
+    "env": {
+      "ANTHROPIC_AUTH_TOKEN": "run-token",
+      "ANTHROPIC_BASE_URL": "http://gateway:4000",
+      "AW_SESSION_MIRROR_TOKEN": "run-token",
+      "NODE_USE_ENV_PROXY": "1",
+    },
+    "gateway": {
+      "baseUrl": "http://gateway:4000",
+      "protocol": "anthropic-messages",
+      "token": "run-token",
+    },
+    "policy": {
+      "fileGrantDeny": [],
+      "tools": null,
+    },
+    "portable": {
+      "instructions": "",
+      "limits": {
+        "maxBudgetUsd": null,
+        "maxTurns": null,
+      },
+      "mcpServers": {},
+      "model": "claude-haiku-5-5",
+      "name": "General",
+      "permissions": {
+        "readFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false,
+        "writeFiles": false,
+      },
+      "skills": {
+        "mode": "allowlist",
+        "names": [],
+      },
+    },
+    "projectKey": "22222222-2222-4222-8222-222222222222",
+    "prompt": "say pong",
+    "resources": {
+      "files": [],
+      "skills": [],
+    },
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "session": {
+      "kind": "fresh",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+    },
+    "sessionId": "44444444-4444-4444-8444-444444444444",
+  },
+  "tokenClaims": [
+    {
+      "agentId": "<agent-id>",
+      "modelConnectionId": "88888888-8888-4888-8888-888888888888",
+      "runId": "11111111-1111-4111-8111-111111111111",
+      "sessionId": "44444444-4444-4444-8444-444444444444",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+    },
+  ],
+}
+`;

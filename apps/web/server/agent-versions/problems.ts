@@ -222,17 +222,23 @@ export function agentNameConflict(name: string): ApiResult {
   );
 }
 
-/**
- * `409 agent_archived` for a version save or a pointer move on an archived agent, or `null` for an
- * active one. The code and status are the run refusal's (issue #1851): an archived agent is frozen
- * whatever the door, so each write path asks this first, before it reads or writes anything.
- */
-export function agentArchivedRefusal(agent: AgentRecord): ApiResult | null {
-  if (agent.archivedAt === undefined) return null;
+/** `409 agent_archived`: the refusal both the pre-lock check and the locked transaction answer. */
+export function agentArchived(): ApiResult {
   return versionProblem(
     'agent_archived',
     'This agent is archived; restore it before moving a pointer or saving a version.',
   );
+}
+
+/**
+ * `409 agent_archived` for a version save or a pointer move on an archived agent, or `null` for an
+ * active one. The code and status are the run refusal's (issue #1851): an archived agent is frozen
+ * whatever the door, so each write path asks this first, before it reads or writes anything. A move
+ * is asked again under the pointer lock (`applyAndPoint` answers `agent-archived`), because an
+ * archive can commit between this read and that lock.
+ */
+export function agentArchivedRefusal(agent: AgentRecord): ApiResult | null {
+  return agent.archivedAt === undefined ? null : agentArchived();
 }
 
 /** The agent named as the creator is gone, so the lineage foreign key refused the new agent. */

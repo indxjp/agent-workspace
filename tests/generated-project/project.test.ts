@@ -81,8 +81,11 @@ describe('the generated-project E2E installs this change’s packages', () => {
     expect(runtime?.reference).toBe('localhost:5000/agent-workspace/runtime-claude-agent-sdk:e2e');
     expect(runtime?.buildArgs['ENGINE']).toBe('claude-agent-sdk');
     expect(builds.find((build) => build.field === 'web')?.target).toBe('web');
-    // Each override is one the generator reads (packages/cli/src/deployment.ts).
-    const deployment = readFileSync(path.join(ROOT, 'packages/cli/src/deployment.ts'), 'utf8');
+    // Each override is one the generator reads (packages/cli/src/deployment-images.ts).
+    const deployment = readFileSync(
+      path.join(ROOT, 'packages/cli/src/deployment-images.ts'),
+      'utf8',
+    );
     expect(deployment).toContain('environment[`AW_${name.toUpperCase()}_IMAGE`]');
   });
 

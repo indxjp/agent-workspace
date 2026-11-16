@@ -15,15 +15,14 @@ import { AGENT_VERSION_PROBLEM_CODES } from '@indx-workspace/contracts/agent-ver
 
 import type { AgentRecord } from '../agents/contract';
 import { isUuid } from '../agents/contract';
-import { agentNotFound, refuseBuiltinWrite } from '../agents/handlers';
+import { agentNotFound, refuseBuiltinWriteFor } from '../agents/handlers';
 import { problem, type ApiResult } from '../http/result';
 import { readAgentIdParam } from '../agents/http';
 import { apiResultResponse } from '../http/json-transport';
 import type { AgentPolicy, BuiltinAgentOperation } from '../../contracts/agents';
 import { connectorNamesOf, storedConnectorServers } from '../agents/policy';
 import { readBoundedJson } from '../http/json-transport';
-import type { OwnershipResolver } from '../rbac/http';
-import type { Principal } from '../rbac/principal';
+import type { OwnershipResolver, Principal } from '../identity';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
 import { requireResourceAccess } from '../resources/authorise';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
@@ -88,7 +87,7 @@ function loadingOwnership(
     }
     loaded.agent = await agents.agents.forWorkspace(principal.workspaceId).get(id);
     if (loaded.agent === null) return { kind: 'refuse', result: agentNotFound() };
-    const readOnly = refuseBuiltinWrite(loaded.agent, operation);
+    const readOnly = refuseBuiltinWriteFor(principal, loaded.agent, operation);
     if (readOnly !== null) return { kind: 'refuse', result: readOnly };
     const ownership =
       principal.ownerPrincipalId === loaded.agent.ownerPrincipalId ? 'own' : 'other';

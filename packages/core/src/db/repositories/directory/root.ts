@@ -38,7 +38,7 @@ class InvitationIdentityConflict extends Error {}
 
 export function createDatabaseDirectoryRootQueries(
   db: Database,
-): Omit<DatabaseDirectoryRoot, 'forWorkspace'> {
+): Omit<DatabaseDirectoryRoot, 'forWorkspace' | 'bindGuestWorkspace'> {
   return {
     async authenticateApiKeyHash(keyHash, now) {
       return db.transaction(async (tx) => {

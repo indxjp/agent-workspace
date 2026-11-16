@@ -30,12 +30,15 @@ import {
   withCatalogService,
 } from '../../files/http';
 import { applicationContext } from '../../application-context';
-import { mayAccessSession } from '../../rbac/owner-principal';
-import type { Principal } from '../../rbac/principal';
+import { mayAccessSession, type Principal } from '../../identity';
 import { createProjectRunGate } from '../../projects/archive-gate';
 import { requireResourceAccess } from '../../resources/authorise';
 import type { StorageContext, StorageService } from '../../storage/service';
 import { admitSurfaceVisitorWrite } from './limits';
+import { Bytes } from '../../newtypes';
+
+/** The most one attachment may be, as a size. */
+const ATTACHMENT_LIMIT = Bytes.parse(SURFACE_ATTACHMENT_MAX_BYTES);
 
 const notFound = (): FileResult => problem(404, 'file_not_found', 'No file has that id.');
 
@@ -96,7 +99,7 @@ async function saveAttachment(
   if (used.count >= SURFACE_ATTACHMENTS_MAX_FILES) {
     return quotaExceeded(`${String(SURFACE_ATTACHMENTS_MAX_FILES)} attachments`);
   }
-  const bounded = boundedBodyStream(request, SURFACE_ATTACHMENT_MAX_BYTES);
+  const bounded = boundedBodyStream(request, ATTACHMENT_LIMIT);
   if (!bounded.ok) return bounded.result;
   const remaining = Math.max(0, SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES - used.bytes);
   const saved = await storage.save(ctx, {
@@ -118,7 +121,7 @@ async function saveAttachment(
     case 'too_large':
       return remaining < SURFACE_ATTACHMENT_MAX_BYTES
         ? quotaExceeded(`${String(SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES)} bytes of attachments`)
-        : tooLarge('sent more than that and was not read to the end', SURFACE_ATTACHMENT_MAX_BYTES);
+        : tooLarge('sent more than that and was not read to the end', ATTACHMENT_LIMIT);
     case 'invalid_path':
       return problem(400, 'invalid_attachment_name', 'That file name cannot be stored.');
     // The path carries a fresh UUID, so these mean a collision, not a competing upload.

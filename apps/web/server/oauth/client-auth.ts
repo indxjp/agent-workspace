@@ -7,6 +7,7 @@
 import { isUuid } from '@indx-workspace/contracts';
 
 import { applicationContext } from '../application-context';
+import { systemClock } from '../clock';
 import { hashesEqual } from '../rbac/api-key';
 import {
   oauthError,
@@ -43,8 +44,14 @@ const invalidClient = (): ClientAuthentication => ({
 
 const refuse = (response: Response): ClientAuthentication => ({ ok: false, response });
 
-/** `client_secret_basic` (RFC 6749 §2.3.1): form-urlencoded id and secret, joined by `:` and base64'd. */
-function readBasic(header: string | null): { id: string; secret: string } | null | undefined {
+/**
+ * `client_secret_basic` (RFC 6749 §2.3.1): form-urlencoded id and secret, joined by `:` and
+ * base64'd. `undefined` when there is no Basic header, `null` when there is a malformed one. Also
+ * read by the ID-token exchange (ADR-0161 D3), which takes this method only.
+ */
+export function readBasic(
+  header: string | null,
+): { id: string; secret: string } | null | undefined {
   if (header === null || !/^Basic[ ]/iu.test(header)) return undefined;
   try {
     const decoded = atob(header.slice(6).trim());
@@ -61,7 +68,7 @@ export async function authenticateClient(request: Request): Promise<ClientAuthen
   if (publicOrigin() === null) return refuse(oauthNotConfigured());
   const runtime = applicationContext()?.oauth ?? null;
   if (runtime === null) return refuse(oauthUnavailable());
-  const nowMs = Date.now();
+  const nowMs = systemClock.now().getTime();
   const address = admitOAuthAddress(request.headers, nowMs);
   if (!address.admitted) return refuse(oauthRateLimited(address.retryAfterSeconds));
 
@@ -89,16 +96,42 @@ export async function authenticateClient(request: Request): Promise<ClientAuthen
   if (basic !== undefined && bodyId !== null && bodyId !== basic.id) {
     return refuse(oauthError(400, 'invalid_request', 'client_id does not match the credentials.'));
   }
-  const found = isUuid(clientId) ? await runtime.findClient(clientId) : null;
-  if (found === null) return failed();
-  const presented = basic?.secret ?? bodySecret;
-  if (found.clientSecretHash === null) {
-    if (presented !== null) return failed();
-  } else {
-    const digest = await clientSecretDigest(presented);
-    if (digest === null || !hashesEqual(digest, found.clientSecretHash)) return failed();
-  }
-  const counted = admitOAuthClient(found.id, nowMs);
+  const checked = await checkClientCredentials(
+    (id) => runtime.findClient(id),
+    clientId,
+    basic?.secret ?? bodySecret,
+  );
+  if (!checked.ok) return failed();
+  const counted = admitOAuthClient(checked.client.id, nowMs);
   if (!counted.admitted) return refuse(oauthRateLimited(counted.retryAfterSeconds));
-  return { ok: true, client: found, form, runtime };
+  return { ok: true, client: checked.client, form, runtime };
+}
+
+export type ClientCheck =
+  | { readonly ok: true; readonly client: OAuthClient }
+  | { readonly ok: false; readonly found: OAuthClient | null };
+
+/**
+ * The one OAuth client check, used by `/oauth/token`, `/oauth/revoke` and the ID-token exchange.
+ * The `client_id` must be a UUID naming a client. A confidential client must present the secret
+ * whose digest equals its stored hash (constant-time compare); a public client, with no stored
+ * hash, must present no secret at all. `found` is the client that was looked up, kept on a
+ * refusal so the caller can log which client failed. Rate limits and the failure counter stay
+ * with the caller, since each endpoint counts differently.
+ */
+export async function checkClientCredentials(
+  findClient: (id: string) => Promise<OAuthClient | null>,
+  clientId: string,
+  presentedSecret: string | null,
+): Promise<ClientCheck> {
+  const found = isUuid(clientId) ? await findClient(clientId) : null;
+  if (found === null) return { ok: false, found: null };
+  if (found.clientSecretHash === null) {
+    return presentedSecret === null ? { ok: true, client: found } : { ok: false, found };
+  }
+  const digest = await clientSecretDigest(presentedSecret);
+  if (digest === null || !hashesEqual(digest, found.clientSecretHash)) {
+    return { ok: false, found };
+  }
+  return { ok: true, client: found };
 }

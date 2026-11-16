@@ -1,0 +1,9 @@
+'use client';
+import {{name}} from '@/resources/{{name}}';
+import { ResourceDetailLoader } from '@indx-workspace/app/react';
+import { use } from 'react';
+
+export default function {{component}}Page(props: { readonly params: Promise<{ id: string }> }) {
+  const { id } = use(props.params);
+  return <ResourceDetailLoader resource={{{name}}} id={id} editHref={`/{{plural}}/${id}/edit`} />;
+}

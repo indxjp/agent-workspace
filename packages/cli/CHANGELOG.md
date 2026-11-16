@@ -3,6 +3,68 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts`,
 `sdk`, `aw` and `create`, with the same version (ADR-0082).
 
+## 0.6.13 — unreleased
+
+### Added
+
+- `npm create @indx-workspace <dir> -- --template chat|wiki|crm|desk` writes a preset over the
+  portal app. A preset starts the agent from the `blank` theme unless `--theme` (or `--answers`)
+  names another, and the app is named after `<dir>`, never the template id.
+- A single-vm `aw deploy production` runs each app listed in `environments.production.apps`
+  beside the platform. It writes `compose.apps.yaml` (`0600`) next to the state's `compose.yaml`
+  and sets `COMPOSE_FILE=compose.yaml:compose.apps.yaml` in `.env`. For each app a one-shot
+  `app-<name>-role` service creates the database role and schema `app_<name>`, which the role
+  owns; the role holds no privilege on the database, so it can create no other schema. The
+  `app-<name>` service then runs the digest-pinned image with a `DATABASE_URL` for that role, never
+  the platform's, and publishes it on `127.0.0.1:<3100 + i>`. The app's database
+  password and identity secret are generated into `.env` once. When the last app is removed, the
+  overlay is emptied and `COMPOSE_FILE` dropped, and the container is left running. The printed
+  next steps name each app's Caddy site, `.env` lines and connector.
+- The Compose deploy step runs with `.env`'s `COMPOSE_FILE`, or none, whatever the shell sets, as
+  it already did for `COMPOSE_PROJECT_NAME`.
+- A single-vm project refuses an app name longer than 59 characters at
+  `environments.production.apps.<name>`, because its role `app_<name>` must fit PostgreSQL's
+  63-byte identifier.
+- The `gcp-cloudrun` and `vercel` deploy targets refuse a non-empty `environments.production.apps`
+  at that path: only `single-vm` and `kubernetes` deploy portal apps.
+- `npm create @indx-workspace <dir> -- --template portal` writes the project and a portal app over
+  it: dashboard, chat, files and runs pages that call Agent Workspace as the signed-in person, a
+  sign-in notice for nobody signed in, `app/theme.ts`, `app/nav.ts` and `en`/`ja` strings, the
+  app's published-packages-only CI, and `aw-generated.json` recording it all. `package.json` gains
+  the app kit's exact pins, the `@indx-workspace/*` ones at the version of `create`. An unknown
+  template is refused naming the list, and `--template` with `--cloud` is refused.
+- `aw deploy production` with `target: kubernetes` writes `environments.production.apps` into the
+  Helm overlay as `apps: [{ name, image, host, schema }]`, `schema` being `app_<name>`, and prints
+  `create Secret agent-workspace-app-<name>` for each app. It refuses an app name longer than 43
+  characters, which would not fit the app's Service name.
+- The Helm chart takes `apps`: per app a Deployment and a Service `agent-workspace-app-<name>`
+  (probes on `/api/health`, no ServiceAccount token, its own operator-created Secret and none of
+  the platform's), an Ingress rule and TLS host, and the NetworkPolicies `apps-dns`,
+  `apps-database`, `apps-egress-https` and `apps-from-ingress`. The default render is unchanged.
+- `aw deploy` writes the project file's `features:` list into the deployment's `.env` as `AW_DEPLOYMENT_FEATURES=<ids>` (ADR-0160 D5), and removes the line when the file has none. The Compose template forwards it to web; the Helm chart takes it as `deploymentFeatures` and the gcp-cloudrun module as `deployment_features`, each rendering nothing when empty. A project without `features:` deploys byte-identically to before. The generated-project E2E that checks `404 feature_disabled` runs only in CI's `generated-project-e2e` job, which needs Docker.
+
+### Changed
+
+- `npm create @indx-workspace <dir> -- --template portal` records every file it writes in
+  `aw-generated.json`: the project's own (`package.json`, `agent-workspace.yaml`, the starter
+  agent and the rest) as `project:<name>`, beside the app's `app:<name>`. Without `--template`
+  the output is unchanged.
+- `agent-workspace deploy` masks the value of an old storage variable left in `.env` (`AW_FILE_STORAGE_ROOT`, `AW_SKILL_STORAGE_ROOT`, `AW_SESSION_TRANSCRIPT_ROOT`, `OBJECT_STORAGE_BACKEND`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_FORCE_PATH_STYLE`) like any other key it does not generate: nothing reads or writes them since the release after 0.6.10, so they are no longer public configuration. Remove them from `.env`; `AW_STORAGE_URL` alone says where data is kept.
+
+### Removed
+
+- `agent-workspace doctor` no longer has a `storage-layout` check. It counted the objects left in the old per-area storage naming, which only the release after 0.6.11 still moves; that release is a required upgrade stop, and the server no longer reads the old naming.
+
+### Fixed
+
+- Resolving an image digest (`aw create`, `aw deploy`, `agent-workspace render`) now tries again
+  when the registry or the network fails for a moment (no route to host, a timeout, a reset
+  connection, a TLS handshake, a DNS miss, a 5xx or 429, or docker failing without a message):
+  up to 4 tries, waiting 2, 4 and 8 seconds. A 401, 403 or "not found" is still refused at once
+  with the same message; when every try fails, the message is unchanged apart from
+  "(after 4 attempts)".
+- Keep test-support modules out of Vercel deployment uploads.
+
 ## 0.6.12 — unreleased
 
 ### Added

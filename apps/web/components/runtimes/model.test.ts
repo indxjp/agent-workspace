@@ -14,6 +14,7 @@ import {
   testRuntime,
   testSelectedRuntime,
 } from './model';
+import { runtimesStrings } from './runtimes-messages';
 
 const spec = readFileSync(path.resolve('docs/spec.md'), 'utf8');
 const mockup = readFileSync(path.resolve('ui/runtimes.html'), 'utf8');
@@ -33,6 +34,26 @@ describe('runtime picker transcription', () => {
       )
       .filter((label): label is string => label !== undefined && label !== 'Managed sandbox');
     expect(RUNTIME_OPTIONS.map((option) => option.label)).toEqual(parsed);
+    // The words an English reader is shown are these, not a copy that could drift (UX-15).
+    const english = runtimesStrings('en');
+    expect(RUNTIME_OPTIONS.map((option) => english.option[option.id].label)).toEqual(parsed);
+    // A Japanese reader is shown a translation of every row, never the spec's English for it,
+    // except where the label is a product name.
+    const japanese = runtimesStrings('ja');
+    for (const option of RUNTIME_OPTIONS) {
+      const words = japanese.option[option.id];
+      expect(words.description, option.id).not.toBe(option.description);
+      expect(words.side === undefined, option.id).toBe(option.side === undefined);
+      expect(words.defaultReason === undefined, option.id).toBe(option.defaultReason === undefined);
+      if (words.defaultReason !== undefined)
+        expect(words.defaultReason, option.id).not.toBe(option.defaultReason);
+    }
+  });
+
+  it('describes every runtime without pointing the reader at internal design records', () => {
+    for (const option of RUNTIME_OPTIONS) {
+      expect(`${option.description} ${option.defaultReason ?? ''}`).not.toMatch(/ADR|docs\//u);
+    }
   });
 
   it('uses the two disabled reasons from the mockup, not shortened spec variants', () => {
@@ -55,6 +76,15 @@ describe('runtime picker transcription', () => {
       ...SWITCH_COMPARISON.blockers,
     ]).toEqual(lines.map((line) => line.trim()));
     expect(SWITCH_COMPARISON.warnings[1]).toContain('"Restricted"');
+    // English readers are shown exactly the transcription; Japanese readers a line-for-line
+    // translation that keeps the two markers (UX-15).
+    expect(runtimesStrings('en').switchComparison).toEqual(SWITCH_COMPARISON);
+    const japanese = runtimesStrings('ja').switchComparison;
+    expect(japanese.warnings).toHaveLength(SWITCH_COMPARISON.warnings.length);
+    expect(japanese.blockers).toHaveLength(SWITCH_COMPARISON.blockers.length);
+    expect(japanese.warnings[0]).toMatch(/^⚠ /u);
+    expect(japanese.blockers[0]).toMatch(/^✕ /u);
+    expect(japanese.heading).toContain('Docker → Azure Container Apps');
   });
 });
 

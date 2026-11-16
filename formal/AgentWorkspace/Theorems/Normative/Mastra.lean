@@ -105,16 +105,14 @@ theorem semantic_recall_and_working_memory_are_off {r : Request} {c : Compiled}
 /-! ## Every unsupported requirement is refused by name -/
 
 /-- The checks every refusal theorem below assumes have passed. -/
-private theorem compile_reaches_budget {r : Request} {grants : List Grant} {b t w : String}
+private theorem compile_reaches_connectors {r : Request} {grants : List Grant} {b t w : String}
     {p : Behaviour.Engines.OpenAiAgents.Protocol}
     (hpol : r.policyReadable = true)
     (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
     (hgw : r.gateway = some (b, t, w)) (hp : Behaviour.Engines.OpenAiAgents.Protocol.ofWire? w = some p)
     (he : r.environmentClean = true) (hd : databaseEnvClean r.envNames = true) :
     compile r =
-      if r.budgetCap && !priced (modelOf r p) then
-        .refused (.capabilityUnsupported "maxBudget")
-      else match compileConnectors r.connectors with
+      match compileConnectors r.connectors with
       | .error e => .refused e
       | .ok names =>
         match threadOf r with
@@ -134,27 +132,19 @@ theorem a_fork_is_refused_by_name {r : Request} {grants : List Grant} {b t w : S
     (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
     (hgw : r.gateway = some (b, t, w)) (hp : Behaviour.Engines.OpenAiAgents.Protocol.ofWire? w = some p)
     (he : r.environmentClean = true) (hd : databaseEnvClean r.envNames = true)
-    (hb : r.budgetCap = false) (hn : compileConnectors r.connectors = .ok names)
+    (hn : compileConnectors r.connectors = .ok names)
     (hf : r.session = .fork parent) :
     compile r = .refused (.capabilityUnsupported "fork") := by
-  rw [compile_reaches_budget hpol hg hgw hp he hd]
-  simp [hb, hn, threadOf, hf]
+  rw [compile_reaches_connectors hpol hg hgw hp he hd]
+  simp [hn, threadOf, hf]
 
-/-- A per-run budget cap the provisional price table cannot price is refused naming `maxBudget`
-(ADR-0074 D7, shared by ADR-0084). -/
+/-- A per-run budget cap never changes the compile: it is neither refused, whatever the model,
+nor carried into the configuration, because the gateway enforces it from the deployment's
+catalogue (ADR-0162, #342). The adapter-side provisional cap (ADR-0074 D7) is retired. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#compile")
-  (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")
-  (ts := "packages/engine/src/prices.ts#provisionalPriceFor")]
-theorem an_unpriced_budget_cap_is_refused_by_name {r : Request} {grants : List Grant}
-    {b t w : String} {p : Behaviour.Engines.OpenAiAgents.Protocol}
-    (hpol : r.policyReadable = true)
-    (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
-    (hgw : r.gateway = some (b, t, w)) (hp : Behaviour.Engines.OpenAiAgents.Protocol.ofWire? w = some p)
-    (he : r.environmentClean = true) (hd : databaseEnvClean r.envNames = true)
-    (hb : r.budgetCap = true) (hpr : priced (modelOf r p) = false) :
-    compile r = .refused (.capabilityUnsupported "maxBudget") := by
-  rw [compile_reaches_budget hpol hg hgw hp he hd]
-  simp [hb, hpr]
+  (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
+theorem a_budget_cap_never_changes_the_compile (r : Request) (cap : Bool) :
+    compile { r with budgetCap := cap } = compile r := rfl
 
 /-- A connection served over a dialect the adapter does not speak is refused naming
 `wireProtocols`. -/
@@ -179,9 +169,9 @@ theorem an_approval_is_refused_by_name (c : Connector) (rest : List Connector)
     compileConnectors (c :: rest) = .error (.capabilityUnsupported "approvals") := by
   simp [compileConnectors, hr, ha]
 
-/-- Witness for the refusal theorems: a fork, an unpriced cap, an unknown dialect, a missing
-gateway, a database variable and an approval each refuse by name, and every protocol the adapter
-advertises compiles. -/
+/-- Witness for the refusal theorems: a fork, an unknown dialect, a missing gateway, a database
+variable and an approval each refuse by name, a cap on an unlisted model compiles as without one,
+and every protocol the adapter advertises compiles. -/
 example :
     let base : Request :=
       { cwd := "/workspace/", sessionId := "s1", projectKey := "tenant", policyReadable := true,
@@ -194,7 +184,7 @@ example :
     compile { base with session := .fork "parent" } =
         .refused (.capabilityUnsupported "fork") ∧
       compile { base with budgetCap := true, model := some "unpriced" } =
-        .refused (.capabilityUnsupported "maxBudget") ∧
+        compile { base with model := some "unpriced" } ∧
       compile { base with gateway := some ("http://gw", "tok", "gemini") } =
         .refused (.capabilityUnsupported "wireProtocols") ∧
       compile { base with gateway := none } = .refused (.credentialRefused "gateway") ∧

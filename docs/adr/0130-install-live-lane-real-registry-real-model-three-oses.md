@@ -79,3 +79,16 @@ night. The quotation use case's ERP is unreachable from a runner and cannot be r
 `aw eval` may honestly fail; contract-review's playbook upload is not done. A run against a release
 older than this ADR tests its packages with newer docs and harness, which can fail for version
 lag rather than a defect in the harness.
+
+## Amendment — the release commit of a tag in the public repository (issue #890, 2026-11-16)
+
+Since ADR-0082's amendment of 2026-10-26 the `packages-v<version>` tag is pushed to the public
+repository only, on a snapshot commit, so `resolve` never found it here: from 0.6.11 on, every run
+tested the published packages with the docs, gallery and harness of `main`, and failed every claim
+about what `main` had merged since the release (`--template portal`, the webhook exports, the
+dry-run fix for built-in skills). `resolve` now takes the tag from this repository when it is here,
+and otherwise fetches it from the public repository and checks out the commit its snapshot names
+(`Source-Commit: <sha>`, written by `oss-export.yml`). A tag in neither, a snapshot without the
+trailer, a named commit this repository lacks, or a commit without the harness still falls back to
+the workflow's own commit with a `::notice`. `tests/docs-claims/install-live-resolve.test.ts` runs
+that part of the job against local repositories.

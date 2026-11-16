@@ -1,0 +1,11 @@
+// shortcut: a static home page that says the same thing in English and Japanese; replace it
+// when `aw generate page` writes the app's resource pages.
+export default function HomePage() {
+  return (
+    <main>
+      <h1>{{appName}}</h1>
+      <p lang="en">This app's records and agent tools are served under /api.</p>
+      <p lang="ja">このアプリのレコードとエージェント用ツールは /api で提供されます。</p>
+    </main>
+  );
+}

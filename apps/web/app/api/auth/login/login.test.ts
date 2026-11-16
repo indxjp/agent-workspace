@@ -10,7 +10,9 @@ vi.mock('openid-client', async (importOriginal) => {
   return {
     ...original,
     discovery: (...args: Parameters<typeof original.discovery>) =>
-      provider.reachable ? Promise.resolve({}) : original.discovery(...args),
+      provider.reachable
+        ? Promise.resolve({ serverMetadata: () => ({}) })
+        : original.discovery(...args),
     calculatePKCECodeChallenge: () => Promise.resolve('challenge'),
     buildAuthorizationUrl: () => new URL('https://idp.example.test/authorize'),
   };

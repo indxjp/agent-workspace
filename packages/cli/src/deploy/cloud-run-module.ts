@@ -34,6 +34,11 @@ function isTerraformOverride(name: string): boolean {
   return name === 'override.tf' || name.endsWith('_override.tf');
 }
 
+/** The shipped module is its Terraform files only: `*.tf` and the provider lock file. */
+function isShippedModuleFile(name: string): boolean {
+  return name.endsWith('.tf') || name === '.terraform.lock.hcl';
+}
+
 /**
  * Make `cloudRunModuleDirectory(stateDirectory)` hold exactly the shipped module's files: each is
  * overwritten, a `.tf` file the CLI no longer ships is removed, and what Terraform and the Owner
@@ -44,7 +49,9 @@ function isTerraformOverride(name: string): boolean {
 export async function materializeCloudRunModule(stateDirectory: string): Promise<string> {
   const moduleDirectory = cloudRunModuleDirectory(stateDirectory);
   await mkdir(moduleDirectory, { recursive: true, mode: 0o700 });
-  const shipped = await readdir(CLOUD_RUN_MODULE_SOURCE);
+  const shipped = (await readdir(CLOUD_RUN_MODULE_SOURCE, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && isShippedModuleFile(entry.name))
+    .map((entry) => entry.name);
   for (const name of await readdir(moduleDirectory)) {
     if (name.endsWith('.tf') && !isTerraformOverride(name) && !shipped.includes(name)) {
       await rm(path.join(moduleDirectory, name));

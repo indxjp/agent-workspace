@@ -13,6 +13,7 @@
  * `aw agents pointers set`) follow the agent commands.
  */
 import type { Command } from '../command.js';
+import { agentTeamCommands } from './agent-teams.js';
 import { agentVersionCommands } from './agent-versions.js';
 import { agentNewCommands } from './agents-new.js';
 import { agentCommands } from './agents.js';
@@ -27,6 +28,8 @@ import { engineCommands } from './engines.js';
 import { evalCommands } from './eval.js';
 import { feedbackCommands } from './feedback.js';
 import { fileCommands } from './files.js';
+import { generateCommands } from './generate.js';
+import { blueprintCommands } from './blueprint.js';
 import { initCommands } from './init.js';
 import { meCommands } from './me.js';
 import { modelCommands } from './models.js';
@@ -45,11 +48,14 @@ import { teamCommands } from './team.js';
 import { toolCommands } from './tool.js';
 import { tokenCommands } from './tokens.js';
 import { triggerCommands } from './triggers.js';
+import { webhookCommands } from './webhooks.js';
 import { workspaceCommands } from './workspaces.js';
 
 export const COMMANDS: readonly Command[] = [
   // Issue #451 (S1-13): the local commands a new project starts with, before any control plane.
   ...initCommands,
+  // Issue #1505: generate a portal app, its resources and agents, and destroy what was generated.
+  ...generateCommands,
   ...devCommands,
   // Issue #800: run one code tool through the local tool host, without a chat turn.
   ...toolCommands,
@@ -78,6 +84,8 @@ export const COMMANDS: readonly Command[] = [
   ...endpointClientCommands,
   // Issue #1295 (ADR-0144): the triggers that start a run from a webhook URL.
   ...triggerCommands,
+  // Issue #250 (N-3, ADR-SDK-18-N3-250): the endpoints a run's outcome is posted to, signed.
+  ...webhookCommands,
   ...modelCommands,
   ...runtimeCommands,
   ...secretCommands,
@@ -92,12 +100,16 @@ export const COMMANDS: readonly Command[] = [
   ...agentNewCommands,
   // Issue #452 (S1-14): the raw version and pointer commands.
   ...agentVersionCommands,
+  // Issue #1516 (ADR-0104): agent teams and their versions.
+  ...agentTeamCommands,
   ...projectCommands,
   ...sessionCommands,
   ...runCommands,
   ...shareCommands,
   ...observabilityCommands,
   ...tokenCommands,
+  // ADR-0166 (issue #1533): install app blueprints from npm and receive new versions as proposals.
+  ...blueprintCommands,
 ];
 
 function startsWith(words: readonly string[], prefix: readonly string[]): boolean {

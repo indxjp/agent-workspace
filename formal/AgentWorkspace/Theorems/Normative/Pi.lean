@@ -64,7 +64,7 @@ example :
         grants := [], connectors := [] }) =
       .ok { cwd := "/workspace", tools := [.read, .bash], networkEgress := false,
             connection := connectionFor "http://gw" "tok", model := "claude-sonnet-4-5",
-            maxTurns := some 2, budgetCap := false, grants := [], skills := [] } := by
+            maxTurns := some 2, grants := [], skills := [] } := by
     decide +kernel
 
 /-! ## `beforeToolCall` blocks bash whenever `runCommands` is off -/
@@ -131,18 +131,13 @@ theorem a_connector_is_refused_by_name {r : Request} {grants : List Grant}
 
 /-! ## Every other unsupported requirement is refused by name -/
 
-/-- A per-run budget cap the provisional price table cannot price is refused naming `maxBudget`: a
-cap that could never stop the run is not accepted (ADR-0074 D7, shared by ADR-0081). -/
+/-- A per-run budget cap never changes the compile: it is neither refused, whatever the model,
+nor carried into the configuration, because the gateway enforces it from the deployment's
+catalogue (ADR-0162, #342). The adapter-side provisional cap (ADR-0074 D7) is retired. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#compile")
-  (ts := "packages/engine-pi/src/compile.ts#compilePiRun")
-  (ts := "packages/engine/src/prices.ts#provisionalPriceFor")]
-theorem an_unpriced_budget_cap_is_refused_by_name {r : Request} {grants : List Grant}
-    (hp : r.policyReadable = true)
-    (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
-    (hc : r.connectors = []) (hb : r.budgetCap = true) (hpr : priced (modelOf r) = false) :
-    compile r = .refused (.capabilityUnsupported "maxBudget") := by
-  unfold compile
-  simp [hp, hg, hc, hb, hpr]
+  (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
+theorem a_budget_cap_never_changes_the_compile (r : Request) (cap : Bool) :
+    compile { r with budgetCap := cap } = compile r := rfl
 
 /-- A connection served over any dialect but Anthropic Messages is refused naming
 `wireProtocols`. -/
@@ -152,15 +147,15 @@ theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Gra
     {b t w : String}
     (hp : r.policyReadable = true)
     (hg : normaliseGrants (some protectedDirectory) r.grants = some grants)
-    (hc : r.connectors = []) (hb : r.budgetCap = false)
+    (hc : r.connectors = [])
     (hgw : r.gateway = some (b, t, w)) (hw : w ≠ "anthropic-messages") :
     compile r = .refused (.capabilityUnsupported "wireProtocols") := by
   unfold compile
-  simp [hp, hg, hc, hb, hgw, hw]
+  simp [hp, hg, hc, hgw, hw]
 
-/-- Witness for the refusal theorems: a connector, an unpriced cap, an OpenAI dialect and a missing
-gateway are each refused by name on otherwise acceptable requests, and a cap on a priced model
-compiles. -/
+/-- Witness for the refusal theorems: a connector, an OpenAI dialect and a missing gateway are each
+refused by name on otherwise acceptable requests, and a cap compiles on the default model and a
+listed one alike. -/
 example :
     let base : Request :=
       { cwd := "/workspace/", policyReadable := true,
@@ -172,9 +167,9 @@ example :
         gateway := some ("http://gw", "tok", "anthropic-messages"), environmentClean := true,
         grants := [], connectors := [] }
     compile { base with connectors := ["docs"] } = .refused (.capabilityUnsupported "mcp") ∧
-      compile { base with budgetCap := true } = .refused (.capabilityUnsupported "maxBudget") ∧
+      compile { base with budgetCap := true } = compile base ∧
       (match compile { base with budgetCap := true, model := some "claude-sonnet-4-5" } with
-        | .ok c => c.budgetCap
+        | .ok _ => true
         | .refused _ => false) = true ∧
       compile { base with gateway := some ("http://gw", "tok", "openai-responses") } =
         .refused (.capabilityUnsupported "wireProtocols") ∧

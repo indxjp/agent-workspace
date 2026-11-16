@@ -7,36 +7,58 @@
  */
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { defineSlot } from '../runtime-slot';
-import { bearerMatches, problem } from '../sessions/retention-cron';
-import type { AgentArchiveSweepResult } from '../agents/archive/sweep';
+import { bearerMatches, problem } from '../http/cron';
 import type { SchedulePassResult } from './schedule-pass';
 
 /**
- * What one delivery of the cron did: the schedule pass, and the agent auto-archive sweep (issue
- * #1851) that rides the same delivery. `archive` is `null` when the sweep threw; it never fails the
- * delivery, because the schedule pass has already started its runs.
+ * What one delivery of the cron did: the schedule pass, the agent auto-archive sweep (issue #1851)
+ * and the Agent Store demo sweep (spec, "Email-link sign-in") that ride the same delivery. A sweep's
+ * field is `null` when it threw; it never fails the delivery, because the schedule pass has already
+ * started its runs.
  */
-export type TriggerScheduleCronResult = SchedulePassResult & {
-  readonly archive?: AgentArchiveSweepResult | null;
+export type TriggerScheduleCronResult<Archive = unknown, Demo = unknown> = SchedulePassResult & {
+  readonly archive?: Archive | null;
+  readonly demo?: Demo | null;
 };
 
 export type TriggerScheduleCronPass = () => Promise<TriggerScheduleCronResult>;
 
-/** The schedule pass first, then the archive sweep; a sweep failure is logged, not thrown. */
-export async function runTriggerCronPass(
+/** One sweep that rides the delivery: its result, or `null` after it threw (the throw is logged). */
+async function sweepOrNull<Result>(
+  sweep: () => Promise<Result>,
+  message: string,
+  log: Pick<Logger, 'error'>,
+): Promise<Result | null> {
+  try {
+    return await sweep();
+  } catch (error) {
+    log.error(message, { error });
+    return null;
+  }
+}
+
+/**
+ * The schedule pass first, then the archive sweep and the demo sweep, each on its own: a sweep
+ * failure is logged, not thrown, and does not stop the other.
+ */
+export async function runTriggerCronPass<Archive, Demo = never>(
   deps: Readonly<{
     schedule: () => Promise<SchedulePassResult>;
-    archive: () => Promise<AgentArchiveSweepResult>;
+    /** The sweep's own result is reported as it is; triggers does not read it. */
+    archive: () => Promise<Archive>;
+    /** The Agent Store demo sweep; absent only where a test leaves it out. */
+    demo?: () => Promise<Demo>;
     log: Pick<Logger, 'error'>;
   }>,
-): Promise<TriggerScheduleCronResult> {
+): Promise<TriggerScheduleCronResult<Archive, Demo>> {
   const schedule = await deps.schedule();
-  try {
-    return { ...schedule, archive: await deps.archive() };
-  } catch (error) {
-    deps.log.error('[agent-archive] sweep failed', { error });
-    return { ...schedule, archive: null };
-  }
+  const archive = await sweepOrNull(deps.archive, '[agent-archive] sweep failed', deps.log);
+  if (deps.demo === undefined) return { ...schedule, archive };
+  return {
+    ...schedule,
+    archive,
+    demo: await sweepOrNull(deps.demo, '[demo-sweep] sweep failed', deps.log),
+  };
 }
 
 /** What the cron route needs, read and built by the composition root: the route reads no env. */

@@ -239,7 +239,7 @@ end UsageRecord
 priced row is `unavailable`, every row priced is `complete`, otherwise `partial`. An empty
 ledger has had no settlement, which is the column default `pending`. (`failed` is written by a
 settlement that could not produce ledger data at all, so the ledger never derives it.) -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#pricedCount")
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#pricedCount")
   (ts := "packages/core/src/db/schema/runs.ts#accountingStates")]
 def ledgerAccounting (records : List UsageRecord) : AccountingState :=
   if records.isEmpty then .pending

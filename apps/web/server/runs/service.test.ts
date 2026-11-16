@@ -1,62 +1,24 @@
 /**
  * `startRunOnSession` and the session it opens: a start whose run insert fails must not leave an
  * empty new session behind, and must never remove a session the client brought (issue #1263).
+ * The admission refusals are in `service.admission.test.ts`, the team child runs in
+ * `service.children.test.ts`.
  */
-import { ProjectPolicySchema } from '@indx-workspace/contracts/policy-ceiling';
-import { log as webLogger } from '../telemetry/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentRef, RunApiEnvironment, RunPrincipal, SessionRef } from './environment';
-import { InMemoryRunStore } from './memory-store';
+import { parseStartRunBody } from './api';
+import type { RunApiEnvironment } from './environment';
 import { startRunOnSession } from './service';
+import {
+  AGENT,
+  EXISTING_SESSION,
+  PRINCIPAL,
+  START,
+  harness,
+  sessionIds,
+} from './service.test-support';
 import { SessionBusyError } from './store';
-
-const WORKSPACE = '22222222-2222-4222-8222-222222222222';
-const AGENT: AgentRef = {
-  id: '33333333-3333-4333-8333-333333333333',
-  workspaceId: WORKSPACE,
-  engine: 'claude-agent-sdk',
-};
-const PRINCIPAL: RunPrincipal = {
-  principalId: '77777777-7777-4777-8777-777777777777',
-  ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
-  userId: '66666666-6666-4666-8666-666666666666',
-  workspaceId: WORKSPACE,
-  role: 'owner',
-  scope: null,
-};
-const EXISTING_SESSION = '44444444-4444-4444-8444-444444444444';
-
-/** An environment whose `openSession` records new sessions in `sessions`, as the real one inserts rows. */
-function harness(discard?: RunApiEnvironment['discardSession']) {
-  const sessions = new Map<string, SessionRef>([
-    [EXISTING_SESSION, { id: EXISTING_SESSION, agentId: AGENT.id, engine: null }],
-  ]);
-  const store = new InMemoryRunStore();
-  const discardSession: NonNullable<RunApiEnvironment['discardSession']> =
-    discard ??
-    ((_principal, sessionId) => {
-      sessions.delete(sessionId);
-      return Promise.resolve();
-    });
-  const env: RunApiEnvironment = {
-    authenticate: () => Promise.resolve(PRINCIPAL),
-    findAgent: () => Promise.resolve(AGENT),
-    openSession: (_principal, agent, requested) => {
-      if (requested !== null) return Promise.resolve(sessions.get(requested) ?? null);
-      const fresh: SessionRef = { id: crypto.randomUUID(), agentId: agent.id, engine: null };
-      sessions.set(fresh.id, fresh);
-      return Promise.resolve(fresh);
-    },
-    discardSession,
-    ownsRun: () => Promise.resolve(true),
-    store,
-    launch: () => undefined,
-  };
-  return { env, sessions, store };
-}
-
-const START = { prompt: 'hello', sessionId: null, modelOverride: null } as const;
+import { log as webLogger } from '../telemetry/logger';
 
 describe('startRunOnSession: a failed run insert', () => {
   it('discards the new session and rethrows the failure', async () => {
@@ -64,7 +26,7 @@ describe('startRunOnSession: a failed run insert', () => {
     vi.spyOn(store, 'create').mockRejectedValue(new Error('insert failed'));
 
     await expect(startRunOnSession(env, PRINCIPAL, AGENT, START)).rejects.toThrow('insert failed');
-    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
+    expect(sessionIds(sessions)).toEqual([EXISTING_SESSION]);
   });
 
   it('discards the new session and answers 409 session_busy', async () => {
@@ -76,7 +38,7 @@ describe('startRunOnSession: a failed run insert', () => {
       status: 409,
       code: 'session_busy',
     });
-    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
+    expect(sessionIds(sessions)).toEqual([EXISTING_SESSION]);
   });
 
   it('keeps the session of a follow-up, which the client opened', async () => {
@@ -108,13 +70,33 @@ describe('startRunOnSession: a failed run insert', () => {
   });
 });
 
+describe('startRunOnSession: a refusal after the session was opened', () => {
+  it('discards the new session when its pinned version runs another engine than the agent', async () => {
+    const { env, sessions } = harness();
+    // The new session is pinned to a version of another engine than the agent row names.
+    const opening = env.openSession.bind(env);
+    env.openSession = async (...args) => {
+      const opened = await opening(...args);
+      return opened === null ? null : { ...opened, engine: 'openai-agents' };
+    };
+
+    await expect(startRunOnSession(env, PRINCIPAL, AGENT, START)).resolves.toMatchObject({
+      kind: 'refused',
+      status: 409,
+      code: 'session_engine_mismatch',
+    });
+    expect(sessionIds(sessions)).toEqual([EXISTING_SESSION]);
+  });
+});
+
 describe('startRunOnSession: the lower-only limits override', () => {
   function launching() {
-    const { env, sessions } = harness();
+    const { env, sessions, store } = harness();
     const launched: unknown[] = [];
     return {
       env: { ...env, launch: (context: unknown) => void launched.push(context) },
       sessions,
+      store,
       launched,
     };
   }
@@ -125,6 +107,21 @@ describe('startRunOnSession: the lower-only limits override', () => {
     await startRunOnSession(env, PRINCIPAL, AGENT, START);
     expect(launched[0]).toMatchObject({ limits: { maxBudgetUsd: 0.3 } });
     expect(launched[1]).not.toHaveProperty('limits');
+  });
+
+  it('stores the override on the run row, so a run built from the row alone can keep it (#1963, SPD-01)', async () => {
+    const { env, store } = launching();
+    const capped = await startRunOnSession(env, PRINCIPAL, AGENT, {
+      ...START,
+      limits: { maxBudgetUsd: 0.3, maxTurns: 4 },
+    });
+    const uncapped = await startRunOnSession(env, PRINCIPAL, AGENT, START);
+    if (capped.kind !== 'started' || uncapped.kind !== 'started') throw new Error('start refused');
+    expect((await store.get(capped.run.id))?.limitsOverride).toEqual({
+      maxBudgetUsd: 0.3,
+      maxTurns: 4,
+    });
+    expect((await store.get(uncapped.run.id))?.limitsOverride).toBeNull();
   });
 
   it.each([
@@ -141,157 +138,82 @@ describe('startRunOnSession: the lower-only limits override', () => {
     await expect(
       startRunOnSession(env, PRINCIPAL, AGENT, { ...START, limits }),
     ).resolves.toMatchObject({ kind: 'refused', status: 422, code: 'invalid_run_limits' });
-    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
+    expect(sessionIds(sessions)).toEqual([EXISTING_SESSION]);
     expect(launched).toEqual([]);
   });
 });
 
-describe('startRunOnSession: an archived agent (#1851 slice 4)', () => {
-  const ARCHIVED: AgentRef = { ...AGENT, archived: true };
+/** A run environment that answers the agent's spend limit, and records the sessions it was asked about. */
+function withSpendLimit(limit: number | null) {
+  const { env, sessions, store } = harness();
+  const asked: (string | null)[] = [];
+  const spendLimitFor: NonNullable<RunApiEnvironment['spendLimitFor']> = (
+    _principal,
+    _agent,
+    sessionId,
+  ) => {
+    asked.push(sessionId);
+    return Promise.resolve(limit);
+  };
+  return { env: { ...env, spendLimitFor }, sessions, store, asked };
+}
 
-  it('refuses 409 agent_archived before it opens a session or creates a run', async () => {
-    const { env, sessions, store } = harness();
+describe('startRunOnSession: the spend ceiling (ADR-0162)', () => {
+  it('refuses 403 policy_cannot_widen at spendCeilingUsd above the agent limit, before a session opens', async () => {
+    const { env, sessions, store } = withSpendLimit(1);
     const create = vi.spyOn(store, 'create');
-
-    await expect(startRunOnSession(env, PRINCIPAL, ARCHIVED, START)).resolves.toMatchObject({
-      kind: 'refused',
-      status: 409,
-      code: 'agent_archived',
-    });
-    expect(create).not.toHaveBeenCalled();
-    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
-  });
-
-  it('refuses a follow-up in an existing session too, and starts nothing', async () => {
-    const { env, store } = harness();
-    const create = vi.spyOn(store, 'create');
-
     await expect(
-      startRunOnSession(env, PRINCIPAL, ARCHIVED, { ...START, sessionId: EXISTING_SESSION }),
-    ).resolves.toMatchObject({ kind: 'refused', status: 409, code: 'agent_archived' });
+      startRunOnSession(env, PRINCIPAL, AGENT, { ...START, spendCeilingUsd: 1.5 }),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      status: 403,
+      code: 'policy_cannot_widen',
+      details: ['spendCeilingUsd'],
+    });
+    expect(sessionIds(sessions)).toEqual([EXISTING_SESSION]);
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('names the archive before the daily cost cap', async () => {
-    const { env } = harness();
-    const capped: RunApiEnvironment = {
-      ...env,
-      dailyCostCap: { refusal: () => Promise.reject(new Error('ledger unreachable')) },
-    };
-
-    await expect(startRunOnSession(capped, PRINCIPAL, ARCHIVED, START)).resolves.toMatchObject({
-      code: 'agent_archived',
+  it('stores a lower spendCeilingUsd on the run', async () => {
+    const started = await startRunOnSession(withSpendLimit(1).env, PRINCIPAL, AGENT, {
+      ...START,
+      spendCeilingUsd: 0.25,
     });
+    expect(started).toMatchObject({ kind: 'started', run: { spendCeilingUsd: '0.250000' } });
   });
 
-  it('starts an agent without the archived mark', async () => {
-    const { env } = harness();
-
-    await expect(startRunOnSession(env, PRINCIPAL, AGENT, START)).resolves.toMatchObject({
-      kind: 'started',
+  it("stores the agent's limit when the start names none, asked with the follow-up's session", async () => {
+    const { env, asked } = withSpendLimit(2);
+    const started = await startRunOnSession(env, PRINCIPAL, AGENT, {
+      ...START,
+      sessionId: EXISTING_SESSION,
     });
+    expect(started).toMatchObject({ kind: 'started', run: { spendCeilingUsd: '2.000000' } });
+    expect(asked).toEqual([EXISTING_SESSION]);
   });
 });
 
-describe('startRunOnSession: the daily cost cap (#1851 slice 3)', () => {
-  it('parses a policy with maxCostPerDayUsd: 5 and refuses a start once the workspace spent 5 USD today', async () => {
-    expect(ProjectPolicySchema.parse({ maxCostPerDayUsd: 5 })).toEqual({ maxCostPerDayUsd: 5 });
-    const { env, sessions, store } = harness();
-    const create = vi.spyOn(store, 'create');
-    const capped: RunApiEnvironment = {
-      ...env,
-      dailyCostCap: {
-        refusal: () =>
-          Promise.resolve({ capUsd: 5, spentUsd: 5, resetsAt: '2026-10-27T00:00:00.000Z' }),
-      },
-    };
-
-    await expect(startRunOnSession(capped, PRINCIPAL, AGENT, START)).resolves.toMatchObject({
-      kind: 'refused',
-      status: 429,
-      code: 'daily_cost_cap_reached',
-      details: ['capUsd: 5', 'spentUsd: 5', 'resetsAt: 2026-10-27T00:00:00.000Z'],
+describe('startRunOnSession: where the spend ceiling comes from', () => {
+  it('lets a trusted override lower it further, and stores none when nothing sets one', async () => {
+    const lowered = await startRunOnSession(withSpendLimit(2).env, PRINCIPAL, AGENT, {
+      ...START,
+      spendCeilingUsd: 1,
+      limits: { maxBudgetUsd: 0.5 },
     });
-    expect(create).not.toHaveBeenCalled();
-    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
+    expect(lowered).toMatchObject({ kind: 'started', run: { spendCeilingUsd: '0.500000' } });
+    const none = await startRunOnSession(withSpendLimit(null).env, PRINCIPAL, AGENT, START);
+    expect(none).toMatchObject({ kind: 'started', run: { spendCeilingUsd: null } });
   });
 
-  it('starts the run unchanged while the workspace is under its cap', async () => {
-    const { env, store } = harness();
-    const create = vi.spyOn(store, 'create');
-    const capped: RunApiEnvironment = {
-      ...env,
-      dailyCostCap: { refusal: () => Promise.resolve(null) },
-    };
-
-    await expect(startRunOnSession(capped, PRINCIPAL, AGENT, START)).resolves.toMatchObject({
-      kind: 'started',
+  it('reads spendCeilingUsd from the body and refuses a malformed one', () => {
+    expect(parseStartRunBody({ prompt: 'hi', spendCeilingUsd: 0.5 })).toMatchObject({
+      kind: 'ok',
+      body: { spendCeilingUsd: 0.5 },
     });
-    expect(create).toHaveBeenCalledOnce();
-  });
-
-  it('fails closed: a spend read that throws is a 503 daily_cost_unavailable with no internals, before any session or run exists', async () => {
-    const { env, sessions, store } = harness();
-    const create = vi.spyOn(store, 'create');
-    const capped: RunApiEnvironment = {
-      ...env,
-      dailyCostCap: { refusal: () => Promise.reject(new Error('ledger unreachable')) },
-    };
-
-    const refusal = await startRunOnSession(capped, PRINCIPAL, AGENT, START);
-    expect(refusal).toMatchObject({
-      kind: 'refused',
-      status: 503,
-      code: 'daily_cost_unavailable',
-    });
-    expect(JSON.stringify(refusal)).not.toContain('ledger unreachable');
-    await expect(
-      startRunOnSession(capped, PRINCIPAL, AGENT, { ...START, sessionId: EXISTING_SESSION }),
-    ).resolves.toMatchObject({ kind: 'refused', status: 503, code: 'daily_cost_unavailable' });
-    expect(create).not.toHaveBeenCalled();
-    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
-  });
-
-  it('names unpriced usage in the refusal when the cap cannot be measured', async () => {
-    const { env } = harness();
-    const capped: RunApiEnvironment = {
-      ...env,
-      dailyCostCap: {
-        refusal: () =>
-          Promise.resolve({
-            capUsd: 5,
-            spentUsd: 0,
-            resetsAt: '2026-10-27T00:00:00.000Z',
-            unpricedUsage: true,
-          }),
-      },
-    };
-    await expect(startRunOnSession(capped, PRINCIPAL, AGENT, START)).resolves.toMatchObject({
-      kind: 'refused',
-      status: 429,
-      code: 'daily_cost_cap_reached',
-      details: [
-        'capUsd: 5',
-        'spentUsd: 0',
-        'resetsAt: 2026-10-27T00:00:00.000Z',
-        'unpricedUsage: true',
-      ],
-    });
-  });
-
-  it('judges the workspace of the principal that starts the run', async () => {
-    const { env } = harness();
-    const asked: string[] = [];
-    const capped: RunApiEnvironment = {
-      ...env,
-      dailyCostCap: {
-        refusal: (workspaceId) => {
-          asked.push(workspaceId);
-          return Promise.resolve(null);
-        },
-      },
-    };
-    await startRunOnSession(capped, PRINCIPAL, AGENT, START);
-    expect(asked).toEqual([WORKSPACE]);
+    for (const spendCeilingUsd of [0, -1, '1', 0.0000001]) {
+      expect(parseStartRunBody({ prompt: 'hi', spendCeilingUsd })).toMatchObject({
+        kind: 'rejected',
+      });
+    }
   });
 });

@@ -29,7 +29,7 @@ import {
   type CreateUserInput,
   type CreatedUserResponse,
   type MembershipResource,
-  type MembershipRoleName,
+  type ConferrableRoleName,
   type UserResource,
 } from '@indx-workspace/contracts/team';
 
@@ -88,7 +88,7 @@ export class MembersClient {
    */
   public async setRole(
     membershipId: string,
-    role: MembershipRoleName,
+    role: ConferrableRoleName,
     options: RequestOptions = {},
   ): Promise<MembershipResource> {
     const body: ChangeMembershipRoleInput = { role };

@@ -5,6 +5,7 @@ import {
   InvalidArgumentError,
   TransportError,
 } from '@indx-workspace/sdk';
+import { stripControlSequences } from '@indx-workspace/sdk/portable';
 
 import type { ParsedArguments } from './args.js';
 import { isLoopbackUrl } from './config.js';
@@ -62,11 +63,15 @@ function isRow(value: unknown): value is Row {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * One value as human text. A string, or JSON holding one, may carry what a model, a tool or the
+ * server wrote (a run's error, its events), so a terminal must not be able to act on it.
+ */
 function cell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return stripControlSequences(value);
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return JSON.stringify(value);
+  return stripControlSequences(JSON.stringify(value));
 }
 
 function padded(text: string, width: number): string {

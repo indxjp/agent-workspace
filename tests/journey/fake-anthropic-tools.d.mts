@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import type { FakeRequestRecord } from '../generated-project/fake-anthropic.mjs';
+import type { FakeRequestRecord, StreamEvent } from '../generated-project/fake-anthropic.mjs';
 
 export const ORDER_OPERATION_ID: 'getOrderByOrderNumber';
 export function orderNote(orderNumber: string): string;
@@ -11,6 +11,19 @@ export type ToolRequestRecord = {
   readonly toolUse: { readonly name: string; readonly input: Record<string, string> } | null;
   readonly toolResult: string | null;
 };
+
+type ToolUse = {
+  readonly id: string;
+  readonly name: string;
+  readonly input: Readonly<Record<string, unknown>>;
+};
+
+export function toolUseEvents(id: string, model: string, toolUse: ToolUse): StreamEvent[];
+export function toolUseResponse(
+  id: string,
+  model: string,
+  toolUse: ToolUse,
+): Record<string, unknown>;
 
 export function createAnthropicToolsHandler(
   requests: FakeRequestRecord[],

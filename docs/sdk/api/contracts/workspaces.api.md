@@ -50,9 +50,10 @@ export const WorkspaceListResponseSchema: z.ZodReadonly<z.ZodObject<{
     workspaces: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         id: z.ZodString;
         slug: z.ZodString;
@@ -69,9 +70,10 @@ export const WorkspaceMembershipResponseSchema: z.ZodReadonly<z.ZodObject<{
     workspace: z.ZodReadonly<z.ZodObject<{
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         id: z.ZodString;
         slug: z.ZodString;
@@ -90,9 +92,10 @@ export type WorkspaceMembershipView = z.infer<typeof WorkspaceMembershipViewSche
 export const WorkspaceMembershipViewSchema: z.ZodReadonly<z.ZodObject<{
     role: z.ZodEnum<{
         builder: "builder";
-        admin: "admin";
         owner: "owner";
+        admin: "admin";
         viewer: "viewer";
+        guest: "guest";
     }>;
     id: z.ZodString;
     slug: z.ZodString;
@@ -146,9 +149,10 @@ export const WorkspaceSwitchResponseSchema: z.ZodReadonly<z.ZodObject<{
     workspace: z.ZodReadonly<z.ZodObject<{
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         id: z.ZodString;
         slug: z.ZodString;

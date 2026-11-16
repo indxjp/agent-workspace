@@ -79,6 +79,26 @@ export async function listStaleRunIds(
 }
 
 /**
+ * Runs paused at `awaiting_approval` whose `approval_deadline_at` is before `before` (ADR-0145
+ * D2.4): nobody decided within the 24 hours. The sweep ends each as `cancelled` through the scoped
+ * `finish`, whose guarded update makes it happen once against a racing decision. Cross-tenant and
+ * unscoped like {@link listStaleRunIds}: it returns ids only.
+ */
+export async function listExpiredApprovalRunIds(
+  db: Database,
+  before: Date,
+  limit = 100,
+): Promise<readonly string[]> {
+  const rows = await db
+    .select({ id: runs.id })
+    .from(runs)
+    .where(every(eq(runs.status, 'awaiting_approval'), lt(runs.approvalDeadlineAt, before)))
+    .orderBy(asc(runs.approvalDeadlineAt))
+    .limit(limit);
+  return rows.map((row) => row.id);
+}
+
+/**
  * Is this user a member of this scope's workspace?
  *
  * Here rather than in `scope.ts` because it is an *authorisation* question and the scope is a

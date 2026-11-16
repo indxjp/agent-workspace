@@ -220,6 +220,30 @@ describe('the agent auto-archive sweep', () => {
       expect(listed.mock.calls.length).toBeGreaterThan(reads);
     });
 
+    it('a sweep that could not list the workspaces does not start the hour, so the next delivery retries', async () => {
+      const { store } = fakeStore([candidate('a')]);
+      let listing = false;
+      const release = vi.fn(() => Promise.resolve());
+      const sweep = createAgentArchiveSweep(
+        deps(
+          { w1: store },
+          {
+            tryAcquireMaintenanceLease: () => Promise.resolve({ release }),
+            listWorkspaceIds: () =>
+              listing ? Promise.resolve(['w1']) : Promise.reject(new Error('connection refused')),
+          },
+        ),
+      );
+
+      await expect(sweep()).rejects.toThrow('connection refused');
+      expect(release).toHaveBeenCalledOnce();
+
+      listing = true;
+      const retry = await sweep();
+      expect(retry.throttled).toBe(false);
+      expect(retry.archived).toBe(1);
+    });
+
     it('is an hour, and a throttled delivery does not take the lease', async () => {
       expect(AGENT_ARCHIVE_MIN_INTERVAL_MS).toBe(60 * 60_000);
       const tryAcquireMaintenanceLease = vi.fn();

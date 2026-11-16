@@ -18,8 +18,8 @@ import { resolveMigrationsDir, runMigrations } from '../migrate.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
-import { workspaces } from '../schema/workspaces.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { insertPriorWorkspaces } from './prior-workspaces.test-support.js';
 
 const BACKFILL = '0083_backfill_version_storage_grants';
 const PERMISSIONS = {
@@ -83,7 +83,7 @@ describe('0083 per-version storage grants backfill', () => {
   };
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0083-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
     const journal = JSON.parse(
@@ -110,9 +110,11 @@ describe('0083 per-version storage grants backfill', () => {
     );
 
     const membershipId = crypto.randomUUID();
-    await isolated.db
-      .insert(workspaces)
-      .values({ id: workspaceId, slug: workspaceId, name: 'Pre-0083 workspace' });
+    await insertPriorWorkspaces(isolated.db, {
+      id: workspaceId,
+      slug: workspaceId,
+      name: 'Pre-0083 workspace',
+    });
     await isolated.db
       .insert(users)
       .values({ id: userId, email: `${userId}@example.test`, name: 'Pre-0083 owner' });

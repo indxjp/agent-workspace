@@ -42,7 +42,14 @@ import { redirect } from 'next/navigation';
 import { safeNextPath } from '../../server/auth/next-path';
 import { checkRequestOrigin } from '../../server/auth/origin';
 import { admitSignInAttempt } from '../../server/auth/sign-in-limit';
-import { sessionCookie, signIn, type SignInFailure } from '../../server/auth/session';
+import {
+  clearedInvitationIdentityCookie,
+  clearedSelectionCookie,
+  clearedSessionCookie,
+  sessionCookie,
+  signIn,
+} from '../../server/auth';
+import type { SignInFailure } from '../../server/auth/session';
 
 /**
  * What the sign-in screen may say back to an anonymous visitor.
@@ -142,4 +149,44 @@ export async function signInAction(form: FormData): Promise<void> {
   });
   log.info('[signin] session issued for the bootstrap administrator');
   redirect(next ?? '/');
+}
+
+/**
+ * Sign out: expire the session cookie, and the workspace-selection and invitation-identity
+ * cookies a sign-in may have left, then go to the sign-in screen (part 06, step 4).
+ *
+ * Sessions are stateless, so this ends the session in this browser only; a copied cookie stays
+ * valid until it expires. The same origin check as sign-in refuses a cross-site form that would
+ * sign a person out without asking (logout CSRF).
+ */
+export async function signOutAction(): Promise<void> {
+  const headerBag = await headers();
+  const origin = checkRequestOrigin({
+    method: 'POST',
+    origin: headerBag.get('origin'),
+    requestHost: headerBag.get('host'),
+    hostHeader: headerBag.get('host'),
+    forwardedHost: headerBag.get('x-forwarded-host'),
+  });
+  if (!origin.ok) {
+    log.warn(`[signin] cross-origin sign-out refused`, { reason: origin.reason });
+    redirect('/');
+  }
+  const jar = await cookies();
+  for (const cookie of [
+    clearedSessionCookie(),
+    clearedSelectionCookie(),
+    clearedInvitationIdentityCookie(),
+  ]) {
+    jar.set({
+      name: cookie.name,
+      value: cookie.value,
+      httpOnly: cookie.httpOnly,
+      secure: cookie.secure,
+      sameSite: cookie.sameSite,
+      path: cookie.path,
+      maxAge: cookie.maxAge,
+    });
+  }
+  redirect('/signin');
 }

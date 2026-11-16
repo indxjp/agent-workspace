@@ -22,7 +22,12 @@ import { readWhole } from '@agent-workspace/core/storage/streams';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
-import { digestOf, ensureBuiltinSkills, installBuiltinSkillsNamedBy } from './builtin';
+import {
+  builtinSkillsASaveInstalls,
+  digestOf,
+  ensureBuiltinSkills,
+  installBuiltinSkillsNamedBy,
+} from './builtin';
 import {
   skillBuiltinMarkerKey,
   skillDeleteMarkerKey,
@@ -230,5 +235,29 @@ describe('installBuiltinSkillsNamedBy', () => {
   it('does nothing when the deployment has no skills runtime', async () => {
     await installBuiltinSkillsNamedBy({ definition: { resources: { skills: [NAME] } } }, PRINCIPAL);
     expect(await bytesOf('SKILL.md')).toBeNull();
+  });
+});
+
+describe('builtinSkillsASaveInstalls (issue #890)', () => {
+  it('names the built-ins a body names, which a save installs before it is checked', () => {
+    installTestDomains({
+      skills: {
+        kind: 'serving',
+        runtime: {
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_ID }),
+          store: { forWorkspace: () => store },
+          catalog: { forWorkspace: () => Promise.resolve(newCatalog().catalog) },
+          storage: world.storage,
+        },
+      },
+    });
+    const body = { definition: { resources: { skills: [NAME, 'my-own-skill'] } } };
+    expect([...builtinSkillsASaveInstalls(body)]).toEqual([NAME]);
+    expect([...builtinSkillsASaveInstalls(undefined)]).toEqual([]);
+  });
+
+  it('names none when the deployment has no skills runtime, as a save installs none', () => {
+    const body = { definition: { resources: { skills: [NAME] } } };
+    expect([...builtinSkillsASaveInstalls(body)]).toEqual([]);
   });
 });

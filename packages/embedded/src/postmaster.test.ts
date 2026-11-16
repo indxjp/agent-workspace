@@ -41,22 +41,28 @@ interface SpawnCall {
 function fakeDeps(overrides: Partial<PostmasterDeps> = {}) {
   const postmaster = new FakeChild();
   const taskkill = new FakeChild(5151);
+  /** Every spawn after the first returns the next of these, `taskkill` first. */
+  const later: FakeChild[] = [taskkill, new FakeChild(6161), new FakeChild(7171)];
   const calls: SpawnCall[] = [];
   const exitEvents = new EventEmitter();
   const kill = vi.fn<(pid: number, signal: NodeJS.Signals) => void>();
+  const readFile = vi.fn<(file: string) => Promise<string>>(() =>
+    Promise.resolve('9090\n/p/.agent-workspace/postgres\n'),
+  );
   const deps: PostmasterDeps = {
     spawn: (command, args, options) => {
       calls.push({ command, args, options: { ...options } });
-      return calls.length === 1 ? postmaster : taskkill;
+      return calls.length === 1 ? postmaster : (later[calls.length - 2] ?? new FakeChild());
     },
     platform: 'linux',
     getuid: () => 1000,
     postgresIds: () => Promise.resolve({ uid: 70, gid: 70 }),
     kill,
+    readFile,
     exitEvents,
     ...overrides,
   };
-  return { deps, postmaster, taskkill, calls, exitEvents, kill };
+  return { deps, postmaster, taskkill, later, calls, exitEvents, kill, readFile };
 }
 
 const startOptions = (onLog: (message: string) => void = () => undefined) => ({
@@ -156,22 +162,20 @@ describe('startPostmaster', () => {
     expect(fake.exitEvents.listenerCount('exit')).toBe(0);
   });
 
-  it('rejects with windows_administrator when an elevated account starts it (BH061-003)', async () => {
-    const fake = fakeDeps({ platform: 'win32', getuid: undefined });
+  it('falls back to nothing outside Windows when the administrator refusal is seen', async () => {
+    const fake = fakeDeps();
     const pending = startPostmaster(startOptions(), fake.deps);
     await vi.waitFor(() => {
       expect(fake.calls).toHaveLength(1);
     });
-    // The exit can be seen before the output that says why.
     fake.postmaster.exitWith(1);
-    fake.postmaster.stderr.write('Execution of PostgreSQL by a user with administrative ');
-    fake.postmaster.stderr.end('permissions is not permitted.\n');
+    fake.postmaster.stderr.end(
+      'Execution of PostgreSQL by a user with administrative permissions is not permitted.\n',
+    );
     fake.postmaster.stdout.end();
 
-    await expect(pending).rejects.toMatchObject({
-      code: 'windows_administrator',
-      message: expect.stringContaining('not elevated') as unknown,
-    });
+    await expect(pending).rejects.toMatchObject({ code: 'windows_administrator' });
+    expect(fake.calls).toHaveLength(1);
   });
 
   it('rejects with postmaster_exited when the binary cannot be spawned', async () => {
@@ -287,6 +291,176 @@ describe('startPostmaster', () => {
       throw new Error('kill EPERM');
     });
     expect(() => fake.exitEvents.emit('exit')).not.toThrow();
+  });
+});
+
+describe('startPostmaster from a Windows account with administrator rights (#892)', () => {
+  const REFUSAL =
+    'Execution of PostgreSQL by a user with administrative permissions is not permitted.\n';
+  const winOptions = (onLog: (message: string) => void = () => undefined) => ({
+    ...startOptions(onLog),
+    binary: path.join('/pg', 'bin', 'postgres.exe'),
+  });
+
+  /** Start on win32, have `postgres.exe` refuse, and wait for the `pg_ctl start` spawn. */
+  async function refusedDirectly(
+    overrides: Partial<PostmasterDeps> = {},
+    onLog?: (message: string) => void,
+  ) {
+    const fake = fakeDeps({ platform: 'win32', getuid: undefined, ...overrides });
+    const pending = startPostmaster(winOptions(onLog), fake.deps);
+    pending.catch(() => undefined);
+    await vi.waitFor(() => {
+      expect(fake.calls).toHaveLength(1);
+    });
+    // The exit can be seen before the output that says why.
+    fake.postmaster.exitWith(1);
+    fake.postmaster.stderr.end(REFUSAL);
+    fake.postmaster.stdout.end();
+    await vi.waitFor(() => {
+      expect(fake.calls).toHaveLength(2);
+    });
+    const pgCtl = fake.later[0];
+    if (pgCtl === undefined) throw new Error('no pg_ctl child');
+    return { fake, pending, pgCtl };
+  }
+
+  /** As {@link refusedDirectly}, then the postmaster `pg_ctl` started reports it is ready. */
+  async function startedThroughPgCtl(overrides: Partial<PostmasterDeps> = {}) {
+    const run = await refusedDirectly(overrides);
+    run.pgCtl.stdout.write('waiting for server to start....\n' + READY);
+    return { ...run, postmaster: await run.pending };
+  }
+
+  /** The postmaster, its backends and `cmd` have exited: the pipes `pg_ctl` handed down end. */
+  function outputEnds(child: FakeChild): void {
+    child.stdout.end();
+    child.stderr.end();
+  }
+
+  it('starts it again through pg_ctl.exe, next to postgres.exe, which drops those rights', async () => {
+    const logs: string[] = [];
+    const run = await refusedDirectly({}, (message) => logs.push(message));
+    run.pgCtl.stdout.write(READY);
+    const postmaster = await run.pending;
+
+    expect(run.fake.calls[1]).toMatchObject({
+      command: path.join('/pg', 'bin', 'pg_ctl.exe'),
+      args: ['start', '-D', '/p/.agent-workspace/postgres', '-o', '-p 25432', '-W'],
+    });
+    const options = run.fake.calls[1]?.options;
+    expect(options).toMatchObject({ stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    // Not detached: Node hides pg_ctl's own console, which the postmaster then shares.
+    expect(options).not.toHaveProperty('detached');
+    expect(options?.['env']).toMatchObject({ LC_MESSAGES: 'C' });
+    expect(run.fake.readFile).toHaveBeenCalledExactlyOnceWith(
+      path.join('/p/.agent-workspace/postgres', 'postmaster.pid'),
+    );
+    expect(postmaster.pid).toBe(9090);
+    expect(logs.join('')).toContain('database system is ready');
+  });
+
+  it('rejects with postmaster_exited when that postmaster exits first, so initdb can run', async () => {
+    const run = await refusedDirectly();
+    run.pgCtl.exitWith(0);
+    run.pgCtl.stdout.write(
+      'FATAL:  "/p/.agent-workspace/postgres" is not a valid data directory\n',
+    );
+    outputEnds(run.pgCtl);
+
+    await expect(run.pending).rejects.toMatchObject({ code: 'postmaster_exited' });
+  });
+
+  it('rejects with windows_administrator, naming both fixes, when pg_ctl is refused as well', async () => {
+    const run = await refusedDirectly();
+    run.pgCtl.stdout.write(REFUSAL);
+    outputEnds(run.pgCtl);
+
+    const failure = await run.pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(EmbeddedDatabaseError);
+    expect(failure).toMatchObject({ code: 'windows_administrator' });
+    expect((failure as Error).message).toMatch(/not elevated/u);
+    expect((failure as Error).message).toMatch(/DATABASE_URL/u);
+    expect(run.fake.exitEvents.listenerCount('exit')).toBe(0);
+  });
+
+  it('rejects with windows_administrator when pg_ctl.exe cannot be spawned', async () => {
+    const run = await refusedDirectly();
+    run.pgCtl.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
+    await expect(run.pending).rejects.toMatchObject({ code: 'windows_administrator' });
+  });
+
+  it('stops it with pg_ctl stop -m fast and resolves once its output ends, once', async () => {
+    const run = await startedThroughPgCtl();
+
+    const first = run.postmaster.stop();
+    const second = run.postmaster.stop();
+    expect(run.fake.calls[2]).toMatchObject({
+      command: path.join('/pg', 'bin', 'pg_ctl.exe'),
+      args: ['stop', '-D', '/p/.agent-workspace/postgres', '-m', 'fast', '-W'],
+    });
+    outputEnds(run.pgCtl);
+    await expect(first).resolves.toBeUndefined();
+    await expect(second).resolves.toBeUndefined();
+    expect(run.fake.calls).toHaveLength(3);
+    expect(run.fake.exitEvents.listenerCount('exit')).toBe(0);
+  });
+
+  it('ends the tree with taskkill when pg_ctl stop does not finish in time', async () => {
+    const run = await startedThroughPgCtl({ stopTimeoutMs: 1_000, killGraceMs: 500 });
+    vi.useFakeTimers();
+
+    const stopping = run.postmaster.stop();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(run.fake.calls[3]).toMatchObject({
+      command: 'taskkill',
+      args: ['/pid', '9090', '/f', '/t'],
+    });
+    outputEnds(run.pgCtl);
+    await expect(stopping).resolves.toBeUndefined();
+  });
+
+  it('rejects with stop_timeout when even taskkill does not end it', async () => {
+    const run = await startedThroughPgCtl({ stopTimeoutMs: 1_000, killGraceMs: 500 });
+    vi.useFakeTimers();
+
+    const outcome = run.postmaster.stop().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(await outcome).toMatchObject({ code: 'stop_timeout' });
+  });
+
+  it('resolves a stop at once when the postmaster has already exited', async () => {
+    const run = await startedThroughPgCtl();
+    outputEnds(run.pgCtl);
+    // Let the end of both pipes reach the postmaster's owner.
+    await new Promise((resolve) => setImmediate(resolve));
+    await expect(run.postmaster.stop()).resolves.toBeUndefined();
+    expect(run.fake.calls).toHaveLength(2);
+  });
+
+  it('registers an exit backstop that ends the postmaster by its pid', async () => {
+    const run = await startedThroughPgCtl();
+    expect(run.fake.exitEvents.listenerCount('exit')).toBe(1);
+    run.fake.exitEvents.emit('exit');
+    expect(run.fake.kill).toHaveBeenCalledExactlyOnceWith(9090, 'SIGINT');
+  });
+
+  it('stops it and rejects when postmaster.pid names no pid', async () => {
+    const run = await refusedDirectly({ readFile: () => Promise.resolve('\n') });
+    run.pgCtl.stdout.write(READY);
+    await vi.waitFor(() => {
+      expect(run.fake.calls).toHaveLength(3);
+    });
+    expect(run.fake.calls[2]?.args).toContain('stop');
+    outputEnds(run.pgCtl);
+    await expect(run.pending).rejects.toMatchObject({ code: 'postmaster_exited', cause: 'no pid' });
+    expect(run.fake.exitEvents.listenerCount('exit')).toBe(0);
   });
 });
 

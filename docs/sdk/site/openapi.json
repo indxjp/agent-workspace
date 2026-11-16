@@ -405,7 +405,8 @@
                   "owner",
                   "admin",
                   "builder",
-                  "viewer"
+                  "viewer",
+                  "guest"
                 ],
                 "type": "string"
               },
@@ -1157,6 +1158,12 @@
                 "permissions": {
                   "additionalProperties": false,
                   "properties": {
+                    "memory": {
+                      "enum": [
+                        "agent"
+                      ],
+                      "type": "string"
+                    },
                     "readFiles": {
                       "type": "boolean"
                     },
@@ -2906,6 +2913,12 @@
           "permissions": {
             "additionalProperties": false,
             "properties": {
+              "memory": {
+                "enum": [
+                  "agent"
+                ],
+                "type": "string"
+              },
               "readFiles": {
                 "type": "boolean"
               },
@@ -3270,6 +3283,614 @@
         ],
         "type": "object"
       },
+      "AgentTeamListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "createdBy": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "latestVersion": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "createdBy": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "lead": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "agentId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "agentVersionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "readOnly": true,
+                          "required": [
+                            "agentId",
+                            "agentVersionId"
+                          ],
+                          "type": "object"
+                        },
+                        "members": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "agentId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "agentVersionId": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "name",
+                              "agentId",
+                              "agentVersionId"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "minItems": 1,
+                          "readOnly": true,
+                          "type": "array"
+                        },
+                        "mode": {
+                          "enum": [
+                            "handoff"
+                          ],
+                          "type": "string"
+                        },
+                        "teamId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "version": {
+                          "maximum": 2147483647,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "workspaceId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        }
+                      },
+                      "readOnly": true,
+                      "required": [
+                        "id",
+                        "teamId",
+                        "workspaceId",
+                        "version",
+                        "mode",
+                        "lead",
+                        "members",
+                        "createdBy",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "ownerPrincipalId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "workspaceId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "id",
+                "workspaceId",
+                "name",
+                "description",
+                "latestVersion",
+                "ownerPrincipalId",
+                "createdBy",
+                "createdAt",
+                "updatedAt"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "AgentTeamResource": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "createdBy": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "latestVersion": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "createdAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "createdBy": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "lead": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "agentId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "agentVersionId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "agentId",
+                      "agentVersionId"
+                    ],
+                    "type": "object"
+                  },
+                  "members": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "agentId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "agentVersionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "readOnly": true,
+                      "required": [
+                        "name",
+                        "agentId",
+                        "agentVersionId"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "readOnly": true,
+                    "type": "array"
+                  },
+                  "mode": {
+                    "enum": [
+                      "handoff"
+                    ],
+                    "type": "string"
+                  },
+                  "teamId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "maximum": 2147483647,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "workspaceId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "id",
+                  "teamId",
+                  "workspaceId",
+                  "version",
+                  "mode",
+                  "lead",
+                  "members",
+                  "createdBy",
+                  "createdAt"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "ownerPrincipalId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "id",
+          "workspaceId",
+          "name",
+          "description",
+          "latestVersion",
+          "ownerPrincipalId",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AgentTeamVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "createdBy": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "lead": {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "agentVersionId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "agentId",
+              "agentVersionId"
+            ],
+            "type": "object"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "agentId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "agentVersionId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "name",
+                "agentId",
+                "agentVersionId"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "readOnly": true,
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "handoff"
+            ],
+            "type": "string"
+          },
+          "teamId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "id",
+          "teamId",
+          "workspaceId",
+          "version",
+          "mode",
+          "lead",
+          "members",
+          "createdBy",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "AgentTeamVersionListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "createdBy": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "lead": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "agentId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "agentVersionId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "agentId",
+                    "agentVersionId"
+                  ],
+                  "type": "object"
+                },
+                "members": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "agentId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "agentVersionId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "name",
+                      "agentId",
+                      "agentVersionId"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "readOnly": true,
+                  "type": "array"
+                },
+                "mode": {
+                  "enum": [
+                    "handoff"
+                  ],
+                  "type": "string"
+                },
+                "teamId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "workspaceId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "id",
+                "teamId",
+                "workspaceId",
+                "version",
+                "mode",
+                "lead",
+                "members",
+                "createdBy",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
       "AgentVersionCheckResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3384,6 +4005,12 @@
                             "permissions": {
                               "additionalProperties": false,
                               "properties": {
+                                "memory": {
+                                  "enum": [
+                                    "agent"
+                                  ],
+                                  "type": "string"
+                                },
                                 "readFiles": {
                                   "type": "boolean"
                                 },
@@ -4676,6 +5303,12 @@
                       "permissions": {
                         "additionalProperties": false,
                         "properties": {
+                          "memory": {
+                            "enum": [
+                              "agent"
+                            ],
+                            "type": "string"
+                          },
                           "readFiles": {
                             "type": "boolean"
                           },
@@ -6071,7 +6704,9 @@
                     "storage-connection-tested",
                     "storage-connection-written",
                     "storage-grant-changed",
-                    "workspace-features-changed"
+                    "workspace-features-changed",
+                    "user-token-exchanged",
+                    "memory-updated"
                   ],
                   "type": "string"
                 },
@@ -6218,7 +6853,8 @@
                   "owner",
                   "admin",
                   "builder",
-                  "viewer"
+                  "viewer",
+                  "guest"
                 ],
                 "type": "string"
               },
@@ -6948,6 +7584,12 @@
               "permissions": {
                 "additionalProperties": false,
                 "properties": {
+                  "memory": {
+                    "enum": [
+                      "agent"
+                    ],
+                    "type": "string"
+                  },
                   "readFiles": {
                     "type": "boolean"
                   },
@@ -7055,6 +7697,12 @@
                           "permissions": {
                             "additionalProperties": false,
                             "properties": {
+                              "memory": {
+                                "enum": [
+                                  "agent"
+                                ],
+                                "type": "string"
+                              },
                               "readFiles": {
                                 "type": "boolean"
                               },
@@ -8188,6 +8836,139 @@
         ],
         "type": "object"
       },
+      "CreateAgentTeamRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "additionalProperties": false,
+            "properties": {
+              "lead": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "agentVersionId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "agentId",
+                  "agentVersionId"
+                ],
+                "type": "object"
+              },
+              "members": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "agentId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "agentVersionId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "agentId",
+                    "agentVersionId"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "readOnly": true,
+                "type": "array"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "lead",
+              "members"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateAgentTeamVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "lead": {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "agentVersionId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "agentId",
+              "agentVersionId"
+            ],
+            "type": "object"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "agentId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "agentVersionId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "agentId",
+                "agentVersionId"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "readOnly": true,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "lead",
+          "members"
+        ],
+        "type": "object"
+      },
       "CreateAgentVersionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8236,6 +9017,12 @@
                       "permissions": {
                         "additionalProperties": false,
                         "properties": {
+                          "memory": {
+                            "enum": [
+                              "agent"
+                            ],
+                            "type": "string"
+                          },
                           "readFiles": {
                             "type": "boolean"
                           },
@@ -9384,6 +10171,12 @@
                       "permissions": {
                         "additionalProperties": false,
                         "properties": {
+                          "memory": {
+                            "enum": [
+                              "agent"
+                            ],
+                            "type": "string"
+                          },
                           "readFiles": {
                             "type": "boolean"
                           },
@@ -10577,6 +11370,12 @@
               "permissions": {
                 "additionalProperties": false,
                 "properties": {
+                  "memory": {
+                    "enum": [
+                      "agent"
+                    ],
+                    "type": "string"
+                  },
                   "readFiles": {
                     "type": "boolean"
                   },
@@ -10768,12 +11567,18 @@
             "enum": [
               "mcp-project",
               "a2a-agent",
-              "builder"
+              "builder",
+              "app-backend"
             ],
             "type": "string"
           },
           "name": {
             "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+            "type": "string"
+          },
+          "oidcAudience": {
+            "maxLength": 255,
+            "minLength": 1,
             "type": "string"
           },
           "toolNames": {
@@ -11784,6 +12589,90 @@
         ],
         "type": "object"
       },
+      "CreateWebhookRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "enum": [
+                "run.completed",
+                "run.failed",
+                "run.cancelled"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "url": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "CreateWebhookResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "pattern": "^whsec_[A-Za-z0-9+/]{43}=$",
+            "type": "string"
+          },
+          "webhook": {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "events": {
+                "items": {
+                  "enum": [
+                    "run.completed",
+                    "run.failed",
+                    "run.cancelled"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "url": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "workspaceId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "id",
+              "workspaceId",
+              "url",
+              "events",
+              "createdAt"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "webhook",
+          "secret"
+        ],
+        "type": "object"
+      },
       "CreatedUserResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11816,7 +12705,8 @@
                   "owner",
                   "admin",
                   "builder",
-                  "viewer"
+                  "viewer",
+                  "guest"
                 ],
                 "type": "string"
               },
@@ -11906,6 +12796,33 @@
         "required": [
           "deleted",
           "referencedBy"
+        ],
+        "type": "object"
+      },
+      "DemoAllowance": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "runsLeft": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runsPerDay": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "runsPerDay",
+          "runsLeft",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -12068,6 +12985,104 @@
         ],
         "type": "object"
       },
+      "EmailLinkIssuedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "sent",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "EmailLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "challenge": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "consent": {
+            "const": true,
+            "type": "boolean"
+          },
+          "email": {
+            "maxLength": 320,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "type": "string"
+          },
+          "entry": {
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "email",
+          "consent",
+          "challenge"
+        ],
+        "type": "object"
+      },
+      "EmailLinkVerifiedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "type": "boolean"
+          },
+          "role": {
+            "const": "guest",
+            "type": "string"
+          },
+          "workspaceId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "workspaceSlug": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "workspaceId",
+          "workspaceSlug",
+          "role",
+          "created"
+        ],
+        "type": "object"
+      },
+      "EmailLinkVerifyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "type": "string"
+          },
+          "entry": {
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "token": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "email",
+          "token"
+        ],
+        "type": "object"
+      },
       "EndpointClientListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -12112,13 +13127,26 @@
                   "enum": [
                     "mcp-project",
                     "a2a-agent",
-                    "builder"
+                    "builder",
+                    "app-backend"
                   ],
                   "type": "string"
                 },
                 "name": {
                   "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
                   "type": "string"
+                },
+                "oidcAudience": {
+                  "anyOf": [
+                    {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "redirectUris": {
                   "items": {
@@ -12171,6 +13199,7 @@
                 "agentIds",
                 "toolNames",
                 "redirectUris",
+                "oidcAudience",
                 "hasClientSecret",
                 "actsForPrincipalId",
                 "apiKeyIds",
@@ -12233,13 +13262,26 @@
                 "enum": [
                   "mcp-project",
                   "a2a-agent",
-                  "builder"
+                  "builder",
+                  "app-backend"
                 ],
                 "type": "string"
               },
               "name": {
                 "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
                 "type": "string"
+              },
+              "oidcAudience": {
+                "anyOf": [
+                  {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "redirectUris": {
                 "items": {
@@ -12292,6 +13334,7 @@
               "agentIds",
               "toolNames",
               "redirectUris",
+              "oidcAudience",
               "hasClientSecret",
               "actsForPrincipalId",
               "apiKeyIds",
@@ -12983,6 +14026,17 @@
                   }
                 ]
               },
+              "parentRunId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "pendingApproval": {
                 "anyOf": [
                   {
@@ -13023,7 +14077,8 @@
                       "anthropic-compatible",
                       "openai",
                       "azure-openai",
-                      "openai-compatible"
+                      "openai-compatible",
+                      "vertex"
                     ],
                     "type": "string"
                   },
@@ -13035,6 +14090,12 @@
               "sessionId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "spendCeilingUsd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "startedAt": {
                 "anyOf": [
@@ -13130,11 +14191,13 @@
               "engineVersion",
               "usage",
               "cost",
+              "spendCeilingUsd",
               "error",
               "output",
               "pendingApproval",
               "accountingState",
-              "accountingError"
+              "accountingError",
+              "parentRunId"
             ],
             "type": "object"
           }
@@ -13466,7 +14529,8 @@
               "owner",
               "admin",
               "builder",
-              "viewer"
+              "viewer",
+              "guest"
             ],
             "type": "string"
           },
@@ -13530,7 +14594,8 @@
                     "owner",
                     "admin",
                     "builder",
-                    "viewer"
+                    "viewer",
+                    "guest"
                   ],
                   "type": "string"
                 },
@@ -13590,7 +14655,8 @@
                   "owner",
                   "admin",
                   "builder",
-                  "viewer"
+                  "viewer",
+                  "guest"
                 ],
                 "type": "string"
               },
@@ -13848,6 +14914,18 @@
                     "deployment": {
                       "minLength": 1,
                       "type": "string"
+                    },
+                    "location": {
+                      "enum": [
+                        "global",
+                        "us",
+                        "eu"
+                      ],
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+                      "type": "string"
                     }
                   },
                   "readOnly": true,
@@ -13875,7 +14953,8 @@
                     "anthropic-compatible",
                     "openai",
                     "azure-openai",
-                    "openai-compatible"
+                    "openai-compatible",
+                    "vertex"
                   ],
                   "type": "string"
                 },
@@ -13928,6 +15007,18 @@
               "deployment": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "location": {
+                "enum": [
+                  "global",
+                  "us",
+                  "eu"
+                ],
+                "type": "string"
+              },
+              "projectId": {
+                "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+                "type": "string"
               }
             },
             "readOnly": true,
@@ -13955,7 +15046,8 @@
               "anthropic-compatible",
               "openai",
               "azure-openai",
-              "openai-compatible"
+              "openai-compatible",
+              "vertex"
             ],
             "type": "string"
           },
@@ -15287,6 +16379,17 @@
                   }
                 ]
               },
+              "parentRunId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "pendingApproval": {
                 "anyOf": [
                   {
@@ -15327,7 +16430,8 @@
                       "anthropic-compatible",
                       "openai",
                       "azure-openai",
-                      "openai-compatible"
+                      "openai-compatible",
+                      "vertex"
                     ],
                     "type": "string"
                   },
@@ -15339,6 +16443,12 @@
               "sessionId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "spendCeilingUsd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "startedAt": {
                 "anyOf": [
@@ -15434,11 +16544,13 @@
               "engineVersion",
               "usage",
               "cost",
+              "spendCeilingUsd",
               "error",
               "output",
               "pendingApproval",
               "accountingState",
-              "accountingError"
+              "accountingError",
+              "parentRunId"
             ],
             "type": "object"
           }
@@ -15447,6 +16559,714 @@
         "required": [
           "run",
           "events"
+        ],
+        "type": "object"
+      },
+      "RunDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "run": {
+            "additionalProperties": false,
+            "properties": {
+              "accountingError": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "accountingState": {
+                "enum": [
+                  "pending",
+                  "complete",
+                  "partial",
+                  "failed",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              "agentId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "agentVersion": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "children": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "accountingError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "accountingState": {
+                      "enum": [
+                        "pending",
+                        "complete",
+                        "partial",
+                        "failed",
+                        "unavailable"
+                      ],
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "agentVersion": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "cost": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "amount": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "currency": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "priceTableVersion": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "readOnly": true,
+                      "required": [
+                        "amount",
+                        "currency",
+                        "priceTableVersion"
+                      ],
+                      "type": "object"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                      "type": "string"
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "engine": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "claude-agent-sdk",
+                            "openai-agents",
+                            "pi",
+                            "mastra"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "engineVersion": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "initiatingUserId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "model": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "modelConnectionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "output": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "structured": {},
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "readOnly": true,
+                          "required": [
+                            "text",
+                            "structured"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "parentRunId": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "pendingApproval": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonicalCall": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "toolName": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "readOnly": true,
+                          "required": [
+                            "toolName",
+                            "canonicalCall"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "projectId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "anthropic",
+                            "anthropic-compatible",
+                            "openai",
+                            "azure-openai",
+                            "openai-compatible",
+                            "vertex"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sessionId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "spendCeilingUsd": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "startedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "queued",
+                        "running",
+                        "awaiting_approval",
+                        "completed",
+                        "failed",
+                        "cancelled"
+                      ],
+                      "type": "string"
+                    },
+                    "usage": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cacheCreationInputTokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "cacheReadInputTokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "inputTokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "outputTokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "toolCalls": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "totalTokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "readOnly": true,
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "cacheReadInputTokens",
+                        "cacheCreationInputTokens",
+                        "totalTokens",
+                        "toolCalls"
+                      ],
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "id",
+                    "workspaceId",
+                    "agentId",
+                    "projectId",
+                    "initiatingUserId",
+                    "sessionId",
+                    "agentVersion",
+                    "status",
+                    "createdAt",
+                    "startedAt",
+                    "endedAt",
+                    "durationMs",
+                    "model",
+                    "provider",
+                    "modelConnectionId",
+                    "engine",
+                    "engineVersion",
+                    "usage",
+                    "cost",
+                    "spendCeilingUsd",
+                    "error",
+                    "output",
+                    "pendingApproval",
+                    "accountingState",
+                    "accountingError",
+                    "parentRunId"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 16,
+                "readOnly": true,
+                "type": "array"
+              },
+              "cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "currency": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "priceTableVersion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "amount",
+                  "currency",
+                  "priceTableVersion"
+                ],
+                "type": "object"
+              },
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "durationMs": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "endedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "engine": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "claude-agent-sdk",
+                      "openai-agents",
+                      "pi",
+                      "mastra"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "engineVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "initiatingUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "modelConnectionId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "output": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "structured": {},
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "text",
+                      "structured"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "parentRunId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendingApproval": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "canonicalCall": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "toolName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "toolName",
+                      "canonicalCall"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "anthropic",
+                      "anthropic-compatible",
+                      "openai",
+                      "azure-openai",
+                      "openai-compatible",
+                      "vertex"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sessionId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "spendCeilingUsd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "awaiting_approval",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "treeCost": {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "currency": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "type": "object"
+              },
+              "usage": {
+                "additionalProperties": false,
+                "properties": {
+                  "cacheCreationInputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cacheReadInputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "inputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "toolCalls": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "totalTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "cacheReadInputTokens",
+                  "cacheCreationInputTokens",
+                  "totalTokens",
+                  "toolCalls"
+                ],
+                "type": "object"
+              },
+              "workspaceId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "id",
+              "workspaceId",
+              "agentId",
+              "projectId",
+              "initiatingUserId",
+              "sessionId",
+              "agentVersion",
+              "status",
+              "createdAt",
+              "startedAt",
+              "endedAt",
+              "durationMs",
+              "model",
+              "provider",
+              "modelConnectionId",
+              "engine",
+              "engineVersion",
+              "usage",
+              "cost",
+              "spendCeilingUsd",
+              "error",
+              "output",
+              "pendingApproval",
+              "accountingState",
+              "accountingError",
+              "parentRunId"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "run"
         ],
         "type": "object"
       },
@@ -15741,6 +17561,17 @@
                     }
                   ]
                 },
+                "parentRunId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "pendingApproval": {
                   "anyOf": [
                     {
@@ -15781,7 +17612,8 @@
                         "anthropic-compatible",
                         "openai",
                         "azure-openai",
-                        "openai-compatible"
+                        "openai-compatible",
+                        "vertex"
                       ],
                       "type": "string"
                     },
@@ -15793,6 +17625,12 @@
                 "sessionId": {
                   "minLength": 1,
                   "type": "string"
+                },
+                "spendCeilingUsd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "startedAt": {
                   "anyOf": [
@@ -15888,11 +17726,13 @@
                 "engineVersion",
                 "usage",
                 "cost",
+                "spendCeilingUsd",
                 "error",
                 "output",
                 "pendingApproval",
                 "accountingState",
-                "accountingError"
+                "accountingError",
+                "parentRunId"
               ],
               "type": "object"
             },
@@ -16072,6 +17912,17 @@
                   }
                 ]
               },
+              "parentRunId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "pendingApproval": {
                 "anyOf": [
                   {
@@ -16112,7 +17963,8 @@
                       "anthropic-compatible",
                       "openai",
                       "azure-openai",
-                      "openai-compatible"
+                      "openai-compatible",
+                      "vertex"
                     ],
                     "type": "string"
                   },
@@ -16124,6 +17976,12 @@
               "sessionId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "spendCeilingUsd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "startedAt": {
                 "anyOf": [
@@ -16219,11 +18077,13 @@
               "engineVersion",
               "usage",
               "cost",
+              "spendCeilingUsd",
               "error",
               "output",
               "pendingApproval",
               "accountingState",
-              "accountingError"
+              "accountingError",
+              "parentRunId"
             ],
             "type": "object"
           }
@@ -17321,6 +19181,12 @@
               "permissions": {
                 "additionalProperties": false,
                 "properties": {
+                  "memory": {
+                    "enum": [
+                      "agent"
+                    ],
+                    "type": "string"
+                  },
                   "readFiles": {
                     "type": "boolean"
                   },
@@ -17527,11 +19393,6 @@
                       "type": "null"
                     }
                   ]
-                },
-                "url": {
-                  "format": "starts_with",
-                  "pattern": "^\\/p\\/.*",
-                  "type": "string"
                 },
                 "viewCount": {
                   "maximum": 9007199254740991,
@@ -18184,6 +20045,11 @@
               }
             ]
           },
+          "spendCeilingUsd": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000,
+            "type": "number"
+          },
           "subject": {
             "maxLength": 256,
             "minLength": 1,
@@ -18370,6 +20236,17 @@
                   }
                 ]
               },
+              "parentRunId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "pendingApproval": {
                 "anyOf": [
                   {
@@ -18410,7 +20287,8 @@
                       "anthropic-compatible",
                       "openai",
                       "azure-openai",
-                      "openai-compatible"
+                      "openai-compatible",
+                      "vertex"
                     ],
                     "type": "string"
                   },
@@ -18422,6 +20300,12 @@
               "sessionId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "spendCeilingUsd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "startedAt": {
                 "anyOf": [
@@ -18517,11 +20401,13 @@
               "engineVersion",
               "usage",
               "cost",
+              "spendCeilingUsd",
               "error",
               "output",
               "pendingApproval",
               "accountingState",
-              "accountingError"
+              "accountingError",
+              "parentRunId"
             ],
             "type": "object"
           }
@@ -18848,6 +20734,15 @@
           {
             "additionalProperties": false,
             "properties": {
+              "emptyFolders": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "readOnly": true,
+                "type": "array"
+              },
               "ok": {
                 "const": true,
                 "type": "boolean"
@@ -18883,6 +20778,161 @@
             "type": "object"
           }
         ]
+      },
+      "StoreDemoStates": {
+        "additionalProperties": false,
+        "properties": {
+          "maintenance": {
+            "items": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "maintenance"
+        ],
+        "type": "object"
+      },
+      "StoreLeadReceivedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "received",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "StoreLeadRequest": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "challenge": {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              "consent": {
+                "const": true,
+                "type": "boolean"
+              },
+              "email": {
+                "maxLength": 320,
+                "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                "type": "string"
+              },
+              "entry": {
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "enquiry",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "setup": {
+                "additionalProperties": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "pattern": "^[a-zA-Z]{1,40}$",
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "kind",
+              "email",
+              "consent",
+              "challenge",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "challenge": {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              "consent": {
+                "const": true,
+                "type": "boolean"
+              },
+              "email": {
+                "maxLength": 320,
+                "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                "type": "string"
+              },
+              "entry": {
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "launch_notice",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "kind",
+              "email",
+              "consent",
+              "challenge",
+              "entry"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "StorePrivacyFacts": {
+        "additionalProperties": false,
+        "properties": {
+          "demoWorkspaceHours": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "leadRetentionDays": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "leadRetentionDays",
+          "demoWorkspaceHours"
+        ],
+        "type": "object"
       },
       "StreamResetFrameData": {
         "additionalProperties": false,
@@ -19016,6 +21066,65 @@
             "type": "object"
           }
         ]
+      },
+      "TokenExchangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "grant_type": {
+            "const": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "type": "string"
+          },
+          "requested_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:access_token",
+            "type": "string"
+          },
+          "subject_token": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string"
+          },
+          "subject_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:id_token",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "grant_type",
+          "subject_token",
+          "subject_token_type"
+        ],
+        "type": "object"
+      },
+      "TokenExchangeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "pattern": "^awo_live_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]{43})$",
+            "type": "string"
+          },
+          "expires_in": {
+            "exclusiveMinimum": 0,
+            "maximum": 300,
+            "type": "integer"
+          },
+          "issued_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:access_token",
+            "type": "string"
+          },
+          "token_type": {
+            "const": "Bearer",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "access_token",
+          "issued_token_type",
+          "token_type",
+          "expires_in"
+        ],
+        "type": "object"
       },
       "ToolBundleResponse": {
         "additionalProperties": false,
@@ -19534,6 +21643,11 @@
             "readOnly": true,
             "type": "array"
           },
+          "oidcAudience": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
           "redirectUris": {
             "items": {
               "maxLength": 2048,
@@ -19715,6 +21829,11 @@
       "UpdateTriggerRequest": {
         "additionalProperties": false,
         "properties": {
+          "cron": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -19752,6 +21871,11 @@
                 "type": "null"
               }
             ]
+          },
+          "timezone": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
           },
           "zoomSecretToken": {
             "anyOf": [
@@ -19888,6 +22012,63 @@
         ],
         "type": "object"
       },
+      "WebhookListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "webhooks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "events": {
+                  "items": {
+                    "enum": [
+                      "run.completed",
+                      "run.failed",
+                      "run.cancelled"
+                    ],
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "url": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "workspaceId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "id",
+                "workspaceId",
+                "url",
+                "events",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "webhooks"
+        ],
+        "type": "object"
+      },
       "WorkspaceFeatures": {
         "additionalProperties": false,
         "properties": {
@@ -19973,7 +22154,8 @@
                     "owner",
                     "admin",
                     "builder",
-                    "viewer"
+                    "viewer",
+                    "guest"
                   ],
                   "type": "string"
                 },
@@ -20049,7 +22231,8 @@
                   "owner",
                   "admin",
                   "builder",
-                  "viewer"
+                  "viewer",
+                  "guest"
                 ],
                 "type": "string"
               },
@@ -20199,7 +22382,8 @@
                   "owner",
                   "admin",
                   "builder",
-                  "viewer"
+                  "viewer",
+                  "guest"
                 ],
                 "type": "string"
               },
@@ -20280,7 +22464,7 @@
       "name": "Apache-2.0"
     },
     "title": "Agent Workspace API",
-    "version": "0.6.12"
+    "version": "0.6.13"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20404,6 +22588,380 @@
         "summary": "Read a published agent's A2A v0.3 agent card",
         "tags": [
           "a2a"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/agent-teams": {
+      "get": {
+        "operationId": "agentTeams.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTeamListResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List the workspace's agent teams, newest first, cursor paged",
+        "tags": [
+          "agentTeams"
+        ],
+        "x-agent-workspace-feature": "core"
+      },
+      "post": {
+        "operationId": "agentTeams.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgentTeamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTeamResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Create an agent team, with its first version when the body carries one",
+        "tags": [
+          "agentTeams"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/agent-teams/{id}": {
+      "delete": {
+        "operationId": "agentTeams.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Delete an agent team; its name becomes free again",
+        "tags": [
+          "agentTeams"
+        ],
+        "x-agent-workspace-feature": "core"
+      },
+      "get": {
+        "operationId": "agentTeams.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTeamResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Read one agent team with its newest version",
+        "tags": [
+          "agentTeams"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/agent-teams/{id}/runs": {
+      "post": {
+        "operationId": "agentTeams.run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Makes a retried team run safe exactly as on `POST /api/agents/:id/runs` (S-6, ADR-0151): the same key with the same request returns the run the first start queued; the same key with a different request answers `409 run_idempotency_conflict`.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartRunResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Run an agent team: start its newest version's lead, which calls the members",
+        "tags": [
+          "agentTeams"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/agent-teams/{id}/versions": {
+      "get": {
+        "operationId": "agentTeams.versions.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTeamVersionListResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List a team's versions, newest first, cursor paged",
+        "tags": [
+          "agentTeams"
+        ],
+        "x-agent-workspace-feature": "core"
+      },
+      "post": {
+        "operationId": "agentTeams.versions.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgentTeamVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTeamVersion"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Save a team's next immutable version, pinning the lead's and each member's version",
+        "tags": [
+          "agentTeams"
         ],
         "x-agent-workspace-feature": "core"
       }
@@ -21687,6 +24245,15 @@
             }
           },
           {
+            "description": "Makes a retried start safe (S-6, ADR-0151, spec §5.12): 1–255 characters after trimming, scoped to the calling principal. The same key with the same request returns the run the first start queued; the same key with a different request answers `409 run_idempotency_conflict`; a blank or longer key answers `400 invalid_idempotency_key`.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "$ref": "#/components/parameters/ContractsVersion"
           }
         ],
@@ -22257,6 +24824,171 @@
         "x-agent-workspace-feature": "core"
       }
     },
+    "/api/auth/email-link": {
+      "post": {
+        "operationId": "auth.issueEmailLink",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLinkIssuedResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Send a single-use sign-in link to an address (guest sign-in); the same 202 for every address",
+        "tags": [
+          "auth"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/auth/email-link/verify": {
+      "post": {
+        "operationId": "auth.verifyEmailLink",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailLinkVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLinkVerifiedResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Consume an emailed link and sign the guest in to their demo workspace; the session cookie is set",
+        "tags": [
+          "auth"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/auth/token-exchange": {
+      "post": {
+        "operationId": "auth.exchange",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Exchange the signed-in person's OIDC ID token for a short-lived access token of an app-backend endpoint client (ADR-0161)",
+        "tags": [
+          "auth"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
     "/api/auth/workspace": {
       "post": {
         "operationId": "workspaces.select",
@@ -22635,6 +25367,50 @@
           "connectors"
         ],
         "x-agent-workspace-feature": "connectors"
+      }
+    },
+    "/api/demo/allowance": {
+      "get": {
+        "operationId": "demo.allowance",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoAllowance"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Read what the signed-in guest's demo workspace has left: runs and time",
+        "tags": [
+          "demo"
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/endpoint-clients": {
@@ -25053,7 +27829,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunResponse"
+                  "$ref": "#/components/schemas/RunDetailResponse"
                 }
               }
             },
@@ -25077,7 +27853,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Read one run",
+        "summary": "Read one run, with its child runs (at most 16, oldest first) and treeCost, the read-time sum of cost over the run and its children (ADR-0104)",
         "tags": [
           "runs"
         ],
@@ -27431,6 +30207,151 @@
         "x-agent-workspace-feature": "core"
       }
     },
+    "/api/store/demos": {
+      "get": {
+        "operationId": "store.demos",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreDemoStates"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Read which live demos are under maintenance, for the store to show on their cards",
+        "tags": [
+          "store"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/store/leads": {
+      "post": {
+        "operationId": "store.sendLead",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreLeadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreLeadReceivedResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Send the store enquiry form or ask to be told when a coming-soon entry launches; the same 202 for every address",
+        "tags": [
+          "store"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/store/privacy": {
+      "get": {
+        "operationId": "store.privacy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorePrivacyFacts"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Read the lead retention period and demo workspace lifetime the privacy notice states",
+        "tags": [
+          "store"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
     "/api/tokens": {
       "post": {
         "operationId": "tokens.mint",
@@ -28105,6 +31026,147 @@
         "x-agent-workspace-feature": "core"
       }
     },
+    "/api/webhooks": {
+      "get": {
+        "operationId": "webhooks.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookListResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List the workspace's webhooks (at most 10, unpaginated); the secret is never listed",
+        "tags": [
+          "webhooks"
+        ],
+        "x-agent-workspace-feature": "runs"
+      },
+      "post": {
+        "operationId": "webhooks.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWebhookResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Register a webhook for terminal run outcomes. The URL must pass the egress policy; the whsec_ signing secret is returned once, in this answer",
+        "tags": [
+          "webhooks"
+        ],
+        "x-agent-workspace-feature": "runs"
+      }
+    },
+    "/api/webhooks/{id}": {
+      "delete": {
+        "operationId": "webhooks.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Remove a webhook, its pending deliveries and its signing secret",
+        "tags": [
+          "webhooks"
+        ],
+        "x-agent-workspace-feature": "runs"
+      }
+    },
     "/api/workspaces": {
       "get": {
         "operationId": "workspaces.list",
@@ -28571,6 +31633,9 @@
       "name": "a2a"
     },
     {
+      "name": "agentTeams"
+    },
+    {
       "name": "agents"
     },
     {
@@ -28578,6 +31643,9 @@
     },
     {
       "name": "connectors"
+    },
+    {
+      "name": "demo"
     },
     {
       "name": "endpointClients"
@@ -28628,6 +31696,9 @@
       "name": "storage-connections"
     },
     {
+      "name": "store"
+    },
+    {
       "name": "team"
     },
     {
@@ -28638,6 +31709,9 @@
     },
     {
       "name": "triggers"
+    },
+    {
+      "name": "webhooks"
     },
     {
       "name": "workspaces"

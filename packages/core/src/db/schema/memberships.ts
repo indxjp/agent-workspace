@@ -1,20 +1,30 @@
 /**
  * `memberships` — a user's role inside one workspace (spec §21, §27).
  *
- * The four roles are §21's, verbatim and in its order of decreasing authority. §21 adds no
- * fifth role for sharing ("Sharing rights follow the same four roles and add nothing new"),
- * so this list is the whole of the project's authorization vocabulary.
+ * The five roles are §21's, verbatim and in its order of decreasing authority. Sharing adds no
+ * role of its own ("Sharing rights follow the same roles and add nothing new"). The fifth,
+ * `guest`, is the narrowest: held only in a demo workspace the email-link sign-in made for one
+ * Agent Store visitor. No route confers it, so `api_keys` and `invitations` close their `role`
+ * over {@link conferrableRoles} instead.
  */
 import { index, pgTable, text, unique, uuid } from 'drizzle-orm/pg-core';
+import { CONFERRABLE_ROLES, type ConferrableRoleName } from '@indx-workspace/contracts/team';
 
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
 import { oneOf } from './one-of.js';
 import { users } from './users.js';
 import { workspaces } from './workspaces.js';
 
-/** Spec §21, in descending order of authority. */
-export const membershipRoles = ['owner', 'admin', 'builder', 'viewer'] as const;
+/** Spec §21, in descending order of authority, then the store's `guest`. */
+export const membershipRoles = ['owner', 'admin', 'builder', 'viewer', 'guest'] as const;
 export type MembershipRole = (typeof membershipRoles)[number];
+
+/**
+ * The roles an invitation or an API key may carry: every membership role but `guest`. The contracts'
+ * own tuple, not a copy of it.
+ */
+export const conferrableRoles = CONFERRABLE_ROLES;
+export type ConferrableRole = ConferrableRoleName;
 
 export const memberships = pgTable(
   'memberships',

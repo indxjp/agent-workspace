@@ -1,0 +1,74 @@
+[
+  {
+    "orderNo": "SO-2024-0412",
+    "partNo": "P-10231",
+    "partName": "Motor-mount L bracket",
+    "customer": "Sample Seiki Co.",
+    "material": "SS400",
+    "orderedOn": "2024-11-12",
+    "quantity": 50,
+    "unitPrice": 430,
+    "amount": 21500,
+    "note": "Mill scale left on. Deburring only."
+  },
+  {
+    "orderNo": "SO-2025-0108",
+    "partNo": "P-10231",
+    "partName": "Motor-mount L bracket",
+    "customer": "Sample Seiki Co.",
+    "material": "SS400",
+    "orderedOn": "2025-08-04",
+    "quantity": 40,
+    "unitPrice": 460,
+    "amount": 18400,
+    "note": "Unit price revised in a re-quote after the steel price rise."
+  },
+  {
+    "orderNo": "SO-2025-0377",
+    "partNo": "P-10388",
+    "partName": "Sensor-mount bracket",
+    "customer": "Sample Chuo Industries Co.",
+    "material": "SS400",
+    "orderedOn": "2025-10-21",
+    "quantity": 100,
+    "unitPrice": 380,
+    "amount": 38000,
+    "note": "Volume part. Setup shared with other parts."
+  },
+  {
+    "orderNo": "SO-2025-0219",
+    "partNo": "P-10502",
+    "partName": "Frame base plate",
+    "customer": "Sample Seiki Co.",
+    "material": "SS400",
+    "orderedOn": "2025-06-30",
+    "quantity": 10,
+    "unitPrice": 4200,
+    "amount": 42000,
+    "note": "Laser settings changed for the 9 mm plate."
+  },
+  {
+    "orderNo": "SO-2025-0533",
+    "partNo": "P-20114",
+    "partName": "Control panel inspection cover",
+    "customer": "Sample Hokuriku Food Systems Co.",
+    "material": "SUS304",
+    "orderedOn": "2026-01-15",
+    "quantity": 30,
+    "unitPrice": 1480,
+    "amount": 44400,
+    "note": "#400 polish finish quoted separately."
+  },
+  {
+    "orderNo": "SO-2024-0920",
+    "partNo": "P-30071",
+    "partName": "Heat-sink block base",
+    "customer": "Sample Chuo Industries Co.",
+    "material": "A5052",
+    "orderedOn": "2024-12-02",
+    "quantity": 20,
+    "unitPrice": 2600,
+    "amount": 52000,
+    "note": "Machined part. Not sheet metal."
+  }
+]

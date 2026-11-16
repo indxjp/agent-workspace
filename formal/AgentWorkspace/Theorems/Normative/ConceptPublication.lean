@@ -59,7 +59,7 @@ theorem three_visibilities :
 /-- "Optional expiry (`24 h`, `7 days`, `30 days`, `never`)": the four options, of 24 hours, 7
 days and 30 days, and `never` sets no expiry. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
-  (ts := "apps/web/server/shares/core/service.ts#EXPIRY_MS")]
+  (ts := "apps/web/server/shares/core/rules.ts#EXPIRY_MS")]
 theorem expiry_options_and_lifetimes :
     WireEnum.wires Expiry = ["24 h", "7 days", "30 days", "never"] ∧
       Expiry.hours24.durationMs? = some (24 * 60 * 60 * 1000) ∧
@@ -79,7 +79,7 @@ theorem expiry_and_passphrase_are_optional :
 /-- "Budget cap $20 total": a runnable share published without a cap gets twenty dollars, which
 fits `budget_cap_usd numeric(12, 4)`. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2063-publishing-an-agent")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem default_runnable_budget_is_twenty_dollars :
     ((Decimal.parse? defaultRunnableBudgetUsd).bind Decimal.toMicros?) = some 20000000 ∧
       ((Decimal.parse? defaultRunnableBudgetUsd).map (Decimal.fits 12 4)) = some true := by decide +kernel
@@ -168,7 +168,7 @@ example := include_and_transcript_are_session_only .agent (some .definition) fal
 `/p/<token>`; a private or workspace share never does, at any instant. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")
   (ts := "packages/core/src/db/repositories/root.ts#findShareWorkspace")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem only_a_public_share_opens (s : Share) (now : Nat) (h : s.publiclyOpen now = true) :
     s.visibility = .«public» := by
   unfold Share.publiclyOpen at h
@@ -195,7 +195,7 @@ theorem suspended_link_does_not_open (s : Share) (hr : s.revokedAt = none)
 share that is neither revoked nor suspended is in state `stopped` and does not open. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2063-publishing-an-agent")
   (ts := "packages/core/src/db/repositories/shares.ts#stop")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem stopped_link_does_not_open (s : Share) (hr : s.revokedAt = none) (hs : s.suspendedAt = none)
     (h : s.stopped = true) (now : Nat) :
     s.stateAt now = .stopped ∧ s.publiclyOpen now = false := by
@@ -204,7 +204,7 @@ theorem stopped_link_does_not_open (s : Share) (hr : s.revokedAt = none) (hs : s
 /-- "Optional expiry": a share whose expiry has come (`expires_at <= now`) does not open, and at
 the instant before it a public share with no other cause still opens. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem expiry_closes_the_link_at_its_instant (s : Share) (e : Nat) (he : s.expiresAt = some e)
     (hv : s.visibility = .«public») (hr : s.revokedAt = none) (hs : s.suspendedAt = none)
     (hst : s.stopped = false) :
@@ -216,7 +216,7 @@ theorem expiry_closes_the_link_at_its_instant (s : Share) (e : Nat) (he : s.expi
 
 /-- A public share that is not revoked, suspended, stopped or expiring opens at every instant. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem live_public_share_always_opens (s : Share) (hv : s.visibility = .«public»)
     (hr : s.revokedAt = none) (hs : s.suspendedAt = none) (hst : s.stopped = false)
     (he : s.expiresAt = none) (now : Nat) : s.publiclyOpen now = true ∧ s.stateAt now = .live := by
@@ -257,6 +257,15 @@ theorem token_never_crosses_the_wire_as_a_field (v : Visibility) (withViewCount 
       (v ≠ .«public» → (resourceKeys v withViewCount).contains "url" = false) := by
   cases v <;> cases withViewCount <;> decide +kernel
 
+/-- "a list item never carries it": `GET /api/shares` renders no `url`, for any visibility; a
+public link is shown once, in the publish response (part 06 step 3 phase 2). -/
+@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+  (ts := "packages/contracts/src/shares.ts#ShareListItemSchema")
+  (ts := "apps/web/server/shares/core/resource.ts#toShareListItem")]
+theorem list_item_never_carries_url (v : Visibility) :
+    (resourceKeys v true).contains "url" = false := by
+  cases v <;> decide +kernel
+
 /-- "`viewCount` is present on list items only": the key is rendered exactly when a count is
 given. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
@@ -290,7 +299,7 @@ a `public` request while public sharing is off is refused with `invalid_share`, 
 subject, mode, role and release gate. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
   (doc := "docs/spec.md#2064-administration")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem public_share_refused_while_public_sharing_is_off (r : PublishRequest)
     (role : Membership.Role) (runnableEnabled : Bool) (now : Nat) (hv : r.visibility = .«public») :
     publishDecision r role false runnableEnabled now = .refused .publicSharingOff ∧
@@ -318,7 +327,7 @@ theorem runnable_is_refused_in_this_release (r : PublishRequest) (role : Members
 open, a Builder's or Viewer's runnable request is still refused, and an Owner's or Admin's is
 admitted. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#viewer")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem runnable_requires_owner_or_admin (r : PublishRequest) (role : Membership.Role) (now : Nat)
     (ht : r.subjectType = .agent) (hm : r.mode = some .runnable) :
     (ownerOrAdmin role = false →
@@ -333,7 +342,7 @@ theorem runnable_requires_owner_or_admin (r : PublishRequest) (role : Membership
 /-- "Definition sharing is the default": an admitted agent share published without a mode is a
 `definition` share, and it carries no budget. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2063-publishing-an-agent")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem agent_share_defaults_to_definition (r : PublishRequest) (role : Membership.Role)
     (pse re : Bool) (now : Nat) (p : Published) (ht : r.subjectType = .agent) (hm : r.mode = none)
     (h : publishDecision r role pse re now = .published p) :
@@ -348,7 +357,7 @@ theorem agent_share_defaults_to_definition (r : PublishRequest) (role : Membersh
 /-- "Budget cap $20 total": an admitted runnable share published without a cap gets
 `defaultRunnableBudgetUsd`, and one published with a cap keeps it. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2063-publishing-an-agent")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem runnable_budget_defaults_to_twenty (r : PublishRequest) (role : Membership.Role)
     (now : Nat) (ht : r.subjectType = .agent) (hm : r.mode = some .runnable)
     (hv : r.visibility ≠ .«public») (ho : ownerOrAdmin role = true) :
@@ -363,7 +372,7 @@ theorem runnable_budget_defaults_to_twenty (r : PublishRequest) (role : Membersh
 /-- "Optional passphrase": a passphrase given at publish time is stored (as a hash), and none is
 stored when none is given. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem passphrase_is_stored_exactly_when_given (r : PublishRequest) (role : Membership.Role)
     (pse re : Bool) (now : Nat) (p : Published)
     (h : publishDecision r role pse re now = .published p) :
@@ -381,7 +390,7 @@ theorem passphrase_is_stored_exactly_when_given (r : PublishRequest) (role : Mem
 /-- "Optional … passphrase" on opening: a public link that is open and has a passphrase opens
 only for the right passphrase, and answers `invalid_passphrase` to a missing or wrong one. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem passphrase_gates_an_open_link (s : Share) (now : Nat) (ho : s.publiclyOpen now = true)
     (hp : s.passphraseRequired = true) :
     s.resolveAt now .right = .opened ∧ s.resolveAt now .wrong = .invalidPassphrase ∧
@@ -392,7 +401,7 @@ theorem passphrase_gates_an_open_link (s : Share) (now : Nat) (ho : s.publiclyOp
 /-- "Neither is required": an open public link without a passphrase opens for every visitor,
 whatever it presents. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+  (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem link_without_passphrase_opens_for_everyone (s : Share) (now : Nat)
     (ho : s.publiclyOpen now = true) (hp : s.passphraseHash = none) (a : PassphraseAttempt) :
     s.resolveAt now a = .opened := by

@@ -20,14 +20,15 @@ open AgentWorkspace.Er.Current.Configuration
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 theorem provider_wires :
     WireEnum.wires ModelConnection.Provider =
-      ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"] := by
+      ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible",
+        "vertex"] := by
   decide +kernel
 
 /-- The model-connection config fields are spelled and ordered as `MODEL_CONNECTION_CONFIG_FIELDS`
 lists them. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/models.ts#MODEL_CONNECTION_CONFIG_FIELDS")]
 theorem config_field_wires :
-    WireEnum.wires ModelConnection.ConfigField = ["baseUrl", "deployment", "apiVersion"] := by
+    WireEnum.wires ModelConnection.ConfigField = ["baseUrl", "deployment", "apiVersion", "projectId", "location"] := by
   decide +kernel
 
 /-- The runtime drivers are spelled and ordered as `runtimeProfileDrivers` lists them. -/
@@ -107,13 +108,13 @@ theorem cluster_value_lists_pass_the_ddl_gate :
 key of today's schema that starts or ends in a cluster table is listed. -/
 @[aw_spec (tier := T0)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem cluster_foreign_keys_are_complete : clusterForeignKeysComplete = true := by decide +kernel
 
 /-- Every foreign key that touches the cluster is classified: a root reference, tenant-paired, or
 covered by a tenant-paired sibling; none is unpaired or global. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")]
+@[aw_spec (tier := T0) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem cluster_foreign_keys_are_paired :
     clusterForeignKeys.map (fun (t, n, _) => classify catalogue t (fkOf t n)) =
       [.rootReference, .rootReference, .siblingPaired, .tenantPaired, .rootReference,

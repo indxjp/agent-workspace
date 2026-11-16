@@ -34,7 +34,21 @@ export const shares = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    token: text('token').notNull(),
+    /**
+     * The plain link token. Written only by a web process from before part 06 step 3 phase 2,
+     * during a rolling update; every existing value was cleared by migration 0105. A public link
+     * is shown once, in the `201` of `POST /api/shares`, and is never stored.
+     * ponytail: dropped, with its unique key and 0105's trigger, by the next release's migration
+     * (ADR-0069: a migration must stay compatible with the release before it).
+     */
+    token: text('token'),
+    /**
+     * SHA-256 of the link token, lower-case hex, the encoding `hashApiKeySecret` gives every other
+     * bearer secret (apps/web/server/rbac/api-key.ts). Links are looked up by this (part 06
+     * step 3). The web process writes it; 0105's trigger fills it for a row a previous release
+     * inserted with only `token`.
+     */
+    tokenHash: text('token_hash').notNull(),
     subjectType: text('subject_type', { enum: shareSubjectTypes }).notNull(),
     subjectId: text('subject_id').notNull(),
     subjectLabel: text('subject_label').notNull(),
@@ -56,6 +70,7 @@ export const shares = pgTable(
   (table) => [
     unique('shares_id_workspace_key').on(table.id, table.workspaceId),
     unique('shares_token_key').on(table.token),
+    unique('shares_token_hash_key').on(table.tokenHash),
     index('shares_workspace_created_idx').on(table.workspaceId, table.createdAt),
     index('shares_publisher_principal_idx').on(table.publisherPrincipalId),
     oneOf('shares_subject_type_valid', table.subjectType, shareSubjectTypes),

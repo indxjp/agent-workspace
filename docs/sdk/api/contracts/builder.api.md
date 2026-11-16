@@ -238,6 +238,9 @@ export const BuilderToolInputSchemas: {
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -377,8 +380,8 @@ export const BuilderToolInputSchemas: {
                         comfortable: "comfortable";
                     }>>;
                     locale: z.ZodOptional<z.ZodEnum<{
-                        en: "en";
                         ja: "ja";
+                        en: "en";
                     }>>;
                     logo: z.ZodOptional<z.ZodUnion<readonly [z.ZodReadonly<z.ZodObject<{
                         text: z.ZodString;
@@ -454,6 +457,9 @@ export const BuilderToolInputSchemas: {
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -593,8 +599,8 @@ export const BuilderToolInputSchemas: {
                         comfortable: "comfortable";
                     }>>;
                     locale: z.ZodOptional<z.ZodEnum<{
-                        en: "en";
                         ja: "ja";
+                        en: "en";
                     }>>;
                     logo: z.ZodOptional<z.ZodUnion<readonly [z.ZodReadonly<z.ZodObject<{
                         text: z.ZodString;
@@ -727,6 +733,9 @@ export const BuilderToolOutputSchemas: {
                         permissions: z.ZodReadonly<z.ZodObject<{
                             readFiles: z.ZodBoolean;
                             writeFiles: z.ZodBoolean;
+                            memory: z.ZodOptional<z.ZodEnum<{
+                                agent: "agent";
+                            }>>;
                             runCommands: z.ZodBoolean;
                             unrestrictedNetwork: z.ZodBoolean;
                         }, z.core.$strict>>;
@@ -866,8 +875,8 @@ export const BuilderToolOutputSchemas: {
                             comfortable: "comfortable";
                         }>>;
                         locale: z.ZodOptional<z.ZodEnum<{
-                            en: "en";
                             ja: "ja";
+                            en: "en";
                         }>>;
                         logo: z.ZodOptional<z.ZodUnion<readonly [z.ZodReadonly<z.ZodObject<{
                             text: z.ZodString;

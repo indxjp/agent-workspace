@@ -35,6 +35,7 @@ export async function projectOptions(root: string) {
     options: {
       defaultEngine: read?.lifted === false ? read.project.engine : undefined,
       withheld: read === null ? [] : projectSecretNames(read),
+      models: read?.lifted === false ? read.project.models : undefined,
     },
   };
 }

@@ -172,12 +172,12 @@ export type PlatformDescriptor = z.infer<typeof PlatformDescriptorSchema>;
 // @public
 export const PlatformDescriptorSchema: z.ZodReadonly<z.ZodObject<{
     id: z.ZodEnum<{
+        "aws-agentcore": "aws-agentcore";
         "claude-managed-agents": "claude-managed-agents";
         "copilot-studio": "copilot-studio";
         "m365-declarative-agent": "m365-declarative-agent";
         "microsoft-foundry": "microsoft-foundry";
         "gemini-enterprise": "gemini-enterprise";
-        "aws-agentcore": "aws-agentcore";
         "eject-claude-agent-sdk": "eject-claude-agent-sdk";
         "eject-mastra": "eject-mastra";
         "eject-openai-agents": "eject-openai-agents";
@@ -297,12 +297,12 @@ export type PlatformExportRequestInput = z.input<typeof PlatformExportRequestSch
 export const PlatformExportRequestSchema: z.ZodReadonly<z.ZodObject<{
     version: z.ZodNumber;
     platform: z.ZodEnum<{
+        "aws-agentcore": "aws-agentcore";
         "claude-managed-agents": "claude-managed-agents";
         "copilot-studio": "copilot-studio";
         "m365-declarative-agent": "m365-declarative-agent";
         "microsoft-foundry": "microsoft-foundry";
         "gemini-enterprise": "gemini-enterprise";
-        "aws-agentcore": "aws-agentcore";
     }>;
     options: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
 }, z.core.$strict>>;
@@ -315,12 +315,12 @@ export const PlatformExportResponseSchema: z.ZodReadonly<z.ZodObject<{
     agentId: z.ZodString;
     version: z.ZodNumber;
     platform: z.ZodEnum<{
+        "aws-agentcore": "aws-agentcore";
         "claude-managed-agents": "claude-managed-agents";
         "copilot-studio": "copilot-studio";
         "m365-declarative-agent": "m365-declarative-agent";
         "microsoft-foundry": "microsoft-foundry";
         "gemini-enterprise": "gemini-enterprise";
-        "aws-agentcore": "aws-agentcore";
         "eject-claude-agent-sdk": "eject-claude-agent-sdk";
         "eject-mastra": "eject-mastra";
         "eject-openai-agents": "eject-openai-agents";
@@ -369,12 +369,12 @@ export type PlatformId = (typeof PLATFORM_IDS)[number];
 
 // @public (undocumented)
 export const PlatformIdSchema: z.ZodEnum<{
+    "aws-agentcore": "aws-agentcore";
     "claude-managed-agents": "claude-managed-agents";
     "copilot-studio": "copilot-studio";
     "m365-declarative-agent": "m365-declarative-agent";
     "microsoft-foundry": "microsoft-foundry";
     "gemini-enterprise": "gemini-enterprise";
-    "aws-agentcore": "aws-agentcore";
     "eject-claude-agent-sdk": "eject-claude-agent-sdk";
     "eject-mastra": "eject-mastra";
     "eject-openai-agents": "eject-openai-agents";
@@ -387,12 +387,12 @@ export type PlatformListResponse = z.infer<typeof PlatformListResponseSchema>;
 export const PlatformListResponseSchema: z.ZodReadonly<z.ZodObject<{
     platforms: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
         id: z.ZodEnum<{
+            "aws-agentcore": "aws-agentcore";
             "claude-managed-agents": "claude-managed-agents";
             "copilot-studio": "copilot-studio";
             "m365-declarative-agent": "m365-declarative-agent";
             "microsoft-foundry": "microsoft-foundry";
             "gemini-enterprise": "gemini-enterprise";
-            "aws-agentcore": "aws-agentcore";
             "eject-claude-agent-sdk": "eject-claude-agent-sdk";
             "eject-mastra": "eject-mastra";
             "eject-openai-agents": "eject-openai-agents";

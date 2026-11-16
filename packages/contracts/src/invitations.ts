@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { IsoDateTimeSchema } from './identifiers.js';
-import { MEMBERSHIP_ROLES, MembershipResourceSchema, type MembershipRoleName } from './team.js';
+import { CONFERRABLE_ROLES, MembershipResourceSchema, type ConferrableRoleName } from './team.js';
 
 /** The longest token `POST /api/invitations/:id/accept` reads, in string code units. */
 export const INVITATION_TOKEN_MAX_LENGTH = 4096;
@@ -23,7 +23,7 @@ export const InvitationResourceSchema = z
   .object({
     id: z.string().min(1),
     email: z.string().min(1),
-    role: z.enum(MEMBERSHIP_ROLES),
+    role: z.enum(CONFERRABLE_ROLES),
     invitedBy: z.string().min(1).nullable(),
     expiresAt: IsoDateTimeSchema,
     acceptedAt: IsoDateTimeSchema.nullable(),
@@ -90,7 +90,7 @@ export type AcceptedInvitationResponse = z.infer<typeof AcceptedInvitationRespon
  */
 export interface CreateInvitationInput {
   readonly email: string;
-  readonly role: MembershipRoleName;
+  readonly role: ConferrableRoleName;
 }
 
 /**

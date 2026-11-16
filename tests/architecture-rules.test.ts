@@ -1,6 +1,7 @@
 /**
  * Proof that the dependency-cruiser rules fire: #1154 (engine adapter boundaries), #1188 (wire
- * modules never name a database record) and #1621 (the storage design, §07 rules 1 and 2).
+ * modules never name a database record), #1621 (the storage design, §07 rules 1 and 2), #1678
+ * (§07 rule 3), #1500 (the app kit's fences) and AGENTS.md hexagonal rule 2 (a domain core is pure).
  *
  * A rule nothing tests can lose its `pathNot` or `from` pattern in an edit and keep reporting a
  * green `pnpm architecture:check`. This runs the real CLI with the real config, exactly as that
@@ -41,6 +42,15 @@ function fakePackage(name: string, entry = 'index.js'): Readonly<Record<string, 
   };
 }
 
+const objectStorageImports = [
+  "import type { ObjectStore } from '../../../../packages/core/src/storage/object-store';",
+  "export * from '../../../../packages/core/src/storage/key-safety';",
+  "export * from '../../../../packages/core/src/storage/content-type';",
+  "export * from '../../../../packages/core/src/storage/object-name';",
+  'export type Store = ObjectStore;',
+  '',
+].join('\n');
+
 const sdkImport = (...specifiers: readonly string[]): string =>
   `${specifiers.map((specifier) => `import '${specifier}';`).join('\n')}\nexport {};\n`;
 
@@ -80,6 +90,19 @@ const fixture: Readonly<Record<string, string>> = {
   ].join('\n'),
   'packages/sdk/src/index.ts': 'export const sdk = 1;\n',
   'packages/aw/src/index.ts': 'export const aw = 1;\n',
+  'packages/react/src/index.ts': 'export const react = 1;\n',
+  // #1500: the app kit reaches only the published sdk, contracts and react, never core or an
+  // application; and nothing else in the workspace imports the app kit.
+  'packages/app/src/index.ts': [
+    "export * from '../../sdk/src/index';",
+    "export * from '../../contracts/src/index';",
+    "export * from '../../react/src/index';",
+    "export * from '../../core/src/index';",
+    "export * from '../../../apps/web/server/agents/store';",
+    '',
+  ].join('\n'),
+  'packages/react/src/uses-app.ts': "export * from '../../app/src/index';\n",
+  'apps/web/server/agents/app-kit.ts': "export * from '../../../../packages/app/src/index';\n",
   // F-15 boundaries. Each file below plants allowed edges and one forbidden edge.
   'packages/core/src/bad.ts': [
     "export * from '../../contracts/src/index';",
@@ -172,6 +195,78 @@ const fixture: Readonly<Record<string, string>> = {
   ].join('\n'),
   'apps/web/server/files/raw-store.test.ts':
     "export * from '../../../../packages/core/src/storage/s3-store';\n",
+  // The storage design, §07 rule 3: only the catalog service reaches object storage. A domain may
+  // import the pure helpers (content type, key safety, object name); a type-only import of
+  // `ObjectStore` counts. The catalog service, the composition root, tests and the tool bundles
+  // (not workspace files) may import the rest.
+  'packages/core/src/storage/object-store.ts': 'export interface ObjectStore {\n  id: string;\n}\n',
+  'packages/core/src/storage/key-safety.ts': 'export const toObjectKey = 1;\n',
+  'packages/core/src/storage/content-type.ts': 'export const inferContentType = 1;\n',
+  'packages/core/src/storage/object-name.ts': 'export const storageObjectName = 1;\n',
+  'apps/web/server/foo/upload.ts': objectStorageImports,
+  'apps/web/server/foo/upload.test.ts': objectStorageImports,
+  'apps/web/server/storage/service.ts': objectStorageImports,
+  'apps/web/server/composition/objects.ts': objectStorageImports,
+  'apps/web/server/tool-bundles/handlers.ts': objectStorageImports,
+  // AGENTS.md "Hexagonal rules" 2: a domain core imports only its own core/, the contracts and zod.
+  // A Node built-in, an npm package, another server module (its own store and ports, type-only
+  // too) and another domain's core are refused; a test beside the core may import anything.
+  ...fakePackage('zod'),
+  ...fakePackage('left-pad'),
+  'apps/web/server/pilot/core/facts.ts': 'export const fact = 1;\n',
+  'apps/web/server/pilot/core/decide.ts': [
+    "export * from './facts';",
+    "export * from '../../../../../packages/contracts/src/index';",
+    "import 'zod';",
+    "import 'node:fs';",
+    "import 'left-pad';",
+    "export * from '../store';",
+    "export type * from '../ports';",
+    "export * from '../../other/core/rules';",
+    '',
+  ].join('\n'),
+  'apps/web/server/pilot/core/decide.test.ts': "import 'node:fs';\nexport * from '../store';\n",
+  'apps/web/server/pilot/store.ts': 'export const pilotStore = 1;\n',
+  'apps/web/server/pilot/ports.ts': 'export interface PilotPort {\n  id: string;\n}\n',
+  'apps/web/server/other/core/rules.ts': 'export const rule = 1;\n',
+  // Refactoring plan part 04: contexts import upstream only (apps/web/server/contexts.json). runs
+  // (execution) may reach auth (identity) and http (shared kernel) but not agents; the shared kernel
+  // reaches no context; no context reaches composition/, which may reach every context; a test may
+  // import anything.
+  'apps/web/server/agents/ctx-target.ts': 'export const agentsTarget = 1;\n',
+  'apps/web/server/auth/ctx-target.ts': 'export const authTarget = 1;\n',
+  'apps/web/server/http/ctx-target.ts': 'export const httpTarget = 1;\n',
+  'apps/web/server/composition/ctx-target.ts': 'export const compositionTarget = 1;\n',
+  'apps/web/server/evaluations/ctx-target.ts': 'export const evaluationsTarget = 1;\n',
+  'apps/web/server/runs/ctx.ts': [
+    "export * from '../agents';",
+    "export * from '../auth/ctx-target';",
+    "export * from '../http/ctx-target';",
+    '',
+  ].join('\n'),
+  'apps/web/server/runs/ctx.test.ts': "export * from '../agents/ctx-target';\n",
+  'apps/web/server/http/ctx.ts': "export * from '../auth/ctx-target';\n",
+  'apps/web/server/agents/ctx.ts': [
+    "export * from '../composition/ctx-target';",
+    "export * from '../evaluations';",
+    '',
+  ].join('\n'),
+  // evaluations has an entry (part 04, step 7), so the planted downstream import above goes through
+  // it and only the direction rule fires.
+  'apps/web/server/evaluations/index.ts': "export * from './ctx-target';\n",
+  'apps/web/server/composition/ctx.ts': "export * from '../agents/ctx-target';\n",
+  'apps/web/server/evaluations/ctx.ts': "export * from '../agents';\n",
+  // agents has an entry too (part 04, step 7): the planted imports of agents above go through it, so
+  // runs/ctx.ts fires only the direction rule and evaluations/ctx.ts fires nothing.
+  'apps/web/server/agents/index.ts': "export * from './ctx-target';\n",
+  // Part 04, step 7: identity has an entry (contexts.json), so another context reaches it only
+  // through identity/index.ts. runs/ctx.ts above reaches auth/ deeply and is reported; the entry,
+  // identity's own modules, composition/ and a test may still import auth/ directly.
+  'apps/web/server/identity/index.ts': "export * from '../auth/ctx-target';\n",
+  'apps/web/server/runs/ctx-entry.ts': "export * from '../identity';\n",
+  'apps/web/server/rbac/ctx.ts': "export * from '../auth/ctx-target';\n",
+  'apps/web/server/composition/ctx-identity.ts': "export * from '../auth/ctx-target';\n",
+  'apps/web/server/runs/ctx-deep.test.ts': "export * from '../auth/ctx-target';\n",
 };
 
 const reportSchema = z.object({
@@ -301,8 +396,27 @@ describe('the dependency-cruiser rules fire on planted violations', () => {
     ]);
   });
 
+  it('F-10: the app kit reaches only sdk, contracts and react', () => {
+    expect(edgesOf('app-kit-depends-only-on-published-packages')).toStrictEqual([
+      'packages/app/src/index.ts -> apps/web/server/agents/store.ts',
+      'packages/app/src/index.ts -> packages/core/src/index.ts',
+    ]);
+  });
+
+  it('F-10: neither an application nor another package imports the app kit', () => {
+    expect(edgesOf('platform-never-imports-the-app-kit')).toStrictEqual([
+      'apps/web/server/agents/app-kit.ts -> packages/app/src/index.ts',
+      'packages/react/src/uses-app.ts -> packages/app/src/index.ts',
+    ]);
+    // react's own fence reports the same edge.
+    expect(edgesOf('react-depends-only-on-sdk-and-contracts')).toStrictEqual([
+      'packages/react/src/uses-app.ts -> packages/app/src/index.ts',
+    ]);
+  });
+
   it('F-15: cli and create are libraries that never import an application', () => {
     expect(edgesOf('libraries-do-not-import-applications')).toStrictEqual([
+      'packages/app/src/index.ts -> apps/web/server/agents/store.ts',
       'packages/cli/src/index.ts -> apps/web/server/agents/store.ts',
       'packages/create/src/index.ts -> apps/web/server/agents/store.ts',
     ]);
@@ -363,27 +477,113 @@ describe('the dependency-cruiser rules fire on planted violations', () => {
     ]);
   });
 
+  it('design §07 rule 3: only the catalog service reaches object storage', () => {
+    expect(edgesOf('only-the-catalog-service-reaches-object-storage')).toStrictEqual([
+      // the raw backend files are object storage too; the #1746 rule reports the same three edges
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/azure-blob-store.ts',
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/gcs-store.ts',
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/s3-store.ts',
+      'apps/web/server/foo/upload.ts -> packages/core/src/storage/object-store.ts',
+    ]);
+  });
+
+  it('AGENTS.md hexagonal rule 2: a domain core imports only its own core, contracts and zod', () => {
+    expect(edgesOf('domain-core-is-pure')).toStrictEqual([
+      'apps/web/server/pilot/core/decide.ts -> apps/web/server/other/core/rules.ts',
+      'apps/web/server/pilot/core/decide.ts -> apps/web/server/pilot/ports.ts',
+      'apps/web/server/pilot/core/decide.ts -> apps/web/server/pilot/store.ts',
+      'apps/web/server/pilot/core/decide.ts -> fs',
+      'apps/web/server/pilot/core/decide.ts -> node_modules/left-pad/index.js',
+    ]);
+  });
+
+  it('refactoring part 04: a context imports only the shared kernel and the contexts before it', () => {
+    expect(edgesOf('context-execution-imports-only-upstream')).toStrictEqual([
+      'apps/web/server/runs/ctx.ts -> apps/web/server/agents/index.ts',
+    ]);
+    expect(edgesOf('context-agents-imports-only-upstream')).toStrictEqual([
+      'apps/web/server/agents/ctx.ts -> apps/web/server/evaluations/index.ts',
+    ]);
+    expect(edgesOf('shared-kernel-imports-no-context')).toStrictEqual([
+      'apps/web/server/http/ctx.ts -> apps/web/server/auth/ctx-target.ts',
+    ]);
+    expect(edgesOf('no-context-imports-the-composition-root')).toStrictEqual([
+      'apps/web/server/agents/ctx.ts -> apps/web/server/composition/ctx-target.ts',
+    ]);
+  });
+
+  it('refactoring part 04, step 7: another context enters identity only through its entry', () => {
+    expect(edgesOf('context-identity-entered-through-its-entry')).toStrictEqual([
+      'apps/web/server/runs/ctx.ts -> apps/web/server/auth/ctx-target.ts',
+    ]);
+  });
+
   it('reports nothing else: the allowed edges stay allowed and every import resolves', () => {
     // 5 earlier + 7 F-15 + the cli and create fence rules firing on the same planted imports
     // + 3 baseline-rule cases + the 2 wire modules the domain rule also reports + 1 F-08 (run-protocol)
     // + 3 F-08 (the Claude adapter's core import; core's engine and run-protocol imports)
     // + 4 design §07 rule 1 (one per cloud, two S3 libraries) + 2 design §07 rule 2
-    // + 1 storage backends subpath + 3 raw backend factories (#1746)
-    expect(violations).toHaveLength(2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3);
+    // + 1 storage backends subpath + 3 raw backend factories (#1746) + 4 design §07 rule 3
+    // + 2 app kit fence (#1500) + its application import, which the library rule also reports
+    // + 2 imports of the app kit + react's fence on one of them + 5 domain core imports
+    // + 4 context direction (part 04) + 1 deep import into identity (part 04, step 7)
+    expect(violations).toHaveLength(
+      2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3 + 4 + 2 + 1 + 2 + 1 + 5 + 4 + 1,
+    );
   });
 });
 
 /**
- * F-15 baselines. `.dependency-cruiser-known-violations.json` lists the violations of the three
- * baseline rules that existed when the rules were added; `architecture:check` ignores exactly
+ * F-15 baselines. `.dependency-cruiser-known-violations.json` lists the violations of the baseline
+ * rules that existed when the rules were added; `architecture:check` ignores exactly
  * those. It may only shrink: a new violation fails the check, and a fixed one must be removed from
  * the file (`pnpm exec depcruise --config dependency-cruiser.config.mjs --output-type baseline
  * apps packages > .dependency-cruiser-known-violations.json`), after which the ceiling below drops.
  */
 const baselineCeiling: Readonly<Record<string, number>> = {
   'routes-do-not-import-routes': 0,
-  'app-does-not-import-core': 1,
-  'domain-does-not-import-persistence': 46,
+  'app-does-not-import-core': 0,
+  // Part 09 step 6: runs/environment.ts names its own evaluation record, not the stored row.
+  'domain-does-not-import-persistence': 31,
+  // Refactoring plan part 04, step 2: the imports against the context direction when it landed.
+  'shared-kernel-imports-no-context': 5,
+  'no-context-imports-the-composition-root': 0,
+  'context-identity-imports-only-upstream': 5,
+  'context-storage-and-sharing-imports-only-upstream': 14,
+  // Part 09 step 2: the launcher's target types moved into execution (runs/launch-target.ts).
+  // Part 09 step 3: run-delivery-fixtures became *.test-support.ts (5 here, 5 from three entry rules).
+  'context-execution-imports-only-upstream': 11,
+  'context-integrations-imports-only-upstream': 0,
+  'context-agents-imports-only-upstream': 1,
+  // Part 04, step 7: deep imports into identity left when its entry landed (rbac/http and
+  // auth/index load start-up work, oauth/resource would close a cycle; see identity/index.ts).
+  'context-identity-entered-through-its-entry': 14,
+  // Evaluations: the Builder's runner adapter still imports handlers.ts, which loads the
+  // application context (see evaluations/index.ts).
+  'context-evaluations-entered-through-its-entry': 1,
+  // Secrets: no deep import was left when its entry landed.
+  'context-secrets-entered-through-its-entry': 0,
+  // Agents: upstream callers' value imports of modules with start-up work, most also against the
+  // direction (see agents/index.ts). The direction ceilings above dropped by 6 when several deep
+  // imports from one file became one import of the entry.
+  'context-agents-entered-through-its-entry': 14,
+  // Execution: other contexts still call runs/environment (application context), runs/api and
+  // runs/service (start-up work), runs/failures and runs/transcription (would close a cycle) and
+  // runtimes/connections (database driver); see execution/index.ts. Storage and sharing's direction
+  // ceiling dropped by 1 when two deep imports from one file became one import of the entry.
+  'context-execution-entered-through-its-entry': 22,
+  // Integrations: other contexts still call tool-endpoint/handler.ts (object-store SDKs, database
+  // driver, agents context), tool-endpoint/close.ts (application context) and a run fixture's
+  // in-memory models store (secret-manager SDKs); identity's oauth/resource.ts and execution's
+  // runs/transcription.ts import against the direction and stay deep; see integrations/index.ts.
+  'context-integrations-entered-through-its-entry': 8,
+  // Storage and sharing: other contexts still call storage/objects.ts (object-store SDKs),
+  // storage/store.ts (database driver), storage/service.ts and storage/testing.ts (fixtures; SDKs and
+  // driver) and files/handlers, files/http and files/search-http (about 330 modules each, including
+  // the agents context); see storage-and-sharing/index.ts.
+  'context-storage-and-sharing-entered-through-its-entry': 20,
+  // The storage design, §07 rule 3: landed with no known violation, and none may be added.
+  'only-the-catalog-service-reaches-object-storage': 0,
 };
 
 describe('the known-violations baseline only shrinks', () => {

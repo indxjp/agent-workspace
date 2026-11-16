@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 
@@ -107,12 +108,14 @@ interface ConnectResult {
   readonly status: number;
   readonly echoed: string;
   readonly body: string;
+  readonly headers?: http.IncomingHttpHeaders;
 }
 
 function connectThrough(
   harness: Harness,
   authority: string,
   send = 'ping',
+  headers: http.OutgoingHttpHeaders = {},
 ): Promise<ConnectResult> {
   return new Promise((resolve, reject) => {
     const request = http.request({
@@ -120,6 +123,7 @@ function connectThrough(
       port: harness.proxyPort,
       method: 'CONNECT',
       path: authority,
+      headers,
     });
     request.on('connect', (response, socket, head) => {
       const status = response.statusCode ?? 0;
@@ -139,6 +143,7 @@ function connectThrough(
           status,
           echoed: '',
           body: Buffer.concat(chunks).toString('utf8'),
+          headers: response.headers,
         }),
       );
     });
@@ -374,5 +379,149 @@ describe('a refused request', () => {
     await get(harness, 'http://other.test/secret/path?token=abc', { authorization: 'Bearer abc' });
     const line = JSON.stringify(harness.logs);
     expect(line).not.toMatch(/secret|token|abc/u);
+  });
+});
+
+describe('shared mode', () => {
+  /** Signs any claims the way the runner manager does; the verifier is the code under test. */
+  function signPayload(key: Buffer, payload: string): string {
+    return `${payload}.${createHmac('sha256', key).update(payload, 'ascii').digest('base64url')}`;
+  }
+
+  function signCredential(key: Buffer, claims: unknown): string {
+    return signPayload(key, Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url'));
+  }
+
+  const KEY = Buffer.from('aw-egress-test-key-0123456789abcdef');
+  const NOW = 1_800_000_000;
+  const credentialFor = (sid: string, hosts: readonly string[], exp = NOW + 60): string =>
+    `Basic ${Buffer.from(`aw:${signCredential(KEY, { sid, exp, hosts })}`).toString('base64')}`;
+  const startShared = (): Promise<Harness> =>
+    startProxy(['*'], { credentialKey: KEY, now: () => NOW });
+  const auth = (value: string): http.OutgoingHttpHeaders => ({ 'proxy-authorization': value });
+
+  it('answers 407 and never dials without a credential, on forward and CONNECT', async () => {
+    const harness = await startShared();
+    const forwarded = await get(harness, 'http://a.example/');
+    expect(forwarded.status).toBe(407);
+    expect(forwarded.headers['proxy-authenticate']).toBe('Basic realm="aw-egress"');
+    expect(JSON.parse(forwarded.body)).toEqual({
+      error: 'egress_denied',
+      reason: 'credential_required',
+    });
+    const tunnelled = await connectThrough(harness, 'a.example:443');
+    expect(tunnelled.status).toBe(407);
+    expect(tunnelled.headers?.['proxy-authenticate']).toBe('Basic realm="aw-egress"');
+    expect(tunnelled.body).toContain('"reason":"credential_required"');
+    expect(harness.dials).toEqual([]);
+    expect(harness.lookups).toEqual([]);
+    expect(harness.logs.map((log) => [log['sessionId'], log['reason']])).toEqual([
+      [null, 'credential_required'],
+      [null, 'credential_required'],
+    ]);
+  });
+
+  it('refuses a forged and an expired credential with 407', async () => {
+    const harness = await startShared();
+    const forged = credentialFor('s', ['a.example']).slice(0, -4) + 'AAAA';
+    const expired = credentialFor('s', ['a.example'], NOW - 1);
+    const a = await get(harness, 'http://a.example/', auth(forged));
+    const b = await connectThrough(harness, 'a.example:443', 'ping', auth(expired));
+    expect(a.status).toBe(407);
+    expect(JSON.parse(a.body)).toMatchObject({ reason: 'credential_invalid' });
+    expect(b.status).toBe(407);
+    expect(b.body).toContain('"reason":"credential_expired"');
+    expect(harness.dials).toEqual([]);
+  });
+
+  it('judges a request by its own credential only, and logs the verified session', async () => {
+    const harness = await startShared();
+    credentialFor('sess-b', ['b.example']);
+    const response = await get(
+      harness,
+      'http://b.example/',
+      auth(credentialFor('sess-a', ['a.example'])),
+    );
+    expect(response.status).toBe(403);
+    expect(JSON.parse(response.body)).toMatchObject({ reason: 'host_not_allowed' });
+    expect(harness.logs).toEqual([
+      {
+        event: 'egress_denied',
+        sessionId: 'sess-a',
+        host: 'b.example',
+        port: 80,
+        reason: 'host_not_allowed',
+      },
+    ]);
+    const own = await connectThrough(
+      harness,
+      'a.example:443',
+      'ping',
+      auth(credentialFor('sess-a', ['a.example'])),
+    );
+    expect(own).toMatchObject({ status: 200, echoed: 'ping' });
+    const other = await connectThrough(
+      harness,
+      'b.example:443',
+      'ping',
+      auth(credentialFor('sess-b', ['b.example'])),
+    );
+    expect(other.status).toBe(200);
+  });
+
+  it('does not forward Proxy-Authorization upstream', async () => {
+    const harness = await startShared();
+    const response = await get(
+      harness,
+      'http://a.example/x',
+      auth(credentialFor('s', ['a.example'])),
+    );
+    expect(response.status).toBe(201);
+    expect(harness.upstreamRequests[0]?.headers['proxy-authorization']).toBeUndefined();
+  });
+
+  it('answers /healthz without a credential', async () => {
+    const harness = await startShared();
+    expect(await get(harness, '/healthz')).toMatchObject({ status: 200, body: 'ok' });
+  });
+
+  describe('with the open policy', () => {
+    const open = credentialFor('s', ['*']);
+
+    it('dials a public address', async () => {
+      const harness = await startShared();
+      expect((await get(harness, 'http://any.example/', auth(open))).status).toBe(201);
+      expect(harness.dials).toHaveLength(1);
+    });
+
+    it.each([
+      '10.10.0.50',
+      '169.254.169.254',
+      '199.36.153.8',
+      '199.36.153.4',
+      '[2600:2d00:2:1000::1]',
+    ])('refuses the literal %s without dialling', async (literal) => {
+      const harness = await startShared();
+      expect((await get(harness, `http://${literal}/`, auth(open))).status).toBe(403);
+      expect((await connectThrough(harness, `${literal}:443`, 'ping', auth(open))).status).toBe(
+        403,
+      );
+      expect(harness.dials).toEqual([]);
+    });
+
+    it.each([
+      ['metadata.google.internal', '169.254.169.254'],
+      ['vip.example', '199.36.153.9'],
+    ])('refuses %s resolving to %s', async (host, address) => {
+      const harness = await startProxy(['*'], {
+        credentialKey: KEY,
+        now: () => NOW,
+        resolve: () => Promise.resolve([address]),
+      });
+      const response = await get(harness, `http://${host}/`, auth(open));
+      expect(response.status).toBe(403);
+      expect(JSON.parse(response.body)).toMatchObject({ reason: 'resolves_to_denied_address' });
+      expect(harness.dials).toEqual([]);
+    });
   });
 });

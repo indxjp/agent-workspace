@@ -286,7 +286,7 @@ def hasGrant (users : List UserId) (u : UserId) : Bool := users.contains u
 /-- The answers `resolveAgentRunOwnership` gives (a subset of `decide()`'s `Ownership`; it never
 answers `not-applicable`). -/
 @[aw_spec (ts := "apps/web/server/agents/run-ownership.ts#resolveAgentRunOwnership")
-  (ts := "apps/web/server/rbac/decide.ts#Ownership")]
+  (ts := "apps/web/server/rbac/core/decide.ts#Ownership")]
 inductive RunOwnership where
   | own
   | permitted

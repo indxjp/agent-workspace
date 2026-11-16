@@ -17,8 +17,8 @@ import { NextResponse } from 'next/server';
 import {
   beginOidcLogin,
   oidcTransactionCookieName,
-  readOidcConfiguration,
-  readSessionSecret,
+  oidcConfiguration,
+  sessionSecret,
   safeNextPath,
 } from '../../../../server/auth';
 
@@ -26,8 +26,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request): Promise<Response> {
-  const configuration = readOidcConfiguration();
-  const secret = readSessionSecret(process.env);
+  const configuration = oidcConfiguration();
+  const secret = sessionSecret();
   if (configuration === null || !secret.ok) {
     return NextResponse.json({ error: 'oidc_not_configured' }, { status: 503 });
   }

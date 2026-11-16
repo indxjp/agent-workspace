@@ -10,7 +10,7 @@
  * answers its `503`, as it does with no context installed.
  */
 import type { Principal } from '../rbac/principal';
-import type { BrowserTokenScope } from '../rbac/token-scope';
+import type { BrowserTokenScope } from '../rbac/core/token-scope';
 
 /** Whether the scope's target row exists in the caller's workspace, and who owns it. */
 export type TokenTargetLookup =

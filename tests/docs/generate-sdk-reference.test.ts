@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { API_ROUTES } from '@indx-workspace/contracts/routes';
 import ts from 'typescript';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -52,6 +53,15 @@ describe('renderReferencePages', () => {
       expect(content.endsWith('\n\n')).toBe(false);
       expect(content.includes('\r')).toBe(false);
     }
+  });
+
+  it('renders every route from the imported resource catalogues', () => {
+    const routes = pages.get('contracts/routes.mdx');
+    expect(routes).toBeDefined();
+    for (const route of API_ROUTES) {
+      expect(routes, route.operationId).toContain(`operationId: '${route.operationId}'`);
+    }
+    expect(routes).not.toMatch(/^- `\.\.\.[A-Za-z]/mu);
   });
 
   // `@indx-workspace/sdk/define` is a public subpath (issue #445), so it has a reference page of

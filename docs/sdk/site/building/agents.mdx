@@ -175,15 +175,16 @@ the sandbox is created:
 | `none`                 | any                          | `none` (the model gateway only)                                                                  |
 | `restricted`           | any                          | `restricted`, the profile's own `allowedDomains`                                                 |
 | `open`                 | `true`                       | `open`                                                                                           |
-| `open`                 | `false`                      | `restricted`, limited to the hosts of the agent's remote connectors (Docker and Kubernetes only) |
+| `open`                 | `false`                      | `restricted`, limited to the hosts of the agent's remote connectors (Docker, Kubernetes and Cloud Run with the proxy) |
 | `open`                 | `false`, no remote connector | `none`                                                                                           |
 
-Only the `docker` and `kubernetes` drivers enforce the lowered `restricted`, through their
-per-session egress proxy, and only when the deployment sets `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE` for
-both the web app and the runner manager. Without it, and always on Cloud Run (`cloud-run-service`)
-and ACA (`aca-sessions`), the run fails with `network_policy_unenforceable`, whose message names
+Only the `docker`, `kubernetes` and `cloud-run-service` drivers enforce the lowered `restricted`.
+Docker and Kubernetes use their per-session egress proxy, and only when the deployment sets
+`AGENT_WORKSPACE_EGRESS_PROXY_IMAGE` for both the web app and the runner manager. Cloud Run uses its
+shared egress proxy, and only when the project file sets `gcp.sandboxInternet: true`
+(`RUNTIME_EGRESS_PROXY_URL`). Without it, and always on ACA (`aca-sessions`), the run fails with `network_policy_unenforceable`, whose message names
 the hosts it was lowered to. It never falls back to `open`: grant the agent `unrestrictedNetwork`,
-remove its remote connectors, or run it on Docker or Kubernetes. `none` and a granted `open` run on
+remove its remote connectors, or run it where the proxy is configured. `none` and a granted `open` run on
 every driver. Any other policy a driver cannot enforce refuses the run through the driver's own
 check. The `local` runtime enforces no network policy and is not lowered. A deployment's policy
 ceiling that turns `unrestrictedNetwork` off lowers the network the same way (ADR-0119).
@@ -285,10 +286,10 @@ The arm carries no tool grammar. Its tools are compiled from the same four permi
 
 The engine declares `skills: false` and `fork: false`, so an agent with a skill assigned, or a fork,
 is refused `422 engine_capability_unsupported` rather than run without it. `maxTurns` is the SDK's
-own. `maxBudget` is `'adapter'` and **provisional**: the adapter prices the usage the gateway reports
-back and stops the run with `stopReason: 'max_budget'` when a `maxBudgetUsd` is reached; a cap on a
-model its price table does not list is refused when the run starts. Enforcement moves into the
-gateway for every engine later (#342). The model is reached through the gateway in the model
+own. `maxBudget` is `'adapter'`: the gateway enforces a `maxBudgetUsd` for every engine (ADR-0162),
+refusing a model call once the run's settled cost reaches its spend ceiling, and the run fails
+`run_budget_reached`. A cap on any model compiles; a run on a model the deployment's catalogue does
+not price is not capped. The model is reached through the gateway in the model
 connection's own dialect — the Responses API for an OpenAI-family connection, Anthropic Messages for
 an Anthropic-family one — and billing comes only from the gateway's usage records. The engine's
 tracing export is always off.
@@ -322,8 +323,8 @@ resume and fork are supported; skills are placed at `.pi/skills/<name>/`, and pi
 and the agent's instructions (appended to pi's own system prompt) — nothing from `~/.pi`,
 `~/.agents` or the project's `AGENTS.md`, `.agents/skills` or `.pi/extensions`. `maxTurns` and
 `maxBudget` are both `'adapter'`: the adapter counts turns and stops the run with
-`stopReason: 'max_turns'`, and — provisionally, from the same price table — stops it with
-`stopReason: 'max_budget'`; a cap on a model the table cannot price is refused. The engine speaks
+`stopReason: 'max_turns'`, and the gateway enforces the spend ceiling as it does for every engine.
+The engine speaks
 only Anthropic Messages to the gateway, the gateway's native ingress, so it reaches any provider: the
 gateway translates the request for an OpenAI-family connection.
 
@@ -354,7 +355,7 @@ Connectors, skills and resume are supported: a connector's tools reach the model
 MCP client and stream as `agent.tool.call` with `kind: 'mcp'`, and skills are placed at
 `.mastra/skills/<name>/` and read as workspace skills. A fork is refused (`fork: false`), and so is
 a connector tool whose policy asks for an approval. `maxTurns` is `'native'` (Mastra's `maxSteps`)
-and `maxBudget` is the same provisional `'adapter'` cap. The engine speaks each connection's own
+and `maxBudget` is `'adapter'`, enforced by the gateway. The engine speaks each connection's own
 dialect — Anthropic Messages, OpenAI Responses or Chat Completions — through the gateway only.
 Conversation memory is kept in the platform's session store, so a second run on the same session
 recalls the first; semantic recall and working memory are off, and Mastra's telemetry is off.

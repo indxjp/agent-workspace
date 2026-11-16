@@ -1,3 +1,4 @@
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
 import { SETUP_PROVIDERS } from '@indx-workspace/contracts/setup';
 import { NextResponse } from 'next/server';
 
@@ -57,6 +58,8 @@ function inputOf(value: unknown): SetupInput | null {
     'agentInstructions',
   ] as const;
   if (names.some((name) => typeof row[name] !== 'string')) return null;
+  // A keyless provider takes no key; every other provider needs one.
+  if (row['providerApiKey'] === '' && !isKeylessProvider(setupProvider)) return null;
   const providerBaseUrl =
     row['providerBaseUrl'] === undefined ? '' : providerBaseUrlOf(row['providerBaseUrl']);
   if (providerBaseUrl === null) return null;

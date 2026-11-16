@@ -1,3 +1,5 @@
+import type { ProjectPolicyLimits } from '@indx-workspace/contracts/policy-ceiling';
+
 import type { EngineId } from '../../schema/agents.js';
 import type { ModelProvider } from '../../schema/model-connections.js';
 import type { WireProtocol } from '../../schema/run-usage-records.js';
@@ -45,6 +47,12 @@ export interface RunRecord {
   readonly cacheCreationInputTokens: number;
   readonly toolCalls: number;
   readonly costUsd: string;
+  /**
+   * The run's spend ceiling in USD (ADR-0162), a six-place decimal string like {@link costUsd},
+   * or `null` when the run has none. Optional for the same reason {@link projectId} is; every
+   * record `get()`, `listRuns()` and `listChildren()` return sets it.
+   */
+  readonly spendCeilingUsd?: string | null;
   readonly costCurrency: 'USD';
   readonly priceTableVersion: string | null;
   readonly error: string | null;
@@ -121,6 +129,22 @@ export interface RunRecord {
    * sets it, for the approval continuation to carry on (ADR-0157); it is never rendered.
    */
   readonly subject?: string | null;
+  /**
+   * The lower-only limits the run was started under (#1963), `null` when it had none. Only `get()`
+   * sets it, for the approval continuation to carry on; it is never rendered.
+   */
+  readonly limitsOverride?: ProjectPolicyLimits | null;
+  /**
+   * The lead run that started this one through an agent team's member tool (ADR-0104), `null`
+   * for a root run. Optional for the same reason {@link projectId} is; every record `get()`,
+   * `listRuns()` and `listChildren()` return sets it.
+   */
+  readonly parentRunId?: string | null;
+  /**
+   * The agent-team version a team run's lead runs (ADR-0104 acceptance decision 4), `null` for
+   * every other run. Only `get()` sets it, like {@link subject}; it is never rendered.
+   */
+  readonly agentTeamVersionId?: string | null;
 }
 
 /** A completed run's answer. `structured` is `null` when the run asked for no output schema. */
@@ -146,7 +170,17 @@ export type CreateRunOutcome =
    * `decides` named a paused run whose approval window (24 hours from the pause, ADR-0145 D2.4)
    * had closed. The run was moved to `cancelled` in this call; no continuation was created.
    */
-  | { readonly kind: 'approval-expired'; readonly runId: string };
+  | { readonly kind: 'approval-expired'; readonly runId: string }
+  /**
+   * `parent` named a run that already has `parent.maxChildren` child runs (ADR-0104 acceptance
+   * decision 6). Nothing was written.
+   */
+  | { readonly kind: 'child-limit'; readonly runId: string }
+  /**
+   * `parent` named a lead run that is no longer `running` (ADR-0104 acceptance decision 8: an
+   * interrupted root starts no new child). Nothing was written.
+   */
+  | { readonly kind: 'parent-stopped'; readonly runId: string };
 
 /**
  * What consuming an approved call can produce (ADR-0145 D2.1, #1541).
@@ -254,6 +288,11 @@ interface RunListFilter {
   readonly initiatingUserId?: string;
   /** Exact session ownership, used for an own-grant collection read. */
   readonly ownerPrincipalId?: string;
+  /**
+   * `sessions.agent_id` is one of these UUIDs (ADR-0161, the amendment of issue #1530: an app
+   * backend's bound agents). An empty set matches no run.
+   */
+  readonly agentIds?: readonly string[];
 }
 
 /**
@@ -396,11 +435,19 @@ export interface RunRepository {
    */
   listRuns(input: ListRunsInput): Promise<RunListPage>;
   /**
+   * The runs of this scope's workspace whose `parent_run_id` is `parentRunId`, oldest first, at
+   * most `limit` (1–200). One indexed read (`runs_parent_idx`); `[]` for a run with no children,
+   * an unknown id and another workspace's run alike (ADR-0104 acceptance decision 7).
+   */
+  listChildren(parentRunId: string, limit: number): Promise<readonly RunRecord[]>;
+  /**
    * The model cost this workspace's usage ledger settled in `[from, to)` by each row's own
-   * `created_at`, in one read. The ledger is the source `runs.cost_usd` is advanced from, so a run
+   * `created_at`. The ledger is the source `runs.cost_usd` is advanced from, so a run
    * that spans midnight is split at it; an unpriced response counts as 0 in `costUsd`, which is why
    * `unpricedUsage` says whether any run with usage in the window has an accounting state other
-   * than `complete`, so a caller can tell that the sum cannot be trusted as a total.
+   * than `complete`, or any run created in the window whose settlement `failed` (it may have
+   * spent money no ledger row records), so a caller can tell that the sum cannot be trusted as a
+   * total.
    */
   usageCostUsd(from: Date, to: Date): Promise<UsageCostWindow>;
 }
@@ -459,6 +506,8 @@ export interface CreateRunInput {
   readonly outputSchema?: Readonly<Record<string, unknown>> | null;
   /** The caller identity the run acts for (ADR-0142 D2, ADR-0157); omitted or null stores NULL. */
   readonly subject?: string | null;
+  /** The lower-only limits the run starts under (#1963, SPD-01); omitted or null stores NULL. */
+  readonly limitsOverride?: ProjectPolicyLimits | null;
   /** The start request's `Idempotency-Key`, the principal it is scoped to, and the request's hash. */
   readonly idempotency?: RunIdempotency;
   /**
@@ -473,6 +522,22 @@ export interface CreateRunInput {
     /** Retention for the paused run's `run.status` event, as for `finish`. */
     readonly statusEventMaxEvents?: number;
   };
+  /**
+   * Makes this run a child run of the lead run `parent.runId` (ADR-0104 acceptance decisions 5 and
+   * 6), written once as `parent_run_id`. Under a lock on the lead run, a lead that already has
+   * `parent.maxChildren` children answers `child-limit` and nothing is inserted, so concurrent
+   * member calls cannot exceed the fan-out, and a lead that is no longer `running` answers
+   * `parent-stopped`. A continuation (`decides`) keeps its paused run's parent and team version
+   * instead, and a child's continuation counts against `RUN_CHILDREN_MAX` children of its root.
+   */
+  readonly parent?: { readonly runId: string; readonly maxChildren: number };
+  /** The agent-team version a team run's lead runs (ADR-0104 decision 4); omitted stores NULL. */
+  readonly agentTeamVersionId?: string | null;
+  /**
+   * The run's effective spend ceiling in USD (ADR-0162 decision 2), a positive decimal string with
+   * at most six places, computed by the caller; omitted or null stores NULL (no ceiling).
+   */
+  readonly spendCeilingUsd?: string | null;
 }
 
 /** A start key: unique per workspace and principal (ADR-0151, #250). */

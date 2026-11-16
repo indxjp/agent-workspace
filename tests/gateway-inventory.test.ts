@@ -9,6 +9,7 @@ import {
   OPENAI_CAPABILITIES,
   OPENAI_COMPATIBLE_CAPABILITIES,
   PROVIDER_IDS,
+  VERTEX_CAPABILITIES,
   createProviderRegistry,
 } from '@agent-workspace/gateway/providers/registry';
 import { OPTIONAL_PROVIDER_SCENARIOS, REQUIRED_PROVIDER_SCENARIOS } from './providers/scenarios.js';
@@ -21,6 +22,7 @@ const CAPABILITIES = {
   openai: OPENAI_CAPABILITIES,
   'azure-openai': AZURE_OPENAI_CAPABILITIES,
   'openai-compatible': OPENAI_COMPATIBLE_CAPABILITIES,
+  vertex: VERTEX_CAPABILITIES,
 } as const;
 
 const OPTIONAL_KEYS = {
@@ -114,7 +116,35 @@ describe('spec §9 gateway inventory', () => {
 
   it('keeps the composition root and registry on the same exact provider table', () => {
     expect(createProviderRegistry().map((provider) => provider.id)).toEqual(PROVIDER_IDS);
-    expect(PROVIDER_IDS).toEqual(['anthropic', 'openai', 'azure-openai', 'openai-compatible']);
+    expect(PROVIDER_IDS).toEqual([
+      'anthropic',
+      'openai',
+      'azure-openai',
+      'openai-compatible',
+      'vertex',
+    ]);
+  });
+
+  it('publishes each optional capability as the provider adapter declares it', async () => {
+    // docs/compatibility/providers.md is rendered from scripts/matrix/providers.json, a hand-kept
+    // table; a capability flag flipped in the adapter must flip the published cell too.
+    const published = JSON.parse(
+      await readFile(new URL('../scripts/matrix/providers.json', import.meta.url), 'utf8'),
+    ) as {
+      providers: { id: string; default: string; overrides?: Record<string, string> }[];
+    };
+    for (const provider of published.providers) {
+      if (provider.default === 'not-derivable') continue;
+      const capabilities = CAPABILITIES[provider.id as keyof typeof CAPABILITIES];
+      for (const id of OPTIONAL_PROVIDER_SCENARIOS) {
+        const verdict = provider.overrides?.[id] ?? provider.default;
+        const declared = capabilities[OPTIONAL_KEYS[id]];
+        expect(
+          verdict === 'unsupported',
+          `${provider.id} ${id} is published as ${verdict}, the adapter declares ${OPTIONAL_KEYS[id]}=${String(declared)}`,
+        ).toBe(!declared);
+      }
+    }
   });
 
   it('renders every provider from the complete union report', () => {

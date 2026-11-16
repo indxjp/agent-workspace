@@ -89,7 +89,7 @@ example :
     let c : Compiled :=
       { cwd := "/workspace", tools := [.read, .write, .edit], networkEgress := false,
         connection := connectionFor "http://gw" "tok", model := "claude-sonnet-4-5",
-        maxTurns := none, budgetCap := false,
+        maxTurns := none,
         grants := [{ directory := true, segments := ["docs"], readOnly := true }], skills := [] }
     guard c "write" (some "docs/a.md") = false ∧ guard c "edit" (some "x/../docs/a.md") = false ∧
       guard c "write" (some "/workspace/docs/a.md") = false ∧
@@ -108,7 +108,7 @@ example :
     let c : Compiled :=
       { cwd := "/workspace", tools := [.write], networkEgress := false,
         connection := connectionFor "http://gw" "tok", model := "claude-sonnet-4-5",
-        maxTurns := none, budgetCap := false, grants := [], skills := [] }
+        maxTurns := none, grants := [], skills := [] }
     workspaceWriteVerdict c "/workspace/" = .refused .workspaceRoot ∧
       workspaceWriteVerdict c "~/x" = .refused .rewrittenSpelling := by decide +kernel
 
@@ -172,7 +172,7 @@ example :
     let c : Compiled :=
       { cwd := "/workspace", tools := [], networkEgress := false,
         connection := connectionFor "http://gw" "tok", model := "claude-sonnet-4-5",
-        maxTurns := none, budgetCap := false, grants := [], skills := ["writer"] }
+        maxTurns := none, grants := [], skills := ["writer"] }
     pinnedLoad c
         [⟨.piHome, "evil-extension"⟩, ⟨.agentsHome, "evil-skill"⟩, ⟨.project, "project-skill"⟩,
          ⟨.platformSkill, "writer"⟩, ⟨.platformSkill, "not-granted"⟩,

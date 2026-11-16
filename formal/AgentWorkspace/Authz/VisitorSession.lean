@@ -58,7 +58,7 @@ inductive Decision where
   deriving DecidableEq, Repr
 
 /-- The scope grammar, then the session match: either refusal is `403 token_out_of_scope`. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")
   (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")]
 def visitorDecision (scope : Scope) (req : Request) : Decision :=
   if (checkTokenScope scope req.resource req.op req.sub req.pathId).isSome then

@@ -1,12 +1,16 @@
-import type { RunOwnershipPrincipal } from '../../../agents/run-ownership';
-import { listConnectors } from '../../../connectors/handlers';
-import type { ConnectorsStoreProvider } from '../../../connectors/store';
-import { listEngines } from '../../../engines/handlers';
+import type { RunOwnershipPrincipal } from '../../../identity';
+import {
+  type ConnectorsStoreProvider,
+  listConnectors,
+  listModelConnections,
+  type ModelsStoreProvider,
+} from '../../../integrations';
+import {
+  listEngines,
+  listRuntimeProfiles,
+  type RuntimeProfileStoreProvider,
+} from '../../../execution';
 import type { ApiResult } from '../../../http/result';
-import { listModelConnections } from '../../../models/handlers';
-import type { ModelsStoreProvider } from '../../../models/store';
-import { listRuntimeProfiles } from '../../../runtimes/handlers';
-import type { RuntimeProfileStoreProvider } from '../../../runtimes/store';
 import type { CallContext, CatalogEntry, CatalogPort } from '../../ports';
 import { readableKinds, type ListedKind } from './access';
 

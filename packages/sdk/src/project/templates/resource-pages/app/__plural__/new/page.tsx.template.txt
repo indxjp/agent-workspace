@@ -1,0 +1,10 @@
+'use client';
+import {{name}} from '@/resources/{{name}}';
+import { ResourceForm } from '@indx-workspace/app/react';
+
+export default function New{{component}}Page() {
+  const saved = ({ id }: { readonly id: string }) => {
+    window.location.assign(`/{{plural}}/${id}`);
+  };
+  return <ResourceForm resource={{{name}}} cancelHref="/{{plural}}" onSaved={saved} />;
+}

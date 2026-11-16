@@ -1,0 +1,12 @@
+Plan summary
+  9 to create, 1 to update, 0 to delete, 0 to replace
+  By resource kind:
+    google_artifact_registry_repository: 1 create
+    google_cloud_run_v2_service: 2 create
+    google_project_service: 2 create
+    google_secret_manager_secret: 1 update
+    google_sql_database_instance: 1 create
+    google_storage_bucket: 2 create
+    random_password: 1 create
+  Protected resources: none would be deleted or replaced
+  Idle cost: small: Cloud SQL shared-core, one warm web instance and the gateway internal load balancer are the idle costs

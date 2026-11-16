@@ -1,6 +1,5 @@
 import { ShareTranscriptSelectionSchema } from '@indx-workspace/contracts/shares';
 import { z } from 'zod';
-import { DomainError } from '../../errors';
 
 const AgentDefinitionInputSchema = z
   .object({
@@ -69,17 +68,18 @@ export const PublishShareRequestSchema = z
 export type PublishShareRequest = z.infer<typeof PublishShareRequestSchema>;
 export type PublishShareInput = Omit<PublishShareRequest, 'transcript' | 'definition'>;
 
-export function parsePublishShareRequest(value: unknown): PublishShareRequest {
+/** The request, or every problem with it as one readable line (`path: message; …`). */
+export function readPublishShareRequest(
+  value: unknown,
+):
+  | { readonly ok: true; readonly request: PublishShareRequest }
+  | { readonly ok: false; readonly detail: string } {
   const result = PublishShareRequestSchema.safeParse(value);
-  if (!result.success) {
-    const detail = result.error.issues
+  if (result.success) return { ok: true, request: result.data };
+  return {
+    ok: false,
+    detail: result.error.issues
       .map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`)
-      .join('; ');
-    throw new DomainError({
-      category: 'validation',
-      code: 'invalid_share',
-      publicMessage: detail,
-    });
-  }
-  return result.data;
+      .join('; '),
+  };
 }

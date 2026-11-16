@@ -136,6 +136,7 @@ export {
 export {
   CatalogPathPendingError,
   CatalogPathTakenError,
+  listCatalogFiles,
   renamedKey,
   type CatalogFile,
   type CatalogPort,
@@ -150,6 +151,8 @@ export {
   type ResourceCatalogRepositoryProvider,
 } from './resource-catalogs.js';
 export { createInMemoryCatalog } from './memory-catalog.js';
+export { createInMemorySessionStateBlobs } from './memory-session-state-blobs.js';
+export { seedCatalogFile, type CatalogFileFixture } from './catalog-fixtures.js';
 export {
   createInMemoryStorageMigrationRuns,
   type StorageMigrationRun,
@@ -269,6 +272,7 @@ export {
 } from './browser-tokens.js';
 export {
   type ActiveOAuthAccessToken,
+  type ExchangedTokenAudit,
   type IssueOAuthTokenInput,
   type OAuthClientRecord,
   type OAuthConsumeOutcome,
@@ -276,6 +280,15 @@ export {
   type OAuthTokenRepository,
   type OAuthTokenRepositoryProvider,
 } from './oauth-tokens.js';
+export { type LoginTokenRepository, type NewLoginTokenRecord } from './login-tokens.js';
+export { type StoreLeadRepository } from './store-leads.js';
+export {
+  type DemoAdmissionOutcome,
+  type DemoCapsRepository,
+  type DemoSpendWindow,
+} from './demo-caps.js';
+export { type DemoEntryStateName, type DemoEntryStatesRepository } from './demo-entry-states.js';
+export { type DemoSweepRepository } from './demo-sweep.js';
 export { type SurfaceSessionKeyRepository } from './surface-session-keys.js';
 export {
   type ActiveCliSession,
@@ -295,8 +308,9 @@ export {
 
 export {
   SESSION_STATE_PAGE_LIMIT,
-  type LegacySessionStateBlob,
-  type SessionStateBlobInput,
+  type SessionStateBlobClaim,
+  type SessionStateBlobConfirmation,
+  type SessionStateBlobRepository,
   type SessionStateEntryInput,
   type SessionStateRepository,
   type SessionStateRepositoryProvider,

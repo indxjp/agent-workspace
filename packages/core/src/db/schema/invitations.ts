@@ -50,7 +50,7 @@ import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizz
 import { sql } from 'drizzle-orm';
 
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
-import { membershipRoles } from './memberships.js';
+import { conferrableRoles } from './memberships.js';
 import { oneOf } from './one-of.js';
 import { users } from './users.js';
 import { workspaces } from './workspaces.js';
@@ -65,7 +65,7 @@ export const invitations = pgTable(
     /** Lower-case, the same shape `users.email` enforces — checked below rather than assumed. */
     email: text('email').notNull(),
     /** The role acceptance will confer, one of §21's four. Never wider than the inviter conferred. */
-    role: text('role', { enum: membershipRoles }).notNull(),
+    role: text('role', { enum: conferrableRoles }).notNull(),
     /** Who sent it. `SET NULL` on deletion: see this file's header. */
     invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
     /** SHA-256 of the random secret, lower-case hex. The secret itself lives nowhere in this row. */
@@ -89,7 +89,7 @@ export const invitations = pgTable(
     // Resend and revoke both take the row by id and must not cross a tenant boundary while doing
     // it; workspace_id leads the lookup the same way it leads every other table's.
     index('invitations_invited_by_idx').on(table.invitedBy),
-    oneOf('invitations_role_valid', table.role, membershipRoles),
+    oneOf('invitations_role_valid', table.role, conferrableRoles),
     check('invitations_email_lowercase', sql`${table.email} = lower(${table.email})`),
     check(
       'invitations_email_shape',

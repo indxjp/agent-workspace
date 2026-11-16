@@ -36,6 +36,11 @@ Worker and its container applications. On the Cloudflare sandbox and Vercel Sand
 agent or its surface (`widget` included) record `n/a` with that refusal as the proof, and only
 `frontend` still runs; any other push problem, or a problem count that disagrees with the refusal
 lines, fails. Each lane reuses one R2 bucket, `awlj-<lane key>-files`, across runs.
+A profile-path lane sets the generated profile's `runtime.default` to its own driver before `render`:
+`create-agent-workspace --cloud cloudflare` writes E2B's `external` (BH061-029), which the Cloudflare
+sandbox lane must not deploy. Every request the journey sends opens its own connection: `aw` runs as a
+synchronous child for minutes, and a pooled keep-alive socket the edge dropped meanwhile failed the
+next request at once with `fetch failed` (ECONNRESET). A failed chapter prints that network cause.
 
 The journey proves the commit under test, so every sandbox lane runs that commit's runtime. The E2B
 lanes build their runtime template from the checkout on every run (`infra/e2b/runtime-template.mjs`

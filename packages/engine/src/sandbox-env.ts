@@ -99,3 +99,41 @@ export function sandboxEnvironmentVerdict(
   }
   return { ok: true, checked };
 }
+
+/**
+ * The three Claude Code switches that keep a Claude Agent SDK run quiet (BYOC GCP plan, D-13).
+ *
+ * Claude Code reads only whether each of these is set (https://code.claude.com/docs/en/env-vars),
+ * so `'1'` is the conventional value and an empty string counts as unset. Without them the bundled
+ * CLI sends nonessential traffic (telemetry, error reports, update and feature checks) to hosts
+ * other than the model gateway, which would leave the gateway path a keyless, egress-restricted
+ * deployment relies on.
+ *
+ * This is deliberately separate from `sandboxEnvironmentVerdict`: A.11 is engine-neutral and
+ * mirrored in Lean, while these flags are specific to Claude Code. Other engines do not set them.
+ */
+export const QUIET_CLAUDE_ENVIRONMENT: Readonly<Record<string, string>> = {
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+  DISABLE_TELEMETRY: '1',
+  DISABLE_ERROR_REPORTING: '1',
+};
+
+export type QuietEnvironmentVerdict =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly variable: string; readonly reason: string };
+
+/** Refuse an environment in which any quiet flag is missing or empty. */
+export function quietEnvironmentVerdict(
+  env: Readonly<Record<string, string>>,
+): QuietEnvironmentVerdict {
+  for (const name of Object.keys(QUIET_CLAUDE_ENVIRONMENT)) {
+    if (env[name] === undefined || env[name] === '') {
+      return {
+        ok: false,
+        variable: name,
+        reason: `${name} must be set for a Claude Agent SDK run (BYOC D-13): without it Claude Code sends nonessential traffic outside the model gateway.`,
+      };
+    }
+  }
+  return { ok: true };
+}

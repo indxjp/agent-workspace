@@ -6,10 +6,10 @@
  * `GET` serves both "selecting a skill" and "export it" (spec §7) on the **same path**, chosen
  * over a sibling `/api/skills/:name/export` route (this file's first revision) for a reason beyond
  * style: a `/:id/<sub>` route needs its `<sub>` segment classified in
- * `apps/web/server/rbac/permissions.ts`'s `SUB_RESOURCES` — owned by W2-CP-06, not this task — or
+ * `apps/web/server/rbac/core/permissions.ts`'s `SUB_RESOURCES` — owned by W2-CP-06, not this task — or
  * `apps/web/server/rbac/authorisation-matrix.test.ts` refuses every role on it as an unclassified
  * sub-resource (ADR-0015, ADR-0031). ADR-0040 gives a track its own
- * `apps/web/server/rbac/declarations/<TASK-ID>.ts` for exactly this, but the union that composes
+ * `apps/web/server/rbac/core/declarations/<TASK-ID>.ts` for exactly this, but the union that composes
  * it (`declared-sub-resources.ts`) is wired by written-out imports only the integration level adds
  * — the identical shape ADR-0038 already established for `instrumentation.ts`. Rather than ship a
  * route that depends on an import this task cannot add, `export` is a query flag on the resource

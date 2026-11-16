@@ -1,6 +1,10 @@
-/* global URL */ // The root ESLint config declares no environment globals.
+#!/usr/bin/env node
+/* global process, URL */ // The root ESLint config declares no environment globals.
 // A stand-in for the company CRM's read API, serving `data/crm/*.json` as
-// `apis/crm.openapi.json` describes it, on loopback. The tests start it.
+// `apis/crm.openapi.json` describes it, on loopback. The tests start it; for a local demo:
+//
+//   CRM_TOKEN=... CRM_IDENTITY_SECRET=... IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
+//     PORT=8794 node crm/fake-crm.mjs
 //
 // The CRM, not the agent, keeps two rules, because the platform redacts nothing:
 //
@@ -17,12 +21,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import {
-  IDENTITY_ASSERTION_HEADER,
-  verifyIdentity,
-} from '@indx-workspace/contracts/identity-assertion';
+import { IDENTITY_ASSERTION_HEADER, verifyIdentity } from '@indx-workspace/sdk';
 
 import { createIndex } from '../../shared/jp-search.mjs';
 import { maskDeep } from '../lib/pii.mjs';
@@ -159,4 +160,15 @@ export function startFakeCrm({ token, key, connectorId, workspace, port = 0, dat
       });
     });
   });
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const crm = await startFakeCrm({
+    token: process.env.CRM_TOKEN ?? 'dev-token',
+    key: (process.env.CRM_IDENTITY_SECRET ?? '').split(','),
+    connectorId: process.env.IDENTITY_AUDIENCE ?? '',
+    workspace: process.env.IDENTITY_WORKSPACE ?? '',
+    port: Number(process.env.PORT ?? 8794),
+  });
+  process.stdout.write(`fake CRM on ${crm.url}\n`);
 }

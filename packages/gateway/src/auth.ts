@@ -1,9 +1,20 @@
 import type { ModelConnectionConfig } from '@indx-workspace/contracts/models';
-import type { ModelProvider, RunStartProblemCode } from '@indx-workspace/contracts/runs';
+import type {
+  ModelProvider,
+  RUN_BUDGET_REACHED,
+  RunStartProblemCode,
+} from '@indx-workspace/contracts/runs';
 import type { RegisteredProviderId } from './providers/registry.js';
 import type { GatewayRouter, RequestContext, WireProtocol } from './types.js';
 import type { RunTokenClaims, RunTokenCodec } from './tokens/run-token.js';
 import { extractResponseUsage } from './usage/index.js';
+
+/** What a run has spent and may spend, as six-place decimal strings (ADR-0162). */
+export type RunSpend = {
+  readonly costUsd: string;
+  /** `null` when the run has no spend ceiling. */
+  readonly ceilingUsd: string | null;
+};
 
 type ActiveRunResolution = {
   readonly state: 'active';
@@ -11,13 +22,22 @@ type ActiveRunResolution = {
   readonly connectionProvider: ModelProvider;
   readonly credential: string;
   readonly settings?: ModelConnectionConfig;
+  /**
+   * The run's cost and spend ceiling, from the same run read that found it active. Absent when the
+   * resolver reads no run row (a test's or a fixture's), which leaves the run uncapped.
+   */
+  readonly spend?: RunSpend;
+  /** Keyless connections only: renews the cloud token after the provider refused it. */
+  readonly refreshCredential?: () => Promise<string>;
 };
 
 export type RunResolution =
   | ActiveRunResolution
   | { readonly state: 'deleted' }
   | { readonly state: 'missing' }
-  | { readonly state: 'revoked' };
+  | { readonly state: 'revoked' }
+  /** A keyless connection whose cloud identity yielded no token (answered 503). */
+  | { readonly state: 'unavailable'; readonly message: string };
 
 export interface GatewayRunResolver {
   resolve(claims: RunTokenClaims, tokenHash: string): Promise<RunResolution>;
@@ -29,6 +49,7 @@ export type GatewayAuthentication =
       readonly claims: RunTokenClaims;
       readonly connectionProvider: ModelProvider;
       readonly context: RequestContext;
+      readonly spend?: RunSpend;
     }
   | { readonly ok: false; readonly response: Response };
 
@@ -63,16 +84,35 @@ export type GatewayUsageRecord = Readonly<{
   metered: boolean;
 }>;
 
-/** Why a model call is refused after its token authenticated; `admit` answers `null` to let it through. */
+/**
+ * Why a model call is refused after its token authenticated; `admit` answers `null` to let it
+ * through. `spend` is the run's, from the resolver's read, when the resolver reads one.
+ */
 export interface GatewayAdmission {
-  admit(claims: RunTokenClaims): Promise<AdmissionRefusal | null>;
+  admit(claims: RunTokenClaims, spend?: RunSpend): Promise<AdmissionRefusal | null>;
 }
 
 export type AdmissionRefusal = {
   readonly status: 403 | 503;
-  readonly code: Extract<RunStartProblemCode, 'daily_cost_cap_reached' | 'daily_cost_unavailable'>;
+  readonly code:
+    | Extract<RunStartProblemCode, 'daily_cost_cap_reached' | 'daily_cost_unavailable'>
+    | typeof RUN_BUDGET_REACHED
+    | 'run_budget_unavailable';
   readonly message: string;
 };
+
+/** The admissions in order, as one: the first refusal wins and the rest are not asked. */
+export function firstRefusalOf(admissions: readonly GatewayAdmission[]): GatewayAdmission {
+  return {
+    async admit(claims, spend) {
+      for (const admission of admissions) {
+        const refusal = await admission.admit(claims, spend);
+        if (refusal !== null) return refusal;
+      }
+      return null;
+    },
+  };
+}
 
 /** The gateway's own refusals. Every run-token code starts `token_` and a provider's `401` is
  * relayed unchanged, never under that prefix: the Claude engine adapter relies on it to tell a
@@ -152,6 +192,10 @@ export async function authenticateGatewayRequest(
   if (resolved.state === 'missing') {
     return problem(404, 'run_not_found', 'The run named by this gateway token does not exist.');
   }
+  if (resolved.state === 'unavailable') {
+    // Not `token_*`: the engine adapter reads that prefix as "the run token was refused".
+    return problem(503, 'model_credential_unavailable', resolved.message, 'api_error');
+  }
   return {
     ok: true,
     claims,
@@ -161,8 +205,12 @@ export async function authenticateGatewayRequest(
       credential: resolved.credential,
       requestId: `run_${claims.runId}_${crypto.randomUUID()}`,
       settings: resolved.settings ?? {},
+      ...(resolved.refreshCredential === undefined
+        ? {}
+        : { refreshCredential: resolved.refreshCredential }),
       signal: request.signal,
     },
+    ...(resolved.spend === undefined ? {} : { spend: resolved.spend }),
   };
 }
 
@@ -313,7 +361,7 @@ export function createAuthenticatedGateway(
       // Only a model turn spends: `/v1/models` and `count_tokens` stay open, so an engine's
       // credential probe still tells a refused token from a refused call.
       if (admission !== undefined && wireProtocol !== null) {
-        const refusal = await admission.admit(authentication.claims);
+        const refusal = await admission.admit(authentication.claims, authentication.spend);
         if (refusal !== null) {
           return problem(
             refusal.status,

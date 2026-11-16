@@ -194,6 +194,57 @@ describe('runTriggerCronPass', () => {
     });
   });
 
+  it('reports the demo sweep of the same delivery when one is installed', async () => {
+    const demo = { workspacesDeleted: 4 };
+    const result = await runTriggerCronPass({
+      schedule: () => Promise.resolve(RESULT),
+      archive: () => Promise.resolve(SWEEP),
+      demo: () => Promise.resolve(demo),
+      log: quietLog(),
+    });
+
+    expect(result).toEqual({ ...RESULT, archive: SWEEP, demo });
+  });
+
+  it('adds no demo field where no demo sweep is installed', async () => {
+    const result = await runTriggerCronPass({
+      schedule: () => Promise.resolve(RESULT),
+      archive: () => Promise.resolve(SWEEP),
+      log: quietLog(),
+    });
+
+    expect(result).not.toHaveProperty('demo');
+  });
+
+  it('logs and reports null when the demo sweep throws, keeping the archive sweep', async () => {
+    const log = quietLog();
+    const failure = new Error('lease unavailable');
+
+    const result = await runTriggerCronPass({
+      schedule: () => Promise.resolve(RESULT),
+      archive: () => Promise.resolve(SWEEP),
+      demo: () => Promise.reject(failure),
+      log,
+    });
+
+    expect(result).toEqual({ ...RESULT, archive: SWEEP, demo: null });
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('[demo-sweep] sweep failed', {
+      error: failure,
+    });
+  });
+
+  it('still runs the demo sweep when the archive sweep throws', async () => {
+    const demo = vi.fn(() => Promise.resolve('swept'));
+    const result = await runTriggerCronPass({
+      schedule: () => Promise.resolve(RESULT),
+      archive: () => Promise.reject(new Error('archive down')),
+      demo,
+      log: quietLog(),
+    });
+
+    expect(result).toEqual({ ...RESULT, archive: null, demo: 'swept' });
+  });
+
   it('does not sweep when the schedule pass throws', async () => {
     const archive = vi.fn(() => Promise.resolve(SWEEP));
 

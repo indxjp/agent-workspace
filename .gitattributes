@@ -34,3 +34,4 @@ migrations/meta/** linguist-generated=true
 formal/generated/** linguist-generated=true
 **/__golden__/** linguist-generated=true
 tests/e2e/platforms-journey/golden/** linguist-generated=true
+examples/store/catalog/recordings.generated.ts linguist-generated=true

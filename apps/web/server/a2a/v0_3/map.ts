@@ -7,7 +7,8 @@ import {
 } from '@indx-workspace/contracts/a2a';
 import { AgentMessageFrameSchema } from '@indx-workspace/contracts/run-events';
 
-import type { RunRecord, RunStatus } from '../../runs/store';
+import { randomIds, type IdGenerator } from '../../ids';
+import type { RunRecord, RunStatus } from '../../execution';
 
 export const ARTIFACT_ID = 'response';
 
@@ -38,10 +39,11 @@ export function agentMessage(
   taskId: string,
   text: string,
   role: 'agent' | 'user' = 'agent',
+  ids: IdGenerator = randomIds,
 ): A2aAgentMessage {
   return {
     kind: 'message',
-    messageId: crypto.randomUUID(),
+    messageId: ids.newId(),
     role,
     parts: [{ kind: 'text', text }],
     contextId,

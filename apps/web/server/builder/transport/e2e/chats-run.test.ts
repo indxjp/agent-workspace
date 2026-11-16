@@ -16,7 +16,13 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryRunStore } from '../../../runs/memory-store';
-import { WORKSPACE, builderDoor, scriptedModelFile, toolResults, type Door } from './harness';
+import {
+  WORKSPACE,
+  builderDoor,
+  scriptedModelFile,
+  toolResults,
+  type Door,
+} from './harness.test-support';
 
 const SCRIPTS = fileURLToPath(new URL('../../../../../../tests/builder/scripted', import.meta.url));
 const scopes = () => createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]);

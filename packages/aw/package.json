@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/aw",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "description": "aw, the command line for the Agent Workspace API: one command per SDK method, with JSON output and stable exit codes.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -78,7 +78,7 @@
   },
   "devDependencies": {
     "@indx-workspace/cli": "workspace:*",
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.6",
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "5.0.5"

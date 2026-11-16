@@ -98,12 +98,13 @@ function packedEmbedded(overrides: Record<string, unknown> = {}): Record<string,
 }
 
 describe('the published package tarballs (issue #246, ADR-0082)', () => {
-  it('publishes contracts, platforms, the SDK, react, aw, the CLI, embedded, then create, each after what it depends on', () => {
+  it('publishes contracts, platforms, the SDK, react, the app kit, aw, the CLI, embedded, then create, each after what it depends on', () => {
     expect(PUBLISHED_PACKAGES).toEqual([
       'contracts',
       'platforms',
       'sdk',
       'react',
+      'app',
       'aw',
       'cli',
       'embedded',
@@ -426,7 +427,7 @@ describe('the published package tarballs (issue #246, ADR-0082)', () => {
     expect(() => selectPackages('sdk,')).toThrow(/empty package/u);
   });
 
-  it('parses the command line strictly and packs all eight for a release or the smoke', () => {
+  it('parses the command line strictly and packs all nine for a release or the smoke', () => {
     expect(parseOptions(['--out', 'o', '--smoke', '--expect-tag', 'packages-v0.1.0'])).toEqual({
       out: 'o',
       smoke: true,

@@ -75,12 +75,17 @@ export {
   openConnectionStore,
   resolveFileRoot,
   ReadOnlyStoreError,
-  storageProviderStatus,
-  storageRefusalClass,
   type ConnectionCredential,
-  type StorageRefusalClass,
   type ConnectionStoreOptions,
 } from './connection-store.js';
+export {
+  folderFailure,
+  storageProviderStatus,
+  storageRefusalClass,
+  type FolderFailure,
+  type StorageRefusalClass,
+} from './connection-refusal.js';
+export { FolderPathError, FolderStoreError, FolderWalkLimitError } from './folder-store.js';
 export {
   newObjectId,
   parseStorageObjectName,
@@ -90,20 +95,17 @@ export {
   type StorageArea,
   type StorageObjectName,
 } from './object-name.js';
-export type { S3ObjectStoreConfig, S3ObjectStoreOptions } from './s3-store.js';
+export type { S3ObjectStoreConfig } from './s3-config.js';
+export type { S3ObjectStoreOptions } from './s3-store.js';
 export type {
   AzureBlobContainer,
   AzureBlobEntry,
   AzureBlobFileEntry,
   AzureBlobFolderEntry,
   AzureBlobObjectStoreConfig,
-} from './azure-blob-store.js';
-export type {
-  GcsClient,
-  GcsObjectStoreConfig,
-  GcsObjectStoreOptions,
-  GcsStoredObject,
-} from './gcs-store.js';
+} from './azure-blob-protocol.js';
+export type { GcsClient, GcsStoredObject } from './gcs-safe-client.js';
+export type { GcsObjectStoreConfig, GcsObjectStoreOptions } from './gcs-store.js';
 
 // The in-memory backend is a reference implementation and a test double, not a deployment
 // backend — `memory-store.ts`'s header says which claim it does and does not discharge. It is

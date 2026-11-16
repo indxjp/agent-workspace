@@ -38,6 +38,8 @@ export interface CreateAgentVersionDependencies {
   readonly toolHost?: boolean;
   /** Why the tool sandbox cannot enforce a code tool's `allowedDomains` (#1018), or `null`. */
   readonly toolDomainsRefusal?: string | null;
+  /** The built-in skills a save would install first; a dry run resolves them as present (#890). */
+  readonly skillsASaveInstalls?: ReadonlySet<string>;
 }
 
 /**

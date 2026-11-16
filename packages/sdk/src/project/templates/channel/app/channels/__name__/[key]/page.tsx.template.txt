@@ -1,0 +1,11 @@
+'use client';
+import {{name}} from '@/resources/{{name}}';
+import { ChannelView } from '@indx-workspace/app/react';
+import { use } from 'react';
+
+export default function {{component}}ChannelPage(props: {
+  readonly params: Promise<{ key: string }>;
+}) {
+  const { key } = use(props.params);
+  return <ChannelView channel="{{name}}" resource={{{name}}} keyValue={key} />;
+}

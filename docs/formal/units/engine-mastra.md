@@ -8,7 +8,7 @@ runs an agent whose policy says `engine: 'mastra'` as a plain Mastra `Agent` (`@
 the tool plan, the filesystem wrapper's write rule, the model connection, the event mapping, the
 step stop and the memory journal over the engine-scoped store. The path rules are
 `Authz/PathGrant.lean`'s, the frames are `Events/AgentFrames.lean`'s, and the permission switches,
-refusal codes, protocols, provisional price list, frame vocabulary and pairing scan are
+refusal codes, protocols, frame vocabulary and pairing scan are
 `Behaviour/Engines/OpenAiAgents.lean`'s; none is re-modelled.
 
 ## Compile
@@ -17,12 +17,11 @@ refusal codes, protocols, provisional price list, frame vocabulary and pairing s
 grants (normalised against the adapter's `.mastra` directory), the gateway connection, its wire
 protocol, spec A.11's environment verdict, the absence of a database connection variable (the
 `DATABASE_ENV` pattern itself, modelled over the variable names: `DATABASE_URL` and
-`*_DATABASE_URL`, libpq's `PG*`, `LIBSQL_*` and `TURSO_*`, in any case), a budget
-cap on a model the provisional price table cannot price (a run naming no model is priced as the
-adapter's default for its protocol family), the connectors (an unreadable record, and a tool asking
-for an approval), and a fork. A requirement the engine cannot honour is refused with the port's
-code and the capability it names — `wireProtocols`, `maxBudget`, `approvals`, `fork` — never
-dropped, never emulated.
+`*_DATABASE_URL`, libpq's `PG*`, `LIBSQL_*` and `TURSO_*`, in any case), the connectors (an
+unreadable record, and a tool asking for an approval), and a fork. A requirement the engine cannot
+honour is refused with the port's code and the capability it names — `wireProtocols`, `approvals`,
+`fork` — never dropped, never emulated. A per-run budget cap never changes the compile: the gateway
+enforces it (ADR-0162).
 
 ## Tools
 
@@ -107,18 +106,17 @@ engine's own tool pairing, and so is `paired` in the sense of `Events/AgentFrame
 Compile hands Mastra `limits.maxTurns` as its native `maxSteps`, unchanged. The adapter never
 reports more steps than the limit; a `max_turns` stop is exactly at the limit; and a run whose model
 keeps asking for tools up to the limit is cut short there and ends
-`agent.result {stopReason: 'max_turns'}`. The boundary's verdict is `mastraStopReason`: the budget
-cap first, then the caller's interrupt, then `max_turns` exactly when the run reached `maxSteps`
-with its last step still asking for tools — a run that used exactly `maxSteps` steps and stopped on
-its own ends `end_turn`. A per-run budget cap is priced per step from the port's provisional table
-and stops the run `max_budget`.
+`agent.result {stopReason: 'max_turns'}`. The boundary's verdict is `mastraStopReason`: the caller's
+interrupt first, then `max_turns` exactly when the run reached `maxSteps` with its last step still
+asking for tools — a run that used exactly `maxSteps` steps and stopped on its own ends `end_turn`.
+The adapter has no budget stop; the gateway enforces the spend ceiling (ADR-0162).
 
 ## Theorems and vectors
 
 - **T1** (`Theorems/Normative/Mastra.lean`): the tools are exactly the permitted ones and network
   egress is exactly `unrestrictedNetwork`; skills and connectors are honoured; semantic recall and
-  working memory are off; a fork, an unpriced cap, an unspoken protocol and an approval are refused
-  by name.
+  working memory are off; a fork, an unspoken protocol and an approval are refused by name; a budget
+  cap never changes the compile.
 - **T2** (`Theorems/Invariants/Mastra.lean`): no chunk is dropped, and every raw chunk the
   boundary reads is represented; tool pairing holds, and every mapped stream is `paired`; compile's
   `maxSteps` is `maxTurns`; the run stops at or before `maxTurns`, a `max_turns` stop is at the

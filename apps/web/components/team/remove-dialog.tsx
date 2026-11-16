@@ -18,6 +18,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 
 import { summariseRemovalImpact, type MemberDialogState, type MembershipResource } from './model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 const BTN =
   'inline-flex h-8 items-center rounded-(--radius-sm) border px-[13px] text-[13px] font-medium';
@@ -41,6 +42,8 @@ interface RemoveMemberDialogProps {
   readonly returnFocusTo?: { current: HTMLElement | null };
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  readonly strings?: TeamStrings;
 }
 
 export function RemoveMemberDialog({
@@ -49,6 +52,7 @@ export function RemoveMemberDialog({
   returnFocusTo,
   onCancel,
   onConfirm,
+  strings = teamStrings('en'),
 }: Readonly<RemoveMemberDialogProps>) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
@@ -98,10 +102,10 @@ export function RemoveMemberDialog({
         className="w-full max-w-[520px] rounded-(--radius) border border-border bg-surface p-5 shadow-xl"
       >
         <h2 id={TITLE_ID} className="text-[18px]">
-          Remove {member.name} from this workspace?
+          {strings.removeTitle(member.name)}
         </h2>
         <p className="mt-1 text-[12.5px] text-muted">{member.email}</p>
-        <RemovalImpact state={state} />
+        <RemovalImpact state={state} strings={strings} />
         {state.kind === 'failed' ? (
           <p className="mt-3 text-[13px] text-danger" role="alert">
             {state.message}
@@ -115,16 +119,16 @@ export function RemoveMemberDialog({
             disabled={busy}
             onClick={onCancel}
           >
-            Cancel
+            {strings.cancel}
           </button>
           <button
             type="button"
-            aria-label={`Remove ${member.name} from this workspace`}
+            aria-label={strings.removeConfirmLabel(member.name)}
             className={`${BTN} ${BTN_DANGER} ${busy ? BTN_DISABLED : ''}`}
             disabled={busy}
             onClick={onConfirm}
           >
-            {busy ? 'Removing…' : 'Remove member'}
+            {busy ? strings.removing : strings.removeMember}
           </button>
         </div>
       </div>
@@ -139,31 +143,28 @@ export function RemoveMemberDialog({
  * failure block a change the server would accept, and printing "0 sessions and 0 projects" would be
  * a number nothing established. Saying so is the third option and the honest one.
  */
-function RemovalImpact({ state }: Readonly<{ state: MemberDialogState }>) {
+function RemovalImpact({
+  state,
+  strings,
+}: Readonly<{ state: MemberDialogState; strings: TeamStrings }>) {
   switch (state.kind) {
     case 'counting':
       return (
         <p className="mt-3 text-[13px] text-muted" role="status">
-          Counting the sessions and projects this member owns…
+          {strings.counting}
         </p>
       );
     case 'counted':
-      return <p className="mt-3 text-[13px] text-text-2">{summariseRemovalImpact(state.impact)}</p>;
-    case 'impact-unavailable':
       return (
         <p className="mt-3 text-[13px] text-text-2">
-          What this member owns could not be counted, so this summary is incomplete. Removing a
-          member ends their access here and deletes no history.
+          {summariseRemovalImpact(state.impact, strings)}
         </p>
       );
+    case 'impact-unavailable':
+      return <p className="mt-3 text-[13px] text-text-2">{strings.impactUnavailable}</p>;
     case 'submitting':
     case 'failed':
-      return (
-        <p className="mt-3 text-[13px] text-text-2">
-          Removing a member ends their access to this workspace. Completed sessions and the projects
-          they created stay where they are.
-        </p>
-      );
+      return <p className="mt-3 text-[13px] text-text-2">{strings.removalNote}</p>;
     default: {
       const unreachable: never = state;
       throw new Error(`unhandled member dialog state ${JSON.stringify(unreachable)}`);

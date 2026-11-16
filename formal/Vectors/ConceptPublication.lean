@@ -334,9 +334,11 @@ def resolveVectors : List Vector :=
 
 private def viewer : PrincipalId := ⟨"00000000-0000-4000-8000-000000000009"⟩
 
-/-- Every role, as the publisher or not, against a share of every visibility. -/
+/-- Every role that can reach `GET /api/shares`, as the publisher or not, against a share of every
+visibility. The guest holds no `shares` grant, so the route refuses it before listing is decided
+(the policy vectors of `authz-decide` pin that refusal); `listedFor` is still total over it. -/
 def listingVectors : List Vector :=
-  roles.flatMap fun role => [false, true].flatMap fun (isPublisher : Bool) =>
+  (roles.filter AgentWorkspace.Concepts.Membership.Role.isConferrable).flatMap fun role => [false, true].flatMap fun (isPublisher : Bool) =>
     (WireEnum.all : List Visibility).map fun v =>
       let s := { base with visibility := v, publisher := if isPublisher then viewer else base.publisher }
       { id := s!"listing/{WireEnum.toWire role}/publisher={isPublisher}/{v.toWire}",

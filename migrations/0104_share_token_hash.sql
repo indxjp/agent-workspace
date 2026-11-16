@@ -1,0 +1,2 @@
+ALTER TABLE "shares" ADD COLUMN "token_hash" text GENERATED ALWAYS AS (encode(sha256("token"::bytea), 'hex')) STORED NOT NULL;--> statement-breakpoint
+ALTER TABLE "shares" ADD CONSTRAINT "shares_token_hash_key" UNIQUE("token_hash");

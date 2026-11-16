@@ -82,6 +82,7 @@ import { materialise } from './materialise';
 import { definitionReferences, validateAgentVersion } from './pipeline';
 import type { StorageConnectionLookup } from './storage-grants';
 import {
+  agentArchived,
   agentArchivedRefusal,
   agentNameConflict,
   agentVersionNotFound,
@@ -98,7 +99,7 @@ import {
 } from './problems';
 import { decidePromote, decideRollback, rollbackHistory, type PromoteDecision } from './release';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../identity';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 
 /** Who moves the pointer: the authenticated principal's ids and its display attribution. */
@@ -235,8 +236,17 @@ async function pointAt(
     if (reserved !== null) return { kind: 'refused', result: reserved };
   }
   if (move.dryRun) return { kind: 'checked' };
+  // The agent's current grants are the version's own rows, by the connection ids its deploy
+  // resolved, never its `storage://` names resolved again: after a delete-and-recreate the new
+  // connection of the same name is another connection, and binding it here would let a version
+  // that fails closed at run time hold the new connection's DELETE.
+  const versionGrants = environment === 'local' ? await store.storageGrantsOf(record.id) : null;
   const materialised = (references: ResolvedReferences): MaterialisedAgent =>
-    materialise(definition, references, validated.policyToStore);
+    materialise(
+      definition,
+      versionGrants === null ? references : { ...references, storageGrants: versionGrants },
+      validated.policyToStore,
+    );
   const audit: AgentPointerAudit = {
     // The name the agent has after the move: a version can rename it.
     subjectLabel:
@@ -266,6 +276,8 @@ async function pointAt(
       return outcome;
     case 'not-found':
       return { kind: 'refused', result: agentNotFound() };
+    case 'agent-archived':
+      return { kind: 'refused', result: agentArchived() };
     case 'version-not-found':
       return { kind: 'refused', result: agentVersionNotFound(number) };
     case 'name-conflict':

@@ -39,8 +39,8 @@ export const sessionStateBlobs = pgTable(
     blobKey: text('blob_key').notNull(),
     /** The workspace-relative object-store key the bytes are at. Derived, never caller-supplied. */
     storageKey: text('storage_key').notNull(),
-    /** The permanent object ID (the storage design, §04); `null` for a blob written before object IDs, whose bytes are at `storage_key`. */
-    objectId: uuid('object_id'),
+    /** The permanent object ID the bytes are stored under (the storage design, §04). */
+    objectId: uuid('object_id').notNull(),
     /** `ready` is the only status a read serves; `pending` and `deleting` are for the save and cleanup steps. */
     status: text('status', { enum: sessionStateBlobStatuses }).notNull().default('ready'),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),

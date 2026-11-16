@@ -7,10 +7,10 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { dominates } from './conferral';
+import { dominates } from './core/conferral';
 import { decide, METHODS, OWNERSHIPS, TOKEN_SCOPE_KINDS, ENDPOINT_SCOPE_KINDS } from './decide';
-import { grantsFor, RESOURCES, SUB_RESOURCES } from './permissions';
-import { ROLES } from './roles';
+import { grantsFor, RESOURCES, SUB_RESOURCES } from './core/permissions';
+import { ROLES } from './core/roles';
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 

@@ -9,6 +9,7 @@ import { startTracing, type Tracing } from '@agent-workspace/core/tracing';
 
 import { createGatewayFromEnvironment, type GatewayFromEnvironment } from './index.js';
 import { adoptTrace, fetchInSpan, requestLogger } from './server.js';
+import { startFailureFields } from './settings.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -51,7 +52,7 @@ export function createGatewayFunction(
         gateway = await started;
       } catch (error) {
         started = undefined;
-        requestLogger(logger, request).error('gateway failed to start', { error });
+        requestLogger(logger, request).error('gateway failed to start', startFailureFields(error));
         return failed();
       }
       try {

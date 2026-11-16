@@ -218,7 +218,7 @@ Rules for the Lean code. They are the Lean counterpart of `ENGINEERING_GUIDELINE
   one English sentence.
 - Every definition and theorem that corresponds to a document or code symbol carries a
   traceability attribute, for example
-  `@[spec doc := "docs/sdk/04-api-specification.md#33-roles", ts := "apps/web/server/rbac/permissions.ts#permissions"]`.
+  `@[spec doc := "docs/sdk/04-api-specification.md#33-roles", ts := "apps/web/server/rbac/core/permissions.ts#permissions"]`.
   The catalogue extractor reads these attributes. It does not guess from names.
 - Prefer `decide`/`simp`/`omega` proofs over long tactic scripts. Where a table has N cells,
   generate the N cell theorems with a macro or command elaborator instead of hand-copying them.

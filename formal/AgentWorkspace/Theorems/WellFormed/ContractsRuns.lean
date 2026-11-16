@@ -181,8 +181,9 @@ private def runFixture : JValue := .obj
    ("usage", usageFixture),
    ("cost", .obj [("amount", .str "0.000000"), ("currency", .str "USD"),
      ("priceTableVersion", .null)]),
+   ("spendCeilingUsd", .null),
    ("error", .null), ("output", .null), ("accountingState", .str "pending"),
-   ("accountingError", .null), ("pendingApproval", .null)]
+   ("accountingError", .null), ("pendingApproval", .null), ("parentRunId", .null)]
 
 private def sessionFixture : JValue := .obj
   [("id", .str "session"), ("workspaceId", .str "ws"), ("agentId", .str "agent"),

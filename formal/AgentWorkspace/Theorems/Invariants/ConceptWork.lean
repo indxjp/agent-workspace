@@ -19,7 +19,8 @@ T2 — invariants of the work cluster.
   workspace, one token per digest.
 * **Operations.** `timedSteps` drives a run through any sequence of store operations
   (`markRunning`, `finish`) with a clock that never runs backwards; every run check is preserved
-  by every such sequence (`store_operations_preserve_run_checks`), by induction. Recording the
+  by every such sequence from a run that, if paused, has a start
+  (`store_operations_preserve_run_checks`), by induction. Recording the
   SDK's session id preserves the session identity invariant.
 * **The event log.** The repository's `append` (allocate `max(sequence) + 1`, insert, prune the
   run's events at or below `next - maxEvents`) keeps every run's stored log contiguous, the
@@ -189,7 +190,7 @@ elab "aw_work_tenant_theorems" : command => do
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T2))
         (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-        (ts := $fkTs) (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+        (ts := $fkTs) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
       theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : consistent catalogue st = true)
           {r r' : AgentWorkspace.Er.Core.Row}
           (href : References catalogue st $tIdent (workFk $tIdent $n) r r') :
@@ -314,7 +315,7 @@ theorem uniqueness_keys_refuse_a_second_row :
 /-- One store operation at instant `now`: the status machine decides whether the run moves
 (`Lifecycle.runStep`), and a move writes the timestamps `Run.stamp` gives. -/
 @[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 def timedStep (r : Run) (op : RunOp) (now : Nat) : Run :=
   match runStep r.status op with
   | .moved next => r.stamp next now
@@ -353,8 +354,27 @@ private theorem stamp_le {r : Run} {now : Nat} (hle : r.lastStamp ≤ now) (op :
   · exact hle
   · exact hle
 
+/-- A paused run has a start: a run pauses only from `running` (`awaitApproval`), which stamps
+`startedAt`. No check of `runs` states it, so the run-check theorems below assume it; the store
+operations keep it (`step_keeps_paused_start`). Without it, finishing a paused run that had no
+start would stamp a start after the pause's kept end time. -/
+def pausedHasStart (r : Run) : Bool := r.status != .awaitingApproval || r.startedAt.isSome
+
+private theorem step_keeps_paused_start (r : Run) (op : RunOp) (now : Nat)
+    (h : pausedHasStart r = true) : pausedHasStart (timedStep r op now) = true := by
+  unfold timedStep pausedHasStart at *
+  cases op with
+  | markRunning =>
+    cases hs : r.status <;>
+      simp_all [runStep, runMayMove, runStatusesThatMayMoveTo, Run.stamp, RunStatus.isTerminal]
+  | finish t =>
+    cases hs : r.status <;> cases t <;>
+      simp_all [runStep, runMayMove, runStatusesThatMayMoveTo, Run.stamp, RunStatus.isTerminal]
+
 private theorem step_well_formed {r : Run} {now : Nat} (hwf : r.wellFormed = true)
+    (hpause : pausedHasStart r = true)
     (hle : r.lastStamp ≤ now) (op : RunOp) : (timedStep r op now).wellFormed = true := by
+  unfold pausedHasStart at hpause
   simp only [Run.wellFormed, Run.endedAtIffTerminal, Run.endedAfterStarted, Run.costNonNegative,
     Run.currencyUsd, Run.priceVersionMatches, Run.unpricedCostZero, Run.pendingWhenAwaiting,
     Run.deadlineWhenAwaiting, Bool.and_eq_true] at hwf ⊢
@@ -363,10 +383,12 @@ private theorem step_well_formed {r : Run} {now : Nat} (hwf : r.wellFormed = tru
   unfold timedStep
   cases op with
   | markRunning =>
-    cases hs : r.status <;> simp only [runStep, Run.stamp] <;>
+    cases hs : r.status <;>
+      simp only [runStep, runMayMove, runStatusesThatMayMoveTo, Run.stamp] <;>
       simp_all [RunStatus.isTerminal, RunStatus.isStopped] <;> cases hst : r.startedAt <;> simp_all
   | finish target =>
-    cases hs : r.status <;> cases target <;> simp only [runStep, Run.stamp] <;>
+    cases hs : r.status <;> cases target <;>
+      simp only [runStep, runMayMove, runStatusesThatMayMoveTo, Run.stamp] <;>
       simp_all [RunStatus.isTerminal, RunStatus.isStopped] <;> cases hst : r.startedAt <;>
       cases hen : r.endedAt <;>
       simp_all <;> omega
@@ -379,49 +401,53 @@ checks untouched. -/
   (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")]
 theorem store_operations_preserve_run_checks :
-    ∀ (steps : List (RunOp × Nat)) (r : Run), r.wellFormed = true →
+    ∀ (steps : List (RunOp × Nat)) (r : Run), r.wellFormed = true → pausedHasStart r = true →
       clockFrom r.lastStamp (steps.map (·.2)) = true → (timedSteps r steps).wellFormed = true
-  | [], _, hwf, _ => hwf
-  | (op, now) :: rest, r, hwf, hclock => by
+  | [], _, hwf, _, _ => hwf
+  | (op, now) :: rest, r, hwf, hpause, hclock => by
     simp only [List.map_cons, clockFrom_cons, Bool.and_eq_true, decide_eq_true_eq] at hclock
     exact store_operations_preserve_run_checks rest (timedStep r op now)
-      (step_well_formed hwf hclock.1 op) (clockFrom_mono (stamp_le hclock.1 op) hclock.2)
+      (step_well_formed hwf hpause hclock.1 op) (step_keeps_paused_start r op now hpause)
+      (clockFrom_mono (stamp_le hclock.1 op) hclock.2)
 
 /-- A run that a `finish` moves to a terminal status always has a duration: "a run that is
 finished without ever having been marked running still gets a start". -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "apps/web/server/runs/api.ts#renderRun")]
 theorem finished_run_has_a_duration (r : Run) (target : RunStatus) (now : Nat)
-    (hlive : r.status.isTerminal = false) (hterm : target.isTerminal = true) :
+    (hmay : runMayMove r.status target = true) (hterm : target.isTerminal = true) :
     (timedStep r (.finish target) now).durationMs.isSome = true := by
   unfold timedStep
-  simp only [runStep, hterm, hlive, Bool.not_true, Bool.false_eq_true, ite_false]
+  simp only [runStep, hterm, hmay, Bool.not_true, Bool.false_eq_true, ite_false, ite_true]
   simp [Run.stamp, hterm, Run.durationMs]
 
 /-- What each store operation writes, status by status: `markRunning` on a queued run moves it to
 `running` and stamps `startedAt` with the store's clock (and nothing else); `finish` with a
-terminal target on a live run moves it there, stamps `endedAt`, and stamps `startedAt` only if
-the run never had one; every other call writes nothing, because the store refuses it (`markRunning`
-on a non-queued run answers `false`, `finish` with a non-terminal target rejects or throws) or
-ignores it (`finish` on an already terminal run). -/
+terminal target moves the run there when the shared rule (`runMayMove`) allows it, stamps
+`endedAt` unless the run already has one (a paused run keeps its pause's end time), and stamps
+`startedAt` only if the run never had one; every other call writes nothing, because the store
+refuses it (`markRunning` on a non-queued run answers `false`, `finish` with a non-terminal target
+rejects or throws) or ignores it (`finish` on a terminal run, or `finish failed` on a paused
+one). -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#RunStore")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem store_stamps_follow_the_status (r : Run) (target : RunStatus) (now : Nat) :
     (r.status = .queued →
         timedStep r .markRunning now = { r with status := .running, startedAt := some now }) ∧
       (r.status ≠ .queued → timedStep r .markRunning now = r) ∧
-      (r.status.isTerminal = false → target.isTerminal = true →
+      (runMayMove r.status target = true → target.isTerminal = true →
         timedStep r (.finish target) now =
           { r with status := target, startedAt := some (r.startedAt.getD now),
-                   endedAt := some now }) ∧
-      (r.status.isTerminal = true ∨ target.isTerminal = false →
+                   endedAt := some (r.endedAt.getD now) }) ∧
+      (runMayMove r.status target = false ∨ target.isTerminal = false →
         timedStep r (.finish target) now = r) := by
-  refine ⟨fun hq => ?_, fun hq => ?_, fun hlive hterm => ?_, fun h => ?_⟩
-  · simp [timedStep, runStep, hq, Run.stamp, RunStatus.isTerminal]
-  · simp [timedStep, runStep, hq]
-  · simp [timedStep, runStep, hlive, hterm, Run.stamp]
+  refine ⟨fun hq => ?_, fun hq => ?_, fun hmay hterm => ?_, fun h => ?_⟩
+  · simp [timedStep, runStep, hq, runMayMove, runStatusesThatMayMoveTo, Run.stamp,
+      RunStatus.isTerminal]
+  · cases hs : r.status <;> simp_all [timedStep, runStep, runMayMove, runStatusesThatMayMoveTo]
+  · simp [timedStep, runStep, hmay, hterm, Run.stamp]
   · rcases h with h | h
     · by_cases ht : target.isTerminal = true
       · simp [timedStep, runStep, h, ht]
@@ -435,11 +461,12 @@ truncated negative one. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/api.ts#renderRun")
   (ts := "packages/core/src/db/schema/runs.ts#runs_ended_after_started")]
 theorem store_durations_are_exact (steps : List (RunOp × Nat)) (r : Run)
-    (hwf : r.wellFormed = true) (hclock : clockFrom r.lastStamp (steps.map (·.2)) = true)
-    {s e d : Nat} (hs : (timedSteps r steps).startedAt = some s)
+    (hwf : r.wellFormed = true) (hpause : pausedHasStart r = true)
+    (hclock : clockFrom r.lastStamp (steps.map (·.2)) = true) {s e d : Nat}
+    (hs : (timedSteps r steps).startedAt = some s)
     (he : (timedSteps r steps).endedAt = some e) (hd : (timedSteps r steps).durationMs = some d) :
     s ≤ e ∧ (d : Int) = (e : Int) - (s : Int) := by
-  have h := store_operations_preserve_run_checks steps r hwf hclock
+  have h := store_operations_preserve_run_checks steps r hwf hpause hclock
   simp only [Run.wellFormed, Run.endedAfterStarted, hs, he, Bool.and_eq_true,
     decide_eq_true_eq] at h
   have hle : s ≤ e := h.1.1.1.1.1.1.2
@@ -681,6 +708,7 @@ example : ofCells (runTokenCells Witness.token) = ofCells (runTokenCells Witness
 example : (timedSteps Witness.queuedRun [(.markRunning, 7), (.finish .cancelled, 8)]).wellFormed =
     true :=
   store_operations_preserve_run_checks _ _ (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)
 
 example : (timedStep Witness.queuedRun (.finish .cancelled) 7).durationMs.isSome = true :=
   finished_run_has_a_duration Witness.queuedRun .cancelled 7 rfl rfl
@@ -705,7 +733,8 @@ example : timedStep Witness.run (.finish .failed) 20 = Witness.run :=
 /-- Started at 7 and cancelled at 8: a duration of exactly 1. -/
 example : (1 : Int) = (8 : Int) - (7 : Int) :=
   (store_durations_are_exact [(.markRunning, 7), (.finish .cancelled, 8)] Witness.queuedRun
-    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)).2
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)).2
 
 example : Witness.session.identityCurrent = true :=
   (recording_keeps_the_session_identity { Witness.session with engineSessionId := none }

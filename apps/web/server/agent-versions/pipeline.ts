@@ -90,7 +90,7 @@ import {
   unsupportedEngineRefusal,
   withStoredConnectorIds,
 } from '../agents/policy';
-import { registeredEngineIds } from '../engines/registry';
+import { registeredEngineIds } from '../execution';
 import { ceilingStep, type RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import {
@@ -131,6 +131,12 @@ export interface AgentVersionContext {
   readonly toolBundles?: ToolBundleLookup | null;
   /** The caller's storage connections (step 4a); absent or `null` when the deployment keeps none. */
   readonly storageConnections?: StorageConnectionLookup | null;
+  /**
+   * The built-in skills a save of this body installs before it runs the pipeline
+   * (`builtinSkillsASaveInstalls`). Read by a dry run only, which installs nothing: step 4 resolves
+   * the body as if they were already in the workspace, so the dry run answers what the save would.
+   */
+  readonly skillsASaveInstalls?: ReadonlySet<string>;
   /**
    * Whether the deployment has a tool sandbox. `false` refuses a body that pins tool bundles
    * (step 3b); absent skips the check, as for a stored body being re-validated.
@@ -279,6 +285,20 @@ export function definitionReferences(
 }
 
 /**
+ * Step 4's names for a dry run leave out the built-in skills its save would install before the
+ * save runs this pipeline (issue #890), so the dry run answers what the save would. A save resolves
+ * every name as given.
+ */
+function withoutSkillsASaveInstalls(
+  references: DefinitionReferences,
+  context: Pick<AgentVersionContext, 'dryRun' | 'skillsASaveInstalls'>,
+): DefinitionReferences {
+  const installed = context.dryRun ? context.skillsASaveInstalls : undefined;
+  if (installed === undefined || installed.size === 0) return references;
+  return { ...references, skills: references.skills.filter((name) => !installed.has(name)) };
+}
+
+/**
  * Step 4's second half: `422 tool_bundle_unknown` naming each pinned digest this workspace has no
  * bundle for (`tool_bundle:<digest>`), or `503` when the body pins bundles and the deployment has
  * nowhere to keep them. A body that pins none never reaches the store.
@@ -409,7 +429,7 @@ export async function validateAgentVersion(
 
   // 4. Resolution (C7 is the store's). A grant step 4a took over is not a workspace file.
   const resolution = await context.store.resolveDefinition(
-    definitionReferences(definition, storage.paths),
+    withoutSkillsASaveInstalls(definitionReferences(definition, storage.paths), context),
   );
   if (resolution.kind === 'unresolved') return { ok: false, result: resolutionRefusal(resolution) };
 

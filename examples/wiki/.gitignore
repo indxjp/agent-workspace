@@ -1,0 +1,4 @@
+node_modules/
+.agent-workspace/
+.aw/
+.env

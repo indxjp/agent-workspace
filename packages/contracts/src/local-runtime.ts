@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { API_KEY_PATTERN } from './api-keys.js';
+import { FeatureListSchema } from './features.js';
 import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 import { ProjectPolicySchema } from './policy-ceiling.js';
 import {
@@ -63,6 +64,31 @@ function isLoopbackHttpUrl(text: string): boolean {
   return url.href === text || (url.pathname === '/' && url.href === `${text}/`);
 }
 
+/** The schemes a local database URL may use; `postgresql:` is what the embedded database names. */
+const POSTGRES_PROTOCOLS: ReadonlySet<string> = new Set(['postgres:', 'postgresql:']);
+
+/**
+ * True when `text` is a `postgres:` or `postgresql:` URL whose host is loopback (issue #1506): the
+ * database a local app is migrated into and runs on. The host is read as a WHATWG URL reads it, and
+ * must be one of the loopback names spelled canonically (`127.1`, an upper-case host or a hex
+ * address are refused). Userinfo is allowed: the URL names the embedded superuser, whose password is
+ * the embedded database's fixed local one. Isomorphic, never throws.
+ */
+function isLoopbackPostgresUrl(text: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return false;
+  }
+  if (!POSTGRES_PROTOCOLS.has(url.protocol)) return false;
+  if (!LOOPBACK_HOSTNAMES.has(url.hostname)) return false;
+  // A non-special scheme keeps the host as written: refuse any spelling but the canonical one.
+  const host = text.slice(text.indexOf('//') + 2).split(/[/?#]/u, 1)[0] ?? '';
+  const hostAndPort = host.slice(host.lastIndexOf('@') + 1);
+  return hostAndPort === url.host;
+}
+
 /**
  * The most names a `start` message's `environment.withheld` may hold (issue #564): generous next
  * to two project maps of at most 64 entries plus TypeScript `secret()` calls, and a bound on IPC
@@ -83,6 +109,57 @@ function uniqueSecretNames(max: number) {
     .optional();
 }
 
+/**
+ * ADR-0161's 2026-11-01 amendment (DI5, issue #2075): the `client_id` the local console is
+ * registered under at `aw dev`'s development OIDC issuer.
+ */
+export const LOCAL_CONSOLE_OIDC_CLIENT_ID = 'aw-local-console';
+
+/** The path the local console's OIDC callback is served at (`apps/web/app/api/auth/callback`). */
+export const LOCAL_CONSOLE_OIDC_CALLBACK_PATH = '/api/auth/callback';
+
+/** `http://127.0.0.1:<port>`, no path and no trailing slash: the development issuer's URL (DI1). */
+const DEV_ISSUER_URL_PATTERN = /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})$/u;
+
+/** True when `text` is a {@link DEV_ISSUER_URL_PATTERN} URL on a port from 1 to 65535. */
+function isDevIssuerUrl(text: string): boolean {
+  const port = DEV_ISSUER_URL_PATTERN.exec(text)?.[1];
+  return port !== undefined && Number(port) <= 65_535;
+}
+
+/**
+ * ADR-0161's 2026-11-01 amendment (DI5), amending ADR-0109's contract C1: the development OIDC
+ * issuer `aw dev` runs on `127.0.0.1`, and the local console's client there. `aw dev` sends it
+ * only when it runs that issuer, which it does only when no `OIDC_*` variable is set (DI2). The
+ * runtime sets `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_REDIRECT_URI`
+ * from it, and links `(issuer, ownerSubject)` to the bootstrap Owner (DI8). `clientSecret` is a
+ * credential: it travels only on the fork's IPC channel and is never logged.
+ */
+export const LocalRuntimeDevIssuerSchema = z
+  .object({
+    /** `http://127.0.0.1:<port>`: never `localhost`, `::1`, another host, a path or `https:`. */
+    issuer: z
+      .string()
+      .max(32)
+      .refine(isDevIssuerUrl, 'must be http://127.0.0.1:<port>, with no path'),
+    clientId: z.literal(LOCAL_CONSOLE_OIDC_CLIENT_ID),
+    /** 32 random bytes, base64url (43 characters), made per `aw dev` process. */
+    clientSecret: z.string().regex(/^[A-Za-z0-9_-]{43}$/u, 'must be 43 base64url characters'),
+    /** `http://127.0.0.1:<environment.port>/api/auth/callback`, checked against the port. */
+    redirectUri: z.string().max(64),
+    /** The bootstrap Owner's `sub` at the issuer: `local:` + base64url(SHA-256(email)). */
+    ownerSubject: z.string().regex(/^local:[A-Za-z0-9_-]{43}$/u, 'must be local:<43 base64url>'),
+  })
+  .strict()
+  .readonly();
+
+export type LocalRuntimeDevIssuer = z.infer<typeof LocalRuntimeDevIssuerSchema>;
+
+/** The redirect URI the local console's client must name for a runtime on `port`. */
+export function localConsoleRedirectUri(port: number): string {
+  return `http://127.0.0.1:${String(port)}${LOCAL_CONSOLE_OIDC_CALLBACK_PATH}`;
+}
+
 /** The environment `aw dev` resolved from the project file, passed whole so the runtime reads no file of its own for it. */
 export const LocalRuntimeEnvironmentSchema = z
   .object({
@@ -96,6 +173,12 @@ export const LocalRuntimeEnvironmentSchema = z
      * runtime older than this key refuses it as an unknown key rather than running unbounded.
      */
     policy: ProjectPolicySchema.optional(),
+    /**
+     * The project file's features (ADR-0160 D5, issue #1495). `aw` sends it only when the file has
+     * a `features` list, so a `start` message from a file without one is unchanged; a runtime older
+     * than this key refuses it as an unknown key rather than install every feature.
+     */
+    features: FeatureListSchema.optional(),
     /**
      * The names, never the values, of the secrets the project references (C10, SD17; ADR-0109
      * slice-2 amendment, issue #564): each a {@link SecretNameSchema}, so a reserved name such as
@@ -113,8 +196,23 @@ export const LocalRuntimeEnvironmentSchema = z
      * runtime older than this key refuses it as an unknown key.
      */
     modelSecrets: uniqueSecretNames(LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES),
+    /**
+     * ADR-0161's 2026-11-01 amendment (DI5): the development OIDC issuer, when `aw dev` runs one.
+     * A `start` message without it starts exactly as before; a runtime older than this key refuses
+     * it as an unknown key.
+     */
+    devIssuer: LocalRuntimeDevIssuerSchema.optional(),
   })
   .strict()
+  .refine(
+    (environment) =>
+      environment.devIssuer === undefined ||
+      environment.devIssuer.redirectUri === localConsoleRedirectUri(environment.port),
+    {
+      message: 'devIssuer.redirectUri must be http://127.0.0.1:<port>/api/auth/callback',
+      path: ['devIssuer', 'redirectUri'],
+    },
+  )
   .readonly();
 
 export type LocalRuntimeEnvironment = z.infer<typeof LocalRuntimeEnvironmentSchema>;
@@ -136,9 +234,22 @@ export const LocalRuntimeStartMessageSchema = z
 export type LocalRuntimeStartMessage = z.infer<typeof LocalRuntimeStartMessageSchema>;
 
 /**
+ * Issue #1506: a `postgres:`/`postgresql:` URL on a loopback host, the database a local app runs on.
+ */
+export const LocalRuntimeDatabaseUrlSchema = z
+  .string()
+  .min(1)
+  .max(2048)
+  .refine(
+    isLoopbackPostgresUrl,
+    'must be a postgres:// or postgresql:// URL on 127.0.0.1, localhost or [::1]',
+  );
+
+/**
  * Runtime → `aw`: the runtime is serving. `url` must be a loopback `http(s)` URL — stricter than
  * ADR-0109's text, so a local runtime can never point `aw` at another host. `contractsVersion` is
- * the runtime's own contracts version, for `aw` to judge skew.
+ * the runtime's own contracts version, for `aw` to judge skew; `databaseUrl` the database a local app
+ * runs on (issue #1506).
  */
 export const LocalRuntimeReadyMessageSchema = z
   .object({
@@ -156,6 +267,14 @@ export const LocalRuntimeReadyMessageSchema = z
       .min(1)
       .max(32)
       .refine((value) => parseContractsVersion(value) !== null, 'must be MAJOR.MINOR.PATCH'),
+    /**
+     * Issue #1506: the runtime's own PostgreSQL, for `aw dev` to migrate and run a generated app
+     * on (its schema `app_<name>`). A `postgres:`/`postgresql:` URL on a loopback host only, so a
+     * runtime can never point an app at another machine's database. Absent when the runtime runs
+     * on a `DATABASE_URL` that is not loopback, and from a runtime older than this key; `aw` then
+     * uses its own `DATABASE_URL`. It names the embedded superuser and is never printed.
+     */
+    databaseUrl: LocalRuntimeDatabaseUrlSchema.optional(),
   })
   .strict()
   .readonly();
@@ -171,7 +290,8 @@ export type LocalRuntimeReadyMessage = z.infer<typeof LocalRuntimeReadyMessageSc
  *
  * The key travels only over the IPC channel. Neither side ever prints or logs it; `aw` keeps it
  * only in its own `0600` credentials file, keyed by the runtime's URL. This is the only
- * local-runtime message that carries a credential.
+ * local-runtime message that carries a workspace credential (`ready`'s `databaseUrl` names only the
+ * embedded database's fixed local superuser).
  */
 export const LocalRuntimeCredentialMessageSchema = z
   .object({

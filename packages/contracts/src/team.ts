@@ -4,17 +4,28 @@ import { FeatureIdSchema } from './features.js';
 import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 
 /**
- * Spec §21's four roles, as the membership wire spells them.
+ * Every role a workspace membership can hold, as the membership wire spells them: spec §21's four,
+ * most- to least-privileged, then the Agent Store's `guest` (spec §21, "Guest"), the narrowest.
  *
  * Written here rather than imported from the server's RBAC module because a wire contract may
  * not depend on the decision table. The duplication is gated rather than commented:
  * `apps/web/contracts/team.test.ts` asserts this tuple equals the server's `ROLES` both as a
  * value and as a type, so the two lists cannot drift silently.
  */
-export const MEMBERSHIP_ROLES = ['owner', 'admin', 'builder', 'viewer'] as const;
+export const MEMBERSHIP_ROLES = ['owner', 'admin', 'builder', 'viewer', 'guest'] as const;
 
-/** One of §21's four roles. */
+/** One role a membership can hold. */
 export type MembershipRoleName = (typeof MEMBERSHIP_ROLES)[number];
+
+/**
+ * The roles a person or a key can be given through the API: §21's four. `guest` is not one of
+ * them. No invitation, membership route, role change or API key confers it; only the email-link
+ * sign-in binds a guest, to the demo workspace made for that guest alone.
+ */
+export const CONFERRABLE_ROLES = ['owner', 'admin', 'builder', 'viewer'] as const;
+
+/** One of the roles {@link CONFERRABLE_ROLES} lists. */
+export type ConferrableRoleName = (typeof CONFERRABLE_ROLES)[number];
 
 /** The bounds the user and membership routes apply to their string fields. */
 export const USER_EMAIL_MAX_LENGTH = 320;
@@ -28,7 +39,7 @@ export const USER_NAME_MAX_LENGTH = 200;
  * constraint — renaming it would be a data migration. Every enum this package publishes is
  * kebab-case (`connectors.ts` already prints the literal `'api-key'`), so the wire keeps the
  * kebab-case spelling and the server maps `api_key → api-key` at the edge. The correspondence is
- * gated rather than commented: `apps/web/server/sdk-conformance.test.ts` asserts the two
+ * gated rather than commented: `apps/web/server/sdk-conformance.*.test.ts` asserts the two
  * vocabularies stay in step, so neither can gain or rename a member alone.
  */
 export const PRINCIPAL_KINDS = ['membership', 'api-key'] as const;
@@ -139,12 +150,12 @@ export type CreatedUserResponse = z.infer<typeof CreatedUserResponseSchema>;
  */
 export interface AddMemberInput {
   readonly email: string;
-  readonly role: MembershipRoleName;
+  readonly role: ConferrableRoleName;
 }
 
 /** The body of `PATCH /api/memberships/:id`: the new role, and nothing else. */
 export interface ChangeMembershipRoleInput {
-  readonly role: MembershipRoleName;
+  readonly role: ConferrableRoleName;
 }
 
 /**
@@ -156,5 +167,5 @@ export interface ChangeMembershipRoleInput {
 export interface CreateUserInput {
   readonly email: string;
   readonly name: string;
-  readonly role: MembershipRoleName;
+  readonly role: ConferrableRoleName;
 }

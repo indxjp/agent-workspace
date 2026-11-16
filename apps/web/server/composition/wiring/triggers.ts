@@ -2,6 +2,7 @@ import type { SecretsService } from '@agent-workspace/core/secrets';
 
 import { openAgentArchiveStore, type AgentArchiveRoot } from '../../agents/archive/store';
 import { createAgentArchiveSweep, startAgentArchiveScheduler } from '../../agents/archive/sweep';
+import { resolveAgentRunOwnership } from '../../agents/run-ownership';
 import type { TriggersRuntime } from '../../triggers/runtime';
 import {
   runSchedulePass,
@@ -10,11 +11,15 @@ import {
 } from '../../triggers/schedule-pass';
 import { runTriggerCronPass, wireTriggerSchedule } from '../../triggers/schedule-cron';
 import type { Logger } from '@agent-workspace/core/telemetry';
+import { startDemoSweepScheduler } from '../../demo/sweep/transport/schedule';
+import type { DemoSweepResult } from '../../demo/sweep/transport/sweep';
 import { createRepositoryTriggersRuntime } from '../../triggers/store';
 
 const SCHEDULE_INTERVAL_MS = 60_000;
 // A poll, not the cadence: the sweep itself runs at most once an hour (see `agents/archive/sweep.ts`).
 const ARCHIVE_POLL_MS = 15 * 60_000;
+// The demo sweep decides for itself whether it is due (every five minutes); this only wakes it.
+const DEMO_SWEEP_POLL_MS = 60_000;
 
 /**
  * Build the trigger routes' runtime and start the schedule driver. `root` is typed by the store
@@ -27,10 +32,16 @@ export function wireTriggers(
     cronSecret: string | undefined;
     log: Pick<Logger, 'error' | 'warn' | 'info'>;
     stopOnClose: (stop: () => void) => void;
+    /**
+     * The Agent Store demo sweeps (spec, "Email-link sign-in"). The run domains always wire them; a
+     * deployment with no demo workspaces finds nothing to delete, and the lead job waits for
+     * `AW_STORE_LEAD_RETENTION_DAYS`. Optional only so a test can leave it out.
+     */
+    demoSweep?: () => Promise<DemoSweepResult>;
   }>,
 ): TriggersRuntime {
   const { log } = options;
-  const runtime = createRepositoryTriggersRuntime(root, secretsService);
+  const runtime = createRepositoryTriggersRuntime(root, secretsService, resolveAgentRunOwnership);
   // ADR-0144 D5: Vercel Cron calls `GET /api/cron/triggers` where `CRON_SECRET` is set; a long-lived
   // server runs the same pass on an interval under the maintenance lease.
   const deps = { root, runtime, log };
@@ -50,6 +61,7 @@ export function wireTriggers(
       runTriggerCronPass({
         schedule: () => runSchedulePass(deps),
         archive: sweepArchive,
+        ...(options.demoSweep === undefined ? {} : { demo: options.demoSweep }),
         log,
       }),
     log,
@@ -68,6 +80,15 @@ export function wireTriggers(
           onError: (error) => log.error('[compose] agent archive sweep failed', { error }),
         }),
       );
+      if (options.demoSweep !== undefined) {
+        options.stopOnClose(
+          startDemoSweepScheduler({
+            sweep: options.demoSweep,
+            intervalMs: DEMO_SWEEP_POLL_MS,
+            onError: (error) => log.error('[compose] demo sweep failed', { error }),
+          }),
+        );
+      }
     },
   });
   log.info(

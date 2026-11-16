@@ -8,6 +8,7 @@ import type { OrdersCall, ToolRequestRecord } from './fake-anthropic-tools.mjs';
 export const JOURNEY_BUDGET_SECONDS: 600;
 export const JOURNEY_LOOK_CHANGE_BUDGET_SECONDS: 60;
 export const JOURNEY_TOOL_BUDGET_SECONDS: 900;
+export const JOURNEY_PORTAL_BUDGET_SECONDS: 600;
 export type JourneyBudgetSeconds = 600 | 60 | 900;
 export const SEALED_PATHS: readonly string[];
 export const TOOL_OWNED_PATHS: readonly string[];
@@ -26,9 +27,17 @@ export type DevLine =
   | { readonly kind: 'try'; readonly url: string }
   | { readonly kind: 'modelConnection' }
   | { readonly kind: 'synced' }
-  | { readonly kind: 'adminSignIn'; readonly email: string; readonly password: string };
+  | { readonly kind: 'adminSignIn'; readonly email: string; readonly password: string }
+  | { readonly kind: 'app'; readonly origin: string }
+  | { readonly kind: 'console'; readonly origin: string };
 
 export function parseDevLine(line: string): DevLine | null;
+export const JOURNEY_FEATURE_IDS: readonly string[];
+export const CONSOLE_FEATURE_ENTRIES: Readonly<Record<string, string>>;
+export function consoleEntriesFor(features: readonly string[]): {
+  shown: string[];
+  hidden: string[];
+};
 export function devOrigin(parsed: DevLine | null): string | null;
 export function colourOfSurfaceSource(text: string): string;
 export function assertBrandColour(fileHex: string, answeredHex: string): void;
@@ -61,6 +70,7 @@ export function assertSecretAbsent(places: Readonly<Record<string, string>>, sec
 export type JourneyStep = { readonly name: string; readonly seconds: number };
 export type TimingsReport = {
   budgetSeconds: JourneyBudgetSeconds;
+  finished: true;
   totalSeconds: number;
   stepsSeconds: number;
   withinBudget: boolean;

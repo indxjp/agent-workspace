@@ -13,12 +13,15 @@
  * registries, per-run telemetry attributes, the held composition, detection and cron caches).
  */
 import type { A2a } from './a2a/env';
+import type { AgentTeamsRuntime } from './agent-teams/runtime';
 import type { AgentVersionsRuntime } from './agent-versions/runtime';
 import type { AgentsRuntime } from './agents/runtime';
 import type { AuditRuntime } from './audit/runtime';
 import type { BuilderDoor } from './builder/transport/mcp';
 import type { CliAuthRuntime } from './cli-auth/runtime';
+import type { DemoOperatorRuntime } from './demo/operator';
 import type { Connectors } from './connectors/runtime';
+import type { EmailLinkRuntime } from './email-link/transport/routes';
 import type { EndpointClientsRuntime } from './endpoint-clients/runtime';
 import type { Files } from './files/runtime';
 import type { InvitationsRuntime } from './invitations/runtime';
@@ -31,20 +34,24 @@ import type { RunApi } from './runs/environment';
 import type { Runtimes } from './runtimes/runtime';
 import type { Secrets } from './secrets/runtime';
 import type { SessionApiEnvironment } from './sessions/environment';
+import type { StoreRuntime } from './demo/storefront/transport/routes';
 import type { Setup } from './setup/runtime';
-import type { SharesRuntime } from './shares/core/runtime';
+import type { SharesRuntime } from './shares/runtime';
 import type { Skills } from './skills/runtime';
 import type { StorageConnections } from './storage-connections/runtime';
 import type { PublicSurfaces } from './surfaces/public/runtime';
 import type { Tokens } from './tokens/runtime';
 import type { ToolEndpoint } from './tool-endpoint/env';
 import type { Triggers } from './triggers/runtime';
+import type { Webhooks } from './webhooks/runtime';
 import type { WorkspaceFeaturesRuntime } from './workspaces/features-runtime';
 import type { WorkspacesRuntime } from './workspaces/runtime';
 
 /** Every domain the composition root has collected, each fully built. */
 export interface ApplicationContext {
   readonly a2a: A2a;
+  /** Agent teams (ADR-0104 acceptance, issue #1516): the team repository and its audit trail. */
+  readonly agentTeams: AgentTeamsRuntime;
   readonly agents: AgentsRuntime;
   readonly agentVersions: AgentVersionsRuntime;
   readonly audit: AuditRuntime;
@@ -52,6 +59,14 @@ export interface ApplicationContext {
   readonly builder: BuilderDoor;
   readonly cliAuth: CliAuthRuntime;
   readonly connectors: Connectors;
+  /**
+   * The demo operator routes (`/api/demo/templates`, `/api/demo/verification`, `/api/demo/maintenance`,
+   * `/api/demo/readiness`)
+   * and the store's read of the maintenance verdicts (`/api/store/demos`).
+   */
+  readonly demoOperator: DemoOperatorRuntime;
+  /** Email-link sign-in (`/api/auth/email-link`): `unavailable` with no database or session secret. */
+  readonly emailLink: EmailLinkRuntime;
   readonly endpointClients: EndpointClientsRuntime;
   readonly files: Files;
   readonly invitations: InvitationsRuntime;
@@ -67,10 +82,14 @@ export interface ApplicationContext {
   readonly shares: SharesRuntime;
   readonly skills: Skills;
   readonly storageConnections: StorageConnections;
+  /** The Agent Store's lead form, privacy facts and demo allowance (`/api/store/*`, `/api/demo/allowance`). */
+  readonly store: StoreRuntime;
   readonly surfaces: PublicSurfaces;
   readonly tokens: Tokens;
   readonly toolEndpoint: ToolEndpoint;
   readonly triggers: Triggers;
+  /** Run-outcome webhooks (N-3, ADR-SDK-18-N3-250): `unavailable` with no secrets service. */
+  readonly webhooks: Webhooks;
   readonly workspaceFeatures: WorkspaceFeaturesRuntime;
   readonly workspaces: WorkspacesRuntime;
 }

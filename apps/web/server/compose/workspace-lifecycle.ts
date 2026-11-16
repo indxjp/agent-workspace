@@ -11,13 +11,21 @@ import {
   type StreamTarEntry,
   type TarEntry,
 } from '@agent-workspace/runtime/transfer';
+import { agentMemoryFolder } from '@indx-workspace/contracts/agents';
 import { RUN_FILE_CORRUPT } from '@indx-workspace/contracts/runs';
 
 import { DomainError } from '../errors';
-import type { LaunchContext } from '../runs/environment';
-import type { RuntimeWorkspaceLifecycle } from '../runs/launcher';
-import type { StorageContext, StorageService } from '../storage/service';
+import type { LaunchContext, RuntimeWorkspaceLifecycle } from '../execution';
+import type { StorageContext, StorageService } from '../storage-and-sharing';
 import { log } from '../telemetry/logger';
+import {
+  boundedMemoryWrites,
+  memorySha256,
+  memoryUpdatedLabel,
+  withMemoryFiles,
+  type MemoryWrite,
+  type MemoryWriteCounts,
+} from './agent-memory';
 import type { RuntimeLaunchTarget } from './runtime-profile';
 import {
   assertRunFilesFit,
@@ -38,9 +46,28 @@ export interface RuntimeWorkspaceLifecycleDependencies {
    */
   readonly granted: (
     context: LaunchContext,
-  ) => Promise<Pick<AgentRunResourceSelection, 'files' | 'skills' | 'sources'>>;
+  ) => Promise<Pick<AgentRunResourceSelection, 'files' | 'skills' | 'sources' | 'memoryFiles'>>;
   /** The catalog service: outputs save into area `artifacts` through it. */
   readonly storage: StorageService;
+  /**
+   * Records the one `memory-updated` row of a run that wrote its agent's memory folder (ADR-0163).
+   * Absent, nothing is recorded; a failure is logged and never undoes the saved files.
+   */
+  readonly audit?: (event: MemoryUpdatedAuditEvent) => Promise<void>;
+}
+
+/** The one audit row a run leaves when it wrote its agent's memory folder (ADR-0163). */
+export interface MemoryUpdatedAuditEvent {
+  readonly workspaceId: string;
+  readonly actorPrincipalId: string;
+  readonly actorUserId: string | null;
+  /** `run <runId>`: the row names the run that wrote, as every agent write does. */
+  readonly actorLabel: string;
+  readonly action: 'memory-updated';
+  /** The agent whose memory folder was written. */
+  readonly subjectId: string;
+  /** The run and counts only, never a path or a fact (`memoryUpdatedLabel`). */
+  readonly subjectLabel: string;
 }
 
 /** The storage-side corruption of one run input: logged with its object id, never its bytes. */
@@ -138,6 +165,11 @@ const OUTPUTS_PREFIX = (runId: string): string => `runs/${runId}/outputs/`;
  * Refuses an entry outside `base` and an empty remainder.
  */
 export function runOutputKey(runId: string, entryPath: string, base?: string): string {
+  return `${OUTPUTS_PREFIX(runId)}${archiveRemainder(entryPath, base)}`;
+}
+
+/** An archive entry's path below `base`; refuses an entry outside `base` and an empty remainder. */
+function archiveRemainder(entryPath: string, base: string | undefined): string {
   let remainder = entryPath;
   if (base !== undefined) {
     const directory = `${base.replace(/\/+$/u, '')}/`;
@@ -149,7 +181,7 @@ export function runOutputKey(runId: string, entryPath: string, base?: string): s
   if (remainder.length === 0) {
     throw new Error(`output ${JSON.stringify(entryPath)} has no storable name`);
   }
-  return `${OUTPUTS_PREFIX(runId)}${remainder}`;
+  return remainder;
 }
 
 /**
@@ -182,6 +214,7 @@ async function promoteThroughStorage(
   context: LaunchContext,
   archive: Uint8Array,
   files: readonly { readonly key: string; readonly entry: TarEntry }[],
+  area: 'artifacts' | 'files' = 'artifacts',
 ): Promise<void> {
   const ctx: StorageContext = {
     workspaceId: context.principal.workspaceId,
@@ -197,7 +230,7 @@ async function promoteThroughStorage(
       // A file an earlier promotion saved keeps this call's complete, newer bytes on rollback.
       const existed = (await storage.get(ctx, 'files', key)) !== null;
       const result = await storage.save(ctx, {
-        area: 'artifacts',
+        area,
         path: key,
         body: bytesToStream(entry.data ?? new Uint8Array()),
         maxBytes: RUN_FILES_MAX_BYTES,
@@ -208,7 +241,7 @@ async function promoteThroughStorage(
     }
   } catch (error) {
     const cleanup = await Promise.allSettled([
-      ...saved.map((path) => storage.remove(ctx, 'artifacts', path, { recursive: false })),
+      ...saved.map((path) => storage.remove(ctx, area, path, { recursive: false })),
       storage.unstage(ctx, staged.row),
     ]);
     const failed: unknown[] = [];
@@ -220,6 +253,75 @@ async function promoteThroughStorage(
       : new AggregateError([error, ...failed], 'the promotion failed and so did its cleanup');
   }
   await storage.unstage(ctx, staged.row);
+}
+
+/** The memory folder `target` names, or a throw: a promotion may write no other workspace path. */
+function memoryTargetOf(context: LaunchContext, target: string): string {
+  const folder = agentMemoryFolder(context.agent.id);
+  if (target !== folder) {
+    throw new Error("a promotion target must be the run agent's own memory folder");
+  }
+  return folder;
+}
+
+/**
+ * The files a run left under its `memory/` directory, keyed into its agent's memory folder and
+ * bounded (ADR-0163): a member that is not a regular file is skipped, the whole folder over its
+ * bounds is refused before anything is written, and a file whose bytes equal the stored row's is
+ * left as it is.
+ */
+async function memoryWrites(
+  storage: StorageService,
+  context: LaunchContext,
+  entries: readonly TarEntry[],
+  base: string | undefined,
+  folder: string,
+): Promise<{ readonly changed: readonly MemoryWrite[]; readonly unchanged: number }> {
+  const writes = boundedMemoryWrites(
+    entries.flatMap((entry, index) => {
+      if (entry.type !== 'file') return [];
+      return [
+        {
+          key: storableOutputKey(index, `${folder}/${archiveRemainder(entry.path, base)}`),
+          data: entry.data ?? new Uint8Array(),
+        },
+      ];
+    }),
+  );
+  const ctx: StorageContext = {
+    workspaceId: context.principal.workspaceId,
+    principalId: context.principal.ownerPrincipalId,
+    userId: context.principal.userId,
+  };
+  const changed: MemoryWrite[] = [];
+  for (const write of writes) {
+    const stored = await storage.get(ctx, 'files', write.key);
+    if (stored?.sha256 !== memorySha256(write.data)) changed.push(write);
+  }
+  return { changed, unchanged: writes.length - changed.length };
+}
+
+/** The one `memory-updated` row of a run that wrote; a failure is logged, never thrown. */
+async function recordMemoryUpdated(
+  audit: RuntimeWorkspaceLifecycleDependencies['audit'],
+  context: LaunchContext,
+  counts: MemoryWriteCounts,
+): Promise<void> {
+  if (audit === undefined || counts.written === 0) return;
+  const runId = context.run.id;
+  try {
+    await audit({
+      workspaceId: context.principal.workspaceId,
+      actorPrincipalId: context.principal.principalId,
+      actorUserId: context.principal.userId,
+      actorLabel: `run ${runId}`,
+      action: 'memory-updated',
+      subjectId: context.agent.id,
+      subjectLabel: memoryUpdatedLabel(runId, counts),
+    });
+  } catch (cause) {
+    log.error('[runs] memory folder audit failed', { runId, error: cause });
+  }
 }
 
 /**
@@ -248,7 +350,12 @@ export function createRuntimeWorkspaceLifecycle(
         loadAttachedFiles(dependencies.resources, workspaceId, context.attachments ?? []),
       ]);
       // Compose refuses a widening scope; here the scope is a filter only.
-      const files = runInputFiles(granted.files, attached.files, context.fileScope);
+      // The memory folder is never narrowed by the scope: a run handed part of its memory would
+      // write the rest back over what it was not shown (ADR-0163).
+      const files = withMemoryFiles(
+        runInputFiles(granted.files, attached.files, context.fileScope),
+        granted.memoryFiles,
+      );
       assertRunFilesFit(files, granted.skills);
       const sources = new Map([...(granted.sources ?? []), ...(attached.sources ?? [])]);
       const cwd = `${workspaceId}/${context.session.id}/`;
@@ -286,7 +393,7 @@ export function createRuntimeWorkspaceLifecycle(
       context: LaunchContext,
       _runtime: RuntimeLaunchTarget,
       archive: Uint8Array,
-      options?: { readonly base?: string },
+      options?: { readonly base?: string; readonly target?: string },
     ) {
       // Decode and map every key first: checksum, member type, traversal and prefix failures must
       // leave durable state untouched.
@@ -294,6 +401,33 @@ export function createRuntimeWorkspaceLifecycle(
         maxBytes: RUN_FILES_MAX_BYTES,
         maxMembers: RUN_FILES_MAX_MEMBERS,
       });
+      if (options?.target !== undefined) {
+        // ADR-0163: the one named path a run writes outside `runs/<runId>/outputs/`.
+        const folder = memoryTargetOf(context, options.target);
+        const { changed, unchanged } = await memoryWrites(
+          dependencies.storage,
+          context,
+          entries,
+          options.base,
+          folder,
+        );
+        await promoteThroughStorage(
+          dependencies.storage,
+          context,
+          archive,
+          changed.map((write) => ({
+            key: write.key,
+            entry: { path: write.key, type: 'file', mode: 0o644, data: write.data },
+          })),
+          'files',
+        );
+        await recordMemoryUpdated(dependencies.audit, context, {
+          written: changed.length,
+          unchanged,
+          bytes: changed.reduce((total, write) => total + write.data.byteLength, 0),
+        });
+        return;
+      }
       const runId = context.run.id;
       const files = entries.flatMap((entry, index) =>
         entry.type === 'file'

@@ -32,6 +32,7 @@ import { createMemoryDirectory } from '../../../../../server/rbac/memory-directo
 import { Principal } from '../../../../../server/rbac/principal';
 import { createSkillRowsWorld } from '../../../../../server/skills/rows-fixture';
 import { createInMemoryCatalogStore } from '../../../../../server/resources/catalog-store.memory';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 /**
  * `GET`/`POST /api/agents/:id/versions` (S1-05, issue #443) on the memory stores, driven with
@@ -276,7 +277,7 @@ describe('POST /api/agents/:id/versions', () => {
 
       expect(saved.status).toBe(201);
       expect((await catalog.listSkills()).map((skill) => skill.name)).toEqual(['office-reader']);
-      expect((await catalog.listFiles()).map((file) => file.path)).toContainEqual(
+      expect((await listCatalogFiles(catalog)).map((file) => file.path)).toContainEqual(
         expect.stringMatching(/office-reader\/scripts\/pdf\.mjs$/),
       );
 
@@ -287,7 +288,7 @@ describe('POST /api/agents/:id/versions', () => {
     }
   });
 
-  it('does not install a built-in skill for a dry run: a dry run has no side effects', async () => {
+  it('a dry run installs no built-in skill, yet answers what the save would (#890)', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'versions-builtin-dry-'));
     try {
       const objects = createLocalFilesystemObjectStoreProvider(root);
@@ -309,10 +310,12 @@ describe('POST /api/agents/:id/versions', () => {
 
       const dry = await call(POST, { actor: 'builderA', body: { ...body, dryRun: true } });
 
-      expect(dry.status).toBe(422);
+      // The save installs office-reader before it checks the body, so it would succeed.
+      expect(dry.status).toBe(200);
+      expect(await dry.json()).toEqual({ ok: true, number: 1 });
       expect(putSkill).not.toHaveBeenCalled();
       expect(await catalog.listSkills()).toEqual([]);
-      expect(await catalog.listFiles()).toEqual([]);
+      expect(await listCatalogFiles(catalog)).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

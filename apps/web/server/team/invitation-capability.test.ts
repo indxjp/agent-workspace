@@ -14,9 +14,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { NO_INVITATION_CAPABILITY } from '../../contracts/invitations';
-import { conferRole } from '../rbac/conferral';
+import { conferRole } from '../rbac/core/conferral';
 import { decide, type Ownership } from '../rbac/decide';
-import { ROLES, type Role } from '../rbac/roles';
+import { isConferrable, ROLES, type Role } from '../rbac/core/roles';
+
+/** Every role but guest, which no route confers. */
+const CONFERRABLE = ROLES.filter(isConferrable);
 import { invitationCapabilityForViewer, invitationGrantsForRole } from './invitation-capability';
 
 /** What the invitation routes' own policy answers for this role. */
@@ -62,7 +65,7 @@ describe('invitationGrantsForRole', () => {
   );
 
   it('admits resend at the same width as the other writes, which is what the declaration says', () => {
-    // `rbac/declarations/W9-TEAM-121.ts` declares `resend` a sub-resource of `invitations`, so
+    // `rbac/core/declarations/W9-TEAM-121.ts` declares `resend` a sub-resource of `invitations`, so
     // `decide()` answers it at the parent's width. Asking it separately is what proves that: an
     // undeclared sub-resource would answer `refuse`, and this cell would read `false` for an Owner.
     expect(invitationGrantsForRole('owner').canResendInvitation).toBe(true);
@@ -103,10 +106,10 @@ describe('invitationCapabilityForViewer', () => {
     ).toEqual(['admin', 'builder', 'viewer']);
   });
 
-  it('lets an Owner invite every role §21 names', () => {
+  it('lets an Owner invite every role §21 names, and never guest', () => {
     expect(
       invitationCapabilityForViewer({ userId: 'user-owner', role: 'owner' }).invitableRoles,
-    ).toEqual([...ROLES]);
+    ).toEqual([...CONFERRABLE]);
   });
 
   it.each(['builder', 'viewer'] as const)('gives a %s no invitation control at all', (role) => {
@@ -118,7 +121,7 @@ describe('invitationCapabilityForViewer', () => {
     // whether this caller may create an invitation at all, `conferRole` decides which role a
     // permitted caller may name — so the create form is gated on `canCreateInvitation` and never on
     // this set being empty. `invitations-table.test.tsx` asserts that gate over the markup.
-    expect(capability.invitableRoles).toEqual(ROLES.slice(ROLES.indexOf(role)));
+    expect(capability.invitableRoles).toEqual(CONFERRABLE.slice(CONFERRABLE.indexOf(role)));
     expect(capability.canCreateInvitation).toBe(false);
   });
 

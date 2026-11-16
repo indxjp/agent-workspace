@@ -43,10 +43,10 @@ import { PUT } from './route';
 import { GET as getAgent, PATCH as patchAgent } from '../route';
 import { GET as getResources, PUT as putResources } from '../resources/route';
 import { GET as listVersions, POST as saveVersion } from '../versions/route';
-import { createRepositoryAgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
 import {
-  createRepositoryAgentStoreProvider,
   type AgentStoreProvider,
+  createRepositoryAgentResourceStoreProvider,
+  createRepositoryAgentStoreProvider,
 } from '../../../../../server/agents/store';
 import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import {

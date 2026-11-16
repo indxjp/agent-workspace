@@ -1,9 +1,13 @@
 {"vectors":
  [{"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.role_wires_match_contract",
-    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.role_checks_hold_the_four_roles"],
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.role_checks_hold_the_roles"],
    "input": {"enum": "role"},
    "id": "enum/role",
+   "expected": {"members": ["owner", "admin", "builder", "viewer", "guest"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.role_checks_hold_the_roles"],
+   "input": {"enum": "role-conferrable"},
+   "id": "enum/role-conferrable",
    "expected": {"members": ["owner", "admin", "builder", "viewer"]}},
   {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.principal_kind_wires_match_contract"],
    "input": {"enum": "principal-kind-wire"},
@@ -49,6 +53,12 @@
    "input": {"value": "viewer"},
    "id": "parse-role/\"viewer\"",
    "expected": {"role": "viewer"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.parse_role_refuses_unknown_spelling",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.role_json_round_trips"],
+   "input": {"value": "guest"},
+   "id": "parse-role/\"guest\"",
+   "expected": {"role": "guest"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.parse_role_refuses_unknown_spelling",
     "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.role_json_round_trips"],

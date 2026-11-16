@@ -18,6 +18,16 @@ export interface ActivityStep {
     readonly tool: string | null;
 }
 
+// @public
+export function approvalProblemMessage(code: string, message: string, strings: ApprovalProblemStrings): string;
+
+// @public
+export interface ApprovalProblemStrings {
+    readonly approvalAlreadyDecided: string;
+    readonly approvalExpired: string;
+    readonly approvalNotAwaiting: string;
+}
+
 export { AssistantResponse }
 
 export { assistantResponseFromAgentEvent }
@@ -38,6 +48,12 @@ export type BadgeTone = 'ok' | 'warn' | 'danger' | 'info' | 'muted';
 
 // @public
 export function beginRun(opening: RunOpening, first: Message): Run;
+
+// @public
+export interface BlockedTool {
+    readonly toolCallId: string;
+    readonly toolName: string;
+}
 
 // @public
 export interface EventLine {
@@ -168,6 +184,7 @@ export interface RailGroup {
 
 // @public
 export interface Run {
+    readonly blocked: readonly BlockedTool[];
     readonly failure: RunFailureNotice | null;
     // (undocumented)
     readonly followUp: FollowUp;
@@ -295,6 +312,9 @@ export function userMessage(id: string, speaker: Speaker, text: string): Message
 
 // @public
 export function withAssistantResponse(run: Run, speaker: Speaker, response: AssistantResponse): Run;
+
+// @public
+export function withBlockedTool(run: Run, tool: BlockedTool): Run;
 
 // @public
 export function withFailure(run: Run, failure: RunFailureNotice | null): Run;

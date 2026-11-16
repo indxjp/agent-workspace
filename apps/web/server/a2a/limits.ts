@@ -5,6 +5,7 @@
  * ponytail: per-process counters, so each replica admits its own limit and a restart resets them;
  * move them to PostgreSQL when the control plane runs more than one replica.
  */
+import { installedClientIdentity, type ClientIdentitySettings } from '../client-identity';
 import { admitClient, perMinuteLimiter, type Admission } from '../http/rate-limit';
 
 /**
@@ -24,9 +25,15 @@ const cardFetches = perMinuteLimiter(A2A_RATE_LIMITS.cardFetchesPerAddressPerMin
 export const admitA2aCardFetch = (
   headers: Headers,
   nowMs: number,
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  identity: ClientIdentitySettings = installedClientIdentity(),
 ): Admission =>
-  admitClient(cardFetches, A2A_RATE_LIMITS.cardFetchesPerAddressPerMinute, headers, nowMs, env);
+  admitClient(
+    cardFetches,
+    A2A_RATE_LIMITS.cardFetchesPerAddressPerMinute,
+    headers,
+    nowMs,
+    identity,
+  );
 
 export function admitA2aCall(credentialId: string, nowMs: number): Admission {
   return calls.admit(credentialId, nowMs);

@@ -1,0 +1,368 @@
+[
+  {
+    "id": "f0000000-0000-4000-8000-000000000001",
+    "channel": "c0000000-0000-4000-8000-000000000001",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "All-hands on Monday at 9:00 in the main meeting room."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000002",
+    "channel": "c0000000-0000-4000-8000-000000000001",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "System maintenance is on Saturday night."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000003",
+    "channel": "c0000000-0000-4000-8000-000000000001",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The new expense procedure is on the wiki."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000004",
+    "channel": "c0000000-0000-4000-8000-000000000001",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Book your health check by the end of the month."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000005",
+    "channel": "c0000000-0000-4000-8000-000000000001",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Summer leave requests are open."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000006",
+    "channel": "c0000000-0000-4000-8000-000000000001",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The projector in meeting room B is being repaired."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000007",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Let us settle the launch of the new product \"Sample Light\". How about March?"
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000008",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "March works. The factory ramp-up should finish in February."
+      }
+    ],
+    "thread_root": "f0000000-0000-4000-8000-000000000007"
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000009",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Let us keep the price unchanged. Costs are the same as last month."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000010",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Agreed. The price stays unchanged."
+      }
+    ],
+    "thread_root": "f0000000-0000-4000-8000-000000000009"
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000011",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "We are torn between white and blue for the package. Opinions?"
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000012",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Blue stands out more on the shelf, I think."
+      }
+    ],
+    "thread_root": "f0000000-0000-4000-8000-000000000011"
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000013",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "White conveys cleanliness better."
+      }
+    ],
+    "thread_root": "f0000000-0000-4000-8000-000000000011"
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000014",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Let us decide the colour at the next weekly. Yamamoto owns it."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000015",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The first draft of the manual is ready for review."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000016",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The figure on page 3 is outdated; I will replace it."
+      }
+    ],
+    "thread_root": "f0000000-0000-4000-8000-000000000015"
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000017",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "We skip the trade show this time and put the web launch first."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000018",
+    "channel": "c0000000-0000-4000-8000-000000000002",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Sharing a draft of the launch announcement."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000019",
+    "channel": "c0000000-0000-4000-8000-000000000003",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "This month: 10 deals, 2 won."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000020",
+    "channel": "c0000000-0000-4000-8000-000000000003",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The Aoba Seiki maintenance proposal goes out next week."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000021",
+    "channel": "c0000000-0000-4000-8000-000000000003",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Shared the quote approval rules."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000022",
+    "channel": "c0000000-0000-4000-8000-000000000003",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Collecting agenda items for next week's sales meeting."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000023",
+    "channel": "c0000000-0000-4000-8000-000000000003",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Uploaded the new price list."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000024",
+    "channel": "c0000000-0000-4000-8000-000000000003",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Scheduling customer visits."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000025",
+    "channel": "c0000000-0000-4000-8000-000000000004",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The weld defect rate dropped from last week."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000026",
+    "channel": "c0000000-0000-4000-8000-000000000004",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The cause was shielding-gas flow adjustment."
+      }
+    ],
+    "thread_root": "f0000000-0000-4000-8000-000000000025"
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000027",
+    "channel": "c0000000-0000-4000-8000-000000000004",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The inspection procedure was revised."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000028",
+    "channel": "c0000000-0000-4000-8000-000000000004",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Retraining for line 2 is on Wednesday."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000029",
+    "channel": "c0000000-0000-4000-8000-000000000004",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Adding two items to the pre-shipment checks."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000030",
+    "channel": "c0000000-0000-4000-8000-000000000004",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Please check the scrap rules for defective parts."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000031",
+    "channel": "c0000000-0000-4000-8000-000000000005",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Sharing next term's hiring plan."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000032",
+    "channel": "c0000000-0000-4000-8000-000000000005",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "The budget review is next month."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000033",
+    "channel": "c0000000-0000-4000-8000-000000000005",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Please schedule the review meetings."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000034",
+    "channel": "c0000000-0000-4000-8000-000000000005",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Please check the draft transfers between sites."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000035",
+    "channel": "c0000000-0000-4000-8000-000000000005",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Next week's leads meeting starts at 15:00."
+      }
+    ]
+  },
+  {
+    "id": "f0000000-0000-4000-8000-000000000036",
+    "channel": "c0000000-0000-4000-8000-000000000005",
+    "body": [
+      {
+        "type": "paragraph",
+        "text": "Listed candidate trainers."
+      }
+    ]
+  }
+]

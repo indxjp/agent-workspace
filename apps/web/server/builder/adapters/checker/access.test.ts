@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { decide, type Ownership } from '../../../rbac/decide';
-import { ROLES } from '../../../rbac/roles';
+import { ROLES } from '../../../rbac/core/roles';
 import { mayCheck } from './access';
 
 const denied = vi.hoisted(() => ({ pointers: false }));

@@ -20,8 +20,16 @@
     "types": ["node"],
     // Read from source, as vitest does (`vitest.config.ts`): the root has no dependency on it.
     "paths": {
+      // The store's recordings run the reference apps' own agents on their own resources.
+      "@indx-workspace/app": ["../packages/app/src/index.ts"],
+      "@indx-workspace/app/server": ["../packages/app/src/server/index.ts"],
+      "@indx-workspace/app/db": ["../packages/app/src/db/index.ts"],
+      "@indx-workspace/app/react": ["../packages/app/src/react/index.ts"],
+      "@indx-workspace/app/testing": ["../packages/app/src/testing/index.ts"],
       "@indx-workspace/platforms": ["../packages/platforms/src/index.ts"],
-      "@indx-workspace/platforms/testing": ["../packages/platforms/src/testing/index.ts"]
+      "@indx-workspace/platforms/testing": ["../packages/platforms/src/testing/index.ts"],
+      "@agent-workspace/egress-proxy": ["../packages/egress-proxy/src/index.ts"],
+      "@agent-workspace/gateway/settings": ["../packages/gateway/src/settings.ts"]
     }
   },
   "include": ["**/*.ts"]

@@ -3,12 +3,17 @@ kind: Project
 name: customer-inquiry
 engine: claude-agent-sdk
 # No MCP connector: the CRM history is an openapiTool() in tools/crm.ts. `aw dev` reads
-# apis/crm.openapi.json and registers it, taking CRM_TOKEN and CRM_IDENTITY_SECRET from its
-# environment (`identity` opts the tool in to the signed caller assertion, ADR-0142; give the CRM
-# the same secret so it can verify whose records are asked for):
-#   CRM_TOKEN=... CRM_IDENTITY_SECRET=... aw dev
+# apis/crm.openapi.json and registers it, taking CRM_TOKEN from its environment. The caller
+# assertion the tool opts in with (`identity`, ADR-0142) is signed with the workspace secret
+# CRM_IDENTITY_SECRET; give the CRM the same value so it can verify whose records are asked for:
+#   printf '%s' "$CRM_IDENTITY_SECRET" | aw secrets create --name CRM_IDENTITY_SECRET --value-stdin
+#   CRM_TOKEN=... aw dev
 # The document's `servers` is the company's CRM (crm.example.co.jp), which is not reachable from
-# here. The FAQ is searched with the built-in `search_files` over `data/faq` (upload it with
+# here. To try the project, run the bundled stand-in with the same token and set
+# servers[0].url in apis/crm.openapi.json to http://127.0.0.1:8794/api/v1:
+#   CRM_TOKEN=... CRM_IDENTITY_SECRET=... IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
+#     PORT=8794 node crm/fake-crm.mjs
+# The FAQ is searched with the built-in `search_files` over `data/faq` (upload it with
 # `aw files upload`).
 policy:
   permissions:

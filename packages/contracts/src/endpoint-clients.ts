@@ -7,11 +7,18 @@ import { ToolOperationNameSchema } from './tool-connectors.js';
 
 /**
  * What an endpoint client names (ADR-0134): an MCP project tool endpoint, one agent's A2A endpoint,
- * or the Builder's MCP door (`/mcp/builder`, issue #1846). A credential is bound to exactly one
- * client, so revoking the client revokes everything that could reach the resource. A `builder`
- * client binds no agent: the member who consents to it is the principal of its tokens.
+ * the Builder's MCP door (`/mcp/builder`, issue #1846), or an app's backend acting as the person
+ * signed in to it (`app-backend`, ADR-0161). A credential is bound to exactly one client, so
+ * revoking the client revokes everything that could reach the resource. A `builder` client binds no
+ * agent: the member who consents to it is the principal of its tokens. An `app-backend` client binds
+ * the agents its exchanged tokens may run, and names the app's OIDC `client_id` (`oidcAudience`).
  */
-export const ENDPOINT_CLIENT_KINDS = ['mcp-project', 'a2a-agent', 'builder'] as const;
+export const ENDPOINT_CLIENT_KINDS = [
+  'mcp-project',
+  'a2a-agent',
+  'builder',
+  'app-backend',
+] as const;
 export type EndpointClientKind = (typeof ENDPOINT_CLIENT_KINDS)[number];
 
 /** The most agents one `mcp-project` client lists; equal to `TOOL_SANDBOX_TOOLS_MAX`. */
@@ -25,6 +32,19 @@ export const ENDPOINT_CLIENT_REDIRECT_URIS_MAX = 10;
 
 /** The longest redirect URI accepted. */
 export const ENDPOINT_CLIENT_REDIRECT_URI_MAX_LENGTH = 2048;
+
+/** The longest `oidcAudience` (the app's OIDC `client_id` at the issuer) accepted, ADR-0161 D4. */
+export const ENDPOINT_CLIENT_OIDC_AUDIENCE_MAX_LENGTH = 255;
+
+/**
+ * The ID token audience an `app-backend` client accepts: the app's own `client_id` at the
+ * deployment's OIDC issuer. Exactly the `aud` (or `azp`) the exchange compares, never normalised.
+ */
+export const OidcAudienceSchema = z
+  .string()
+  .min(1)
+  .max(ENDPOINT_CLIENT_OIDC_AUDIENCE_MAX_LENGTH)
+  .refine((value) => value.trim() === value, 'an OIDC audience has no surrounding whitespace');
 
 const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
@@ -60,6 +80,7 @@ const AGENT_COUNT = {
   'mcp-project': { fits: (n: number) => n >= 1, article: 'an', wanted: 'at least one agent' },
   'a2a-agent': { fits: (n: number) => n === 1, article: 'an', wanted: 'exactly one agent' },
   builder: { fits: (n: number) => n === 0, article: 'a', wanted: 'no agent' },
+  'app-backend': { fits: (n: number) => n >= 1, article: 'an', wanted: 'at least one agent' },
 } as const satisfies Record<EndpointClientKind, unknown>;
 
 /**
@@ -75,6 +96,8 @@ export const EndpointClientResourceSchema = z
     agentIds: BoundAgentIdsSchema,
     toolNames: ToolNamesSchema.nullable(),
     redirectUris: RedirectUrisSchema,
+    /** The ID token audience of an `app-backend` client; `null` for every other kind. */
+    oidcAudience: OidcAudienceSchema.nullable(),
     hasClientSecret: z.boolean(),
     actsForPrincipalId: z.string().min(1),
     apiKeyIds: z.array(z.string().min(1)).readonly(),
@@ -91,7 +114,9 @@ export type EndpointClientResource = z.infer<typeof EndpointClientResourceSchema
  * The body of `POST /api/endpoint-clients`. An `a2a-agent` client lists exactly one agent and no
  * `toolNames`; an `mcp-project` client lists 1 to {@link ENDPOINT_CLIENT_AGENTS_MAX} agents and may
  * narrow the tools with `toolNames` (`null` or absent means every code tool of those agents); a
- * `builder` client lists no agent and no `toolNames`.
+ * `builder` client lists no agent and no `toolNames`; an `app-backend` client lists 1 to
+ * {@link ENDPOINT_CLIENT_AGENTS_MAX} agents, no `toolNames`, and requires `oidcAudience`, which
+ * every other kind refuses.
  */
 export const CreateEndpointClientRequestSchema = z
   .object({
@@ -99,6 +124,7 @@ export const CreateEndpointClientRequestSchema = z
     kind: z.enum(ENDPOINT_CLIENT_KINDS),
     agentIds: BoundAgentIdsSchema,
     toolNames: ToolNamesSchema.nullable().optional(),
+    oidcAudience: OidcAudienceSchema.optional(),
   })
   .strict()
   .superRefine((request, context) => {
@@ -121,30 +147,41 @@ export const CreateEndpointClientRequestSchema = z
         message: 'toolNames applies to mcp-project clients only',
       });
     }
+    if ((request.kind === 'app-backend') !== (request.oidcAudience !== undefined)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['oidcAudience'],
+        message:
+          'oidcAudience is required for an app-backend client and refused for every other kind',
+      });
+    }
   })
   .readonly();
 
 export type CreateEndpointClientRequest = z.infer<typeof CreateEndpointClientRequestSchema>;
 
 /**
- * The body of `PATCH /api/endpoint-clients/:id`: the agents, the tool allow-list and/or the OAuth
- * redirect URIs. Whether
- * the new list fits the client's kind (one agent for `a2a-agent`, no `toolNames`) depends on the
- * stored client, so the server checks that and answers `400 endpoint_client_invalid`.
+ * The body of `PATCH /api/endpoint-clients/:id`: the agents, the tool allow-list, the OAuth
+ * redirect URIs and/or an `app-backend` client's `oidcAudience`. Whether the change fits the
+ * client's kind (one agent for `a2a-agent`, no `toolNames`, `oidcAudience` and no redirect URIs
+ * for `app-backend` only) depends on the stored client, so the server checks that and answers
+ * `400 endpoint_client_invalid`.
  */
 export const UpdateEndpointClientRequestSchema = z
   .object({
     agentIds: AgentIdsSchema.optional(),
     toolNames: ToolNamesSchema.nullable().optional(),
     redirectUris: RedirectUrisSchema.optional(),
+    oidcAudience: OidcAudienceSchema.optional(),
   })
   .strict()
   .refine(
     (patch) =>
       patch.agentIds !== undefined ||
       patch.toolNames !== undefined ||
-      patch.redirectUris !== undefined,
-    { message: 'send agentIds, toolNames, redirectUris or any of them' },
+      patch.redirectUris !== undefined ||
+      patch.oidcAudience !== undefined,
+    { message: 'send agentIds, toolNames, redirectUris, oidcAudience or any of them' },
   )
   .readonly();
 

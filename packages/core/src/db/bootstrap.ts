@@ -1,7 +1,7 @@
 import pg from 'pg';
 
 import { readDatabaseConfig, reportDatabaseConnectionErrors } from './client.js';
-import { runMigrations } from './migrate.js';
+import { resolveMigrationsDir, runMigrations } from './migrate.js';
 import { readSeedOptions, runSeed, type SeedOptions, type SeedResult } from './seed.js';
 
 const SEED_LOCK_KEY = 4_242_424_243;
@@ -14,11 +14,11 @@ const SEED_LOCK_KEY = 4_242_424_243;
  * and its owner without a second query.
  */
 export async function prepareDatabase(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
   options: Pick<SeedOptions, 'general'> = {},
 ): Promise<SeedResult> {
   const config = readDatabaseConfig(env);
-  await runMigrations(config);
+  await runMigrations(config, resolveMigrationsDir(env));
   const lock = new pg.Client({ connectionString: config.url });
   reportDatabaseConnectionErrors(lock);
   await lock.connect();

@@ -1,0 +1,67 @@
+[
+  {
+    "partNo": "P-10231",
+    "name": "Motor-mount L bracket",
+    "kind": "Bracket",
+    "material": "SS400",
+    "lengthMm": 200,
+    "widthMm": 100,
+    "thicknessMm": 3.2,
+    "holeCount": 4,
+    "bendCount": 2,
+    "customer": "Sample Seiki Co.",
+    "orderNos": ["SO-2024-0412", "SO-2025-0108"]
+  },
+  {
+    "partNo": "P-10388",
+    "name": "Sensor-mount bracket",
+    "kind": "Bracket",
+    "material": "SS400",
+    "lengthMm": 180,
+    "widthMm": 90,
+    "thicknessMm": 3.2,
+    "holeCount": 4,
+    "bendCount": 2,
+    "customer": "Sample Chuo Industries Co.",
+    "orderNos": ["SO-2025-0377"]
+  },
+  {
+    "partNo": "P-10502",
+    "name": "Frame base plate",
+    "kind": "Plate",
+    "material": "SS400",
+    "lengthMm": 400,
+    "widthMm": 300,
+    "thicknessMm": 9,
+    "holeCount": 8,
+    "bendCount": 0,
+    "customer": "Sample Seiki Co.",
+    "orderNos": ["SO-2025-0219"]
+  },
+  {
+    "partNo": "P-20114",
+    "name": "Control panel inspection cover",
+    "kind": "Cover",
+    "material": "SUS304",
+    "lengthMm": 300,
+    "widthMm": 150,
+    "thicknessMm": 2,
+    "holeCount": 6,
+    "bendCount": 4,
+    "customer": "Sample Hokuriku Food Systems Co.",
+    "orderNos": ["SO-2025-0533"]
+  },
+  {
+    "partNo": "P-30071",
+    "name": "Heat-sink block base",
+    "kind": "Block",
+    "material": "A5052",
+    "lengthMm": 60,
+    "widthMm": 60,
+    "thicknessMm": 20,
+    "holeCount": 2,
+    "bendCount": 0,
+    "customer": "Sample Chuo Industries Co.",
+    "orderNos": ["SO-2024-0920"]
+  }
+]

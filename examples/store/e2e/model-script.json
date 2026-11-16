@@ -1,0 +1,8 @@
+{
+  "conversations": [
+    {
+      "when": "e2e-store-demo",
+      "turns": [{ "text": "The demo agent answered as the visitor." }]
+    }
+  ]
+}

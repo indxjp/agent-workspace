@@ -2,7 +2,7 @@
 
 | Provider          | basic-response | streaming | system-prompt | multi-turn-conversation | tool-call | tool-result | multiple-tool-calls | errors | usage | cancellation | thinking | prompt-caching | structured-output | context-management |
 | ----------------- | -------------- | --------- | ------------- | ----------------------- | --------- | ----------- | ------------------- | ------ | ----- | ------------ | -------- | -------------- | ----------------- | ------------------ |
-| anthropic         | ✓              | ✓         | ✓             | ✓                       | ✓         | ✓           | ✓                   | ✓      | ✓     | ✓            | ✓        | -              | ✓                 | ✓                  |
+| anthropic         | ✓              | ✓         | ✓             | ✓                       | ✓         | ✓           | ✓                   | ✓      | ✓     | ✓            | ✓        | ✓              | ✓                 | ✓                  |
 | openai            | n/d            | n/d       | n/d           | n/d                     | n/d       | n/d         | n/d                 | n/d    | n/d   | n/d          | n/d      | n/d            | n/d               | n/d                |
 | azure-openai      | ✓              | ✓         | ✓             | ✓                       | ✓         | ✓           | ✓                   | ✓      | ✓     | ✓            | -        | -              | ✓                 | -                  |
 | openai-compatible | n/d            | n/d       | n/d           | n/d                     | n/d       | n/d         | n/d                 | n/d    | n/d   | n/d          | n/d      | n/d            | n/d               | n/d                |
@@ -21,7 +21,7 @@ n/d not derivable from the available scenario or out of release scope
 
 Fixture basis:
 
-- anthropic: recorded-fixture conformance; no live provider credential was available.
+- anthropic: recorded-fixture conformance; prompt-caching also verified against the real API by model-providers-live.yml.
 - openai: out of the tested 0.1.0 provider scope under D-03.
 - azure-openai: recorded-fixture conformance; no live provider credential was available.
 - openai-compatible: out of the tested 0.1.0 provider scope under D-03.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { base64Url } from './base64url.js';
 import { createRunTokenCodec, toolSandboxRunToken } from './run-token.js';
 
 const SECRET = 'gateway-run-token-test-secret-at-least-32-bytes';
@@ -70,6 +71,29 @@ describe('run token codec', () => {
 
     now = 1_300;
     await expect(codec.verify(token)).resolves.toEqual({ ok: false, reason: 'expired' });
+  });
+
+  it('refuses a correctly signed token whose lifetime is longer than one hour', async () => {
+    const codec = createRunTokenCodec({ secret: SECRET, now: () => 1_000 });
+    const signed = async (expiresAt: number) => {
+      const claims = { version: 1, tokenId: 'token-1', ...SUBJECT, issuedAt: 1_000, expiresAt };
+      const payload = base64Url(new TextEncoder().encode(JSON.stringify(claims)));
+      const key = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(SECRET),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign'],
+      );
+      const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+      return `${payload}.${base64Url(new Uint8Array(mac))}`;
+    };
+
+    await expect(codec.verify(await signed(1_000 + 3_600))).resolves.toMatchObject({ ok: true });
+    await expect(codec.verify(await signed(1_000 + 3_601))).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
   });
 });
 

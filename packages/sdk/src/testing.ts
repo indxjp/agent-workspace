@@ -25,9 +25,11 @@ import {
   type ModelConnectionResource,
 } from '@indx-workspace/contracts/models';
 import {
+  RunDetailSchema,
   RunResourceSchema,
   isStoppedRunStatus,
   isTerminalRunStatus,
+  type RunDetail,
   type RunResource,
 } from '@indx-workspace/contracts/runs';
 import { SessionResourceSchema, type SessionResource } from '@indx-workspace/contracts/sessions';
@@ -208,13 +210,30 @@ function run(overrides: Partial<RunResource> = {}): RunResource {
       toolCalls: 0,
     },
     cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+    spendCeilingUsd: null,
     error: status === 'failed' ? 'The run failed.' : null,
     output: null,
     pendingApproval:
       status === 'awaiting_approval' ? { toolName: 'send_email', canonicalCall: '{}' } : null,
     accountingState: ended ? 'complete' : 'pending',
     accountingError: null,
+    parentRunId: null,
     ...overrides,
+  });
+}
+
+/**
+ * `base` as `GET /api/runs/:id` answers it (ADR-0104): with no children unless `tree` names some,
+ * and a `treeCost` equal to the run's own cost unless `tree` names one.
+ */
+function runDetail(
+  base: RunResource = run(),
+  tree: Partial<Pick<RunDetail, 'children' | 'treeCost'>> = {},
+): RunDetail {
+  return RunDetailSchema.parse({
+    ...base,
+    children: tree.children ?? [],
+    treeCost: tree.treeCost ?? { amount: base.cost.amount, currency: base.cost.currency },
   });
 }
 
@@ -386,11 +405,13 @@ function postgresConnector(overrides: Partial<ConnectorResource> = {}): Connecto
  * name, which `fixtures.agentVersionPointer()` points the `local` environment at (S1-09, #447).
  * `fixtures.modelConnection()` is the `default` connection, and `fixtures.connector()`,
  * `fixtures.openApiConnector()` and `fixtures.postgresConnector()` are one connector of each kind
- * (issue #533).
+ * (issue #533). `fixtures.runDetail(run)` is a run as `GET /api/runs/:id` answers it, with its
+ * `children` and `treeCost` (ADR-0104).
  */
 export const fixtures = {
   agent,
   run,
+  runDetail,
   session,
   agentVersion,
   agentVersionPointer,

@@ -24,7 +24,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts.Workspace
 
 /-- `TOKEN_SCOPE_KINDS`: the two shapes a browser token may be scoped to. -/
 @[aw_spec (ts := "packages/contracts/src/tokens.ts#TOKEN_SCOPE_KINDS")
-  (ts := "apps/web/server/rbac/token-scope.ts#TOKEN_SCOPE_KINDS")
+  (ts := "apps/web/server/rbac/core/token-scope.ts#TOKEN_SCOPE_KINDS")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browserTokenScopeKinds")
   (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 inductive ScopeKind where
@@ -48,7 +48,7 @@ instance : WireEnum ScopeKind where
 
 /-- What a browser token may act on: one run or one session, never both, never neither. -/
 @[aw_spec (ts := "packages/contracts/src/tokens.ts#TokenScopeSchema")
-  (ts := "apps/web/server/rbac/token-scope.ts#TokenScope")]
+  (ts := "apps/web/server/rbac/core/token-scope.ts#TokenScope")]
 inductive Scope where
   | run (id : RunId)
   | session (id : SessionId)

@@ -19,6 +19,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  decideRunApproval,
   followRunEvents,
   startAgentRun,
   startAgentRunForSession,
@@ -399,5 +400,109 @@ describe('a run pinned to a version', () => {
 
     expect(calls[1]?.json).toMatchObject({ sessionId: SESSION, version: 2 });
     expect(outcome).toMatchObject({ kind: 'rejected', status: 400 });
+  });
+});
+
+// ── decideRunApproval (#1490) ───────────────────────────────────────────────────────────────────
+
+describe('decideRunApproval', () => {
+  const CONTINUATION = '88888888-8888-4888-8888-888888888888';
+
+  it('posts the decision and names the continuation run the 202 started', async () => {
+    const { client, calls } = clientFor(() => accepted({ id: CONTINUATION }));
+
+    const outcome = await decideRunApproval('r1', 'approve', undefined, client);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url.pathname).toBe('/api/runs/r1/approval');
+    expect(calls[0]?.json).toEqual({ decision: 'approve' });
+    expect(outcome).toEqual({ kind: 'continued', runId: CONTINUATION, status: 'queued' });
+  });
+
+  it('sends a reject with its comment', async () => {
+    const { client, calls } = clientFor(() => accepted({ id: CONTINUATION }));
+
+    await decideRunApproval('r1', 'reject', 'Wrong recipient.', client);
+
+    expect(calls[0]?.json).toEqual({ decision: 'reject', comment: 'Wrong recipient.' });
+  });
+
+  it.each(['run_not_awaiting_approval', 'approval_already_decided', 'approval_expired'])(
+    'returns the 409 %s as a refusal and does not retry it',
+    async (code) => {
+      const { client, calls } = clientFor(() => problem(409, code, `refused: ${code}`));
+
+      const outcome = await decideRunApproval('r1', 'approve', undefined, client);
+
+      expect(calls).toHaveLength(1);
+      expect(outcome).toEqual({
+        kind: 'rejected',
+        status: 409,
+        code,
+        message: `refused: ${code}`,
+      });
+    },
+  );
+
+  it('treats a 202 that is not the published contract as a transport error', async () => {
+    const { client } = clientFor(() => jsonResponse(202, { run: { id: CONTINUATION } }));
+
+    const outcome = await decideRunApproval('r1', 'approve', undefined, client);
+
+    expect(outcome.kind).toBe('transport-error');
+  });
+});
+
+// RF-502 (#2089): the files picked in the home chat's "+ Files" narrow every run of the chat.
+describe('a run narrowed to the picked files', () => {
+  const session = () =>
+    jsonResponse(201, { id: SESSION, projectId: 'project-1', agentId: 'agent-1' });
+  const scope = ['reports', 'notes/q3.md'];
+
+  it('sends the picks as fileScope on a new chat, in a project, and on a follow-up', async () => {
+    const { client, calls } = clientFor((request) =>
+      request.url.pathname.endsWith('/sessions') ? session() : accepted(),
+    );
+
+    await startAgentRunForSession('agent-1', 'first', null, null, null, client, [], null, scope);
+    await startAgentRunForSession(
+      'agent-1',
+      'in project',
+      null,
+      null,
+      'project-1',
+      client,
+      [],
+      null,
+      scope,
+    );
+    await startAgentRunForSession(
+      'agent-1',
+      'again',
+      null,
+      SESSION,
+      null,
+      client,
+      ['f1'],
+      2,
+      scope,
+    );
+
+    const runs = calls.filter((call) => call.url.pathname.endsWith('/runs'));
+    expect(runs).toHaveLength(3);
+    for (const run of runs) expect(run.json).toMatchObject({ fileScope: scope });
+    // A follow-up keeps its session's attachments, and still never sends a version.
+    expect(runs[2]?.json).toMatchObject({ attachments: [{ fileId: 'f1' }] });
+    expect(runs[2]?.json).not.toHaveProperty('version');
+  });
+
+  it('sends no fileScope when nothing is picked, so the run keeps every grant', async () => {
+    const { client, calls } = clientFor(() => accepted());
+
+    await startAgentRunForSession('agent-1', 'first', null, null, null, client, [], null, []);
+    await startAgentRunForSession('agent-1', 'again', null, SESSION, null, client);
+
+    for (const call of calls) expect(call.json).not.toHaveProperty('fileScope');
   });
 });

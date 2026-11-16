@@ -107,7 +107,7 @@
 
 ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 ARG ENGINE=claude-agent-sdk
-ARG ENGINE_VERSION=0.0.0+0.3.310
+ARG ENGINE_VERSION=0.0.0+0.3.316
 
 # pnpm for `npx` through `pnpm dlx` (ADR-0087 D1), installed by the final stage below. From pnpm 12
 # a release is a native executable per platform, `@pnpm/exe.linux-<x64|arm64>` on the npm registry,

@@ -17,6 +17,10 @@ corepack enable
 pnpm install
 ```
 
+When the web app runs under `next dev`, restart it after changing `SESSION_SECRET` or
+`AW_INSTANCE_ID` in `.env`. The dev server reloads `.env` for the proxy, but the routes keep the
+settings read once at start-up, so until a restart sign-in loops back to the sign-in page.
+
 ## Checks
 
 Run these before you ask for review:

@@ -51,9 +51,10 @@ export const CliTokenResponseSchema: z.ZodReadonly<z.ZodObject<{
     workspace: z.ZodReadonly<z.ZodObject<{
         role: z.ZodEnum<{
             builder: "builder";
-            admin: "admin";
             owner: "owner";
+            admin: "admin";
             viewer: "viewer";
+            guest: "guest";
         }>;
         id: z.ZodString;
         slug: z.ZodString;

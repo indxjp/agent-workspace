@@ -204,7 +204,7 @@ describe.skipIf(!hasDatabase)('production composition API-key principal', () => 
         share: {
           id: crypto.randomUUID(),
           workspaceId,
-          token: 'pub_machine_composition',
+          tokenHash: 'not-checked-here',
           subjectType: 'agent',
           subjectId: machineAgent.id,
           subjectLabel: machineAgent.name,

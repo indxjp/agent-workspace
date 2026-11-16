@@ -7,7 +7,7 @@ description: "The tenancy model — workspaces, principals, membership roles, an
 
 - **Read this when:** you pick a credential for a backend, a CI job, a browser or the CLI, or a call
   fails with `401`, `403` or `404`.
-- **You will learn:** what a workspace and a principal are, what each of the four roles may do, and
+- **You will learn:** what a workspace and a principal are, what each of the five roles may do, and
   which credential to use for which job.
 - **Used in:** [Chapter 4: Put it in your product](/path/embed) and [Chapter 6: Run it for your
   team](/path/operate).
@@ -51,11 +51,13 @@ cannot see at all, so that a wrong id can never be used to probe for another ten
 
 ## Membership roles
 
-Every membership and every API key carries exactly one of four roles, `MEMBERSHIP_ROLES` in
-`packages/contracts/src/team.ts`:
+Every membership carries exactly one of five roles, `MEMBERSHIP_ROLES` in
+`packages/contracts/src/team.ts`. An API key or an invitation carries one of the first four,
+`CONFERRABLE_ROLES`: `guest` is the narrowest role and is never handed out through the API (see
+below).
 
 ```ts title="illustrative" claim="illustrative"
-export const MEMBERSHIP_ROLES = ['owner', 'admin', 'builder', 'viewer'] as const;
+export const MEMBERSHIP_ROLES = ['owner', 'admin', 'builder', 'viewer', 'guest'] as const;
 ```
 
 The SDK does not encode what each role may do — it surfaces whatever the server decides, as a
@@ -74,6 +76,7 @@ enforces — always branch on the `403` you actually receive, not on this table)
 | projects                                                 | all                                                                   | manage         | own                                  | none                      |
 | sessions                                                 | all                                                                   | own            | own                                  | own (read)                |
 | runs                                                     | all                                                                   | read/run any   | read/run own                         | read/run own              |
+| webhooks (N-3, #250)                                     | all                                                                   | manage         | none                                 | none                      |
 | memberships, users, invitations, api-keys                | all                                                                   | manage         | none                                 | none                      |
 | shares                                                   | all                                                                   | manage         | own                                  | own                       |
 | sharing-policies                                         | all                                                                   | read           | read                                 | read                      |
@@ -86,7 +89,17 @@ enforces — always branch on the `403` you actually receive, not on this table)
 "Permitted" for running an agent means one the caller owns or an explicit `agent_grants` row names. Manage those rows
 with `aw.agents.getGrants` and `aw.agents.replaceGrants`, using membership principal ids.
 
-The roles are monotonic (ADR-0152): each role can do at least everything the roles below it can.
+The roles are monotonic (ADR-0152): each role can do at least everything the roles below it can,
+and `guest` sits below Viewer.
+
+The **guest** is the fifth role, held only inside a demo workspace that the email-link sign-in made
+for one visitor. It can read the agents of its demo workspace and run the ones it owns or was granted, read its own
+sessions and runs, approve or reject a write that one of its own runs is waiting on (its `run`
+grant on runs is `own`), and read its own
+membership and workspace. It cannot create agents, connectors or API keys, cannot invite anyone, and cannot create
+a workspace. No route confers it: a request that names `guest` as the role of an invitation, an API
+key, a new member or a role change is refused whoever sends it, and the table above is silent about
+it because it prints the four roles a caller can confer.
 
 [Ownership and sharing](/concepts/ownership-and-sharing) is the full statement of this table plus
 the sharing vocabulary it implies — the catalog → assignment → grant verbs that decide what a

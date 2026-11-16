@@ -16,7 +16,7 @@
  * `GET /api/workspaces` is the identity-scoped listing the card names explicitly: unlike every
  * other route this repository has declared before it, its result set is not "every row of one
  * resource in the caller's session workspace" — it is every workspace the caller's OWN identity
- * currently belongs to, which is why `apps/web/server/rbac/permissions.ts`'s
+ * currently belongs to, which is why `apps/web/server/rbac/core/permissions.ts`'s
  * `WORKSPACE_MEMBER_SCOPED` grant is `own` rather than `any` for every one of §21's four roles
  * (see that constant's own comment for the cross-workspace exploit `any` would open). `POST` shares
  * the same grant width and is available to every role for the identical reason: #119 puts no role

@@ -1,38 +1,46 @@
-import { log } from '../telemetry/logger';
 import { createHash } from 'node:crypto';
+import { log } from '../telemetry/logger';
 
-import { loadEgressPolicyFromEnv } from '@agent-workspace/core';
-import type { RuntimeDriverId } from '@agent-workspace/run-protocol';
+import { loadEgressPolicyFromEnv, loadOutboundProxyFromEnv } from '@agent-workspace/core';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import { DEPLOYMENT_POSTURE_ENV, readDeploymentPosture } from '@agent-workspace/core/posture';
 import type { SecretsService } from '@agent-workspace/core/secrets';
+import type { RuntimeDriverId } from '@agent-workspace/run-protocol';
 import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 import { STORAGE_CONNECTION_FILE_ROOTS_ENV } from '@indx-workspace/contracts/storage-connections';
 
+import { resolveAgentRunOwnership } from '../agents/run-ownership';
 import type { AgentsRuntime, WorkspaceResolution } from '../agents/runtime';
+import type { RuntimeManagerClient } from '../compose/runtime-manager-client';
+import type { ProviderCredentialSpec } from '../compose/runtime-provider-credential';
 import type { Connectors } from '../connectors/runtime';
 import type { EndpointClientsRuntime } from '../endpoint-clients/runtime';
 import { createRepositoryEndpointClientsRuntime } from '../endpoint-clients/store';
 import { registeredEngines } from '../engines/registry';
 import type { Models } from '../models/runtime';
+import { readVertexDefaults } from '../models/vertex-defaults';
 import type { OAuthRuntime } from '../oauth/runtime';
 import { createRepositoryOAuthRuntime } from '../oauth/store';
+import type { Principal } from '../rbac/principal';
+import type { Runtimes } from '../runtimes/runtime';
+import { egressProxyConfiguredFromEnv } from '../runtimes/network-policy';
 import type { Secrets } from '../secrets/runtime';
 import { createRepositorySecretsStoreProvider } from '../secrets/store';
 import type { StorageConnections } from '../storage-connections/runtime';
 import { createRepositoryStorageConnectionsStoreProvider } from '../storage-connections/store';
-import type { RuntimeManagerClient } from '../compose/runtime-manager-client';
-import type { ProviderCredentialSpec } from '../compose/runtime-provider-credential';
-import type { RuntimeProbeConfig } from '../runtimes/registry';
-import type { Runtimes } from '../runtimes/runtime';
-import type { Principal } from '../rbac/principal';
 import {
   configuredPath,
   enforceableRuntimeNetworkPolicies,
   runnerManagerDriverId,
   runtimeNetworkPolicyRefusal,
+  scriptedModelsOption,
 } from './config';
+import {
+  createRuntimeVerificationRegistry,
+  type SharedRuntimeVerifications,
+} from './runtime-verification';
 import type { InstalledModelsApi } from './types';
+export type { SharedRuntimeVerifications } from './runtime-verification';
 
 export async function installModelsApi(
   resolveWorkspace: (request: Request) => Promise<WorkspaceResolution>,
@@ -65,7 +73,7 @@ export async function installModelsApi(
   // One discovery cache for the whole process (issue #129's short in-memory TTL cache), shared by
   // `GET /api/models` and by every run's model resolution — a run started moments after a
   // `GET /api/models` call should not repeat an identical, still-fresh discovery round trip.
-  const discover = createModelDiscovery();
+  const discover = createModelDiscovery(scriptedModelsOption(process.env));
   const runtime: Models = {
     kind: 'serving',
     runtime: {
@@ -92,6 +100,7 @@ export async function installModelsApi(
       discover,
       audit: (event) => root.recordAuditEvent(event),
       log: (message) => log.info(`[models] ${message}`),
+      vertexDefaults: readVertexDefaults(process.env),
     },
   };
   log.info(
@@ -159,7 +168,12 @@ export async function installConnectorsApi(
 
 /** Build `/api/endpoint-clients*` (ADR-0134) over the PostgreSQL repository and key directory. */
 export function installEndpointClientsApi(root: DatabaseRoot): EndpointClientsRuntime {
-  const endpointClients = createRepositoryEndpointClientsRuntime(root);
+  const endpointClients = createRepositoryEndpointClientsRuntime(
+    root,
+    resolveAgentRunOwnership,
+    () => new Date(),
+    readDeploymentPosture(process.env),
+  );
   log.info('[compose] endpoint clients API installed: PostgreSQL endpoint-scoped API keys');
   return endpointClients;
 }
@@ -190,6 +204,7 @@ export function installStorageConnectionsApi(
       }),
       fileRoots,
       egress: loadEgressPolicyFromEnv(),
+      proxy: loadOutboundProxyFromEnv(process.env),
       isConnectionGranted: async (workspaceId, connectionId) => {
         const scope = await root.scopes.forWorkspaceId(workspaceId);
         return (
@@ -207,21 +222,6 @@ export function installOAuthApi(root: DatabaseRoot): OAuthRuntime {
   log.info('[compose] OAuth server installed: PostgreSQL codes, access and refresh tokens');
   return oauth;
 }
-
-// ── The sub-wave 2b-1 installers ────────────────────────────────────────────────────────────────
-//
-// One function per subsystem, below {@link register} rather than inside it, because each is a
-// paragraph of configuration reasoning and inlining four of them would bury the ordering that is
-// the whole content of a composition root (§53).
-//
-// Every one of them loads its implementation with a **dynamic** `import` expression carrying a
-// string literal, for the reason {@link register}'s header records at length and which was measured
-// rather than inferred: Next.js compiles this file for the edge runtime as well as for Node, a
-// top-level import is resolved before the `NEXT_RUNTIME` guard can run, and `pg`, `node:fs` and
-// `node:path` do not exist on the edge. `@agent-workspace/core/secrets` opens a `pg.Pool`,
-// `@agent-workspace/core/storage` reaches `node:fs`, so both are loaded here and not at the top
-// of the file. The `Secrets` type is a static import, because its module imports nothing but
-// types.
 
 /**
  * Build `/api/secrets/**` (spec §23, W2-CP-02).
@@ -381,28 +381,6 @@ export function unavailableRuntimeRegistryEntries(
   return entries.filter(([id]) => id !== managedDriverId);
 }
 
-/**
- * Where a workspace's passing Test Runtime is kept so that every instance serving it sees it. The
- * verification file is per process, and a serverless host runs the test and the run on different
- * instances (issue #827).
- */
-export interface SharedRuntimeVerifications {
-  get(
-    workspaceId: string,
-    driverId: string,
-  ): Promise<Readonly<{ configurationKey: string; expiresAt: Date }> | null>;
-  record(
-    workspaceId: string,
-    driverId: string,
-    verification: Readonly<{
-      configurationKey: string;
-      fingerprint: string;
-      verifiedAt: Date;
-      expiresAt: Date;
-    }>,
-  ): Promise<void>;
-}
-
 /** Install the live registry used by the Runtimes page and its Test Runtime endpoint. */
 export async function installDriverRegistry(
   runnerManager: RuntimeManagerClient | null,
@@ -424,14 +402,6 @@ export async function installDriverRegistry(
   const managedDriverLabel = runnerManagerDriverLabel(managedDriverId);
   try {
     const registryModule = await import('../runtimes/registry');
-    const echoConnection = (value: string) => ({
-      events: (async function* () {
-        await Promise.resolve();
-        yield value;
-      })(),
-      sessionId: Promise.resolve(crypto.randomUUID()),
-      interrupt: () => Promise.resolve(),
-    });
     // The web process never owns the runner manager's own lifecycle machinery (a Docker socket, a
     // Cloud Run Admin API client, …). That capability belongs to the runner manager; until it
     // positively reports the capability, the UI keeps this driver visible and unavailable. Most
@@ -458,14 +428,6 @@ export async function installDriverRegistry(
     // checked no HOST, so it keeps needing a Test Runtime like every other posture and driver.
     const verifiedWithoutTest =
       inProcessLocalDriver && (process.env[DEPLOYMENT_POSTURE_ENV] ?? '').trim().length > 0;
-    // #786: under that same posture a managed `docker` driver is `aw dev --sandbox docker`'s runner
-    // manager, which ran its own create/readiness/echo/destroy verification before this process
-    // started, and the start fails when it does not pass (`packages/embedded/src/docker-sandbox.ts`).
-    const verifiedAtStart = (driverId: string): boolean =>
-      verifiedWithoutTest &&
-      driverId === 'docker' &&
-      managedDriverId === 'docker' &&
-      runnerManager !== null;
     const configurationKeys = new Map<string, string>([['local', 'development-local']]);
     if (!(inProcessLocalDriver && managedDriverId === 'local')) {
       configurationKeys.set(
@@ -475,84 +437,16 @@ export async function installDriverRegistry(
           .digest('hex'),
       );
     }
-    const registry = {
-      wasVerified: async (driverId: string, workspaceId?: string) => {
-        if (verifiedWithoutTest && driverId === 'local') return true;
-        if (verifiedAtStart(driverId)) return true;
-        const configurationKey = configurationKeys.get(driverId);
-        if (configurationKey === undefined) return false;
-        if (verified.wasVerified(driverId, configurationKey)) return true;
-        if (sharedVerifications === undefined || workspaceId === undefined) return false;
-        const shared = await sharedVerifications.get(workspaceId, driverId);
-        return (
-          shared !== null &&
-          shared.configurationKey === configurationKey &&
-          shared.expiresAt.getTime() > Date.now()
-        );
-      },
-      // BH061-002: a lapsed pass (24 hours, or an image upgrade that changed the key) is renewed
-      // by the run that finds it, rather than failing every run until someone re-tests by hand.
-      hasPassed: async (driverId: string, workspaceId: string) =>
-        verified.hasPassed(driverId) ||
-        (sharedVerifications !== undefined &&
-          (await sharedVerifications.get(workspaceId, driverId)) !== null),
-      async test(
-        driverId: string,
-        _config: RuntimeProbeConfig,
-        request: string,
-        renderEvent: (event: string) => string,
-      ) {
-        const transcript: string[] = [];
-        if (driverId === managedDriverId && !(inProcessLocalDriver && driverId === 'local')) {
-          if (runnerManager === null) throw new Error('the runner manager is not configured');
-          // The workspace comes from the caller's session, never from a request body.
-          const providerCredential =
-            _config.providerCredential ??
-            (resolveProviderCredential === undefined || _config.workspaceId === undefined
-              ? undefined
-              : await resolveProviderCredential(_config.workspaceId, {
-                  driver: managedDriverId,
-                  ...(_config.runtimeConnectionId === undefined
-                    ? {}
-                    : { runtimeConnectionId: _config.runtimeConnectionId }),
-                }));
-          const result = await runnerManager.verify(_config, managedDriverId, providerCredential);
-          const expiresAt = Date.parse(result.expiresAt);
-          if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-            throw new Error('the runner manager returned an expired verification');
-          }
-          const configurationKey = configurationKeys.get(managedDriverId) ?? '';
-          await verified.record(driverId, configurationKey, result);
-          if (sharedVerifications !== undefined && _config.workspaceId !== undefined) {
-            await sharedVerifications.record(_config.workspaceId, driverId, {
-              configurationKey,
-              fingerprint: result.fingerprint,
-              verifiedAt: new Date(result.verifiedAt),
-              expiresAt: new Date(expiresAt),
-            });
-          }
-          transcript.push(
-            renderEvent(
-              `${request}: create/readiness/echo/destroy passed; fingerprint=${result.fingerprint}`,
-            ),
-          );
-        } else if (driverId === 'local' && inProcessLocalDriver) {
-          const connection = echoConnection(request);
-          for await (const event of connection.events) transcript.push(renderEvent(event));
-          await verified.record(driverId, configurationKeys.get('local') ?? '', {
-            fingerprint: 'development-local',
-            verifiedAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-          });
-        } else throw new Error(`${driverId} is not available on this runner.`);
-        return {
-          driverId,
-          handle: { id: crypto.randomUUID() },
-          transcript,
-          destroyed: true as const,
-        };
-      },
-    };
+    const registry = createRuntimeVerificationRegistry({
+      managedDriverId,
+      inProcessLocalDriver,
+      verifiedWithoutTest,
+      runnerManager,
+      configurationKeys,
+      verified,
+      sharedVerifications,
+      resolveProviderCredential,
+    });
     // `RUNTIME_IMAGE` is read here only for the fingerprint used by `configurationKeys`; whether
     // the *managed* driver's image is actually ready is the runner manager's own concern, not this
     // process's — it validates its own digest at driver construction (`requireDigest` in
@@ -584,7 +478,7 @@ export async function installDriverRegistry(
             ? enforceableRuntimeNetworkPolicies(
                 managedDriverId,
                 verificationNetworkPolicy,
-                (process.env['AGENT_WORKSPACE_EGRESS_PROXY_IMAGE']?.trim() ?? '') !== '',
+                egressProxyConfiguredFromEnv(process.env),
               )
             : null,
         // ADR-0131: shown on the Runtimes screen; the driver still refuses every run itself.

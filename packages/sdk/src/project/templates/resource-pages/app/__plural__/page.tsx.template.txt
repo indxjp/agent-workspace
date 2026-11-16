@@ -1,0 +1,7 @@
+'use client';
+import {{name}} from '@/resources/{{name}}';
+import { {{listPart}} } from '@indx-workspace/app/react';
+
+export default function {{components}}Page() {
+  return <{{listPart}} resource={{{name}}} />;
+}

@@ -10,10 +10,10 @@ import { AGENT_MUTABLE_FIELDS, type CreateAgentInput } from '../../contracts/age
 import { createAgentFromVersion } from '../agent-versions/create-from-version';
 import { openStorageConnectionLookup, readCreateAgentBody } from '../agent-versions/http';
 import { applicationContext } from '../application-context';
-import { DEFAULT_ENGINE_ID } from '../engines/session-engine';
+import { DEFAULT_ENGINE_ID } from '../execution';
 import { problem, type ApiResult } from '../http/result';
 import { judgeAgent } from '../policy-ceiling/ceiling';
-import { installBuiltinSkillsNamedBy } from '../skills/builtin';
+import { builtinSkillsASaveInstalls, installBuiltinSkillsNamedBy } from '../skills/builtin';
 import { openToolBundleLookup } from '../tool-bundles/http';
 import { builderNameRefusal } from './builder-name';
 import { parseAssignments } from './contract';
@@ -111,7 +111,8 @@ export async function createAgent(request: Request): Promise<ApiResult> {
           version?: { body?: unknown } | null;
           dryRun?: unknown;
         };
-        // A dry run has no side effects, so it does not install the built-in it names.
+        // A dry run has no side effects, so it does not install the built-in it names; it checks
+        // the body as if the save had installed it (issue #890).
         if (dryRun !== true) await installBuiltinSkillsNamedBy(draft?.body, principal);
         return createAgentFromVersion(body.value, versionOwner, {
           store: versionStore,
@@ -121,6 +122,9 @@ export async function createAgent(request: Request): Promise<ApiResult> {
           storageConnections: openStorageConnectionLookup(workspaceId),
           toolHost: versions.toolHost,
           toolDomainsRefusal: versions.toolDomainsRefusal,
+          ...(dryRun === true
+            ? { skillsASaveInstalls: builtinSkillsASaveInstalls(draft?.body) }
+            : {}),
         });
       }
       const compound =

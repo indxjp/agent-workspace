@@ -15,6 +15,7 @@
  * Package-level replays (Drizzle tables, contract schemas, closed sets) live in
  * tests/formal/concept-configuration.test.ts.
  */
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
 import { MODEL_PROVIDERS, type ModelProvider } from '@indx-workspace/contracts/runs';
 import { RuntimeConnectionResourceSchema } from '@indx-workspace/contracts/runtimes';
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
@@ -103,13 +104,17 @@ function secretsPort(seed: readonly string[]): RuntimeConnectionSecretsPort {
 
 /**
  * The readiness a resource shows: a connection without a credential is reported as such before its
- * config is looked at (the resource's `hasCredential`), otherwise `ready` decides.
+ * config is looked at (the resource's `hasCredential`), otherwise `ready` decides. A keyless
+ * provider needs no credential, so only `ready` decides.
  */
-function readinessOf(resource: {
-  readonly hasCredential: boolean;
-  readonly ready: boolean;
-}): string {
-  if (!resource.hasCredential) return 'no-credential';
+function readinessOf(
+  resource: {
+    readonly hasCredential: boolean;
+    readonly ready: boolean;
+  },
+  provider: ModelProvider,
+): string {
+  if (!resource.hasCredential && !isKeylessProvider(provider)) return 'no-credential';
   return resource.ready ? 'ready' : 'incomplete-config';
 }
 
@@ -125,7 +130,12 @@ describe('provider config rules and readiness', () => {
       const accepted = asBoolean(expected['accepted'], 'accepted');
 
       const created = await parseCreateModelConnection(
-        { name: 'Claude', provider, apiKey: 'sk-test', config },
+        {
+          name: 'Claude',
+          provider,
+          ...(isKeylessProvider(provider) ? {} : { apiKey: 'sk-test' }),
+          config,
+        },
         allowEveryUrl,
       );
       expect(created.ok).toBe(accepted);
@@ -149,8 +159,10 @@ describe('provider config rules and readiness', () => {
       expect(withCredential.ready).toBe(asBoolean(expected['readyWithCredential'], 'ready'));
       expect(withoutCredential.ready).toBe(asBoolean(expected['readyWithoutCredential'], 'ready'));
       expect(withCredential.hasCredential && !withoutCredential.hasCredential).toBe(true);
-      expect(readinessOf(withCredential)).toBe(asString(expected['readiness'], 'readiness'));
-      expect(readinessOf(withoutCredential)).toBe(
+      expect(readinessOf(withCredential, provider)).toBe(
+        asString(expected['readiness'], 'readiness'),
+      );
+      expect(readinessOf(withoutCredential, provider)).toBe(
         asString(expected['readinessWithoutCredential'], 'readinessWithoutCredential'),
       );
     },

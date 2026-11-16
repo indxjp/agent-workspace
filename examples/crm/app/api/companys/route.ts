@@ -1,0 +1,3 @@
+import company from '@/resources/company';
+import { resourceRoutes } from '@indx-workspace/app/server';
+export const { GET, POST } = resourceRoutes(company);

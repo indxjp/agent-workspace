@@ -25,7 +25,7 @@ at this step, so none is refused.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; memory?: "agent" \| undefined; }>` | Yes |  |
 | `limits` | `Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>` | Yes |  |
 | `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
 | `model` | `null \| string` | Yes |  |

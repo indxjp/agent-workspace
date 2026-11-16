@@ -9,11 +9,15 @@ import {
 } from '@indx-workspace/contracts/storage-settings';
 
 import { defaultRuntimeNetworkPolicy, type RuntimeNetworkPolicy } from '../../contracts/runtimes';
+import { CONTAINER_STOP_MARGIN_MS, parseContainerIdleStopSeconds } from '../settings';
+import {
+  scriptedModelsFromEnv,
+  type ScriptedModels,
+} from '@agent-workspace/gateway/providers/registry';
 
 // The storage settings are resolved by contracts, so `agent-workspace doctor` decides the same way.
 export {
   STORAGE_URL_ENV,
-  legacyAreaPrefixes,
   storageAreaPlace,
   type StorageArea,
   type StorageAreaPlace,
@@ -165,7 +169,6 @@ const ACA_HTTP_INGRESS_SAFETY_MARGIN_MS = 15_000;
 
 const VERCEL_FUNCTION_MAX_DURATION_MS = 300_000;
 const VERCEL_FUNCTION_SAFETY_MARGIN_MS = 15_000;
-const CONTAINER_STOP_MARGIN_MS = 15_000;
 
 /**
  * The longest run the control plane's host allows, or `null` when the host sets no limit.
@@ -185,10 +188,11 @@ export function hostRunLimitMs(env: Readonly<Record<string, string | undefined>>
   }
   // Cloudflare Containers (ADR-0127): the routing Worker stops the idle Container after this many
   // seconds (`setInactivityTimeout`, https://developers.cloudflare.com/containers/, checked
-  // 2026-10-08), and the stop would kill a longer run's consumer. A malformed value is no limit.
-  const idleStopSeconds = Number(env['AW_CONTAINER_IDLE_STOP_SECONDS']);
-  return Number.isInteger(idleStopSeconds) && idleStopSeconds * 1000 > CONTAINER_STOP_MARGIN_MS
-    ? idleStopSeconds * 1000 - CONTAINER_STOP_MARGIN_MS
+  // 2026-10-08), and the stop would kill a longer run's consumer. Start-up refuses a malformed
+  // value (`readWebSettings`), so here it can only come from a caller's own environment.
+  const idleStop = parseContainerIdleStopSeconds(env['AW_CONTAINER_IDLE_STOP_SECONDS']);
+  return idleStop.ok && idleStop.value !== null
+    ? idleStop.value * 1000 - CONTAINER_STOP_MARGIN_MS
     : null;
 }
 
@@ -255,4 +259,16 @@ export function resolveStorageSettings(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): ResolvedStorageSettings {
   return resolveStorageSettingsWith(env);
+}
+
+/**
+ * The scripted models (a test tool) this process opted into with `AW_SCRIPTED_MODELS_DIR`, as the
+ * option the model discovery and the evaluation judge take; none when it is unset. Outside the
+ * `local` posture a set variable throws, so start-up fails rather than serving a test tool.
+ */
+export function scriptedModelsOption(env: Readonly<Record<string, string | undefined>>): {
+  readonly scripted?: ScriptedModels;
+} {
+  const scripted = scriptedModelsFromEnv(env);
+  return scripted === undefined ? {} : { scripted };
 }

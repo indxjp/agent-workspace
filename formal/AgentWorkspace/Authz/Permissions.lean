@@ -4,13 +4,13 @@ import AgentWorkspace.Authz.Resources
 /-!
 # The permission table (`POLICY`)
 
-`apps/web/server/rbac/permissions.ts`: a permission is `(role, resource, operation) → grant`, a
+`apps/web/server/rbac/core/permissions.ts`: a permission is `(role, resource, operation) → grant`, a
 grant is one of four widths (`none`, `own`, `permitted`, `any`), and each role is declared as a
 fallback plus an override per named resource. Owner's fallback is `EVERYTHING` (with a
 `workspaces` override); every other role's fallback is `NOTHING`.
 
 The model transcribes `POLICY` **literally**, as the same fallback-plus-override shape with the
-same named constants, so each of the 4 × 31 × 3 = 372 cells is computed the way `grantsFor`
+same named constants, so each of the 4 × 32 × 3 = 384 cells is computed the way `grantsFor`
 computes it. The per-cell theorems (`Theorems.Normative.AuthzDecide`) pin every cell against an
 independent transcription of the document table in `docs/sdk/04-api-specification.md` §3.3.
 -/
@@ -20,7 +20,7 @@ namespace AgentWorkspace.Authz.Permissions
 open AgentWorkspace AgentWorkspace.Concepts.Membership AgentWorkspace.Authz.Resources
 
 /-- `Operation`: what a caller is trying to do to a resource. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#Operation")
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#Operation")
   (doc := "docs/spec.md#21-users-and-rbac")]
 inductive Operation where
   | read | write | run
@@ -40,7 +40,7 @@ instance : WireEnum Operation where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- `Grant`: how wide a permission is. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#Grant")
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#Grant")
   (doc := "docs/sdk/04-api-specification.md#33-roles")]
 inductive Grant where
   | none | own | permitted | any
@@ -60,7 +60,7 @@ instance : WireEnum Grant where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- `Grants`: the three operations' grants for one (role, resource) pair. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#Grants")]
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#Grants")]
 structure Grants where
   read : Grant
   write : Grant
@@ -87,7 +87,7 @@ def OWN_ONLY : Grants := ⟨.own, .own, .none⟩
 def OWN_READS : Grants := ⟨.own, .none, .none⟩
 /-- `READ_ONLY`: readable across the workspace. -/
 def READ_ONLY : Grants := ⟨.any, .none, .none⟩
-/-- `WORKSPACE_MEMBER_SCOPED`: issue #119's `workspaces` grant, identical for all four roles. -/
+/-- `WORKSPACE_MEMBER_SCOPED`: issue #119's `workspaces` grant, identical for the four conferrable roles. -/
 def WORKSPACE_MEMBER_SCOPED : Grants := ⟨.own, .own, .none⟩
 
 /-- One role's declaration: a fallback and the resources §21 names for it. -/
@@ -96,7 +96,7 @@ structure RolePolicy where
   byResource : List (Resource × Grants)
 
 /-- `POLICY`, role by role, in the order and with the constants `permissions.ts` uses. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#POLICY")
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")
   (doc := "docs/sdk/04-api-specification.md#33-roles") (doc := "docs/spec.md#21-users-and-rbac")]
 def policy : Role → RolePolicy
   | .owner => { fallback := EVERYTHING, byResource := [(.workspaces, WORKSPACE_MEMBER_SCOPED)] }
@@ -115,6 +115,7 @@ def policy : Role → RolePolicy
         (.memberships, MANAGE),
         (.invitations, MANAGE),
         (.me, READ_ONLY),
+        (.demo, READ_ONLY),
         (.metrics, READ_ONLY),
         (.engines, READ_ONLY),
         -- Issue #968: the platform catalogue, same cell and reading as `engines`.
@@ -122,6 +123,8 @@ def policy : Role → RolePolicy
         (.modelConnections, MANAGE),
         -- Issue #1690 (storage design Q-22): Owner and Admin connect and change a bucket.
         (.storageConnections, MANAGE),
+        -- Issue #250 (ADR-SDK-18-N3-250 D6): Owner and Admin decide where run outcomes are sent.
+        (.webhooks, MANAGE),
         (.models, MANAGE),
         (.runtimeProfiles, MANAGE),
         (.runtimes, MANAGE),
@@ -161,6 +164,7 @@ def policy : Role → RolePolicy
         (.sharingPolicies, READ_ONLY),
         (.runs, { OWN_READS with run := .own }),
         (.me, READ_ONLY),
+        (.demo, READ_ONLY),
         (.metrics, READ_ONLY),
         (.engines, READ_ONLY),
         -- Issue #968: the platform catalogue, same cell and reading as `engines`.
@@ -176,14 +180,27 @@ def policy : Role → RolePolicy
         (.shares, OWN_ONLY),
         (.sharingPolicies, READ_ONLY),
         (.me, READ_ONLY),
+        (.demo, READ_ONLY),
         (.metrics, READ_ONLY),
         (.engines, READ_ONLY),
         -- Issue #968: the platform catalogue, same cell and reading as `engines`.
         (.platforms, READ_ONLY),
         (.workspaces, WORKSPACE_MEMBER_SCOPED) ] }
+  | .guest =>
+    -- §21 Guest: the demo agents (a provisioner grant), its own sessions and runs (`run: own`
+    -- reaches the approval sub-resource), and nothing else. `workspaces` is read-only: a guest
+    -- that could create a workspace would be its Owner.
+    { fallback := NOTHING
+      byResource := [
+        (.agents, ⟨.any, .none, .permitted⟩),
+        (.sessions, OWN_READS),
+        (.runs, { OWN_READS with run := .own }),
+        (.me, READ_ONLY),
+        (.demo, READ_ONLY),
+        (.workspaces, ⟨.own, .none, .none⟩) ] }
 
 /-- `grantsFor`: the override for the resource if the role names it, else the fallback. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#grantsFor")]
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#grantsFor")]
 def grantsFor (role : Role) (resource : Resource) : Grants :=
   match ((policy role).byResource.find? (·.1 == resource)) with
   | some (_, g) => g
@@ -209,7 +226,7 @@ def Grant.le : Grant → Grant → Bool
 
 An independent transcription of the document's table, phrase by phrase, so that the per-cell
 theorems compare two readings rather than restate one. §3.3 says the table "is
-`apps/web/server/rbac/permissions.ts` as of this document's date". -/
+`apps/web/server/rbac/core/permissions.ts` as of this document's date". -/
 
 /-- The phrases §3.3 uses in its cells. -/
 inductive DocPhrase where
@@ -275,20 +292,23 @@ def docRow : Resource → Option (DocPhrase × DocPhrase × DocPhrase × DocPhra
   | .projects => some (.all, .manage, .own, .none)
   | .sessions => some (.all, .own, .own, .sessionsOwnRead)
   | .runs => some (.all, .readRunAny, .readRunOwn, .readRunOwn)
-  | .memberships | .users | .invitations | .apiKeys => some (.all, .manage, .none, .none)
+  | .memberships | .users | .invitations | .apiKeys | .webhooks => some (.all, .manage, .none, .none)
   | .tokens => some (.all, .writeAny, .writeOwn, .none)
   | .shares => some (.all, .manage, .own, .own)
   | .sharingPolicies => some (.all, .read, .read, .read)
   | .metrics | .auditEvents => some (.all, .read, .read, .read)
   | .engines | .platforms => some (.all, .read, .read, .read)
   | .workspaces => some (.memberScoped, .memberScoped, .memberScoped, .memberScoped)
-  | .endpointClients | .me | .setup | .storageConnections | .toolBundles | .triggers => Option.none
+  | .demo | .endpointClients | .me | .setup | .storageConnections | .toolBundles | .triggers => Option.none
 
-/-- The grants §3.3 prints for a role over a resource, or `none` where it is silent. -/
+/-- The grants §3.3 prints for a role over a resource, or `none` where it is silent. §3.3 prints the
+four conferrable roles; it has no `guest` column, so the guest is silent everywhere. -/
 def documentedGrants (role : Role) (resource : Resource) : Option Grants :=
-  (docRow resource).map fun (o, a, b, v) =>
+  match role with
+  | .guest => Option.none
+  | _ => (docRow resource).map fun (o, a, b, v) =>
     let phrase := match role with
-      | .owner => o | .admin => a | .builder => b | .viewer => v
+      | .owner => o | .admin => a | .builder => b | .viewer | .guest => v
     phrase.grants resource
 
 /-! ## The `(admin, runs)` cell as ADR W9-AUTH-165 states it

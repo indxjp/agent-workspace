@@ -60,19 +60,22 @@ export function compareComposeServices(
 }
 
 /**
- * `project` is `.env`'s `COMPOSE_PROJECT_NAME`. Compose prefers a shell-level value over `.env`,
- * so every call runs with `.env`'s set explicitly: the hashes, the containers listed and the
- * project `up` acts on are then always the same one.
+ * `project` is `.env`'s `COMPOSE_PROJECT_NAME`, and `composeFile` its `COMPOSE_FILE` (`aw deploy`
+ * sets it while the project has apps, issue #1512). Compose prefers a shell-level value over
+ * `.env`, so every call runs with `.env`'s set explicitly, and without a shell `COMPOSE_FILE` when
+ * `.env` has none: the files, the hashes, the containers listed and the project `up` acts on are
+ * then always the same ones.
  */
 export async function deployWithCompose(
   deployContext: DeployContext,
   project: string,
   apply: boolean,
+  composeFile?: string,
 ): Promise<DeployOutcome> {
-  const context: DeployContext = {
-    ...deployContext,
-    env: { ...deployContext.env, COMPOSE_PROJECT_NAME: project },
-  };
+  const env: NodeJS.ProcessEnv = { ...deployContext.env, COMPOSE_PROJECT_NAME: project };
+  if (composeFile === undefined || composeFile === '') delete env['COMPOSE_FILE'];
+  else env['COMPOSE_FILE'] = composeFile;
+  const context: DeployContext = { ...deployContext, env };
   await runStep(context, 'docker', ['compose', 'config', '--quiet'], { show: true });
   const hashes = await runStep(context, 'docker', ['compose', 'config', '--hash', '*'], {
     show: false,

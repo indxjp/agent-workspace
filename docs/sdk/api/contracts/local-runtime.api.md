@@ -7,6 +7,12 @@
 import { z } from 'zod';
 
 // @public
+export const LOCAL_CONSOLE_OIDC_CALLBACK_PATH = "/api/auth/callback";
+
+// @public
+export const LOCAL_CONSOLE_OIDC_CLIENT_ID = "aw-local-console";
+
+// @public
 export const LOCAL_RUNTIME_MESSAGE_TYPES: readonly ["start", "ready", "credential", "failed"];
 
 // @public
@@ -14,6 +20,9 @@ export const LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES = 64;
 
 // @public
 export const LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES = 256;
+
+// @public
+export function localConsoleRedirectUri(port: number): string;
 
 // @public (undocumented)
 export type LocalRuntimeChildMessage = z.infer<typeof LocalRuntimeChildMessageSchema>;
@@ -23,6 +32,7 @@ export const LocalRuntimeChildMessageSchema: z.ZodDiscriminatedUnion<[z.ZodReado
     type: z.ZodLiteral<"ready">;
     url: z.ZodString;
     contractsVersion: z.ZodString;
+    databaseUrl: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
     type: z.ZodLiteral<"credential">;
     token: z.ZodString;
@@ -44,6 +54,21 @@ export const LocalRuntimeCredentialMessageSchema: z.ZodReadonly<z.ZodObject<{
     expiresAt: z.ZodISODateTime;
     workspaceId: z.ZodString;
     workspaceSlug: z.ZodString;
+}, z.core.$strict>>;
+
+// @public
+export const LocalRuntimeDatabaseUrlSchema: z.ZodString;
+
+// @public (undocumented)
+export type LocalRuntimeDevIssuer = z.infer<typeof LocalRuntimeDevIssuerSchema>;
+
+// @public
+export const LocalRuntimeDevIssuerSchema: z.ZodReadonly<z.ZodObject<{
+    issuer: z.ZodString;
+    clientId: z.ZodLiteral<"aw-local-console">;
+    clientSecret: z.ZodString;
+    redirectUri: z.ZodString;
+    ownerSubject: z.ZodString;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -90,8 +115,28 @@ export const LocalRuntimeEnvironmentSchema: z.ZodReadonly<z.ZodObject<{
         network: z.ZodOptional<z.ZodNever>;
         approval: z.ZodOptional<z.ZodNever>;
     }, z.core.$strict>>>;
+    features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+        skills: "skills";
+        files: "files";
+        builder: "builder";
+        runs: "runs";
+        connectors: "connectors";
+        chat: "chat";
+        projects: "projects";
+        sharing: "sharing";
+        surfaces: "surfaces";
+        triggers: "triggers";
+        evaluations: "evaluations";
+    }>>>>;
     withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+    devIssuer: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+        issuer: z.ZodString;
+        clientId: z.ZodLiteral<"aw-local-console">;
+        clientSecret: z.ZodString;
+        redirectUri: z.ZodString;
+        ownerSubject: z.ZodString;
+    }, z.core.$strict>>>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -150,13 +195,34 @@ export const LocalRuntimeMessageSchema: z.ZodDiscriminatedUnion<[z.ZodReadonly<z
             network: z.ZodOptional<z.ZodNever>;
             approval: z.ZodOptional<z.ZodNever>;
         }, z.core.$strict>>>;
+        features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>>>;
         withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+        devIssuer: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+            issuer: z.ZodString;
+            clientId: z.ZodLiteral<"aw-local-console">;
+            clientSecret: z.ZodString;
+            redirectUri: z.ZodString;
+            ownerSubject: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>>;
 }, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
     type: z.ZodLiteral<"ready">;
     url: z.ZodString;
     contractsVersion: z.ZodString;
+    databaseUrl: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
     type: z.ZodLiteral<"credential">;
     token: z.ZodString;
@@ -218,8 +284,28 @@ export const LocalRuntimeParentMessageSchema: z.ZodDiscriminatedUnion<[z.ZodRead
             network: z.ZodOptional<z.ZodNever>;
             approval: z.ZodOptional<z.ZodNever>;
         }, z.core.$strict>>>;
+        features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>>>;
         withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+        devIssuer: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+            issuer: z.ZodString;
+            clientId: z.ZodLiteral<"aw-local-console">;
+            clientSecret: z.ZodString;
+            redirectUri: z.ZodString;
+            ownerSubject: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>>;
 }, z.core.$strict>>], "type">;
 
@@ -231,6 +317,7 @@ export const LocalRuntimeReadyMessageSchema: z.ZodReadonly<z.ZodObject<{
     type: z.ZodLiteral<"ready">;
     url: z.ZodString;
     contractsVersion: z.ZodString;
+    databaseUrl: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -280,8 +367,28 @@ export const LocalRuntimeStartMessageSchema: z.ZodReadonly<z.ZodObject<{
             network: z.ZodOptional<z.ZodNever>;
             approval: z.ZodOptional<z.ZodNever>;
         }, z.core.$strict>>>;
+        features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>>>;
         withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+        devIssuer: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+            issuer: z.ZodString;
+            clientId: z.ZodLiteral<"aw-local-console">;
+            clientSecret: z.ZodString;
+            redirectUri: z.ZodString;
+            ownerSubject: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>>;
 }, z.core.$strict>>;
 

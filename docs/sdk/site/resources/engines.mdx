@@ -120,15 +120,16 @@ await workspace.agents.replacePolicy(agentId, {
 Each arm's engine-native fields are its own, so moving a policy between engines keeps `skills` and
 `limits` and replaces the rest. `openai-agents` declares `skills: false` and `fork: false`: an agent
 assigned a skill is refused `422 engine_capability_unsupported` on that engine rather than run
-without it. Its `maxBudget` is `'adapter'`, a provisional cap that stops a run with
-`stopReason: 'max_budget'` and refuses a cap on a model it cannot price. `pi` declares `mcp: false`:
+without it. Its `maxBudget` is `'adapter'`: the gateway enforces the cap for it (ADR-0162), so a
+run stops at its spend ceiling and fails `run_budget_reached`, and a cap on any model compiles. `pi`
+declares `mcp: false`:
 an agent assigned a connector is refused `422 engine_capability_unsupported` with
-`capability: 'mcp'`. It supports skills, resume and fork, enforces both `maxTurns` and the same
-provisional `maxBudget` in its adapter, and speaks only `anthropic-messages`, the gateway's native
+`capability: 'mcp'`. It supports skills, resume and fork, enforces `maxTurns` in its adapter and
+leaves `maxBudget` to the gateway, and speaks only `anthropic-messages`, the gateway's native
 ingress, which reaches every provider: the gateway translates it for an OpenAI-family connection.
 `mastra` supports connectors, skills and resume, declares `fork: false`
-(a fork is refused), enforces `maxTurns` natively and the same provisional `maxBudget` in its
-adapter, and speaks all three dialects, each connection in its own.
+(a fork is refused), enforces `maxTurns` natively and leaves `maxBudget` to the gateway, and speaks
+all three dialects, each connection in its own.
 
 A policy naming an engine this deployment does not register is refused with
 `400 unsupported_engine`, and the list above is exactly what that refusal is taken against. The

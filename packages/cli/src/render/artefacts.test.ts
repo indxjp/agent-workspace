@@ -384,6 +384,19 @@ describe('the Helm and Terraform renderers as functions of the profile alone', (
     }
   });
 
+  it('renders deployment_features for gcp-cloudrun alone, and only when .env carries a list (#1495)', () => {
+    const options = { deploymentFeatures: 'chat,files' };
+    const variables = (cloud: 'gcp' | 'azure', given: TerraformVariableOptions = options) =>
+      JSON.parse(
+        renderTerraformVariables(defaultProfile({ cloud, projectName: 'acme-ai' }), images, given)
+          ?.contents ?? '{}',
+      ) as object;
+
+    expect(variables('gcp')).toMatchObject({ deployment_features: 'chat,files' });
+    expect(variables('gcp', {})).not.toHaveProperty('deployment_features');
+    expect(variables('azure')).not.toHaveProperty('deployment_features');
+  });
+
   it('renders publicUrl in the Helm overlay ahead of images, and only when .env carries the origin', () => {
     const publicUrl = 'https://agents.acme.example:8443';
     for (const cloud of ['gcp', 'aws'] as const) {

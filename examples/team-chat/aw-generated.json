@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "entries": {
+    "agent:helper": {
+      "files": {
+        "agents/helper.ts": "d8f2ab9705e41dee3554017bc0c645f82e479d3c05e3639bd902212b2b237f6b"
+      },
+      "edits": []
+    },
+    "app:team-chat": {
+      "files": {
+        ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+        ".github/workflows/app-ci.yml": "dc0a38b0aba17aadbe4c7955af79775911532b27aa0f44f595fe9a4f1c00a742",
+        "Dockerfile": "d92b0bda0645e1d1e294ef8d8e8f6bd3fad8fc3f67f59af59f86dafbc1b1f97e",
+        "README.md": "cc84789b88b0aaee024c3e1546914582e047a1db56f89089fc93b56402884137",
+        "app.config.ts": "1991265db2fe3bd8b5f2ef7051137c506dfc68f22bf60597e415c20570c221cd",
+        "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+        "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+        "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+        "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+        "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+        "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+        "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+        "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+        "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+        "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+        "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+        "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+        "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+        "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+        "app/layout.tsx": "4b8f39b23ad7c3961c7ddb813092b96e4b59de183588e3e9fa16566df462961b",
+        "app/nav.ts": "1a62f828b1be50eb5f1ffa6dc101a74ac708c82d69f1565242c643fee43545c7",
+        "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+        "app/page.tsx": "d900035fe1c0d1d7ed0d6aa432ab96681b5a3b55145a7c02f7ad8d71b0c20ce4",
+        "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+        "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+        "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+        "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+        "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+        "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+        "app/strings.ts": "a7e67ae011de85888e408b36e7bcb18e0c69b6565edbdfafc6feab85e67eb465",
+        "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+        "db/migrations/0000_app_kit.sql": "0ff1bf678a1c0e16d44f3e6de968bf859f25492ee6c4a8c19bc08364a2445769",
+        "db/migrations/0001_app_kit_recipes.sql": "6ea998e289be8bd54b3864dcfa767c95b40152d35c35936fed6a1dd7c7644e94",
+        "db/migrations/0002_app_kit_channels.sql": "49692304c8a5fd188826566b4d788436a74f47e5265f6a389cca7ef6d33ad57c",
+        "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+        "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+        "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+        "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+        "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470"
+      },
+      "edits": [
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/app\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"drizzle-orm\":\"0.45.4\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"pg\":\"8.23.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react-dom\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"devDependencies\":{\"dependency-cruiser\":\"18.7.0\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/contracts\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/react\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"build\":\"next build\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"image\":\"docker build -t team-chat .\"}}"
+        }
+      ]
+    },
+    "channel:message": {
+      "files": {
+        "app/api/channels/message/events/route.ts": "0ff6b14f91fea1c8ec050fe816c58dcd38569344814aef90a58c123c29e51724",
+        "app/channels/message/[key]/page.tsx": "24643f492b96efe05a7741dc8a54121b94d384dcb630a280fac1ab2538b240de",
+        "channels/message.ts": "56e670817af0758e900396f69d33808f6edd54d80af1166b9d121a0baf578f17"
+      },
+      "edits": [
+        {
+          "path": "app/api/messages/route.ts",
+          "added": "import messageChannel from '@/channels/message';"
+        },
+        {
+          "path": "app/api/messages/route.ts",
+          "added": "export const { GET, POST } = resourceRoutes(message, { publish: messageChannel });",
+          "replaced": "export const { GET, POST } = resourceRoutes(message);"
+        },
+        {
+          "path": "app/api/messages/[id]/route.ts",
+          "added": "import messageChannel from '@/channels/message';"
+        },
+        {
+          "path": "app/api/messages/[id]/route.ts",
+          "added": "export const { GET, PATCH, DELETE } = resourceItemRoutes(message, { publish: messageChannel });",
+          "replaced": "export const { GET, PATCH, DELETE } = resourceItemRoutes(message);"
+        }
+      ]
+    },
+    "project:team-chat": {
+      "files": {
+        ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+        "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+        "agent-workspace.yaml": "1da4faada0c02ad11a51f4ab38f135dd6c62ced5546c61b97bccea6b10c41504",
+        "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+        "package.json": "cdc02fbd8953c45838288535f79614ae42e85ae7d9764ca16eefd42e457122b7",
+        "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+        "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48"
+      },
+      "edits": []
+    },
+    "recipe:on-mention": {
+      "files": {
+        "recipes/on-mention.ts": "1da79974ea3aaa9365b2ae505398d45ce5a606f2904a7179cad647a3554d8b77",
+        "tests/recipes/on-mention.test.ts": "b5e54089343c3fc09e26e2c52817cf38eb5c2226def6b09236f8642012beafa2"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import onMentionRecipe from './recipes/on-mention.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    onMentionRecipe,"
+        }
+      ]
+    },
+    "resource:channel": {
+      "files": {
+        "app/api/channels/[id]/route.ts": "b246117933ac218bf383490054a67cd79be8a27d2179fab7155d2a8beeed055a",
+        "app/api/channels/route.ts": "0572cc8333291802e770761f878ceaf82c35df531217a9b0c3974bf686af1fb1",
+        "app/channels/[id]/edit/page.tsx": "67acea20dce570fa94ff10cd508029bb93fcdad24d3a8f92f9778813a55aae3c",
+        "app/channels/[id]/page.tsx": "6d0f17ba7627653980421cb59034cef23d5ab50f63e53ed519c555085e89a1b7",
+        "app/channels/new/page.tsx": "f3bca5e21c6034ae4ee18692bea5a14c9af09492c1d3a024428db9000053a732",
+        "app/channels/page.tsx": "2dc0fadc19e792d2a50b40ab9762b7ce02c99bca6928e6c9fca42a55d909a34e",
+        "db/migrations/0003_create_channels.sql": "adbc1a0396fbf78fd6ed56b6e36361771a020b4222c8a933e41858f2f6a3b569",
+        "resources/channel.ts": "84064f906e93b17f76475abc5597337a8a251b01bdc6d04b848d4a405f4290bd",
+        "tests/channel.test.ts": "658fa367ecf1d6c61d30dd126a3c7e21582d328c4b9924541ffbf4dbd06d4ebf"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import channel from './resources/channel.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    channel,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":3,\"version\":\"7\",\"when\":1767225600003,\"tag\":\"0003_create_channels\",\"breakpoints\":true}"
+        }
+      ]
+    },
+    "resource:message": {
+      "files": {
+        "app/api/messages/[id]/route.ts": "4c4dc0a4d0aa043870c433b3d67c32653f8471a19f2e12df34942ba473dc263a",
+        "app/api/messages/route.ts": "54feab5af0d1deda54ce135970586b4a62b49dbe9bbe96fa11626bdef99912fb",
+        "app/messages/[id]/edit/page.tsx": "9074bd0483ac64b8eb7b92eed79ff3e4168e48d1c3fd946257841de9a2d9007e",
+        "app/messages/[id]/page.tsx": "0234850d5372d2798dea760a223fd49d1b1cd5f937cff20305b8b1751aa0cb37",
+        "app/messages/new/page.tsx": "2b281f6f692142966a465f8c98185fc45bfa70c2ed5be28fc5bb4bc024e2bb8c",
+        "app/messages/page.tsx": "85159ffbf55d7e1a4541f5493a0c89177d1c9c3694fef2a170e0aa5c052e0d74",
+        "db/migrations/0004_create_messages.sql": "f5cf6a881a19ebffd4db22cd54b3461e32a6f927da8059dfa327519deb646b1f",
+        "resources/message.ts": "db29003500fe9b4b5379bd177bfd27218b35d0e77753e7fd51d308fb1a916ca8",
+        "tests/message.test.ts": "4e15e68ce7e6bbe62c4ee027e69bf24635c836dace23ba938c278c5d052f77a5"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import message from './resources/message.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    message,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":4,\"version\":\"7\",\"when\":1767225600004,\"tag\":\"0004_create_messages\",\"breakpoints\":true}"
+        }
+      ]
+    }
+  }
+}

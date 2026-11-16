@@ -1,7 +1,7 @@
 /**
  * `GET /api/platforms` — the platform targets an agent can be exported to (issue #968). Static
  * code, the same for every caller, so `authorise` gets `'not-applicable'`, like `/api/engines`;
- * the `platforms` row of `server/rbac/permissions.ts` still decides who may read it.
+ * the `platforms` row of `server/rbac/core/permissions.ts` still decides who may read it.
  */
 import { listPlatforms } from '../../../server/platforms/catalogue';
 import { authorise, toResponse } from '../../../server/rbac/http';

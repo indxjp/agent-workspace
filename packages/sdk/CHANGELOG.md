@@ -7,6 +7,143 @@ what the policy covers are on the developer site's
 [Public surface and stability](../../docs/sdk/site/concepts/public-surface.mdx#versions-and-deprecation)
 page. Released in lock-step with `@indx-workspace/contracts`, with the same version.
 
+## 0.6.13 — unreleased
+
+### Added
+
+- The app template (`aw generate app`, `create --template portal`) builds an image for
+  `aw deploy`: a two-stage `Dockerfile` on a digest-pinned Node.js 24 image that copies Next.js's
+  standalone output, its static files and `db/migrations`, and runs as `node` on port 3000; a
+  `.dockerignore`; `instrumentation.ts`, which applies the app's migrations as the server starts
+  when `AW_APP_MIGRATE_ON_START=1` and exits on a failed one; and `app/api/health/route.ts`, which
+  answers `ok` with `no-store` without reading the app's settings. `package.json` gains the script
+  `image` (`docker build -t <app> .`), recorded in `aw-generated.json` so `aw destroy app` removes
+  it; a project's own `image` script is kept. `appScripts` and `scriptEdit` are exported from
+  `@indx-workspace/sdk/project`.
+- `renderAppTemplate` renders four presets over the portal: `chat`, `wiki`, `crm` and `desk`
+  (`APP_PRESETS`). Each adds the recipe pages and their four routes, and its own overlay: chat a
+  home page that links to its channels once they exist; wiki the `space` and `page` resources,
+  their migration `0003_wiki`, routes, the wiki pages and the space pages; crm its theme tokens;
+  desk the dashboard page. A later layer writing a path an earlier one wrote is refused unless the
+  preset lists it in `replaces`. The app is named after the project, never the template, and
+  `aw-generated.json` records the wiki's resources as `resource:space` and `resource:page` and the
+  desk's dashboard as `page:dashboard`, so `aw destroy` removes them as generated ones. Each
+  preset's README section lists its follow-up `npx aw` commands, shell-quoted.
+- `triggers.update(id, { cron, timezone })` re-times a `schedule` trigger; a `webhook` trigger
+  answers `400 invalid_field`.
+- `aw.agentTeams` (ADR-0104, #1516): `list`, `listAll`, `get`, `create`, `remove`,
+  `versions.create` and `versions.list` over `/api/agent-teams/**`. `runs.get` returns a
+  `RunDetail` with `parentRunId`, `children` and `treeCost`, and `fixtures.runDetail(run)` in
+  `@indx-workspace/sdk/testing` builds the read's answer for a test double.
+- `@indx-workspace/sdk/project` renders app templates for `create --template`:
+  `renderAppTemplate('portal', { appName, version, existing })` returns the `app` template, the
+  portal's pages over it and the `aw-generated.json` entry recording them, with the packages to
+  pin; `withAppPackages` adds those pins to `package.json`; `appKitPackages` and `APP_TEMPLATES`
+  are the pins and the template list `aw generate app` and `create` share.
+- The generated app's CI (`app-ci.yml`) now cruises the whole project, so an app with no
+  `resources/` yet passes, and also refuses a private-scope or `workspace:` dependency in
+  `package.json`; its dependency-cruiser rule is `app-imports-only-published-packages`, which
+  refuses the private packages' imports as well as `apps/*`.
+- `@indx-workspace/sdk/project` exports the app blueprint API (ADR-0166): `BlueprintManifestSchema`
+  and `parseBlueprintManifest` for a package's strict `blueprint.json`; the pure planners
+  `planBlueprintInstall(release, app)` and `planBlueprintUpdate(installed, release, local)`, which
+  classify each file as `add`, `update`, `remove`, `unchanged` or `conflict` and never plan a write
+  over a file the developer edited (a conflict writes only `blueprintSidecarPath`); and
+  `destructiveMigrations`, which refuses a non-expand-only migration by name. It reads comments
+  with a quote-aware reader and also refuses `TRUNCATE`, `DELETE`, `DO` and `EXECUTE` in blueprint
+  SQL. `readBlueprintArchive` reads a gunzipped npm tarball and refuses links, unsafe paths and
+  unlisted files. `aw-generated.json` gains a `blueprint` entry kind: a `blueprint:<name>` entry
+  must carry its `source` (package, exact version and sha512 integrity) and its `migrations` map.
+- The `channel` generator template (issue #1519) and its spec: `renderChannelSpec(resource,
+  { key?, refs })` keys the channel on a `ref()` field (`--key`, else the first `ref()` to another
+  resource, found by `refFieldsOf` in the resource's file) and refuses with `channel_key_required`
+  when there is none; `channelRouteEdits(resource)` are the one-line edits of the resource's two
+  route files that pass `{ publish }`. `aw-generated.json` records the `channel` kind, and an edit
+  may name the line it `replaced`, which `aw destroy` puts back.
+- `pinnedOf(tool)` in `@indx-workspace/sdk/define` returns the declaration `aw push` pins in a version's `toolBundles` entry for a code tool (with the `PinnableCodeTool` and `PinnedToolDeclaration` types); `aw` and `agentFromVersionBody()` now share it.
+- `@indx-workspace/sdk/project`: `renderPageSpec(name, { kind, resource })` gives the values of the
+  `page/dashboard`, `page/list` and `page/custom` templates (`GENERATOR_PAGE_KINDS`), refusing an
+  unknown kind, a list page without its resource and a reserved name; `renderResourceSpec`'s values
+  also render the new `resource-pages` template. `aw-generated.json` entries may now be `page:<name>`.
+- The generators' pure half in `@indx-workspace/sdk/project`, for `aw generate app|resource|agent`:
+  `parseFieldSpec` and `parseFieldSpecs` read the `name:type` field grammar (`title:text(200)`,
+  `amount:money(JPY)`, `status:enum(new,closed)`, `parent:ref(ticket)`, a trailing `?` for an
+  optional field) and refuse a bad argument with every reason; `renderFieldCode` writes the
+  app-kit builder call a field becomes; `GENERATOR_FIELD_TYPES` lists the field types.
+  `renderAppSpec`, `renderResourceSpec` and `renderAgentSpec` give the values of the `app`,
+  `resource` and `agent` templates, which `renderGeneratorTemplate` renders.
+- `aw-generated.json`, the record of what a generator wrote: `parseGeneratedManifest` refuses a
+  file that is not exactly the manifest, `serializeGeneratedManifest` writes it in one canonical
+  form, and `addGeneratedEntry` and `removeGeneratedEntry` change it.
+- `issuesFromZod(error, prefix?, known?)` from `@indx-workspace/sdk/define`: maps a Zod error to
+  the `DefinitionIssue`s a `DefinitionError` lists, naming the closest known key for an unknown
+  root key ("did you mean"). `@indx-workspace/app` uses it so its definitions report mistakes in
+  the same words as `defineAgent`.
+- `@indx-workspace/sdk/portable` exports `revealInvisible` and `stripControlSequences`, which make
+  model-written text safe to show. `revealInvisible` is for a screen where a person approves
+  something: every control, zero-width, bidirectional, tag, variation-selector and look-alike space
+  character is written as `<U+XXXX>` and nothing is deleted. `stripControlSequences` drops the escape
+  sequences a terminal would act on, for streamed output.
+- `@indx-workspace/sdk/project`: `renderTemplateDirectory(root, values, subject, options?)` renders
+  a directory of real files into `ProjectFile[]`: `{{key}}` in text and `__key__` in paths are
+  replaced from `values`, a trailing `.template.txt` is dropped and a README's file maps are
+  re-aligned; a placeholder with no value is a `ProjectRenderError` naming the key. The setup
+  starters render through it, so `aw init` and `create` write the same files as before.
+- `aw.webhooks.list | create | remove` (N-3, issue #250, ADR-SDK-18-N3-250): register the endpoints
+  a run's outcome is posted to. `create` answers `{ webhook, secret }`, the only time the `whsec_`
+  signing secret is returned; `remove` resolves on the `204`.
+- `verifyWebhookSignature({ secret, headers, body, toleranceSeconds?, now? })` checks a delivery's
+  Standard Webhooks v1 signature with Web Crypto (any `v1` entry may match, compared in constant
+  time; the timestamp must be within 5 minutes) and returns the contract-checked `WebhookEvent`.
+  A refusal is a `WebhookVerificationError` whose `code` is `missing_header`, `invalid_secret`,
+  `timestamp_out_of_tolerance`, `signature_mismatch` or `invalid_payload`.
+- `aw.auth.exchange({ clientId, clientSecret, idToken })` (ADR-0161) trades the signed-in person's
+  OIDC ID token for a 300-second `awo_live_` access token of an `app-backend` endpoint client,
+  posting `/api/auth/token-exchange` with the client pair as `Authorization: Basic`. A client built
+  with the new `auth: { kind: 'access-token', token }` presents that token as a bearer and acts as
+  the person: it starts runs on the client's bound agents the person may run, reads and interrupts
+  their runs, and reads `me`.
+
+### Changed
+
+- `renderAppTemplate(template, { appName, version, projectFiles })` takes the project's own files
+  in place of the `existing` path list, returns them first in `files` (its `package.json` with the
+  app's packages and scripts added), and records them in `aw-generated.json` as the entry
+  `project:<name>`, so every file `create --template` writes is recorded. `project` is a new
+  `GENERATED_ENTRY_KINDS` kind.
+- `@indx-workspace/sdk/project` exports `revertGeneratedEdit`, which undoes one recorded
+  generator edit (a line, a replaced line, a `package.json` pin or script, a migration journal
+  entry) as `aw destroy` does, with `readPackageManifest`, `serializePackageManifest`,
+  `readMigrationJournal` and `serializeMigrationJournal`.
+- The `page/dashboard` template draws the app kit's `Dashboard` instead of a placeholder grid, and
+  writes its route too, `app/api/dashboard/route.ts` (`export const { GET } = dashboardRoutes();`),
+  so `aw generate page <name> --kind dashboard` gives a working dashboard.
+- `runs.follow` backs off between reconnects (issue #250, K-3): the base is the last `retry:` the
+  stream sent, or `reconnectDelayMs` before one arrives; the n-th failed reconnect in a row waits a
+  random time between half and all of `min(maxReconnectDelayMs, base × 2^(n−1))`, and a connection
+  that delivers a new event starts the count again. A `429` or `5xx` with `Retry-After` is still
+  waited exactly that long. The new `maxReconnectDelayMs` option is the ceiling, default 30000.
+  `reconnectDelayMs` and `maxReconnectDelayMs` must be non-negative finite numbers with
+  `reconnectDelayMs ≤ maxReconnectDelayMs`; anything else throws a `TypeError` before the first
+  request.
+- `AgentVersionSource.project` no longer lists `models` in its `Pick<ProjectDocument, …>`: `agentFromVersionBody()` never read it, because the body names its model connection itself. A full `ProjectDocument` is still accepted.
+- The `app` generator template's `app/layout.tsx` imports `@indx-workspace/app/react/styles.css`
+  and wraps every page in `AppTheme`, so the generated resource pages are styled and themed.
+- `shares.list()` items no longer carry `url`. Keep the `url` that `shares.publish()` returns: it
+  is the only time a public link is shown. An older SDK refuses a list that holds a public share,
+  because its schema still required `url` on one; upgrade the SDK with the server.
+
+### Fixed
+
+- `agentFromVersionBody()` reports a module tool whose name repeats an earlier export that the body uses (`toolModules.N` in `dropped`) instead of silently keeping the first, and the drops of a runtime profile, a skill allowlist and a stored tool policy now say what to change instead of "not reproduced by defineAgent()".
+- `toPortableAgent()` and `portableFromAgentVersionBody()` no longer drop the signed identity assertion (`identity`) of an OpenAPI tool or an `mcp()` connector silently: the converter lists it in `dropped` at `<tool path>.identity`, naming the signing secret, because the portable tool has no field to carry it (ADR-0133 D5).
+
+### Security
+
+- A new project from `npm create` overrides `minimatch` 10.x to 11.0.3 (GHSA-g3hv-75wg-m249), as
+  the repository root does, so the `pi` engine's dependency tree no longer installs a vulnerable
+  `minimatch`.
+
 ## 0.6.12 — unreleased
 
 ### Added

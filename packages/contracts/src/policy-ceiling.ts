@@ -326,6 +326,8 @@ export function meetPolicyCeiling(
   const permissions: AgentPermissions = Object.freeze({
     readFiles: effective.permissions.readFiles && caps?.readFiles !== false,
     writeFiles: effective.permissions.writeFiles && caps?.writeFiles !== false,
+    // ADR-0163: kept as stated; a ceiling that turns a file switch off turns memory off with it.
+    ...(effective.permissions.memory === undefined ? {} : { memory: effective.permissions.memory }),
     runCommands: effective.permissions.runCommands && caps?.runCommands !== false,
     unrestrictedNetwork:
       effective.permissions.unrestrictedNetwork && caps?.unrestrictedNetwork !== false,

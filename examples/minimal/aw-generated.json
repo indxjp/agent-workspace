@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "entries": {
+    "agent:helper": {
+      "files": {
+        "agents/helper.ts": "b25a82d4a6196eed1b9356421c32451b16cf8378f4dc55ccd3488628e3665f61"
+      },
+      "edits": []
+    },
+    "app:minimal": {
+      "files": {
+        ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+        ".github/workflows/app-ci.yml": "0c4f9ea9bd695fb8839b7bc8b8f3d56d43bb07bf3cdfedbe3837306f43da2f50",
+        "Dockerfile": "b9dab6e1aeae70315ef86e36905d5873758fc090f821cac4e842162fafd68f10",
+        "app.config.ts": "eea526396ca2827f621ec51cbe752f64ee3b1501e3d717a6a27e114cd8a222a5",
+        "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+        "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+        "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+        "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+        "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+        "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+        "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+        "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+        "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+        "app/layout.tsx": "263b1f032319a4830158d8fa22f4fc1b47a81936911a18712995296c53ee6361",
+        "app/nav.ts": "954cc1e71aee7ce91b65c522a94cc42f9d8e4d23a3a4b29d5670e39945af7c43",
+        "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+        "app/page.tsx": "f2c836895900d6adab4171c68164c300ad798dc7188b7de30d4f612c4ebaf5f5",
+        "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+        "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+        "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+        "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+        "app/strings.ts": "9e2e42a44725de375e2ee2edaa411b8c791390c7fec062e3071f1979e3366f86",
+        "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+        "db/migrations/0000_app_kit.sql": "39f63b00a47206ff84763d9ec8446f0c82998321b2b18a8858af5c770a7e12a1",
+        "db/migrations/0001_app_kit_recipes.sql": "1088e1c8e58a8c8b00f8ad16745bb44c52f16f02707a92c6cd8382a90f7eda75",
+        "db/migrations/0002_app_kit_channels.sql": "d897a9133cd91c2dcfb69cd4a6bce22f75fd182638c8c57f7842299e886923b9",
+        "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+        "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+        "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+        "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+        "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470"
+      },
+      "edits": [
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/app\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"drizzle-orm\":\"0.45.4\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"pg\":\"8.23.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react-dom\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"devDependencies\":{\"dependency-cruiser\":\"18.7.0\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/contracts\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/react\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"build\":\"next build\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"image\":\"docker build -t minimal .\"}}"
+        }
+      ]
+    },
+    "project:minimal": {
+      "files": {
+        ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+        "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+        "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+        "agent-workspace.yaml": "691e73496d28414a523ffb379134781047a47bc2d483edd9c16c7bcc9b5c00f5",
+        "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+        "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+        "package.json": "7d7eda2ab82b94d46274bd58fee9de14cdd30f85591821a04ac3175539953af5",
+        "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+        "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+        "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39"
+      },
+      "edits": []
+    },
+    "resource:note": {
+      "files": {
+        "app/api/notes/[id]/route.ts": "3c51a15c4eca69de6984673c372b5115a9f72391aba9bcf773ec08751b276099",
+        "app/api/notes/route.ts": "55021d79d00c89aa6cf762e67be672295a35e0a552945d2a9f9b9aafa8500af4",
+        "app/notes/[id]/edit/page.tsx": "2c9a201c33d611ffe87b27fef3a6d91d6286be664016043b4ab246a604111a01",
+        "app/notes/[id]/page.tsx": "e85d4611582ed9b400baf7111d7d874f2954a712a385d97f2f21ee3e952198ac",
+        "app/notes/new/page.tsx": "203a9e37887a0337d6a6b73125fcfe7a0bd9947eb37580fdd4b6766768368279",
+        "app/notes/page.tsx": "fadd6a83fa0d9d05c9f420872382f0985f17ae91aaa91f2550bb73fb6db77b7f",
+        "db/migrations/0003_create_notes.sql": "49fe112b62f6b1bd7567eb04c3c609abddd41fc35e2b05d7dfdc2320ce89b536",
+        "resources/note.ts": "d85d3c7d4f1e1ed7c06b3eb5477750b89549df0ae8fdddae67c8cd26a79dc6ac",
+        "tests/note.test.ts": "8233c03215f294d9bff56b4615bfc00a9596e12e7f0a606e1f17ff56155e08d8"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import note from './resources/note.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    note,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":3,\"version\":\"7\",\"when\":1767225600003,\"tag\":\"0003_create_notes\",\"breakpoints\":true}"
+        }
+      ]
+    }
+  }
+}

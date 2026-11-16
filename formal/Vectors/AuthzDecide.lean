@@ -270,7 +270,7 @@ def methodVectors : List Vector :=
     methodCases.map fun m => decideVector "method" "owner" m path none
 
 def roleCases : List String :=
-  ["owner", "admin", "builder", "viewer", "Owner", "ADMIN", "", " owner", "owner ", "superuser",
+  ["owner", "admin", "builder", "viewer", "guest", "Guest", "Owner", "ADMIN", "", " owner", "owner ", "superuser",
     "member", "viewer\u0000"]
 
 def roleVectors : List Vector :=

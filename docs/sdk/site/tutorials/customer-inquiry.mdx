@@ -404,7 +404,7 @@ input is what the customer typed and may contain their personal data.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    aw secrets set CRM_IDENTITY_SECRET   # the same value your CRM verifies x-aw-identity with
+    printf '%s' "$CRM_IDENTITY_SECRET" | aw secrets create --name CRM_IDENTITY_SECRET --value-stdin  # the same value your CRM verifies x-aw-identity with
     CRM_TOKEN=... aw dev           # registers the CRM tool and keeps the skill in step
     aw push --yes                  # the agent and the support widget
     aw eval customer-inquiry       # the seven cases, on a real model

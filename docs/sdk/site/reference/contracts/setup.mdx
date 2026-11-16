@@ -82,18 +82,25 @@ The platforms setup offers (ADR-0133): every hosted platform, and `none`, chosen
 eject-* ids are one-off exports (`aw platforms export`), not a project binding, so setup does not
 offer them.
 
-- `...HOSTED_PLATFORM_IDS`
+- `'claude-managed-agents'`
+- `'copilot-studio'`
+- `'m365-declarative-agent'`
+- `'microsoft-foundry'`
+- `'gemini-enterprise'`
+- `'aws-agentcore'`
 - `'none'`
 
 ## SETUP_PROVIDERS
 
 The model providers first-run setup offers: `MODEL_PROVIDERS` without
-`anthropic-compatible`, which setup does not ask about.
+`anthropic-compatible`, which setup does not ask about. `vertex` is keyless and is set up in the
+web first-run setup only.
 
 - `'anthropic'`
 - `'openai'`
 - `'azure-openai'`
 - `'openai-compatible'`
+- `'vertex'`
 
 ## SETUP_QUESTIONS
 
@@ -179,8 +186,8 @@ Answers given so far, keyed by question id; any may be missing, an unknown id is
 ## SetupAudience
 
 - `"admin"`
-- `"content"`
 - `"setup"`
+- `"content"`
 - `"embedder"`
 
 ## SetupFilePath
@@ -196,6 +203,7 @@ Answers given so far, keyed by question id; any may be missing, an unknown id is
 - `"openai"`
 - `"azure-openai"`
 - `"openai-compatible"`
+- `"vertex"`
 
 ## SetupQuestion
 
@@ -205,7 +213,7 @@ One setup question: who it is for, how it is answered, what it recommends and wr
 | --- | --- | --- | --- |
 | `id` | `Id` | Yes | Dotted `<audience>.<name>`; also the key in `SetupAnswersSchema`. |
 | `flag` | `string` | Yes | The command-line flag that answers this question, without the dashes (`theme` is `--theme`). |
-| `audience` | `"admin" \| "content" \| "setup" \| "embedder"` | Yes |  |
+| `audience` | `"admin" \| "setup" \| "content" \| "embedder"` | Yes |  |
 | `prompt` | `string` | Yes |  |
 | `answer` | `{ readonly kind: "choice"; readonly choices: readonly string[]; } \| { readonly kind: "multi"; readonly choices: readonly string[]; readonly max: number; } \| { readonly kind: "text"; readonly grammar: string; readonly pattern: RegExp; readonly maxLength: number; }` | Yes |  |
 | `recommended` | `z.core.output<Schema>` | Yes | The answer `--yes` takes; it always parses with `SetupQuestion.schema`. |

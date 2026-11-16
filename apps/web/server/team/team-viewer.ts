@@ -18,7 +18,7 @@
  * the failure ADR-0015 exists to forbid.
  */
 import type { DirectoryRoot } from '../rbac/directory';
-import { parseRole, type Role } from '../rbac/roles';
+import { parseRole, type Role } from '../rbac/core/roles';
 
 /** The signed-in caller, as the team screen's capabilities need them. Nothing about the session. */
 export interface TeamViewer {
@@ -45,7 +45,7 @@ export async function resolveTeamViewer(
   const current = memberships.find((membership) => membership.workspaceSlug === session.ws);
   if (current === undefined) return null;
   // A membership row carrying something §21 does not name is not a Viewer, it is a row this program
-  // refuses to authorise from (`rbac/roles.ts`). Refusing here rather than only in the grant lookups
+  // refuses to authorise from (`rbac/core/roles.ts`). Refusing here rather than only in the grant lookups
   // keeps the viewer's identity out of the answer too: "is this row me?" is also a capability, and
   // it has no business being answered from a corrupt row.
   const role = parseRole(current.role);

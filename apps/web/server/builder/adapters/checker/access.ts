@@ -1,5 +1,4 @@
-import { decide, type Ownership } from '../../../rbac/decide';
-import type { Role } from '../../../rbac/roles';
+import { decide, type Ownership, type Role } from '../../../identity';
 
 type Caller = { readonly role: Role; readonly ownerPrincipalId: string };
 type Target = { readonly id: string; readonly ownerPrincipalId: string };

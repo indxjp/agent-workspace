@@ -156,9 +156,9 @@ export const AgentFrameSchema: z.ZodDiscriminatedUnion<[z.ZodReadonly<z.ZodObjec
 }, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
     stopReason: z.ZodEnum<{
         error: "error";
+        max_turns: "max_turns";
         cancelled: "cancelled";
         end_turn: "end_turn";
-        max_turns: "max_turns";
         max_budget: "max_budget";
         refusal: "refusal";
     }>;
@@ -337,9 +337,9 @@ export type AgentResultFrame = z.infer<typeof AgentResultFrameSchema>;
 export const AgentResultFrameSchema: z.ZodReadonly<z.ZodObject<{
     stopReason: z.ZodEnum<{
         error: "error";
+        max_turns: "max_turns";
         cancelled: "cancelled";
         end_turn: "end_turn";
-        max_turns: "max_turns";
         max_budget: "max_budget";
         refusal: "refusal";
     }>;
@@ -382,9 +382,9 @@ export type AgentStopReason = (typeof AGENT_STOP_REASONS)[number];
 // @public (undocumented)
 export const AgentStopReasonSchema: z.ZodEnum<{
     error: "error";
+    max_turns: "max_turns";
     cancelled: "cancelled";
     end_turn: "end_turn";
-    max_turns: "max_turns";
     max_budget: "max_budget";
     refusal: "refusal";
 }>;

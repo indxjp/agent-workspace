@@ -182,7 +182,7 @@ describe('ProjectArchiveDialog', () => {
   it('disables both controls and says so while the transition is in flight', () => {
     const html = dialog(PROJECT, 'archive', { kind: 'submitting' });
     expect(html).toContain('Archiving…');
-    expect(html.match(/disabled/gu)).toHaveLength(2);
+    expect(html.match(/\sdisabled=""/gu)).toHaveLength(2);
   });
 
   it('renders a concealed 404 as the wording the client can actually stand behind', () => {

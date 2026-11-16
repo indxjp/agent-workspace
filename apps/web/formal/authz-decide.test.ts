@@ -19,8 +19,13 @@ import {
   type Ownership,
   type TokenScope,
 } from '../server/rbac/decide';
-import { grantsFor, RESOURCES, SUB_RESOURCES, type Resource } from '../server/rbac/permissions';
-import { parseRole, ROLES, type Role } from '../server/rbac/roles';
+import {
+  grantsFor,
+  RESOURCES,
+  SUB_RESOURCES,
+  type Resource,
+} from '../server/rbac/core/permissions';
+import { parseRole, ROLES, type Role } from '../server/rbac/core/roles';
 import { readDeclarationFiles, requireString } from '../../../tests/inventory-support';
 import { asRecord, asString, loadVectors, type FormalVector } from '../../../tests/formal/vectors';
 
@@ -61,7 +66,7 @@ function asRole(value: unknown, what: string): Role {
 
 /**
  * The role as `decide()` receives it at run time. A vector may carry a string that is not one of
- * the four roles — that is the point of those vectors — and a type annotation is no evidence
+ * the five roles — that is the point of those vectors — and a type annotation is no evidence
  * about a value that arrived from a database row, which is why `decide()` re-parses it.
  */
 function runtimeRole(value: string): Role {

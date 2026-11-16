@@ -65,13 +65,13 @@ describe('SharesClient.list', () => {
       json(200, {
         shares: [
           { ...share, viewCount: 0 },
-          { ...publicShare, viewCount: 12 },
+          { ...share, visibility: 'public', viewCount: 12 },
         ],
       }),
     );
     const listed = await shares.list();
     expect(listed).toHaveLength(2);
-    expect(listed[1]?.url).toBe('/p/pub_abcdefghijklmnopqrstuvwx');
+    expect(listed[1]?.visibility).toBe('public');
     expect(listed[1]?.viewCount).toBe(12);
     const [call] = calls;
     expect(call?.method).toBe('GET');
@@ -81,7 +81,7 @@ describe('SharesClient.list', () => {
     expect(call?.json).toBeUndefined();
   });
 
-  it('refuses a list item without a view count, or a private share that carries a link', async () => {
+  it('refuses a list item without a view count, or any share that carries a link', async () => {
     const withoutCount = client(() => json(200, { shares: [share] }));
     const drift = await failure(withoutCount.shares.list());
     expect(drift).toBeInstanceOf(ContractViolationError);
@@ -93,6 +93,12 @@ describe('SharesClient.list', () => {
     const leak = await failure(leaking.shares.list());
     expect(leak).toBeInstanceOf(ContractViolationError);
     expect((leak as ContractViolationError).issues.join('\n')).toContain('url');
+
+    // A public link is shown once, when it is published; the list never carries one.
+    const publicLeak = client(() => json(200, { shares: [{ ...publicShare, viewCount: 1 }] }));
+    const listed = await failure(publicLeak.shares.list());
+    expect(listed).toBeInstanceOf(ContractViolationError);
+    expect((listed as ContractViolationError).issues.join('\n')).toContain('url');
   });
 
   it('surfaces the unwired-runtime, unauthenticated and forbidden problems by code', async () => {

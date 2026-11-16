@@ -10,7 +10,7 @@ export {
   type InvitationResource,
 } from '@indx-workspace/contracts/invitations';
 
-import type { MembershipRoleName } from '@indx-workspace/contracts/team';
+import type { ConferrableRoleName } from '@indx-workspace/contracts/team';
 
 /**
  * What the signed-in caller may do to this workspace's invitations, answered by the server's own
@@ -35,7 +35,7 @@ export interface InvitationCapability {
   readonly canCreateInvitation: boolean;
   readonly canResendInvitation: boolean;
   readonly canRevokeInvitation: boolean;
-  readonly invitableRoles: readonly MembershipRoleName[];
+  readonly invitableRoles: readonly ConferrableRoleName[];
 }
 
 /** The answer for a caller nothing could be established about. Every field denies. */

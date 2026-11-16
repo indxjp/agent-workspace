@@ -534,7 +534,7 @@ theorem run_checks_refuse_unpriced_or_negative_cost :
 
 /-- The ledger's accounting state: no settlement is `pending`; after one, it is priced exactly
 when some ledger row is priced, `complete` when every row is and `unavailable` when none is. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs.ts#pricedCount")
+@[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs/accounting.ts#pricedCount")
   (ts := "packages/core/src/db/schema/runs.ts#accountingStates")]
 theorem ledger_accounting_follows_the_priced_rows (records : List UsageRecord) :
     (records = [] → ledgerAccounting records = .pending) ∧
@@ -567,7 +567,7 @@ theorem ledger_accounting_follows_the_priced_rows (records : List UsageRecord) :
 
 /-- A ledger with at least one priced and at least one unpriced row is `partial`: the run's
 cost is known for some of its responses but not all of them. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs.ts#pricedCount")
+@[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs/accounting.ts#pricedCount")
   (ts := "packages/core/src/db/schema/runs.ts#accountingStates")
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")]
 theorem mixed_ledger_is_partial (records : List UsageRecord)

@@ -1,0 +1,226 @@
+---
+title: "demo"
+description: "The @indx-workspace/contracts/demo exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/demo.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## DEMO_ALLOWANCE_PATH
+
+`GET /api/demo/allowance`: what the signed-in guest's demo has left, for the store to show
+("18 of 20 runs left") and never type in. Answered only to a session whose workspace is a demo
+workspace; any other is `404 demo_workspace_not_found`.
+
+- `runsPerDay` — the person's configured runs per 24 hours (`AW_DEMO_RUNS_PER_PERSON_PER_DAY`).
+- `runsLeft` — how many more the person may start now; `0` once the cap is reached.
+- `expiresAt` — when the demo workspace and everything in it is deleted
+  (`workspaces.demo_expires_at`).
+
+Value: `'/api/demo/allowance'`
+
+## DEMO_ALLOWANCE_PROBLEM_CODES
+
+The refusals of `GET /api/demo/allowance`, each with its HTTP status.
+
+| Key | Value |
+| --- | --- |
+| `unauthenticated` | `401` |
+| `demo_workspace_not_found` | `404` |
+
+## DEMO_ENTRY_SLUG_MAX_LENGTH
+
+A catalog entry's slug, as the store sends it to name the demo the visitor chose.
+
+Value: `64`
+
+## DEMO_FALLBACK_REASONS
+
+Why the store shows the recording instead of a live run, in the words the visitor reads: the
+person's or the run's count, the cost, the load from one address, or the demo being unavailable.
+
+- `'count'`
+- `'cost'`
+- `'load'`
+- `'unavailable'`
+
+## DEMO_RUN_START_PROBLEM_CODES
+
+The run-start refusals of a demo workspace, each with its HTTP status. They join
+`RUN_START_PROBLEM_CODES`:
+
+- `demo_person_runs_reached` — the person has started `DEMO_RUNS_PER_PERSON_PER_DAY` (or the
+  configured number of) demo runs in the last 24 hours.
+- `demo_client_runs_reached` — the client address has started its configured number of demo runs
+  in the last 24 hours, whichever accounts started them.
+- `demo_site_cost_reached` — the whole site's demo model cost today (UTC) has reached the
+  configured daily cap, so no demo run starts until the next UTC midnight.
+- `demo_caps_unconfigured` — a cap the spec leaves to configuration is not set, so no demo run
+  starts at all (fail closed).
+- `demo_expired` — the demo workspace's end (`workspaces.demo_expires_at`) has passed, so nothing
+  more runs in it, even before the retention sweep deletes it.
+
+| Key | Value |
+| --- | --- |
+| `demo_person_runs_reached` | `429` |
+| `demo_client_runs_reached` | `429` |
+| `demo_site_cost_reached` | `429` |
+| `demo_caps_unconfigured` | `503` |
+| `demo_expired` | `409` |
+
+## DEMO_RUN_WINDOW_SECONDS
+
+The window the per-person and per-client run counts look back over: a rolling 24 hours.
+
+Value: `24 * 60 * 60`
+
+## DEMO_RUNS_PER_CLIENT_PER_DAY
+
+The recommended default for runs started from one client address in
+`DEMO_RUN_WINDOW_SECONDS`, across every account it signs in as
+(`AW_DEMO_RUNS_PER_CLIENT_PER_DAY` overrides it).
+
+Value: `60`
+
+## DEMO_RUNS_PER_PERSON_PER_DAY
+
+Fixed by the spec: one person starts at most this many demo runs in `DEMO_RUN_WINDOW_SECONDS`.
+
+Value: `20`
+
+## DEMO_SEND_RESULT
+
+What a demo agent's tool that would send or write outside answers instead. Nothing leaves the
+demo; the visitor reads that it did not.
+
+Value: `Object.freeze({ ja: '送信しました（デモのため、実際には送信していません）', en: 'Sent (demo only, nothing was actually sent)', })`
+
+## DEMO_TEMPLATE_SLUG_PREFIX
+
+The slug prefix of every demo template workspace. It is reserved: `POST /api/workspaces` refuses a
+slug that starts with it, so only the deployment's own seeding step can make a template, and a
+person cannot squat an entry's template slug.
+
+Value: `'demo-template-'`
+
+## DemoAllowance
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runsPerDay` | `number` | Yes |  |
+| `runsLeft` | `number` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+
+## DemoAllowanceProblemCode
+
+- `"unauthenticated"`
+- `"demo_workspace_not_found"`
+
+## DemoAllowanceSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runsPerDay` | `number` | Yes |  |
+| `runsLeft` | `number` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+
+## DemoEntrySlug
+
+`string`
+
+## DemoEntrySlugSchema
+
+`string`
+
+## demoFallbackReason
+
+The reason to show for a demo start refusal code, or for a run that stopped at a per-run cap
+(`run_budget_reached`, `max_turns`); `null` for anything else, which is not a cap.
+
+```ts
+demoFallbackReason(code: string): DemoFallbackReason | null
+```
+
+## DemoFallbackReason
+
+- `"count"`
+- `"cost"`
+- `"load"`
+- `"unavailable"`
+
+## DemoFallbackReasonSchema
+
+- `"count"`
+- `"cost"`
+- `"load"`
+- `"unavailable"`
+
+## DemoRunStartProblemCode
+
+- `"demo_person_runs_reached"`
+- `"demo_client_runs_reached"`
+- `"demo_site_cost_reached"`
+- `"demo_caps_unconfigured"`
+- `"demo_expired"`
+
+## demoTemplateWorkspaceSlug
+
+The slug of the workspace a deployment fills with one entry's demo agent and its `demo.seed`
+sample data. The provisioner copies from it and never runs in it.
+
+```ts
+demoTemplateWorkspaceSlug(entry: DemoEntrySlug): string
+```
+
+## isDemoTemplateWorkspaceSlug
+
+Whether `slug` is in the reserved demo-template namespace (`DEMO_TEMPLATE_SLUG_PREFIX`).
+
+```ts
+isDemoTemplateWorkspaceSlug(slug: string): boolean
+```
+
+## STORE_DEMOS_PATH
+
+`GET /api/store/demos`: the live entries whose demo is under maintenance, for the store to show on
+the card and the Try tab. Public (no session), like `GET /api/store/privacy`.
+
+Value: `'/api/store/demos'`
+
+## STORE_PRIVACY_PATH
+
+`GET /api/store/privacy`: the facts the store's privacy notice states that only the platform's
+configuration knows, so the page never types them in. Public (no session); the store reads it
+from its own server when it renders the notice.
+
+- `leadRetentionDays` — how long a lead is kept after its last contact
+  (`AW_STORE_LEAD_RETENTION_DAYS`); `null` while the period is not decided, and the page then
+  says it is to be set.
+- `demoWorkspaceHours` — how long a demo workspace and everything typed in it lasts.
+
+Value: `'/api/store/privacy'`
+
+## StoreDemoStates
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maintenance` | `readonly string[]` | Yes |  |
+
+## StoreDemoStatesSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maintenance` | `readonly string[]` | Yes |  |
+
+## StorePrivacyFacts
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `leadRetentionDays` | `null \| number` | Yes |  |
+| `demoWorkspaceHours` | `number` | Yes |  |
+
+## StorePrivacyFactsSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `leadRetentionDays` | `null \| number` | Yes |  |
+| `demoWorkspaceHours` | `number` | Yes |  |

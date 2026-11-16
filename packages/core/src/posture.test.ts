@@ -151,3 +151,40 @@ describe('isLoopbackHost', () => {
     expect(isLoopbackHost(host)).toBe(false);
   });
 });
+
+describe('production refuses the dev issuer (ADR-0161 amendment DI9, issue #2075)', () => {
+  const devIssuer = 'http://127.0.0.1:3200';
+
+  it('refuses an http OIDC issuer under the production posture, a loopback one included', () => {
+    for (const env of [
+      { [DEPLOYMENT_POSTURE_ENV]: 'production', OIDC_ISSUER_URL: devIssuer },
+      { NODE_ENV: 'production', OIDC_ISSUER_URL: devIssuer },
+      { NODE_ENV: 'production', OIDC_ISSUER_URL: 'http://idp.example.test' },
+      { NODE_ENV: 'production', OIDC_ISSUER_URL: 'not a url' },
+    ]) {
+      const error = readError(env);
+      expect(error.code).toBe('oidc_issuer_not_https');
+      expect(error.message).not.toContain(env.OIDC_ISSUER_URL);
+      expect(() => checkDeploymentPosture(env, '0.0.0.0')).toThrow(DeploymentPostureError);
+    }
+  });
+
+  it('accepts an https issuer, and no issuer, under the production posture', () => {
+    const https = { NODE_ENV: 'production', OIDC_ISSUER_URL: 'https://idp.example.test' };
+    expect(readDeploymentPosture(https)).toBe('production');
+    expect(readDeploymentPosture({ NODE_ENV: 'production', OIDC_ISSUER_URL: '  ' })).toBe(
+      'production',
+    );
+    expect(readDeploymentPosture({ NODE_ENV: 'production' })).toBe('production');
+  });
+
+  it('leaves the dev issuer to the local posture', () => {
+    const local = {
+      [DEPLOYMENT_POSTURE_ENV]: 'local',
+      HOST: '127.0.0.1',
+      NODE_ENV: 'production',
+      OIDC_ISSUER_URL: devIssuer,
+    };
+    expect(readDeploymentPosture(local)).toBe('local');
+  });
+});

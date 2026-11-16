@@ -5,40 +5,20 @@ import {
   createClient,
   type AgentWorkspaceClient,
 } from '@indx-workspace/sdk';
-
 import path from 'node:path';
-
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import { AW_DEV_TOOLS_CONNECTOR } from '@indx-workspace/contracts/tool-connectors';
 import type { LocalRuntimeStartMessage } from '@indx-workspace/contracts/local-runtime';
 import type { ProjectDocument, ProjectRead } from '@indx-workspace/contracts/project-file';
-
 import { CommandRefusedError, UsageError, type CliIo } from '../io.js';
-import { nonBlank } from '../config.js';
-import {
-  applyProjectResources,
-  applyProjectTools,
-  plannedProject,
-} from '../local-runtime/project-resources.js';
-import { projectSecretNames, readLocalProject } from '../local-runtime/project.js';
+import { applyProjectTools } from '../local-runtime/project-resources.js';
 import type { LocalRuntimeSession } from '../local-runtime/supervisor.js';
-import {
-  formatProblem,
-  problemCount,
-  pushProject,
-  type LoadedCodeTool,
-  type LoadedTool,
-  type PushReport,
-} from '../project/index.js';
+import { pushProject, type LoadedCodeTool, type LoadedTool } from '../project/index.js';
+import type { LoadProjectOptions } from '../project/load.js';
 import { madeByAwDev } from '../project/tool-host.js';
-import {
-  EDITED_IN_UI_CODE,
-  missingFolders,
-  problemsFromError,
-  withMissingFolderHint,
-  type ProjectProblem,
-} from '../project/problems.js';
-import { surfaceLines, syncSummary } from './format.js';
+import { problemsFromError, type ProjectProblem } from '../project/problems.js';
+import { createProjectFileSync } from './sync-project-file.js';
+import { createSyncReporter } from './sync-report.js';
 import { watchProject } from './watch.js';
 
 /**
@@ -118,36 +98,6 @@ async function registerToolHost(
   }
 }
 
-/**
- * A `secret()` named after start whose value is set: the runtime was forked with it in its
- * environment, and only a restart withholds it there. An unset one is said by the plan's notice.
- */
-function namedLateLine(name: string): string {
-  return `${name} was in aw dev's environment when the runtime started; restart aw dev to withhold it from the runtime\n`;
-}
-
-/**
- * Issue #695: the keys of `agent-workspace.yaml` only a new runtime takes, as one line each: the
- * port, the runtime driver, the default engine and the policy, which the runtime reads when it
- * starts. Compared with the file as `aw dev` started, so a pending change is said once.
- */
-function restartLines(before: ProjectRead, after: ProjectRead): readonly string[] {
-  if (before.lifted || after.lifted) return [];
-  const keys = (read: typeof before): Record<string, unknown> => ({
-    'environments.local.port': read.project.environments.local?.port,
-    'environments.local.runtime': read.project.environments.local?.runtime,
-    engine: read.project.engine,
-    policy: read.project.policy,
-  });
-  const was = keys(before);
-  const now = keys(after);
-  return Object.keys(was).flatMap((name) =>
-    JSON.stringify(was[name]) === JSON.stringify(now[name])
-      ? []
-      : [`agent-workspace.yaml: ${name} changed; restart aw dev to apply\n`],
-  );
-}
-
 export interface DevSyncOptions {
   /** A client for the runtime this `aw dev` started, signed in with its own credential. */
   readonly client: AgentWorkspaceClient;
@@ -166,6 +116,8 @@ export interface DevSyncOptions {
   readonly debounceMs?: number;
   /** The project file's `engine`, for an agent that names none (C12). */
   readonly defaultEngine?: EngineId | undefined;
+  /** The project file's `models`, which an `.agent.md` model is matched to (ADR-0166 D12). */
+  readonly models?: LoadProjectOptions['models'];
   /** The secret names withheld from the runtime when it was forked (SD17). */
   readonly forkWithheld: readonly string[];
   /** The project file as planned at start: its `connectors` names are not a tool's (SD1). */
@@ -245,14 +197,12 @@ function isRecoverable(error: unknown, root: string): error is Error {
  * transaction; ADR-0101 declares that race until V-2.
  */
 export function startDevSync(options: DevSyncOptions): DevSync {
-  const { client, root, io, signal, origin, defaultEngine, onFatal } = options;
-  let project = options.project;
+  const { client, root, io, signal, origin, defaultEngine, models, onFatal } = options;
   const debounceMs = options.debounceMs ?? DEV_SYNC_DEBOUNCE_MS;
   const printed = new Set(options.announcedSurfaces);
   const printedNotices = new Set<string>();
   // Every name the runtime or a loader child must not see; a `secret()` added later joins it.
   const withheld = new Set(options.forkWithheld);
-  let projectFileChanged = false;
   const stop = new AbortController();
   const stopped = AbortSignal.any([signal, stop.signal]);
 
@@ -265,7 +215,7 @@ export function startDevSync(options: DevSyncOptions): DevSync {
         : [],
     );
     const applied = await applyProjectTools(
-      { client, io, root, project, signal: stopped, printedNotices },
+      { client, io, root, project: projectFile.project(), signal: stopped, printedNotices },
       tools,
     );
     const problems = [...applied.problems];
@@ -275,109 +225,14 @@ export function startDevSync(options: DevSyncOptions): DevSync {
     return problems;
   };
 
-  let timer: NodeJS.Timeout | undefined;
-  let running: Promise<void> | null = null;
-  let dirty = false;
+  const report = createSyncReporter({ io, origin, withheld, printed });
 
-  // The agents the last clean sync held, by name: one gone from the project since is said once.
-  let synced = new Map<string, { readonly file: string; readonly agentId: string | null }>();
-  const reportRemoved = (pushed: PushReport): void => {
-    if (pushed.problems.length > 0) return;
-    const now = new Map(pushed.agents.map(({ name, file, agentId }) => [name, { file, agentId }]));
-    for (const [name, { file, agentId }] of synced) {
-      if (now.has(name) || agentId === null) continue;
-      io.stderr(
-        `notice: ${file} no longer defines "${name}", which stays in the local workspace ` +
-          `(aw chat then asks which agent); remove it with aw agents remove ${agentId}\n`,
-      );
-    }
-    synced = now;
-  };
-
-  const report = (pushed: PushReport): void => {
-    reportRemoved(pushed);
-    for (const name of pushed.secrets) {
-      if (withheld.has(name)) continue;
-      withheld.add(name);
-      // Read from aw dev's environment by the tool step; only an unset one needs saying.
-      if (nonBlank(io.env[name]) !== undefined) io.stderr(namedLateLine(name));
-    }
-    if (pushed.agents.length > 0 || pushed.skills.skills.some((s) => s.action !== 'unchanged')) {
-      io.stdout(`${syncSummary(pushed.agents, pushed.skills)}\n`);
-    }
-    for (const problem of pushed.problems) {
-      io.stdout(`${formatProblem(withMissingFolderHint(problem))}\n`);
-    }
-    if (pushed.problems.length > 0) {
-      // Saving the file again does not clear an edit made in the UI, nor an empty file folder.
-      // A refused check writes nothing (BH061-047): say so, or a surface edit seems lost.
-      let advice = 'fix the file and save to sync again';
-      if (pushed.problems.every((problem) => problem.code === EDITED_IN_UI_CODE)) {
-        advice = 'those agents keep their UI edit until aw push --yes overwrites them';
-      } else if (pushed.problems.every((problem) => missingFolders(problem) !== undefined)) {
-        advice =
-          'upload the files named above, then save a file or run aw push --yes to sync again';
-      } else if (pushed.agents.length === 0) {
-        advice = 'nothing was synced; fix the file and save to sync again';
-      }
-      io.stderr(`sync: ${problemCount(pushed.problems.length)}; ${advice}\n`);
-    }
-    for (const agent of pushed.agents) {
-      for (const name of agent.surfaces) {
-        if (printed.has(name)) continue;
-        printed.add(name);
-        for (const line of surfaceLines(origin, name)) io.stdout(`${line}\n`);
-      }
-    }
-  };
-
-  // Issue #695: a save of agent-workspace.yaml is read again and applied before the agents sync.
-  const applyProjectFile = async (): Promise<void> => {
-    const live = options.liveProject;
-    if (live === undefined || !projectFileChanged) return;
-    // Cleared first: a save during the apply sets it again, and a failed apply restores it.
-    projectFileChanged = false;
-    // Each line prints once per session, so saving the file again repeats nothing.
-    const once: CliIo = {
-      ...io,
-      stderr: (text) => {
-        if (printedNotices.has(text)) return;
-        printedNotices.add(text);
-        io.stderr(text);
-      },
-    };
-    try {
-      let read: ProjectRead | null;
-      try {
-        read = await readLocalProject(root);
-      } catch (error) {
-        if (!(error instanceof UsageError)) throw error;
-        io.stderr(`sync: ${error.message}
-`);
-        return;
-      }
-      if (read === null) return;
-      for (const line of restartLines(live.read, read)) once.stderr(line);
-      await applyProjectResources({ ...live, read, root, io: once, signal: stopped });
-      for (const name of projectSecretNames(read)) {
-        if (withheld.has(name)) continue;
-        withheld.add(name);
-        // The model secrets were named to the runtime at start on purpose.
-        if (live.start.environment.modelSecrets?.includes(name) === true) continue;
-        // An unset one is said by the plan's notice; a set one is in the runtime's environment.
-        if (nonBlank(io.env[name]) !== undefined) io.stderr(namedLateLine(name));
-      }
-      project = plannedProject(read, live.start);
-    } catch (error) {
-      projectFileChanged = true;
-      throw error;
-    }
-  };
+  const projectFile = createProjectFileSync(options, { withheld, printedNotices, stopped });
 
   const syncOnce = async (): Promise<void> => {
     documents = [];
     try {
-      await applyProjectFile();
+      await projectFile.apply();
       report(
         await pushProject({
           client,
@@ -387,6 +242,7 @@ export function startDevSync(options: DevSyncOptions): DevSync {
           yes: true,
           onEdited: 'refuse',
           defaultEngine,
+          models,
           withheld: [...withheld],
           toolStep,
         }),
@@ -403,6 +259,34 @@ export function startDevSync(options: DevSyncOptions): DevSync {
       watching.watchFiles(documents);
     }
   };
+
+  const scheduler = createSyncScheduler(stopped, debounceMs, syncOnce);
+  const watching = watchProject({
+    root,
+    signal: stopped,
+    onChange: scheduler.schedule,
+    onProjectFileChange: () => {
+      if (options.liveProject === undefined) return;
+      projectFile.changed();
+      scheduler.schedule();
+    },
+    onError: (error) => {
+      if (stopped.aborted) return;
+      stop.abort();
+      onFatal(error);
+    },
+  });
+  return scheduler.start();
+}
+
+function createSyncScheduler(
+  stopped: AbortSignal,
+  debounceMs: number,
+  syncOnce: () => Promise<void>,
+) {
+  let timer: NodeJS.Timeout | undefined;
+  let running: Promise<void> | null = null;
+  let dirty = false;
 
   const loop = async (): Promise<void> => {
     do {
@@ -440,21 +324,11 @@ export function startDevSync(options: DevSyncOptions): DevSync {
     else stopped.addEventListener('abort', release, { once: true });
   });
 
-  const watching = watchProject({
-    root,
-    signal: stopped,
-    onChange: schedule,
-    onProjectFileChange: () => {
-      if (options.liveProject === undefined) return;
-      projectFileChanged = true;
-      schedule();
+  return {
+    schedule,
+    start: (): DevSync => {
+      run();
+      return { closed, firstSync: running ?? Promise.resolve() };
     },
-    onError: (error) => {
-      if (stopped.aborted) return;
-      stop.abort();
-      onFatal(error);
-    },
-  });
-  run();
-  return { closed, firstSync: running ?? Promise.resolve() };
+  };
 }

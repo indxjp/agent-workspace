@@ -1,10 +1,27 @@
 export const PROJECTS: readonly string[];
 export const STAND_IN: RegExp;
+export interface ServerCommand {
+  env: Record<string, string>;
+  script: string;
+  port: number;
+  identity?: { key: string; secret: string };
+}
+export function workspaceSecrets(projectYaml: string): string[];
 export function serverCommands(
   projectYaml: string,
   secret: () => string,
   overrides?: Readonly<Record<string, string>>,
-): { env: Record<string, string>; script: string; port: number }[];
+): ServerCommand[];
+export function secretCreateCommand(name: string): string;
+export interface IdentityTarget {
+  connectorId: string;
+  workspaceId: string;
+}
+export function identityTargets(listJson: string): Map<string, IdentityTarget>;
+export function identityEnvironment(
+  server: ServerCommand,
+  targets: ReadonlyMap<string, IdentityTarget>,
+): Record<string, string>;
 export function devEnvironment(projectYaml: string, secret: () => string): Record<string, string>;
 export function firstPrompt(evalYaml: string): string | undefined;
 export const MAX_TRACED_RUNS: number;

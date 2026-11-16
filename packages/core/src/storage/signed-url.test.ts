@@ -13,11 +13,8 @@ import {
   createAzureBlobObjectStoreProvider,
   createAzureSdkBlobContainer,
 } from './azure-blob-store.js';
-import {
-  createGcsObjectStoreProvider,
-  createNativeGcsClient,
-  type GcsClient,
-} from './gcs-store.js';
+import type { GcsClient } from './gcs-safe-client.js';
+import { createGcsObjectStoreProvider, createNativeGcsClient } from './gcs-store.js';
 import { createLocalFilesystemObjectStoreProvider } from './local-fs-store.js';
 import { createInMemoryObjectStoreProvider } from './memory-store.js';
 import { SignedUrlUnsupportedError, type SignedUrlRequest } from './object-store.js';

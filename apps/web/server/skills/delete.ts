@@ -5,7 +5,7 @@
  * its bytes in the workspace (`.skills/<name>…` rows, plus the bare objects of earlier releases).
  * The two cannot share one transaction, so the delete is ordered to be recoverable instead:
  *
- * 1. The row is marked first (`ResourceCatalogRepository.markSkillDeleting`), in one transaction
+ * 1. The row is marked first (`SkillCatalog.markSkillDeleting`), in one transaction
  *    with the assignment check. An assigned skill is refused there with `409 skill_in_use` naming
  *    every agent, and nothing else is touched. The mark (`skills.pending_delete`) holds the row's
  *    owner and every revision number. While it exists the catalog sync in `GET /api/skills` and
@@ -19,7 +19,6 @@
  * mark) is finished the same way; its marker object is removed with it.
  */
 import { formatInUseReferrer } from '@indx-workspace/contracts';
-import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
 
 import type { ApiResult } from '../http/result';
 import { problem } from './handlers';
@@ -30,16 +29,17 @@ import {
   skillRevisionsPrefix,
   skillRowFolder,
 } from './keys';
-import { readWhole } from '@agent-workspace/core/storage/streams';
-import type { SkillObjects } from '../storage/store';
+import { readWhole } from '../storage/objects';
+import type { SkillObjects } from '../storage-and-sharing';
 import { withSkillMetaColumn } from './meta-column';
 import { clearLegacyPendingSkillDelete, pendingSkillDelete } from './pending-delete';
+import type { SkillCatalog } from './ports';
 import { walkFiles, type SkillRowsAccess } from './tree';
 
 /** `204` once the skill's row and bytes are gone; `409 skill_in_use`; `404 skill_not_found`. */
 export async function deleteSkill(
   objects: SkillObjects,
-  catalog: ResourceCatalogRepository,
+  catalog: SkillCatalog,
   name: string,
   rows?: SkillRowsAccess,
 ): Promise<ApiResult> {

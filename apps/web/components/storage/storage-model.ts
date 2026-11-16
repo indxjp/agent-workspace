@@ -1,12 +1,20 @@
+import { isUuid } from '@indx-workspace/contracts';
+import { StorageConnectionNameSchema } from '@indx-workspace/contracts/storage-connections';
 import {
   ApiProblemError,
   type CreateStorageConnectionInput,
   type StorageConnectionCredential,
   type StorageConnectionResource,
+  type StorageConnectionTestOutcome,
   type UpdateStorageConnectionPatch,
 } from '@indx-workspace/sdk';
 
+import { storageStrings, type StorageModelWords } from './storage-messages';
+
 export type StorageProvider = StorageConnectionResource['provider'];
+
+/** The model's sentences in English: the default for a caller that does not pass the reader's. */
+const ENGLISH: StorageModelWords = storageStrings('en');
 export type { StorageConnectionResource };
 
 export const PROVIDER_OPTIONS: ReadonlyArray<{ value: StorageProvider; label: string }> = [
@@ -79,13 +87,28 @@ export function credentialFor(
   }
 }
 
+/**
+ * What is wrong with a connection name, before it is sent. The server's refusal is a generic
+ * `invalid_storage_connection`, which the screen could only show as "could not be saved"
+ * (UX-08 in #2086), so the form checks the same rule the contract does and names the problem.
+ */
+export function connectionNameProblem(
+  name: string,
+  words: StorageModelWords = ENGLISH,
+): string | null {
+  const trimmed = name.trim();
+  if (!StorageConnectionNameSchema.safeParse(trimmed).success) return words.nameInvalid;
+  return isUuid(trimmed) ? words.nameLooksLikeId : null;
+}
+
 /** S3 needs both halves of a key pair or neither; the server's refusal would not say which. */
 export function credentialProblem(
   provider: StorageProvider,
   fields: CredentialFields,
+  words: StorageModelWords = ENGLISH,
 ): string | null {
   return provider === 's3' && (fields.accessKeyId === '') !== (fields.secretAccessKey === '')
-    ? 'Fill both the access key ID and the secret access key, or leave both empty.'
+    ? words.keyPairHalf
     : null;
 }
 
@@ -135,43 +158,80 @@ export function updatePatch(
   };
 }
 
-const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
-  storage_connection_url_invalid: 'That is not a valid storage URL for the chosen provider.',
-  storage_connection_url_has_secret:
-    'The URL must not carry a password, key or signed parameter. Use the credential fields instead.',
-  storage_connection_endpoint_forbidden:
-    'This deployment does not allow that endpoint or folder. Ask an operator which locations are permitted.',
-  storage_connection_name_taken: 'Another storage connection already has that name.',
-  storage_connection_not_found: 'That storage connection no longer exists.',
-  storage_connection_prefix_not_allowed: 'That folder is outside the connection’s allowed folders.',
-  storage_connection_write_not_allowed: 'This connection does not allow writing.',
-  storage_connection_credential_required:
-    'Moving the connection to another endpoint, bucket or account needs a new credential. Enter it under Credential and save again.',
-  storage_connection_in_use:
-    'Agents still grant this connection. Remove their storage grants first, then delete it.',
-  storage_connection_unreachable: 'The storage did not answer. Try again, or check the connection.',
-  agent_definition_references_missing:
-    'The agent refers to something that no longer exists, so the grant could not be saved.',
-};
-
 /** A fixed sentence per API code: the server's own message is never shown. */
-export function storageProblemMessage(error: unknown, fallback: string): string {
+export function storageProblemMessage(
+  error: unknown,
+  fallback: string,
+  words: StorageModelWords = ENGLISH,
+): string {
   if (!(error instanceof ApiProblemError)) return fallback;
-  const known = PROBLEM_MESSAGES[error.code];
-  if (known !== undefined) return known;
-  return error.status === 403 ? 'You don’t have access to connected storage.' : fallback;
+  if (Object.hasOwn(words.problems, error.code))
+    return words.problems[error.code as keyof StorageModelWords['problems']];
+  return error.status === 403 ? words.noAccess : fallback;
 }
 
 export function testOutcomeMessage(
-  outcome: { readonly ok: true } | { readonly ok: false; readonly code: string },
+  outcome: StorageConnectionTestOutcome,
+  words: StorageModelWords = ENGLISH,
 ): string {
-  if (outcome.ok) return 'Connection OK';
+  if (outcome.ok) {
+    // A bucket cannot tell a missing folder from an empty one, so this is a warning, not a failure.
+    const empty = outcome.emptyFolders ?? [];
+    return empty.length === 0 ? words.testOk : words.testOkEmpty(empty.join(', '));
+  }
   switch (outcome.code) {
     case 'forbidden':
-      return 'The storage refused the credential or the endpoint.';
+      return words.testForbidden;
     case 'not_found':
-      return 'The storage location was not found.';
+      return words.testNotFound;
     default:
-      return 'The storage did not answer.';
+      return words.testUnreachable;
   }
+}
+
+/** What "Save and test" shows once the new connection's test answers (UX-07 in #2086). */
+export interface SavedTestResult {
+  /** `ok`: it works. `warn`: it opened, but a folder looks wrong. `fail`: it did not open. */
+  readonly level: 'ok' | 'warn' | 'fail';
+  readonly message: string;
+  /** What to do next when the test did not pass cleanly; `null` when nothing is needed. */
+  readonly next: string | null;
+}
+
+/** The connection is saved either way; this says whether it works and what to fix if not. */
+export function savedTestResult(
+  outcome: StorageConnectionTestOutcome,
+  words: StorageModelWords = ENGLISH,
+): SavedTestResult {
+  if (outcome.ok) {
+    const empty = outcome.emptyFolders ?? [];
+    return empty.length === 0
+      ? { level: 'ok', message: words.savedConnected, next: null }
+      : {
+          level: 'warn',
+          message: words.savedConnectedEmpty(empty.join(', ')),
+          next: words.savedEmptyNext,
+        };
+  }
+  const message = words.savedTestFailed(testOutcomeMessage(outcome, words));
+  switch (outcome.code) {
+    case 'forbidden':
+      return { level: 'fail', message, next: words.savedForbiddenNext };
+    case 'not_found':
+      return { level: 'fail', message, next: words.savedNotFoundNext };
+    default:
+      return { level: 'fail', message, next: words.savedUnreachableNext };
+  }
+}
+
+/** A test that could not run at all (refused, or the request failed); the connection is saved. */
+export function savedTestFailure(
+  error: unknown,
+  words: StorageModelWords = ENGLISH,
+): SavedTestResult {
+  return {
+    level: 'fail',
+    message: words.savedNotTested(storageProblemMessage(error, words.couldNotTest, words)),
+    next: words.savedNotTestedNext,
+  };
 }

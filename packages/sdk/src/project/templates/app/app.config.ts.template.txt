@@ -1,0 +1,9 @@
+import { defineApp } from '@indx-workspace/app';
+{{imports}}
+export default defineApp({
+  name: '{{appName}}',
+  resources: [
+{{resources}}  ],
+  recipes: [
+  ],
+});

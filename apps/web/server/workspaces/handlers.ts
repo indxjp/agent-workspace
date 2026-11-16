@@ -6,13 +6,15 @@
  * reason: a handler is exercised without a framework, a server or a network, and the route files
  * under `apps/web/app/api/workspaces/**` are the thin wiring above these.
  */
+import { isDemoTemplateWorkspaceSlug } from '@indx-workspace/contracts/demo';
+
 import type { ApiResult } from '../http/result';
 import { problemWithDetail as problem } from '../http/result';
-// `asObject`/`readString` are `apps/web/server/rbac/handlers.ts`'s, not a copy of them:
+// `asObject`/`readString` are `apps/web/server/rbac/body-readers.ts`'s, not a copy of them:
 // verification round 1, finding 6, found jscpd reporting a byte-identical clone of both between
 // this file and that one — both are this task's `Owns`, so the fix is one shared export, not a
 // second copy.
-import { asObject, readString } from '../rbac/handlers';
+import { asObject, readString } from '../rbac/body-readers';
 import { log } from '../telemetry/logger';
 import type { WorkspaceRepositoryPort } from './runtime';
 
@@ -72,6 +74,14 @@ export async function createWorkspace(
   if (!name.ok) return name.result;
   const slug = readString(object.body, 'slug', 64);
   if (!slug.ok) return slug.result;
+  // The demo provisioner finds an entry's template by this slug, so a person may never take one.
+  if (isDemoTemplateWorkspaceSlug(slug.value)) {
+    return problem(
+      400,
+      'invalid_field',
+      `"${slug.value}" is reserved: slugs starting with "demo-template-" belong to the deployment.`,
+    );
+  }
 
   const outcome: CreateWorkspaceOutcome = await repository.create({
     name: name.value,

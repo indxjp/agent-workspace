@@ -26,6 +26,7 @@ import {
   type LocalCommandContext,
 } from '../command.js';
 import { CommandRefusedError, UsageError } from '../io.js';
+import { lineDiff } from '../line-diff.js';
 import { modelFixFor, notice, writeResult } from '../output.js';
 import { evalAgents, evalCaseFileLabel, loadEvalCases } from '../project/index.js';
 import { versionNumberOf } from './agent-versions.js';
@@ -383,28 +384,6 @@ function defined<T>(record: Readonly<Record<string, T | undefined>>): Record<str
       value === undefined ? [] : [[key, value]],
     ),
   );
-}
-
-/** The lines that differ between `before` and `after`, as `-` and `+` lines between their common ends. */
-function lineDiff(label: string, before: string, after: string): string {
-  const a = before === '' ? [] : before.trimEnd().split('\n');
-  const b = after.trimEnd().split('\n');
-  let head = 0;
-  while (head < a.length && head < b.length && a[head] === b[head]) head += 1;
-  let tail = 0;
-  while (
-    tail < a.length - head &&
-    tail < b.length - head &&
-    a[a.length - 1 - tail] === b[b.length - 1 - tail]
-  ) {
-    tail += 1;
-  }
-  return [
-    `--- ${label}`,
-    `+++ ${label}`,
-    ...a.slice(head, a.length - tail).map((line) => `-${line}`),
-    ...b.slice(head, b.length - tail).map((line) => `+${line}`),
-  ].join('\n');
 }
 
 /**

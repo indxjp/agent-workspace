@@ -1,0 +1,14 @@
+{
+  // The type-checking project for the store's catalog, which the repository's own gates read
+  // (`tsconfig.root.json` includes `examples/store/catalog/**/*.ts`; `pnpm lint` lints this folder).
+  // The app around it is checked like every example app, in the apps lane, against the packed
+  // packages: it is not a workspace member, so the root gates do not look at it. This file exists so
+  // type-aware ESLint's `projectService`, which searches upwards for the nearest `tsconfig.json`,
+  // finds this project rather than the app's.
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts"]
+}

@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
 
 import { loadConnections, testConnection } from './connections-model';
 import { connectionDetail, connectionStatus, type ModelConnectionView } from './model';
+import { modelsStrings } from './models-messages';
 import { ProviderDetailPanel } from './provider-detail';
 
 const CARD = 'overflow-hidden rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
@@ -21,23 +23,27 @@ const STATUS_CLASS: Record<'ok' | 'warn' | 'danger', string> = {
 export function ModelsList({
   models,
   onChange,
+  locale = 'en',
 }: Readonly<{
   models: readonly ModelConnectionView[];
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
   /** Called after an edit, rotation-triggered refresh, or removal so the caller's list stays the
    * source of truth — this component never keeps its own copy of `models`. */
   onChange: (next: readonly ModelConnectionView[]) => void;
 }>) {
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [managingId, setManagingId] = useState<string | null>(null);
+  const strings = modelsStrings(locale);
   if (models.length === 0) {
     return (
-      <div className={`${CARD} p-5 text-[13px] text-muted`}>
-        No providers are configured yet. Add one to make a model available to agents.
+      <div lang={locale} className={`${CARD} p-5 text-[13px] text-muted`}>
+        {strings.empty}
       </div>
     );
   }
   return (
-    <div className={CARD}>
+    <div lang={locale} className={CARD}>
       {models.map((model) => {
         const status = connectionStatus(model);
         return (
@@ -49,29 +55,29 @@ export function ModelsList({
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] ${STATUS_CLASS[status.tone]}`}
                   >
-                    {status.text}
+                    {strings.status[status.kind]}
                   </span>
                 </div>
-                <div className="mt-0.5 text-[12px] text-muted">{connectionDetail(model)}</div>
+                <div className="mt-0.5 text-[12px] text-muted">
+                  {connectionDetail(model, strings)}
+                </div>
                 {model.hasCredential ? (
-                  <div className="mt-1 text-[11px] text-muted">
-                    Credential stored securely · write-only
-                  </div>
+                  <div className="mt-1 text-[11px] text-muted">{strings.credentialStored}</div>
                 ) : null}
               </div>
               <button
                 type="button"
                 className={BUTTON}
                 onClick={() => {
-                  setTestMessage(`Testing ${model.name}…`);
-                  void testConnection(browserClient(), model.id)
+                  setTestMessage(strings.testing(model.name));
+                  void testConnection(browserClient(), model.id, strings)
                     .then(setTestMessage)
                     .catch((error: unknown) =>
                       setTestMessage(error instanceof Error ? error.message : String(error)),
                     );
                 }}
               >
-                Test
+                {strings.test}
               </button>
               <button
                 type="button"
@@ -79,12 +85,13 @@ export function ModelsList({
                 aria-expanded={managingId === model.id}
                 onClick={() => setManagingId(managingId === model.id ? null : model.id)}
               >
-                {managingId === model.id ? 'Hide' : 'Manage'}
+                {managingId === model.id ? strings.hide : strings.manage}
               </button>
             </div>
             {managingId === model.id ? (
               <ProviderDetailPanel
                 connection={model}
+                locale={locale}
                 onClose={() => setManagingId(null)}
                 onUpdated={(next) =>
                   onChange(models.map((entry) => (entry.id === next.id ? next : entry)))
@@ -107,7 +114,8 @@ export function ModelsList({
   );
 }
 
-export function ModelsScreen() {
+export function ModelsScreen({ locale = 'en' }: { readonly locale?: VersionsLocale }) {
+  const strings = modelsStrings(locale);
   const [models, setModels] = useState<readonly ModelConnectionView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -129,27 +137,26 @@ export function ModelsScreen() {
   }, []);
 
   return (
-    <main className="w-full max-w-[980px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[980px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-[22px] flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[21px]">Models</h1>
-          <p className="mt-[3px] text-[13px] text-muted">
-            Providers behind the internal gateway. Agents select a model; they never see provider
-            credentials.
-          </p>
+          <h1 className="text-[21px]">{strings.title}</h1>
+          <p className="mt-[3px] text-[13px] text-muted">{strings.intro}</p>
         </div>
         <Link
           className={`${BUTTON} border-accent bg-accent text-white no-underline`}
           href="/admin/models/new"
         >
-          + Add Provider
+          {strings.addProvider}
         </Link>
       </div>
 
       <div className="mb-4 flex gap-5 border-b border-border text-[13px] font-medium">
-        <span className="border-b-2 border-accent px-1 pb-2 text-accent">Providers</span>
-        <span className="px-1 pb-2 text-muted">Compatibility</span>
-        <span className="px-1 pb-2 text-muted">Gateway</span>
+        <span className="border-b-2 border-accent px-1 pb-2 text-accent">
+          {strings.tabProviders}
+        </span>
+        <span className="px-1 pb-2 text-muted">{strings.tabCompatibility}</span>
+        <span className="px-1 pb-2 text-muted">{strings.tabGateway}</span>
       </div>
 
       {problem !== null ? (
@@ -160,9 +167,9 @@ export function ModelsScreen() {
           {problem}
         </div>
       ) : models === null ? (
-        <div className="text-[13px] text-muted">Loading model connections…</div>
+        <div className="text-[13px] text-muted">{strings.loading}</div>
       ) : (
-        <ModelsList models={models} onChange={setModels} />
+        <ModelsList models={models} onChange={setModels} locale={locale} />
       )}
     </main>
   );

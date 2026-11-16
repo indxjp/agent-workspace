@@ -2,7 +2,6 @@
  * `createMastraFrameMapper`: every `fullStream` chunk type, the two invariants (nothing dropped,
  * tool pairing), and the usage fold (ENG-10, #309).
  */
-import { PROVISIONAL_MODEL_PRICES } from '@agent-workspace/engine';
 import { describe, expect, it } from 'vitest';
 
 import { addMastraUsage, createMastraFrameMapper, type MastraEvent } from './frames.js';
@@ -113,7 +112,6 @@ describe('createMastraFrameMapper', () => {
         cacheReadInputTokens: 1,
         cacheWriteInputTokens: 2,
         reasoningTokens: null,
-        costUsd: 0.1,
       },
       finish: { type: 'finish' },
     });
@@ -178,34 +176,22 @@ describe('createMastraFrameMapper', () => {
 });
 
 describe('addMastraUsage', () => {
-  const price = PROVISIONAL_MODEL_PRICES['claude-sonnet-4-5'] ?? null;
-
-  it('sums steps and prices uncached, cached and cache-write input apart', () => {
-    const one = addMastraUsage(
-      null,
-      {
-        inputTokens: 1_000_000,
-        outputTokens: 0,
-        cachedInputTokens: 0,
-        cacheCreationInputTokens: 0,
-      },
-      price,
-    );
-    expect(one?.costUsd).toBeCloseTo(3);
-    const two = addMastraUsage(
-      one,
-      {
-        inputTokens: 2_000_000,
-        outputTokens: 1_000_000,
-        cachedInputTokens: 1_000_000,
-        cacheCreationInputTokens: 1_000_000,
-        reasoningTokens: 7,
-      },
-      price,
-    );
-    // 3 + (0 uncached) + 1M cache write at 1.25 × 3 + 1M cached at 0.3 + 1M output at 15.
-    expect(two?.costUsd).toBeCloseTo(3 + 3.75 + 0.3 + 15);
-    expect(two).toMatchObject({
+  it('sums the counters of each step, cached and cache-write input apart, and prices nothing', () => {
+    const one = addMastraUsage(null, {
+      inputTokens: 1_000_000,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+    });
+    const two = addMastraUsage(one, {
+      inputTokens: 2_000_000,
+      outputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheCreationInputTokens: 1_000_000,
+      reasoningTokens: 7,
+    });
+    // No cost field: the gateway prices and bills every call (ADR-0065 D6, ADR-0162).
+    expect(two).toEqual({
       inputTokens: 3_000_000,
       outputTokens: 1_000_000,
       cacheReadInputTokens: 1_000_000,
@@ -214,8 +200,7 @@ describe('addMastraUsage', () => {
     });
   });
 
-  it('leaves the total unchanged for a step with no readable counts, and costs nothing uncapped', () => {
-    expect(addMastraUsage(null, { inputTokens: 'x' }, price)).toBeNull();
-    expect(addMastraUsage(null, { inputTokens: 1, outputTokens: 1 }, null)?.costUsd).toBe(0);
+  it('leaves the total unchanged for a step with no readable counts', () => {
+    expect(addMastraUsage(null, { inputTokens: 'x' })).toBeNull();
   });
 });

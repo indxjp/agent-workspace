@@ -174,6 +174,70 @@ describe('an S3 one-level listing page', () => {
   });
 });
 
+describe('an S3 listing page and content types', () => {
+  // #1746: ListObjectsV2 carries no content type, and a page used to send one HEAD per file for it.
+  it('sends no HEAD unless the caller asks for content types, then one per file, a few at a time', async () => {
+    const files = Array.from({ length: 20 }, (_, n) => `o/f${String(n).padStart(2, '0')}.txt`);
+    let heads = 0;
+    let inFlight = 0;
+    let mostInFlight = 0;
+    const server = createServer((request, response) => {
+      if (request.method === 'HEAD') {
+        heads += 1;
+        inFlight += 1;
+        mostInFlight = Math.max(mostInFlight, inFlight);
+        setTimeout(() => {
+          inFlight -= 1;
+          response.writeHead(200, {
+            'content-type': 'text/csv',
+            'content-length': '1',
+            'x-amz-meta-aw-content-type-known': 'true',
+          });
+          response.end();
+        }, 20);
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'application/xml' });
+      response.end(
+        '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated>' +
+          files.map((key) => `<Contents><Key>${key}</Key><Size>1</Size></Contents>`).join('') +
+          '</ListBucketResult>',
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = new S3Client({
+        endpoint: `http://127.0.0.1:${String(port)}`,
+        region: 'us-east-1',
+        forcePathStyle: true,
+        maxAttempts: 1,
+        credentials: { accessKeyId: 'id', secretAccessKey: 'secret' },
+      });
+      const store = createS3ObjectStore({ client, bucket: 'b' });
+
+      const plain = await store.listPage('o', { recursive: true });
+      expect(heads).toBe(0);
+      expect(plain.entries).toHaveLength(20);
+      expect(
+        plain.entries.every((entry) => entry.kind === 'file' && entry.contentType === null),
+      ).toBe(true);
+
+      const typed = await store.listPage('o', { recursive: true, contentTypes: true });
+      expect(heads).toBe(20);
+      expect(mostInFlight).toBeGreaterThan(1);
+      expect(mostInFlight).toBeLessThanOrEqual(8);
+      expect(typed.entries.map((entry) => entry.key)).toEqual(files);
+      expect(
+        typed.entries.every((entry) => entry.kind === 'file' && entry.contentType === 'text/csv'),
+      ).toBe(true);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  });
+});
+
 describe('an S3 write', () => {
   // #1746: the time comes from the write's own response, so a write costs no second request.
   it("reports the server's time from the write's response, with no read-back HEAD", async () => {

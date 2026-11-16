@@ -26,7 +26,7 @@ export type SessionApiPrincipal =
        * The principal that owns what this caller writes and that own/other is decided against
        * (`rbac/principal.ts`'s `ownerPrincipalId`). Equal to `principalId` except for a local
        * runtime key, which writes for the member it acts for (issue #509, S1-24). Every
-       * composition root sets it, so it is required (`rbac/owner-principal.ts`).
+       * composition root sets it, so it is required (`rbac/core/owner-principal.ts`).
        */
       readonly ownerPrincipalId: string;
       readonly userId: string | null;

@@ -7,7 +7,11 @@
  *
  * The widget sends no comment, so the case's judge is "Must not repeat: <answer>". The fake model
  * answers the judge with prose, which is no verdict (`judge_unparseable`); the real one under
- * `run.mjs --live` grades the same answer against "must not repeat it". Either way the case fails.
+ * `run.mjs --live` grades the re-run's answer against "must not repeat it". Either way the case
+ * fails, but only if the real agent gives the same answer again: to a free question ("Please answer
+ * <nonce>.") it words each answer differently, the re-run does not repeat the rated one, and the
+ * case passed on most nightly runs. So the visitor asks for an answer with one right wording
+ * (`PROMPT`), the nonce alone, which the re-run repeats.
  *
  * The generated surface does not ask for ratings (`parts.feedback` is off by default), so the test
  * turns it on in `surfaces/main.ts`, as a developer would, and waits for `aw dev` to serve it.
@@ -18,7 +22,10 @@
  * to default to.
  *
  * A second test (issue #665) walks the same path from the CLI alone: `aw runs start --wait`, then
- * `aw runs rate <id> --down --comment <text>` in place of the widget's button.
+ * `aw runs rate <id> --down --comment <text>` in place of the widget's button. `aw eval add-case`
+ * frames a comment as the fault to avoid (BH061-049), so the comment names a fault every answer to
+ * `PROMPT` has; one worded as a requirement ("Must answer with ...") left the real judge unsure
+ * what "that problem" was, and it passed the case on some nightly runs.
  *
  * Named `.e2e.mjs`, not `.spec.mjs`, so the `tests` Vitest project never loads it.
  */
@@ -44,6 +51,8 @@ const BASE_URL = required('JOURNEY_BASE_URL');
 const NONCE = required('JOURNEY_NONCE');
 const DEMO_DIR = required('JOURNEY_DEMO_DIR');
 const SURFACE = 'main';
+/** A question with one right answer, so the real agent's re-run gives the answer rated down. */
+const PROMPT = `Reply with exactly ${NONCE} and nothing else.`;
 const FEEDBACK_PATH = /^\/api\/runs\/([^/]+)\/feedback$/u;
 const NAME_LINE = /^(\s*)name: 'main',$/mu;
 const PARTS_LINE = /^(\s*)parts: \{$/mu;
@@ -113,7 +122,7 @@ test('a thumbs-down in the widget becomes an eval case that fails', async ({ pag
     await openWidgetHost(page, BASE_URL);
     await page.locator(`button[data-aw-surface-launcher="${SURFACE}"]`).click();
     const chat = page.frameLocator(`iframe[data-aw-surface-frame="${SURFACE}"]`);
-    await askWidget(page, chat, `Please answer ${NONCE}.`, 120_000);
+    await askWidget(page, chat, PROMPT, 120_000);
 
     const rated = page.waitForResponse(
       (response) =>
@@ -163,15 +172,7 @@ test('a thumbs-down from aw runs rate becomes an eval case that fails', () => {
     expect(agents.status, agents.output).toBe(0);
     const agentId = agentIdOf(agents.stdout, name);
 
-    const started = aw([
-      'runs',
-      'start',
-      agentId,
-      '--prompt',
-      `Please answer ${NONCE}.`,
-      '--wait',
-      '--json',
-    ]);
+    const started = aw(['runs', 'start', agentId, '--prompt', PROMPT, '--wait', '--json']);
     expect(started.status, started.output).toBe(0);
     const runId = String(JSON.parse(started.stdout).id);
 
@@ -181,7 +182,7 @@ test('a thumbs-down from aw runs rate becomes an eval case that fails', () => {
       runId,
       '--down',
       '--comment',
-      'Must answer with exactly the word PINEAPPLE.',
+      'The answer does not contain the word PINEAPPLE.',
     ]);
     expect(rated.status, rated.output).toBe(0);
 

@@ -1,9 +1,7 @@
 import { log } from '../../telemetry/logger';
-import type { DatabaseRoot, WorkspaceScopeResolver } from '@agent-workspace/core/db';
-import type { SecretsService } from '@agent-workspace/core/secrets';
+import type { DatabaseRoot } from '@agent-workspace/core/db';
 import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 import { LOCAL_RUNTIME_CAPABILITIES } from '@agent-workspace/runtime/driver/local';
-import { toolSandboxRunToken } from '@agent-workspace/gateway/tokens';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
 import { runNetworkGrant } from '../../compose/run-request';
@@ -12,59 +10,23 @@ import {
   createRuntimeRunResolver,
   localRuntimeRunSpecRejection,
 } from '../../compose/runtime-profile';
-import { buildToolSandboxRequest } from '../../compose/tool-sandbox';
 import { atStep } from '../../runs/failures';
 import type { LaunchContext } from '../../runs/environment';
-import { isStorageConnectionSecretName } from '../../secrets/contract';
-import { readToolBundle } from '../../tool-bundles/handlers';
-import { openToolBundleStore } from '../../tool-bundles/http';
+import { egressProxyConfiguredFromEnv } from '../../runtimes/network-policy';
 import { runnerManagerDriverId } from '../config';
 import type { AgentsWiring } from './agents';
+import {
+  recordRunToolSandboxOrRelease,
+  releaseRunToolSandboxes,
+  requestRunToolSandbox,
+  type RunnerManager,
+} from './run-tool-sandbox';
 import type { RunResourcesWiring } from './run-resources';
 import type { RunRuntimeWiring } from './run-runtime';
 import type { SubsystemsWiring } from './subsystems';
 
-/**
- * A run's tool-sandbox secret source: the workspace secret `name`, or `null` when it is not set.
- * A storage connection's credential is never a tool's: it is `null` without being read, whoever
- * calls this.
- */
-export function runToolSecretSource(
-  dependencies: {
-    readonly scopes: Pick<WorkspaceScopeResolver, 'forWorkspaceId'>;
-    readonly secretsService: Pick<SecretsService, 'resolveByName'> | null;
-  },
-  workspaceId: string,
-): (name: string) => Promise<string | null> {
-  return (name) =>
-    atStep('secrets', async () => {
-      if (isStorageConnectionSecretName(name)) return null;
-      const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
-      const resolved =
-        scope === null || dependencies.secretsService === null
-          ? null
-          : await dependencies.secretsService.resolveByName(scope, name);
-      return resolved === null ? null : resolved.value.toString('utf8');
-    });
-}
-
-export function wireRuntimeResolver({
-  root,
-  scopes,
-  sessionRows,
-  secretsService,
-  runnerManager,
-  runnerManagerUrl,
-  resolveProviderCredential,
-  runResources,
-  runAgentOf,
-  wave5Repositories,
-  runtime,
-  gatewaySettings,
-  driverRegistry,
-  runtimeProfiles,
-  policyCeiling,
-}: Pick<AgentsWiring, 'scopes' | 'sessionRows'> &
+/** The ports the run launcher's runtime targets are built from. */
+export type RuntimeTargetDependencies = Pick<AgentsWiring, 'scopes' | 'sessionRows'> &
   Pick<
     SubsystemsWiring,
     'secretsService' | 'runnerManager' | 'runnerManagerUrl' | 'resolveProviderCredential'
@@ -73,7 +35,123 @@ export function wireRuntimeResolver({
   Pick<RunRuntimeWiring, 'runtime' | 'gatewaySettings' | 'driverRegistry' | 'runtimeProfiles'> & {
     readonly root: DatabaseRoot;
     readonly policyCeiling: ProjectPolicy | null;
-  }) {
+  };
+
+/** What the run's network grant is computed from: its agent, resources and project ceiling. */
+function runNetworkGrantFor({
+  scopes,
+  sessionRows,
+  wave5Repositories,
+  runAgentOf,
+  runResources,
+  policyCeiling,
+}: Pick<
+  RuntimeTargetDependencies,
+  'scopes' | 'sessionRows' | 'wave5Repositories' | 'runAgentOf' | 'runResources' | 'policyCeiling'
+>) {
+  return async (context: LaunchContext) => {
+    const scope = await scopes.forWorkspaceId(context.principal.workspaceId);
+    const sessionRow =
+      scope === null ? null : await sessionRows.forScope(scope).get(context.session.id);
+    const projectId = sessionRow?.projectId ?? null;
+    const project =
+      projectId === null
+        ? null
+        : await (await wave5Repositories(context.principal.workspaceId)).projects.get(projectId);
+    return runNetworkGrant(context, await runAgentOf(context), {
+      resourceLoader: runResources,
+      ceiling: policyCeiling,
+      projectId: project?.id ?? null,
+    });
+  };
+}
+
+function logNetworkLowered(
+  context: LaunchContext,
+  lowered: { readonly applied: string; readonly allowedDomains: readonly string[] },
+): void {
+  log.info(
+    `[runs] run ${context.run.id}: the agent lacks unrestrictedNetwork, so the open runtime ` +
+      `profile was lowered to ${lowered.applied}` +
+      (lowered.allowedDomains.length === 0 ? '' : ` (${lowered.allowedDomains.join(', ')})`),
+  );
+}
+
+/**
+ * Allocate this run's runtime through the runner manager (ADR-0118): a version that pins code tools
+ * gets the session's tool sandbox from the allocation, and the run records where it is.
+ */
+function allocateThroughRunnerManager(
+  dependencies: RuntimeTargetDependencies,
+  runnerManager: RunnerManager,
+) {
+  return async (context: LaunchContext, spec: RuntimeRunSpec) => {
+    // Refuse a misconfigured connection before any tool secret is decrypted.
+    const providerCredential = await atStep('runtime_connection', () =>
+      dependencies.resolveProviderCredential(context.principal.workspaceId, spec),
+    );
+    const toolSandbox = await requestRunToolSandbox(dependencies, context);
+    const allocation = await atStep('allocation', () =>
+      runnerManager.allocate(context, spec, toolSandbox, providerCredential),
+    );
+    const { toolSandboxOrigin } = allocation;
+    if (toolSandboxOrigin !== undefined) {
+      await recordRunToolSandboxOrRelease(dependencies, context, toolSandboxOrigin, () =>
+        spec.driver === 'external'
+          ? releaseRunToolSandboxes(runnerManager, context, providerCredential)
+          : Promise.resolve(),
+      );
+    }
+    return {
+      runnerUrl: allocation.runnerUrl,
+      workspaceRoot: '/workspace',
+      ...(toolSandboxOrigin === undefined ? {} : { toolSandboxOrigin }),
+    };
+  };
+}
+
+/** The local HTTP runtime, positively configured by RUNNER_URL; no other driver falls back to it. */
+function localRuntimeTargets({ runtime }: Pick<RuntimeTargetDependencies, 'runtime'>) {
+  if (!runtime.ok) return [];
+  return [
+    {
+      driver: 'local' as const,
+      runnerUrl: runtime.settings.runnerUrl,
+      workspaceRoot: runtime.settings.workspaceRoot,
+      fileTransfer: LOCAL_RUNTIME_CAPABILITIES.fileTransfer,
+      validate: localRuntimeRunSpecRejection,
+    },
+  ];
+}
+
+/**
+ * The runner manager allocates whatever runtime its own RUNTIME_DRIVER selects (docker container,
+ * Cloud Run service, ...) - this web process names that same driver so an agent's runtime profile
+ * can select it. RUNTIME_DRIVER is read again here rather than threaded through, because the two
+ * processes are configured independently and must still agree on the id by construction: a
+ * mismatch here means a runtime profile can never find this target (`createRuntimeRunResolver`
+ * matches on `driver` alone), not that it reaches the wrong runtime.
+ */
+function runnerManagerTargets(dependencies: RuntimeTargetDependencies) {
+  const { runnerManager, runnerManagerUrl } = dependencies;
+  if (runnerManager === null || runnerManagerUrl === null) return [];
+  const driver = runnerManagerDriverId(process.env);
+  return [
+    {
+      driver,
+      runnerUrl: runnerManagerUrl,
+      workspaceRoot: '/workspace',
+      // Every driver behind the runner manager takes the pushed archive, except a managed
+      // `local` one, whose workspace is this host's disk.
+      fileTransfer:
+        driver === 'local' ? LOCAL_RUNTIME_CAPABILITIES.fileTransfer : ('push-archive' as const),
+      allocate: allocateThroughRunnerManager(dependencies, runnerManager),
+    },
+  ];
+}
+
+export function wireRuntimeResolver(dependencies: RuntimeTargetDependencies) {
+  const { runAgentOf, runtimeProfiles, driverRegistry } = dependencies;
   const launchedModels = new Map<string, LaunchedModel>();
   const runtimeResolver = createRuntimeRunResolver({
     agentFor: async (context) => (await runAgentOf(context)).agent,
@@ -82,137 +160,14 @@ export function wireRuntimeResolver({
     // ponytail: this reads the agent and loads the run's resources a second time, because
     // `buildRunRequest` loads them after the spec is allocated; pass one load through if launch
     // latency matters.
-    networkGrantFor: async (context) => {
-      const scope = await scopes.forWorkspaceId(context.principal.workspaceId);
-      const sessionRow =
-        scope === null ? null : await sessionRows.forScope(scope).get(context.session.id);
-      const project =
-        sessionRow?.projectId === null || sessionRow?.projectId === undefined
-          ? null
-          : await (
-              await wave5Repositories(context.principal.workspaceId)
-            ).projects.get(sessionRow.projectId);
-      return runNetworkGrant(
-        context,
-        await runAgentOf(context),
-        runResources,
-        policyCeiling,
-        project?.id ?? null,
-      );
-    },
-    // The runner manager starts the proxy from this image (#822); the web reads the same variable,
-    // as it does for the runtime images, so both processes must be given it.
-    egressProxyConfigured: (process.env['AGENT_WORKSPACE_EGRESS_PROXY_IMAGE']?.trim() ?? '') !== '',
-    onNetworkLowered: (context, lowered) => {
-      log.info(
-        `[runs] run ${context.run.id}: the agent lacks unrestrictedNetwork, so the open runtime ` +
-          `profile was lowered to ${lowered.applied}` +
-          (lowered.allowedDomains.length === 0 ? '' : ` (${lowered.allowedDomains.join(', ')})`),
-      );
-    },
-    // RUNNER_URL positively configures the local HTTP runtime only. Other drivers stay
-    // unavailable until their own launch adapters register a target; they never fall back here.
-    targets: [
-      ...(runtime.ok
-        ? [
-            {
-              driver: 'local' as const,
-              runnerUrl: runtime.settings.runnerUrl,
-              workspaceRoot: runtime.settings.workspaceRoot,
-              fileTransfer: LOCAL_RUNTIME_CAPABILITIES.fileTransfer,
-              validate: localRuntimeRunSpecRejection,
-            },
-          ]
-        : []),
-      ...(runnerManager === null
-        ? []
-        : [
-            {
-              // The runner manager allocates whatever runtime its own RUNTIME_DRIVER selects
-              // (docker container, Cloud Run service, …) — this web process names that same
-              // driver so an agent's runtime profile can select it. RUNTIME_DRIVER is read again
-              // here rather than threaded through, because the two processes are configured
-              // independently and must still agree on the id by construction: a mismatch here
-              // means a runtime profile can never find this target (`createRuntimeRunResolver`
-              // matches on `driver` alone), not that it reaches the wrong runtime.
-              driver: runnerManagerDriverId(process.env),
-              runnerUrl: runnerManagerUrl!,
-              workspaceRoot: '/workspace',
-              // Every driver behind the runner manager takes the pushed archive, except a managed
-              // `local` one, whose workspace is this host's disk.
-              fileTransfer:
-                runnerManagerDriverId(process.env) === 'local'
-                  ? LOCAL_RUNTIME_CAPABILITIES.fileTransfer
-                  : ('push-archive' as const),
-              allocate: async (context: LaunchContext, spec: RuntimeRunSpec) => {
-                // ADR-0118: a version that pins code tools gets the session's tool sandbox from
-                // this allocation, and the run records where it is so the gateway can reach it.
-                const workspaceId = context.principal.workspaceId;
-                // Refuse a misconfigured connection before any tool secret is decrypted.
-                const providerCredential = await atStep('runtime_connection', () =>
-                  resolveProviderCredential(workspaceId, spec),
-                );
-                const { toolBundles } = await atStep('tools', () => runAgentOf(context));
-                const toolSandbox =
-                  toolBundles.length === 0
-                    ? undefined
-                    : await atStep('tools', () =>
-                        buildToolSandboxRequest(context.run.id, toolBundles, {
-                          bundle: async (digest) => {
-                            const store = openToolBundleStore(workspaceId);
-                            return store === null ? null : readToolBundle(store, digest);
-                          },
-                          secret: runToolSecretSource({ scopes, secretsService }, workspaceId),
-                          runToken: (runId) => {
-                            if (!gatewaySettings.ok) throw new Error(gatewaySettings.reason);
-                            return toolSandboxRunToken(
-                              gatewaySettings.settings.signingSecret,
-                              runId,
-                            );
-                          },
-                        }),
-                      );
-                const allocation = await atStep('allocation', () =>
-                  runnerManager.allocate(context, spec, toolSandbox, providerCredential),
-                );
-                if (allocation.toolSandboxOrigin !== undefined) {
-                  const toolSandboxOrigin = allocation.toolSandboxOrigin;
-                  try {
-                    await atStep('tools', async () => {
-                      const scope = await scopes.forWorkspaceId(workspaceId);
-                      const outcome =
-                        scope === null
-                          ? null
-                          : await root.runs
-                              .forScope(scope)
-                              .recordToolSandbox?.(context.run.id, toolSandboxOrigin);
-                      if (outcome?.kind !== 'recorded') {
-                        throw new Error(
-                          `the run tool sandbox was not recorded (${outcome?.kind ?? 'unavailable'})`,
-                        );
-                      }
-                    });
-                  } catch (error) {
-                    // No target is returned, so the launcher never releases this run's tool sandbox.
-                    if (spec.driver === 'external') {
-                      await runnerManager
-                        .releaseRunToolSandboxes(workspaceId, context.run.id, providerCredential)
-                        .catch(() => undefined);
-                    }
-                    throw error;
-                  }
-                }
-                return {
-                  runnerUrl: allocation.runnerUrl,
-                  workspaceRoot: '/workspace',
-                  ...(allocation.toolSandboxOrigin === undefined
-                    ? {}
-                    : { toolSandboxOrigin: allocation.toolSandboxOrigin }),
-                };
-              },
-            },
-          ]),
-    ],
+    networkGrantFor: runNetworkGrantFor(dependencies),
+    // The runner manager starts the proxy from AGENT_WORKSPACE_EGRESS_PROXY_IMAGE (#822) or, on
+    // Cloud Run, reaches the shared one at RUNTIME_EGRESS_PROXY_URL; the web reads the same
+    // variables, so both processes must be given them.
+    egressProxyConfigured: egressProxyConfiguredFromEnv(process.env),
+    onNetworkLowered: logNetworkLowered,
+    // Other drivers stay unavailable until their own launch adapters register a target.
+    targets: [...localRuntimeTargets(dependencies), ...runnerManagerTargets(dependencies)],
   });
 
   return { launchedModels, runtimeResolver };

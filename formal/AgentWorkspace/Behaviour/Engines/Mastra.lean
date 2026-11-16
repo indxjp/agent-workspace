@@ -25,8 +25,7 @@ the decisions the adapter owns, as pure functions over explicit inputs:
    platform's store stream and folded back by key.
 
 The path rules are `Authz/PathGrant.lean`'s, the frames `Events/AgentFrames.lean`'s, and the
-permission switches, refusal codes, protocols, the provisional price list, `isNeutral` and the
-pairing scan are `Behaviour/Engines/OpenAiAgents.lean`'s; none is re-modelled here.
+permission switches, refusal codes, protocols, `isNeutral` and the pairing scan are `Behaviour/Engines/OpenAiAgents.lean`'s; none is re-modelled here.
 
 ## What is a hypothesis rather than a theorem
 
@@ -288,7 +287,8 @@ structure Request where
   skills : List String
   session : SessionMode
   maxTurns : Option Nat
-  /-- `limits.maxBudgetUsd` is set. -/
+  /-- `limits.maxBudgetUsd` is set. Compile never reads it: the gateway enforces the cap
+  (ADR-0162), so a cap neither refuses a request nor reaches the compiled configuration. -/
   budgetCap : Bool
   /-- `(baseUrl, token, protocol)`, or `none` for a request carrying no gateway. -/
   gateway : Option (String × String × String)
@@ -348,10 +348,6 @@ def defaultModel : OpenAiAgents.Protocol → String
   | _ => "gpt-5"
 
 def modelOf (r : Request) (p : OpenAiAgents.Protocol) : String := r.model.getD (defaultModel p)
-
-/-- Can a cap on this model be priced? The port's provisional table (`provisionalPriceFor`). -/
-@[aw_spec (ts := "packages/engine/src/prices.ts#provisionalPriceFor")]
-def priced (model : String) : Bool := OpenAiAgents.pricedModels.contains model
 
 /-- `MASTRA_MEMORY_LAST_MESSAGES`. -/
 def lastMessages : Nat := 40
@@ -421,7 +417,6 @@ structure Compiled where
   connection : Connection
   model : String
   maxSteps : Option Nat
-  budgetCap : Bool
   grants : List Grant
   skills : List String
   connectors : List String
@@ -467,7 +462,7 @@ def compileWith (r : Request) (grants : List Grant) (baseUrl token : String)
     skillTools := !skills.isEmpty,
     networkEgress := r.permissions.unrestrictedNetwork,
     connection := connectionFor protocol baseUrl token, model := modelOf r protocol,
-    maxSteps := r.maxTurns, budgetCap := r.budgetCap, grants, skills, connectors,
+    maxSteps := r.maxTurns, grants, skills, connectors,
     memory := memoryFor threadId r.projectKey, observability := observabilityOff }
 
 /-- `compileMastraRun`, check for check and in the same order. -/
@@ -485,8 +480,6 @@ def compile (r : Request) : Outcome :=
       | some protocol =>
         if !r.environmentClean then .refused (.credentialRefused "environment")
         else if !databaseEnvClean r.envNames then .refused (.credentialRefused "database")
-        else if r.budgetCap && !priced (modelOf r protocol) then
-          .refused (.capabilityUnsupported "maxBudget")
         else match compileConnectors r.connectors with
         | .error e => .refused e
         | .ok names =>
@@ -524,16 +517,14 @@ theorem compile_ok_shape {r : Request} {c : Compiled} (h : compile r = .ok c) :
             · rename_i hd
               split at h
               · cases h
-              · split at h
+              · rename_i names hn
+                split at h
                 · cases h
-                · rename_i names hn
-                  split at h
-                  · cases h
-                  · rename_i tid ht
-                    cases h
-                    refine ⟨grants, b, t, w, p, names, tid, hg, hgw, hp, ?_, ?_, hn, ht, rfl⟩
-                    · simpa using he
-                    · simpa using hd
+                · rename_i tid ht
+                  cases h
+                  refine ⟨grants, b, t, w, p, names, tid, hg, hgw, hp, ?_, ?_, hn, ht, rfl⟩
+                  · simpa using he
+                  · simpa using hd
 
 /-! ## The filesystem wrapper -/
 
@@ -753,14 +744,13 @@ def stepRun (limit : Option Nat) : Nat → List Bool → Nat × StopReason
 theorem stepRun_nil (limit : Option Nat) (n : Nat) : stepRun limit n [] = (n, .endTurn) := by
   rw [stepRun.eq_def]
 
-/-- `mastraStopReason`: the adapter's verdict on a drained run. The budget cap wins, then the
-caller's interrupt; otherwise a run whose last allowed step still asked for tools
+/-- `mastraStopReason`: the adapter's verdict on a drained run. The caller's interrupt wins;
+otherwise a run whose last allowed step still asked for tools
 (`stepResult.reason` is `tool-calls`) was cut short, and any other ends `end_turn`. -/
 @[aw_spec (ts := "packages/engine-mastra/src/boundary.ts#mastraStopReason")]
 def stopReason (steps : Nat) (lastStepReason : Option String) (maxSteps : Option Nat)
-    (overBudget interrupted : Bool) : StopReason :=
-  if overBudget then .maxBudget
-  else if interrupted then .cancelled
+    (interrupted : Bool) : StopReason :=
+  if interrupted then .cancelled
   else match maxSteps with
     | some m => if m ≤ steps && lastStepReason == some "tool-calls" then .maxTurns else .endTurn
     | none => .endTurn

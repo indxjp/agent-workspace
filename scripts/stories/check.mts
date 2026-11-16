@@ -3,9 +3,11 @@
 // `// @story US-STO-xx` code tags from tracked files and prints the design §07 table.
 // A gap prints and does not fail; a malformed tag exits 1. With `--base <ref>` (default
 // `origin/main`, report-only when it is missing) a cell covered at the merge base and uncovered
-// now also exits 1: no baseline file, the base tree is the baseline. Node stdlib and git only.
+// now also exits 1: no baseline file, the base tree is the baseline. With `--require-complete`
+// any gap of a storage story also exits 1 (#1703); a Builder story's gap stays accepted until the
+// issue in PROVING_ISSUES lands its tests. Node stdlib and git only.
 //
-//   node scripts/stories/check.mts [--report | --base <ref>] [--json]
+//   node scripts/stories/check.mts [--report | --base <ref>] [--require-complete] [--json]
 import { execFileSync } from 'node:child_process';
 import console from 'node:console';
 import { existsSync, readFileSync } from 'node:fs';
@@ -371,6 +373,11 @@ export function readTree(ref: string): Map<string, string> {
   return files;
 }
 
+/** The gaps `--require-complete` refuses: every uncovered cell of a story no issue is proving. */
+export function incompleteCells(report: Report): Cell[] {
+  return report.cells.filter((c) => !c.covered && PROVING_ISSUES[c.story] === undefined);
+}
+
 /** Each lost cell with the tag and the base files that covered it. */
 export function renderLost(lost: readonly Cell[], base: string): string {
   return [
@@ -381,7 +388,8 @@ export function renderLost(lost: readonly Cell[], base: string): string {
   ].join('\n');
 }
 
-const USAGE = 'usage: node scripts/stories/check.mts [--report | --base <ref>] [--json]';
+const USAGE =
+  'usage: node scripts/stories/check.mts [--report | --base <ref>] [--require-complete] [--json]';
 
 function main(): number {
   let values;
@@ -391,6 +399,7 @@ function main(): number {
       options: {
         report: { type: 'boolean' },
         base: { type: 'string' },
+        'require-complete': { type: 'boolean' },
         json: { type: 'boolean' },
       },
       strict: true,
@@ -418,6 +427,15 @@ function main(): number {
   const report = scan(readHead());
   console.log(values.json ? JSON.stringify(report) : render(report));
   let failed = report.errors.length > 0;
+  if (values['require-complete']) {
+    const incomplete = incompleteCells(report);
+    if (incomplete.length > 0) {
+      const text = incomplete.map((c) => `incomplete: ${c.story} ${c.entry}:${c.type}`).join('\n');
+      if (values.json) console.error(text);
+      else console.log(text);
+      failed = true;
+    }
+  }
   if (base !== undefined) {
     const mergeBase = git(['merge-base', base, 'HEAD']).toString('utf8').trim();
     const lost = lostCells(scan(readTree(mergeBase)), report);

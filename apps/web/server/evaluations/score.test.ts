@@ -1,21 +1,83 @@
 import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { describe, expect, it } from 'vitest';
 
-import { ORDER_STATUS_FRAMES } from './fixtures';
-import { checkCase, finalAnswer, pausedCall, score, toolCalls } from './score';
+import { assistantSays, ORDER_STATUS_FRAMES, toolCall, toolResult } from './fixtures';
+import { checkCase, finalAnswer, pausedCall, score, toolCalls, turnAnswer } from './score';
 
-const answer = finalAnswer(ORDER_STATUS_FRAMES);
+const answer = turnAnswer(ORDER_STATUS_FRAMES);
 const tools = toolCalls(ORDER_STATUS_FRAMES);
 
 describe('finalAnswer and toolCalls (issue #618)', () => {
-  it('reads the last assistant text and every tool call', () => {
-    expect(answer).toBe('Order 1042 has shipped.');
+  it('reads the assistant text of the turn and every successful tool call', () => {
+    expect(answer).toBe('Let me check.\n\nOrder 1042 has shipped.');
+    expect(finalAnswer(ORDER_STATUS_FRAMES)).toBe('Order 1042 has shipped.');
     expect(tools).toEqual([{ name: 'orders_getOrder', input: { orderNumber: '1042' } }]);
   });
 
+  it('reads the assistant text of the whole turn, a question asked before the last message too', () => {
+    const frames = [
+      assistantSays('Which product should it be for?', 'msg_a'),
+      toolCall('draft_check'),
+      toolResult('call_draft_check'),
+      assistantSays('Checked the draft.', 'msg_b'),
+    ];
+    expect(turnAnswer(frames)).toBe('Which product should it be for?\n\nChecked the draft.');
+    expect(checkCase({ contains: ['Which product'] }, turnAnswer(frames), [], null)).toEqual([]);
+  });
+
+  it('keeps one copy of a message the engine re-sent while it grew, and skips user turns', () => {
+    const frames = [
+      assistantSays('First ', 'msg_a'),
+      assistantSays('First part.', 'msg_a'),
+      assistantSays('Second.', 'msg_b'),
+    ];
+    expect(turnAnswer([ORDER_STATUS_FRAMES[0] ?? assistantSays(''), ...frames])).toBe(
+      'First part.\n\nSecond.',
+    );
+  });
+
+  it('keeps every message that has no id', () => {
+    expect(turnAnswer([assistantSays('One.', null), assistantSays('Two.', null)])).toBe(
+      'One.\n\nTwo.',
+    );
+  });
+
   it('reads an empty answer from a run that said nothing', () => {
+    expect(turnAnswer([])).toBe('');
     expect(finalAnswer([])).toBe('');
     expect(toolCalls([])).toEqual([]);
+  });
+});
+
+describe('toolCalls counts successful calls only (EVL-01)', () => {
+  it('drops a call that failed, one that answered with an error, and one with no result', () => {
+    const frames = [
+      toolCall('ok_tool', 'c1'),
+      toolResult('c1'),
+      toolCall('failed_tool', 'c2'),
+      toolResult('c2', 'failed'),
+      toolCall('refused_tool', 'c3'),
+      toolResult('c3', 'error'),
+      toolCall('unanswered_tool', 'c4'),
+    ];
+    expect(toolCalls(frames).map((call) => call.name)).toEqual(['ok_tool']);
+    expect(checkCase({ tool: 'refused_tool' }, '', toolCalls(frames), null)).toEqual([
+      'tool: refused_tool was not called',
+    ]);
+  });
+
+  it('joins the result to its own call by id, whatever order the frames arrive in', () => {
+    const frames = [
+      toolCall('same_tool', 'c1'),
+      toolCall('same_tool', 'c2'),
+      toolResult('c2', 'error'),
+      toolResult('c1'),
+    ];
+    expect(toolCalls(frames)).toEqual([{ name: 'same_tool', input: { orderNumber: '1042' } }]);
+  });
+
+  it('reads a result for a call never announced as nothing', () => {
+    expect(toolCalls([toolResult('ghost')])).toEqual([]);
   });
 });
 

@@ -1,6 +1,78 @@
+import { readFileSync } from 'node:fs';
+
+/**
+ * Refactoring plan part 04, step 2: the server's bounded contexts depend in one direction. The map
+ * is `apps/web/server/contexts.json` (listed upstream first; `tests/server-contexts.test.ts` keeps
+ * it complete). A context may import the shared kernel and the contexts before it; the shared kernel
+ * imports no context; `composition/` may import every context. Imports against that direction that
+ * existed when the rules landed are in .dependency-cruiser-known-violations.json and can only shrink.
+ */
+const contextMap = JSON.parse(
+  readFileSync(new URL('./apps/web/server/contexts.json', import.meta.url), 'utf8'),
+);
+const TESTS = '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$';
+const folders = (/** @type {readonly string[]} */ list) =>
+  `^apps/web/server/(?:${list.join('|')})/`;
+const slug = (/** @type {string} */ name) => name.replaceAll(' ', '-');
+/** @type {import('dependency-cruiser').IForbiddenRuleType[]} */
+const contextRules = [
+  {
+    name: 'shared-kernel-imports-no-context',
+    severity: 'error',
+    comment:
+      'Refactoring plan part 04: the shared kernel (http, telemetry, …) is used by every context and imports none of them. Known violations can only shrink.',
+    from: { path: folders(contextMap.sharedKernel), pathNot: TESTS },
+    to: { path: folders(contextMap.contexts.flatMap((c) => c.folders)) },
+  },
+  {
+    name: 'no-context-imports-the-composition-root',
+    severity: 'error',
+    comment:
+      'Refactoring plan part 04: `composition/` wires every context, so no context and no shared-kernel module imports it. Known violations can only shrink.',
+    from: {
+      path: folders([...contextMap.sharedKernel, ...contextMap.contexts.flatMap((c) => c.folders)]),
+      pathNot: TESTS,
+    },
+    to: { path: folders([contextMap.compositionRoot]) },
+  },
+  // Part 04, step 7: a context with an `entry` is imported from the other contexts through that one
+  // file. Its own modules, tests, `composition/` and the shared kernel (which imports no context at
+  // all, see above) are not covered. Deep imports left when the rule landed are baseline entries.
+  ...contextMap.contexts.flatMap((context) => {
+    if (context.entry === undefined) return [];
+    const others = contextMap.contexts.filter((c) => c !== context).flatMap((c) => c.folders);
+    return [
+      {
+        name: `context-${slug(context.name)}-entered-through-its-entry`,
+        severity: 'error',
+        comment: `Refactoring plan part 04, step 7: another context imports ${context.name} through apps/web/server/${context.entry}, not from the folders underneath. Known violations can only shrink.`,
+        from: { path: folders(others), pathNot: TESTS },
+        to: {
+          path: folders(context.folders),
+          pathNot: `^apps/web/server/${context.entry.replaceAll('.', '\\.')}$`,
+        },
+      },
+    ];
+  }),
+  ...contextMap.contexts.flatMap((context, index) => {
+    const downstream = contextMap.contexts.slice(index + 1).flatMap((c) => c.folders);
+    if (downstream.length === 0) return [];
+    return [
+      {
+        name: `context-${slug(context.name)}-imports-only-upstream`,
+        severity: 'error',
+        comment: `Refactoring plan part 04: the ${context.name} context imports the shared kernel and the contexts listed before it in apps/web/server/contexts.json, never one listed after it. Known violations can only shrink.`,
+        from: { path: folders(context.folders), pathNot: TESTS },
+        to: { path: folders(downstream) },
+      },
+    ];
+  }),
+];
+
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
   forbidden: [
+    ...contextRules,
     {
       name: 'no-circular-dependencies',
       severity: 'error',
@@ -50,7 +122,7 @@ export default {
       comment: 'Browser code depends on HTTP contracts, never server implementation modules.',
       from: {
         path: '^apps/web/components/',
-        pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+        pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
       },
       to: { path: '^apps/web/server/' },
     },
@@ -72,7 +144,7 @@ export default {
       name: 'libraries-do-not-import-applications',
       severity: 'error',
       from: {
-        path: '^packages/(core|runtime|gateway|contracts|sdk|react|aw|platforms|skills-office|engine|engine-[^/]+|cli|create|tool-host|egress-proxy)/',
+        path: '^packages/(core|runtime|gateway|contracts|sdk|react|app|aw|platforms|skills-office|engine|engine-[^/]+|cli|create|tool-host|egress-proxy)/',
       },
       to: { path: '^apps/' },
     },
@@ -142,7 +214,7 @@ export default {
         'ADR-0133 D6: no file system, network or process access outside the conformance kit.',
       from: {
         path: '^packages/platforms/src/',
-        pathNot: '^packages/platforms/src/testing/|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+        pathNot: '^packages/platforms/src/testing/|\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
       },
       to: { dependencyTypes: ['core'] },
     },
@@ -153,7 +225,8 @@ export default {
         'W3-8: an engine package root exports its port (packages/engine) or its one factory (an adapter); `@agent-workspace/engine(-<id>)?/testing` carries the conformance kit and the adapter internals, and only tests may reach it.',
       from: {
         path: '^(apps|packages)/',
-        pathNot: '^packages/engine[a-z-]*/src/testing[./]|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+        pathNot:
+          '^packages/engine[a-z-]*/src/testing[./]|\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
       },
       to: { path: '^packages/engine[a-z-]*/src/testing(?:\\.ts$|/)' },
     },
@@ -207,7 +280,7 @@ export default {
       severity: 'error',
       comment:
         'ENG-04: which adapters a runtime image carries is the runner’s business. The control plane knows engines only through `@indx-workspace/contracts/engines` and its own registry, so adding an engine never touches `apps/web`. Test files are excluded, as they are from the browser-boundary rule above: two compose assertions are about what a composed request compiles to on the engine it named, and there is no way to assert that without the engine.',
-      from: { path: '^apps/web/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      from: { path: '^apps/web/', pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
       to: { path: '^packages/engine-[^/]+/' },
     },
     {
@@ -217,7 +290,7 @@ export default {
         'ENG-04: `apps/runner/src/engines.ts` holds the static id → adapter table and is the only file in the runner that names an adapter. Everything else talks to the port, which is what makes adding an engine a new package and a new row rather than an edit to a run path.',
       from: {
         path: '^apps/runner/',
-        pathNot: '^apps/runner/src/engines\\.ts$|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+        pathNot: '^apps/runner/src/engines\\.ts$|\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
       },
       to: { path: '^packages/engine-[^/]+/' },
     },
@@ -256,6 +329,22 @@ export default {
         pathNot:
           '^packages/(aw|sdk|contracts|platforms)/|^packages/cli/src/deploy/project\\.ts$|^packages/cli/src/publish/index\\.ts$',
       },
+    },
+    {
+      name: 'app-kit-depends-only-on-published-packages',
+      severity: 'error',
+      comment:
+        'ADR-0082 (amendment for #1500): `@indx-workspace/app` is the published app kit generated portal apps import, so of the workspace it reaches only the published SDK, contracts and React packages — never a server-side package, a private member or an application. Its npm allowlist is `packages/app/src/dependencies.test.ts`.',
+      from: { path: '^packages/app/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/(app|sdk|contracts|react)/' },
+    },
+    {
+      name: 'platform-never-imports-the-app-kit',
+      severity: 'error',
+      comment:
+        'ADR-0082 (amendment for #1500): the app kit sits above the platform, so no application or other package imports it; `aw` spawns its `aw-app` bin from the project and never imports it.',
+      from: { path: '^(apps|packages)/', pathNot: '^packages/app/' },
+      to: { path: '^packages/app/' },
     },
     {
       name: 'aw-reaches-cli-only-through-the-cli-bridge',
@@ -300,7 +389,7 @@ export default {
         'F-15: a route handler is a delivery adapter; sharing logic between two routes belongs in a server domain, not in one route importing the other. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
       from: {
         path: '^apps/web/app/.*/route\.ts$',
-        pathNot: '\.(?:test|spec)\.[cm]?[jt]sx?$',
+        pathNot: '\.(?:test|spec|test-support)\.[cm]?[jt]sx?$',
       },
       to: { path: '^apps/web/app/.*/route\.ts$' },
     },
@@ -309,7 +398,7 @@ export default {
       severity: 'error',
       comment:
         'F-15: Next.js `app/**` reaches persistence and infrastructure through server domains and composition, never `@agent-workspace/core` directly. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
-      from: { path: '^apps/web/app/', pathNot: '\.(?:test|spec)\.[cm]?[jt]sx?$' },
+      from: { path: '^apps/web/app/', pathNot: '\.(?:test|spec|test-support)\.[cm]?[jt]sx?$' },
       to: { path: '^packages/core/' },
     },
     {
@@ -328,11 +417,11 @@ export default {
       name: 'only-the-gcs-boundary-imports-the-gcs-sdk',
       severity: 'error',
       comment:
-        'The storage design, §07 rule 1: only `packages/core/src/storage/gcs-store.ts` imports `@google-cloud/storage`. `packages/cli/src/validate.ts` is the one named exception (Q-9, ADR-0082: the published CLI probes a bucket and may not import `packages/core`). Test, live and acceptance files may import the SDK.',
+        'The storage design, §07 rule 1: only `packages/core/src/storage/gcs-store.ts` and its native client adapter `gcs-native-client.ts` import `@google-cloud/storage`. `packages/cli/src/validate.ts` is the one named exception (Q-9, ADR-0082: the published CLI probes a bucket and may not import `packages/core`). Test, live and acceptance files may import the SDK.',
       from: {
         path: '^(apps|packages)/',
         pathNot:
-          '^packages/core/src/storage/gcs-store\\.ts$|^packages/cli/src/validate\\.ts$|\\.(?:test|spec|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
+          '^packages/core/src/storage/gcs-(?:store|native-client)\\.ts$|^packages/cli/src/validate\\.ts$|\\.(?:test|spec|test-support|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
       },
       to: { path: '(^|/)@google-cloud/storage(/|$)' },
     },
@@ -340,11 +429,11 @@ export default {
       name: 'only-the-azure-boundary-imports-the-azure-sdk',
       severity: 'error',
       comment:
-        'The storage design, §07 rule 1: only `packages/core/src/storage/azure-blob-store.ts` imports `@azure/storage-blob`. `@azure/identity` is a credential library also used by the Key Vault provider and the runtime, so it is left out on purpose. Test, live and acceptance files may import the SDK.',
+        'The storage design, §07 rule 1: only `packages/core/src/storage/azure-blob-store.ts` and its SDK adapter `azure-blob-sdk-container.ts` import `@azure/storage-blob`. `@azure/identity` is a credential library also used by the Key Vault provider and the runtime, so it is left out on purpose. Test, live and acceptance files may import the SDK.',
       from: {
         path: '^(apps|packages)/',
         pathNot:
-          '^packages/core/src/storage/azure-blob-store\\.ts$|\\.(?:test|spec|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
+          '^packages/core/src/storage/azure-blob-(?:store|sdk-container)\\.ts$|\\.(?:test|spec|test-support|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
       },
       to: { path: '(^|/)@azure/storage-blob(/|$)' },
     },
@@ -353,7 +442,7 @@ export default {
       severity: 'error',
       comment:
         'The storage design, §07 rule 2: pages and API routes never touch storage directly; they call a server domain service. `app/**` may not value-import a domain `store.ts` or `composition/storage.ts`; a type-only import is allowed.',
-      from: { path: '^apps/web/app/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      from: { path: '^apps/web/app/', pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
       to: {
         path: '^apps/web/server/(?:[^/]+/store|composition/storage)\\.ts$',
         dependencyTypesNot: ['type-only', 'type-import'],
@@ -366,7 +455,8 @@ export default {
         'F-15: a web server domain names no `packages/core/src/db` record or repository; only its `store.ts` adapter (and the test-only `catalog-store.memory.ts`) may. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
       from: {
         path: '^apps/web/server/[^/]+/',
-        pathNot: '/store\.ts$|/catalog-store\.memory\.ts$|\.(?:test|spec)\.[cm]?[jt]sx?$',
+        pathNot:
+          '/store\.ts$|/catalog-store\.memory\.ts$|\.(?:test|spec|test-support)\.[cm]?[jt]sx?$',
       },
       to: { path: '^packages/core/src/db/' },
     },
@@ -375,20 +465,22 @@ export default {
       severity: 'error',
       comment:
         'The storage design, §07 rule 4: the in-memory catalog store backs tests only; production wires `createResourceCatalogStoreProvider`.',
-      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
       to: { path: '^apps/web/server/resources/catalog-store\\.memory\\.ts$' },
     },
     {
-      name: 'builder-core-is-pure',
+      name: 'domain-core-is-pure',
       severity: 'error',
       comment:
-        'Builder design §04 "The core and its ports" (ADR-0108 B-D5, #1844): `builder/core/` is a pure decision core. It may import only files inside `core/`, the wire contracts (`packages/contracts/src/`) and zod; every Node built-in, other server module, workspace package and npm package is refused.',
+        'AGENTS.md "Hexagonal rules" 2, first held by the Builder (design §04, ADR-0108 B-D5, #1844): a web server domain\'s `core/` folder is a pure decision core. It may import only files inside its own `core/`, the wire contracts (`packages/contracts/src/`) and zod; every Node built-in, other server module (another domain\'s core included), workspace package and npm package is refused. The globals an import rule cannot see are banned by ESLint (eslint.config.mjs, "A domain core does no I/O"). `shares/core/` was left out until refactoring plan part 05 made it pure; no core is left out now.',
+      // The capture group and its `$1` back-reference keep each core to its own folder without
+      // naming the domains, as `engine-adapters-depend-only-on-the-port-and-contracts` does.
       from: {
-        path: '^apps/web/server/builder/core/',
-        pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+        path: '^apps/web/server/([^/]+)/core/',
+        pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
       },
       to: {
-        pathNot: '^apps/web/server/builder/core/|^packages/contracts/src/|(?:^|/)node_modules/zod/',
+        pathNot: '^apps/web/server/$1/core/|^packages/contracts/src/|(?:^|/)node_modules/zod/',
       },
     },
     {
@@ -398,7 +490,7 @@ export default {
         'Builder design §04 (#1844): the in-memory Builder adapters back tests only; production wires the real ports.',
       from: {
         pathNot:
-          '\\.(?:test|spec)\\.[cm]?[jt]sx?$|^apps/web/server/builder/testing/|^apps/web/server/builder/adapters/.+/memory(?:\\.tsx?|/)',
+          '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$|^apps/web/server/builder/testing/|^apps/web/server/builder/adapters/.+/memory(?:\\.tsx?|/)',
       },
       to: { path: '^apps/web/server/builder/adapters/.+/memory(?:\\.tsx?|/)' },
     },
@@ -407,7 +499,7 @@ export default {
       severity: 'error',
       comment:
         'The storage design, §07 "Load test": `@agent-workspace/core/storage/backends` loads the Azure and Google Cloud libraries and backs tests only; production opens a store with `openObjectStore`.',
-      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
       to: { path: '^packages/core/src/storage/backends\\.ts$' },
     },
     {
@@ -417,15 +509,30 @@ export default {
         'The storage design, §07 rule 1 (#1746): a raw backend factory (`createS3ObjectStore`, `createGcsObjectStore`, `createAzureBlobObjectStore`, `createNativeGcsClient`) signs links with no expiry bound; the storage module wraps each in the scoped store that bounds it. So only `packages/core/src/storage/` imports a backend file. Tests may. The in-memory and local-filesystem stores are exported from the barrel on purpose, for test fakes, and are not backend files here.',
       from: {
         path: '^(apps|packages)/',
-        pathNot: '^packages/core/src/storage/|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+        pathNot: '^packages/core/src/storage/|\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
       },
       to: { path: '^packages/core/src/storage/(?:s3-store|gcs-store|azure-blob-store)\\.ts$' },
     },
     {
+      name: 'only-the-catalog-service-reaches-object-storage',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 3: only the catalog service may save files. A web server domain reaches object storage through `apps/web/server/storage/` (the catalog service and the names it re-exports), never `packages/core/src/storage` itself; a type-only import of `ObjectStore` counts, because that is how a store is passed around. The composition root wires the stores, and tests may import them. `tool-bundles/` is a named exception: tool bundles are not workspace files (design §07 rule 3 is about files). The pure helpers (content type, key safety, object name) do no I/O and stay importable. Zero known violations, ceiling 0.',
+      from: {
+        path: '^apps/web/server/',
+        pathNot:
+          '^apps/web/server/(?:storage|composition|tool-bundles)/|\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
+      },
+      to: {
+        path: '^packages/core/src/storage/',
+        pathNot: '^packages/core/src/storage/(?:content-type|key-safety|object-name)\\.ts$',
+      },
+    },
+    {
       name: 'production-does-not-import-tests',
       severity: 'error',
-      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
-      to: { path: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
+      to: { path: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
     },
   ],
   options: {

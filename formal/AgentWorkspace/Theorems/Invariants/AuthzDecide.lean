@@ -27,7 +27,7 @@ private theorem classified_scope_narrows (role : Role) (q : Query) (res : Resour
 `token_out_of_scope` deny — never an `allow` the minter would not get, and never a different
 refusal. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem scope_only_narrows (q : Query) (s : Scope) :
     decideOrdinary { q with scope := some s } = decideOrdinary { q with scope := none } ∨
       ∃ d, decideOrdinary { q with scope := some s } = .deny none (some d) := by
@@ -69,7 +69,7 @@ example : decideOrdinary ⟨"owner", "GET", "/api/runs/r", .own, none⟩ = .allo
 handler that has not read the row gains nothing by saying so. -/
 @[aw_spec (tier := T2)
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
+  (ts := "apps/web/server/rbac/core/decide.ts#applyGrant")]
 theorem unknown_owner_is_decided_as_other (q : Query) :
     decideOrdinary { q with ownership := .unknown } = decideOrdinary { q with ownership := .other } := by
   have hg : ∀ g, applyGrant g .unknown = applyGrant g .other := by decide +kernel

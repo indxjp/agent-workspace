@@ -2,7 +2,11 @@ import { context, propagation, trace, SpanStatusCode } from '@opentelemetry/api'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { BatchSpanProcessor, type SpanProcessor } from '@opentelemetry/sdk-trace';
-import { parseTraceparent, type RunTelemetryAttributes } from '@agent-workspace/core/telemetry';
+import {
+  parseTraceparent,
+  readTracingSettings,
+  type RunTelemetryAttributes,
+} from '@agent-workspace/core/telemetry';
 import { defineSlot } from '../runtime-slot';
 import { redactingExporter, redactSpanStart } from './redact-span';
 
@@ -30,8 +34,8 @@ let sdk: NodeSDK | null = null;
 export function configureTelemetryRuntime(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<boolean> {
-  const endpoint = env['OTEL_EXPORTER_OTLP_ENDPOINT']?.trim();
-  if (!endpoint) return Promise.resolve(false);
+  const { endpoint } = readTracingSettings(env);
+  if (endpoint === undefined) return Promise.resolve(false);
   if (sdk !== null) return Promise.resolve(true);
   const exporter = new OTLPTraceExporter({ url: `${endpoint.replace(/\/$/u, '')}/v1/traces` });
   // ADR-0144 D2: Next.js spans carry the request URL; the redactor runs before the exporter.

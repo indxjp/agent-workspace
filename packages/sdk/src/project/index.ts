@@ -20,7 +20,30 @@
  *   {@link renderProjectShell} adds `package.json` (its dependencies are {@link projectDependencies}:
  *   the three packages and the chosen engine's), `pnpm-workspace.yaml` and `.gitignore`;
  *   {@link projectNameFor} derives the project's name from a directory name. `aw init` and
- *   `create` both render through these, so their output is the same.
+ *   `create` both render through these, so their output is the same. The starter files are a
+ *   template directory, rendered by {@link renderTemplateDirectory}: real files whose `{{key}}`
+ *   and `__key__` placeholders are replaced from a set of values.
+ * - **Generating.** `aw generate app|resource|agent|page|recipe|channel` renders the `templates/<kind>/`
+ *   directories through {@link renderGeneratorTemplate}, with values from {@link renderAppSpec},
+ *   {@link renderResourceSpec} (its fields parsed by {@link parseFieldSpecs} from the
+ *   `name:type` grammar; the same values render the resource's pages), {@link renderPageSpec},
+ *   {@link renderAgentSpec}, {@link renderRecipeSpec} (its `--on` trigger) and
+ *   {@link renderChannelSpec} (its key, from {@link refFieldsOf}; its route edits are
+ *   {@link channelRouteEdits}). What it wrote is recorded in
+ *   `aw-generated.json`, read by {@link parseGeneratedManifest} and written by
+ *   {@link serializeGeneratedManifest}, so `aw destroy` removes exactly that, undoing each
+ *   recorded edit with {@link revertGeneratedEdit}.
+ *   `create --template <id>` renders {@link renderAppTemplate}: the `app` template, the
+ *   template's pages over it and their manifest entry, with the {@link appKitPackages} pins
+ *   added to `package.json` by {@link withAppPackages}; the project's own files are recorded as
+ *   the entry `project:<name>`.
+ * - **Blueprints.** An app blueprint (ADR-0166) is a versioned npm release of app parts.
+ *   {@link parseBlueprintManifest} reads its `blueprint.json`; {@link planBlueprintInstall} plans
+ *   `aw blueprint add`, and {@link planBlueprintUpdate} proposes each new version per file
+ *   (`add`, `update`, `remove`, `conflict`), never overwriting an edited file; a destructive
+ *   migration is refused by {@link destructiveMigrations}. {@link readBlueprintArchive} reads the
+ *   package's gunzipped tarball, refusing links, unsafe paths and unlisted files. Its entry, `blueprint:<name>`, records
+ *   the package's `source` in `aw-generated.json`.
  * - **Planning.** {@link planProjectResources} says what `aw dev` creates, updates, refuses and
  *   reports from the project file and its agents' tools (C10, C11, C15). It is pure, never
  *   deletes, and never holds a secret value: an action names its secret, and the caller sends it.
@@ -62,8 +85,115 @@ export {
   renderProjectFiles,
   renderProjectShell,
   setupSecretNames,
-  type ProjectFile,
 } from './render.js';
+export { renderTemplateDirectory, type ProjectFile } from './template.js';
+export {
+  appConfigLines,
+  appConfigRecipeLines,
+  channelRouteEdits,
+  GENERATOR_FIELD_TYPES,
+  GENERATOR_PAGE_KINDS,
+  parseFieldSpec,
+  parseFieldSpecs,
+  renderAgentSpec,
+  renderAppSpec,
+  renderChannelSpec,
+  renderFieldCode,
+  renderGeneratorTemplate,
+  renderPageSpec,
+  renderRecipeSpec,
+  renderResourceSpec,
+  refFieldsOf,
+  type ChannelRouteEdit,
+  type ChannelSpecOptions,
+  type FieldSpec,
+  type GeneratorFieldType,
+  type GeneratorPageKind,
+  type GeneratorTemplate,
+  type RecipeSpecOptions,
+  type RecipeTriggerSpec,
+  type RefFieldSpec,
+  type TemplateValues,
+} from './generate.js';
+export {
+  APP_PRESETS,
+  type AppNavItem,
+  type AppPreset,
+  type AppPresetPart,
+  type AppPresetResource,
+} from './app-presets.js';
+export {
+  APP_TEMPLATES,
+  appKitPackages,
+  appScripts,
+  renderAppTemplate,
+  scriptEdit,
+  withAppPackages,
+  type AppScript,
+  type AppTemplate,
+  type PinnedPackage,
+  type RenderedAppTemplate,
+} from './templates.js';
+export {
+  addGeneratedEntry,
+  EMPTY_GENERATED_MANIFEST,
+  GENERATED_ENTRY_KINDS,
+  GENERATED_MANIFEST_FILE,
+  generatedEntryKey,
+  parseGeneratedManifest,
+  removeGeneratedEntry,
+  serializeGeneratedManifest,
+  type GeneratedEdit,
+  type GeneratedEntry,
+  type GeneratedEntryKind,
+  type BlueprintSource,
+  type GeneratedManifest,
+} from './generated-manifest.js';
+export {
+  appKitSatisfies,
+  BLUEPRINT_MANIFEST_FILE,
+  BLUEPRINT_PART_KINDS,
+  BlueprintManifestSchema,
+  blueprintSidecarPath,
+  destructiveMigrations,
+  parseBlueprintManifest,
+  planBlueprintInstall,
+  planBlueprintUpdate,
+  type BlueprintAppState,
+  type BlueprintFile,
+  type BlueprintFileAction,
+  type BlueprintFileChange,
+  type BlueprintInstallPlan,
+  type BlueprintLocalState,
+  type BlueprintManifest,
+  type BlueprintMigrationWrite,
+  type BlueprintPartKind,
+  type BlueprintRelease,
+  type BlueprintSlotStatus,
+  type BlueprintUpdatePlan,
+  type BlueprintWiring,
+  type BlueprintWrite,
+  type DestructiveMigration,
+} from './blueprint.js';
+export {
+  BLUEPRINT_ARCHIVE_MAX_BYTES,
+  BLUEPRINT_PACKAGE_KEYWORD,
+  readBlueprintArchive,
+  type BlueprintArchive,
+} from './blueprint-archive.js';
+export {
+  MIGRATION_JOURNAL_FILE,
+  PACKAGE_MANIFEST_FILE,
+  readMigrationJournal,
+  readPackageManifest,
+  revertGeneratedEdit,
+  serializeMigrationJournal,
+  serializePackageManifest,
+  type GeneratedEditRevert,
+  type MigrationJournal,
+  type MigrationJournalEntry,
+  type PackageManifest,
+} from './generated-edits.js';
 export {
   planProjectResources,
   planProjectSkills,

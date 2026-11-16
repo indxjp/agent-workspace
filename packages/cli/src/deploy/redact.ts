@@ -25,14 +25,7 @@ const PUBLIC_ENV_KEYS: ReadonlySet<string> = new Set([
   'DOCKER_GID',
   'POSTGRES_USER',
   'POSTGRES_DB',
-  'OBJECT_STORAGE_BACKEND',
-  'OBJECT_STORAGE_ENDPOINT',
-  'OBJECT_STORAGE_BUCKET',
-  'OBJECT_STORAGE_FORCE_PATH_STYLE',
   'AWS_REGION',
-  'AW_FILE_STORAGE_ROOT',
-  'AW_SKILL_STORAGE_ROOT',
-  'AW_SESSION_TRANSCRIPT_ROOT',
   'RUNTIME_DRIVER',
   'RUNNER_URL',
   'RUNNER_MANAGER_URL',
@@ -57,6 +50,13 @@ const MINIMUM_MASKED_LENGTH = 4;
 
 /** `scheme://user:password@` — the user information is masked, the scheme and host are kept. */
 const URL_USERINFO = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:([^\s/@]+)@/giu;
+
+/**
+ * The id in a Terraform `random_id` progress line. A `random_id`'s id is its value in base64url, and
+ * the module generates the master key, the session secret, the gateway token secret and each app's
+ * identity secret that way, so `[id=...]` on those lines is a credential.
+ */
+const RANDOM_ID_PROGRESS = /(random_id\.[^\s:]+: [^\n]*?\[id=)[^\]\n]+(\])/gu;
 
 /** The password of every `scheme://user:password@` URL in `text`. */
 function urlPasswords(text: string): readonly string[] {
@@ -91,5 +91,6 @@ export function createRedactor(
   return (text) =>
     secrets
       .reduce((masked, secret) => masked.replaceAll(secret, MASK), text)
-      .replace(URL_USERINFO, `$1${MASK}@`);
+      .replace(URL_USERINFO, `$1${MASK}@`)
+      .replace(RANDOM_ID_PROGRESS, `$1${MASK}$2`);
 }

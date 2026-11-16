@@ -540,6 +540,7 @@ Implementation steps:
 | Target architecture | Requested/queued/starting/running/stopped (`awaiting_approval`, and the terminal statuses as the final subset) state machine, with the lease valid only while live (ADR-0151) with compare-and-swap version, request idempotency, lease and RunAttempt. |
 | Affected modules | Run schema/repository/store/contracts/API/SSE/UI; gateway token issuance/revocation; operations docs. |
 | Dependencies | RF-201 ExecutionSpec; ADR-0151 (decision-ledger item 6, accepted 2026-10-18). |
+| Lease design | [ADR-0151-FU-1440](../../adr/ADR-0151-FU-1440-a-cancelled-run-is-stopped-by-its-holder-and-the-lease-renews-on-the-same-watch.md) (proposed). Today: the replica holding a launch watches the run's committed status and stops the runtime on a cross-replica interrupt (#261), with no migration. Target: the lease remainder that record designs (#1440 Q1–Q6): lease columns, the live-only check, the lease-keyed sweep and `run_attempts`, each with its upgrade trigger. |
 
 Implementation steps:
 

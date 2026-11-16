@@ -218,6 +218,37 @@ describe('POST /api/workspaces', () => {
     harness.teardown();
   });
 
+  it('refuses a slug in the reserved demo-template namespace, so no person can squat a template', async () => {
+    const harness = installRbacHarness([
+      {
+        email: 'creator@example.com',
+        name: 'Creator',
+        workspaceId: TEST_WORKSPACE_ID,
+        role: 'owner',
+      },
+    ]);
+    const repository = createMemoryWorkspaceRepository();
+    installTestDomains({ workspaces: { repository } });
+    for (const slug of ['demo-template-manual-search', 'Demo-Template-wiki']) {
+      const response = await harness.call(POST, {
+        method: 'POST',
+        path: '/api/workspaces',
+        as: { email: 'creator@example.com' },
+        body: { name: 'Squatter', slug },
+      });
+      expect(response.status).toBe(400);
+      expect((response.body as { error: { code: string } }).error.code).toBe('invalid_field');
+    }
+    const allowed = await harness.call(POST, {
+      method: 'POST',
+      path: '/api/workspaces',
+      as: { email: 'creator@example.com' },
+      body: { name: 'Fine', slug: 'demo-templates-are-fine-here' },
+    });
+    expect(allowed.status).toBe(201);
+    harness.teardown();
+  });
+
   it('rejects a non-object body as 400 malformed_body (verification round 1, finding 4)', async () => {
     const harness = installRbacHarness([
       {

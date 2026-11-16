@@ -1,5 +1,4 @@
 import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
-import type { WorkspaceScopeResolver } from '@agent-workspace/core/db';
 
 import { DomainError } from '../errors';
 import {
@@ -42,7 +41,9 @@ function refusal(code: string, message: string): DomainError {
 export function createProviderCredentialResolver(
   dependencies: Readonly<{
     secrets: RuntimeConnectionCredentialSecrets | null;
-    scopes: WorkspaceScopeResolver;
+    // The scope resolver `resolveRuntimeConnectionCredential` reads, typed by that function so this
+    // module names no database type (refactoring plan part 07, step 4).
+    scopes: Parameters<typeof resolveRuntimeConnectionCredential>[0]['scopes'];
   }>,
 ): (workspaceId: string, spec: ProviderCredentialSpec) => Promise<string | undefined> {
   return async (workspaceId, spec) => {

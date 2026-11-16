@@ -16,8 +16,8 @@ import {
 } from './invitations-model';
 import {
   removalImpactFromReads,
+  type ConferrableRoleName,
   type MembershipResource,
-  type MembershipRoleName,
   type RemovalImpactCounts,
   type RequestProblem,
 } from './model';
@@ -67,7 +67,7 @@ export function loadMembers(
 export function changeMemberRole(
   client: AgentWorkspaceClient,
   membershipId: string,
-  role: MembershipRoleName,
+  role: ConferrableRoleName,
 ): Promise<RequestOutcome<MembershipResource>> {
   return outcome(client.team.members.setRole(membershipId, role), UNREADABLE_MEMBERS);
 }

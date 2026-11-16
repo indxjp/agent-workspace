@@ -4,13 +4,19 @@
  * `<prefix><22-char id>_<43-char secret>`, only the SHA-256 hex of the secret half stored, and the
  * primitives imported from `rbac/api-key.ts` rather than written a second time.
  */
+import {
+  OAUTH_ACCESS_TOKEN_PATTERN,
+  OAUTH_ACCESS_TOKEN_PREFIX,
+  OAUTH_CLIENT_SECRET_PREFIX,
+} from '@indx-workspace/contracts/token-exchange';
+
 import { hashApiKeySecret, hashesEqual, randomToken } from '../rbac/api-key';
 
 export type OAuthTokenKind = 'code' | 'access' | 'refresh';
 
 export const OAUTH_TOKEN_PREFIXES = {
   code: 'awc_live_',
-  access: 'awo_live_',
+  access: OAUTH_ACCESS_TOKEN_PREFIX,
   refresh: 'awr_live_',
 } as const satisfies Record<OAuthTokenKind, string>;
 
@@ -26,13 +32,14 @@ const SECRET_BYTES = 32;
 const ID_LENGTH = Math.ceil((ID_BYTES * 8) / 6);
 const SECRET_LENGTH = Math.ceil((SECRET_BYTES * 8) / 6);
 
+/** The access token's pattern is the contract's, which an app backend validates the answer with. */
 const PATTERNS = {
   code: patternFor('code'),
-  access: patternFor('access'),
+  access: OAUTH_ACCESS_TOKEN_PATTERN,
   refresh: patternFor('refresh'),
 } as const satisfies Record<OAuthTokenKind, RegExp>;
 
-function patternFor(kind: OAuthTokenKind): RegExp {
+function patternFor(kind: Exclude<OAuthTokenKind, 'access'>): RegExp {
   return new RegExp(
     `^${OAUTH_TOKEN_PREFIXES[kind]}([A-Za-z0-9_-]{${String(ID_LENGTH)}})_([A-Za-z0-9_-]{${String(SECRET_LENGTH)}})$`,
     'u',
@@ -70,9 +77,8 @@ export async function oauthTokenHash(kind: OAuthTokenKind, value: unknown): Prom
   return parsed === null ? null : hashApiKeySecret(parsed.secret);
 }
 
-const CLIENT_SECRET_PREFIX = 'awcs_live_';
 const CLIENT_SECRET_PATTERN = new RegExp(
-  `^${CLIENT_SECRET_PREFIX}([A-Za-z0-9_-]{${String(SECRET_LENGTH)}})$`,
+  `^${OAUTH_CLIENT_SECRET_PREFIX}([A-Za-z0-9_-]{${String(SECRET_LENGTH)}})$`,
   'u',
 );
 
@@ -80,7 +86,7 @@ const CLIENT_SECRET_PATTERN = new RegExp(
 export async function mintClientSecret(): Promise<{ presented: string; secretHash: string }> {
   const secret = randomToken(SECRET_BYTES);
   return {
-    presented: `${CLIENT_SECRET_PREFIX}${secret}`,
+    presented: `${OAUTH_CLIENT_SECRET_PREFIX}${secret}`,
     secretHash: await hashApiKeySecret(secret),
   };
 }

@@ -142,6 +142,63 @@ export function ToolTrace({ mode, steps, strings }: ToolTraceProps): ReactNode {
   );
 }
 
+/** The props of {@link AttachmentChips}. */
+export interface AttachmentChipsProps {
+  /** One chip each: an id the caller resolves on remove (and the React key), and the name shown. */
+  readonly items: readonly { readonly id: string; readonly name: string }[];
+  /**
+   * The accessible name of the button that removes the chip called `name`, localised. Given with
+   * `onRemove`; without both, the chips are read-only and draw no button.
+   */
+  readonly removeLabel?: ((name: string) => string) | undefined;
+  /** Called with the removed chip's `id`. Without it the chips are read-only (issue #1508). */
+  readonly onRemove?: ((id: string) => void) | undefined;
+  /** Disables every remove button, as while a message is sending. */
+  readonly disabled?: boolean | undefined;
+  /** Class names, so a host keeps its own look; the chip defaults to `aw-chip`. */
+  readonly classNames?: { readonly chip?: string; readonly remove?: string } | undefined;
+  /** The remove button's mark; `×` by default. */
+  readonly removeGlyph?: string | undefined;
+  /** The remove button's tooltip; none by default. */
+  readonly removeTitle?: string | undefined;
+}
+
+/**
+ * The chips of what the next message carries, each with a button that removes it (R-F5a, #1489),
+ * or, with no `onRemove`, a read-only row of a record's attachments (issue #1508). Presentational
+ * only: it never knows where the items came from. It draws no wrapper, so the
+ * caller keeps its own row; the chip names are text nodes, so a file name cannot inject markup.
+ */
+export function AttachmentChips({
+  items,
+  removeLabel,
+  onRemove,
+  disabled,
+  classNames,
+  removeGlyph = '×',
+  removeTitle,
+}: AttachmentChipsProps): ReactNode {
+  return items.map((item) => (
+    <span key={item.id} className={classNames?.chip ?? 'aw-chip'}>
+      {item.name}
+      {onRemove === undefined || removeLabel === undefined ? null : (
+        <button
+          type="button"
+          aria-label={removeLabel(item.name)}
+          className={classNames?.remove}
+          title={removeTitle}
+          disabled={disabled}
+          onClick={() => {
+            onRemove(item.id);
+          }}
+        >
+          {removeGlyph}
+        </button>
+      )}
+    </span>
+  ));
+}
+
 /** How one tool's output renders: the component it asked for when the output fits, else text. */
 export type ToolResultView =
   | {

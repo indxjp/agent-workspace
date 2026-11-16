@@ -1,8 +1,7 @@
 import { applicationContext } from '../application-context';
 import { noStoreResultResponse, type ApiResult } from '../http/result';
 import { authorise, problem, type OwnershipResolver } from '../rbac/http';
-import { decide, type Ownership } from '../rbac/decide';
-import type { Principal } from '../rbac/principal';
+import { decide, type Ownership, type Principal } from '../identity';
 
 export type ResourceAccess =
   | { readonly ok: true; readonly principal: Principal }

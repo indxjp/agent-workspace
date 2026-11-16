@@ -40,8 +40,9 @@ export const MASTRA_ADAPTER_VERSION = `0.0.0+${MASTRA_CORE_VERSION}`;
  * * `interrupt: true` — `abortSignal` on `agent.stream()`.
  * * `streamingText: true`, `reasoning: true` — text and reasoning deltas are mapped.
  * * `maxTurns: 'native'` — Mastra's own `maxSteps`.
- * * `maxBudget: 'adapter'` — **provisional** (ADR-0074 D7, #342): each step is priced with the
- *   port's table and the run stops `max_budget` at the cap. Billing stays the gateway's.
+ * * `maxBudget: 'adapter'` — enforced outside the engine, by the platform: the gateway refuses a
+ *   model call once the run's settled cost reaches its spend ceiling (ADR-0162, #342). The adapter
+ *   prices nothing and refuses no cap; billing is the gateway's alone (ADR-0065 D6).
  * * `wireProtocols` — Anthropic Messages, OpenAI Responses and Chat Completions, each through an
  *   explicit AI SDK provider at the gateway.
  *

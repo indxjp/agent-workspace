@@ -11,7 +11,7 @@ export type TestConnectionResult = {
   readonly message: string;
 };
 
-function endpoint(resolved: ResolvedModelConnection): { url: string; headers: HeadersInit } {
+function endpoint(resolved: ResolvedModelConnection): { url: string; headers: HeadersInit } | null {
   const { connection, credential } = resolved;
   const base = connection.config.baseUrl?.replace(/\/$/, '');
   switch (connection.provider) {
@@ -30,6 +30,10 @@ function endpoint(resolved: ResolvedModelConnection): { url: string; headers: He
       if (base === undefined)
         throw new Error('OpenAI-compatible connections require config.baseUrl.');
       return { url: `${base}/models`, headers: { authorization: `Bearer ${credential}` } };
+    case 'vertex':
+      // No network call: the web service's identity holds no Vertex role by design; the gateway
+      // checks access on the first run.
+      return null;
     case 'azure-openai': {
       if (base === undefined || connection.config.apiVersion === undefined) {
         throw new Error('Azure OpenAI connections require config.baseUrl and config.apiVersion.');
@@ -57,6 +61,15 @@ export async function probeModelConnection(
   const started = performance.now();
   try {
     const target = endpoint(resolved);
+    if (target === null) {
+      return {
+        ok: true,
+        status: null,
+        latencyMs: 0,
+        message:
+          "Uses this install's Google Cloud identity; the gateway checks access on the first run.",
+      };
+    }
     const response = await guardedFetch(
       target.url,
       { method: 'GET', headers: target.headers, signal: AbortSignal.timeout(timeoutMs) },

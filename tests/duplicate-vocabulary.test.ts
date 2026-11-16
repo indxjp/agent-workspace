@@ -48,7 +48,7 @@ describe('closed vocabularies owned by packages/contracts are not re-declared (F
 
   it('flags a planted literal array and a planted union, and ignores subsets', () => {
     const planted = new Map([
-      ['a.ts', "const X = ['owner', 'viewer', 'admin', 'builder'] as const;"],
+      ['a.ts', "const X = ['owner', 'viewer', 'admin', 'builder', 'guest'] as const;"],
       ['b.ts', "type S = 'archived' | 'active';"],
       ['c.ts', "const Y = ['completed', 'failed'];"],
     ]);

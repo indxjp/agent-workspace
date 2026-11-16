@@ -1,4 +1,9 @@
+import { headers } from 'next/headers';
+
+import { versionsLocaleOf } from '../../../../components/agents/versions-messages';
+import { runtimesStrings } from '../../../../components/runtimes/runtimes-messages';
 import { RuntimesScreen } from '../../../../components/runtimes/runtimes-screen';
+import { NotAllowedScreen } from '../../../../components/shell/screen-main';
 import { getSession } from '../../../../server/auth';
 import { decide } from '../../../../server/rbac/decide';
 import { applicationContext } from '../../../../server/application-context';
@@ -32,12 +37,17 @@ async function callerManagesRuntimes(): Promise<boolean> {
 }
 
 export default async function RuntimesPage() {
+  // The reader's language (UX-15 in #2086), negotiated as the shell negotiates it.
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
+  const strings = runtimesStrings(locale);
   if (!(await callerManagesRuntimes())) {
     return (
-      <p className="p-8 text-sm text-muted">Only workspace Owners and Admins can view runtimes.</p>
+      <NotAllowedScreen title={strings.title} lang={locale}>
+        {strings.notAllowed}
+      </NotAllowedScreen>
     );
   }
   const registry = currentWebRuntimeRegistry();
   const entries = registry === null ? [] : await registry.list();
-  return <RuntimesScreen entries={entries} />;
+  return <RuntimesScreen entries={entries} locale={locale} />;
 }

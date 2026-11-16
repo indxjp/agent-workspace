@@ -224,7 +224,7 @@ structure SessionProjectState where
   runCount : Nat := 0
   deriving DecidableEq, Repr
 
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#create")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/creation.ts#create")]
 def createRunInSession (s : SessionProjectState) : SessionProjectState :=
   { s with runCount := s.runCount + 1 }
 

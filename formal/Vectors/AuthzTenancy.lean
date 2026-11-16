@@ -240,7 +240,7 @@ def routeResultJson (runId : String) : Except RunProblem Unit → Json
 
 def runVectors : List Vector :=
   (WireEnum.all : List RunRoute).flatMap fun route =>
-    ["owner", "admin", "builder", "viewer"].flatMap fun role =>
+    ["owner", "admin", "builder", "viewer", "guest"].flatMap fun role =>
       [false, true].flatMap fun isScoped => runIds.map fun (idName, runId) =>
         let caller : RunCaller := ⟨wsA, role, isScoped⟩
         { id := s!"run/{WireEnum.toWire route}/{role}/{if isScoped then "scoped" else "unscoped"}/{idName}",

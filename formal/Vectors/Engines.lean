@@ -361,7 +361,7 @@ def sdkFile : List Vector :=
      input := Json.mkObj [("method", "GET"), ("path", "/api/engines")],
      expected := Json.mkObj [("readableBy", Lean.toJson ["owner", "admin", "builder", "viewer"]),
        ("writableBy", Lean.toJson ["owner"])],
-     witnesses := [authz "engine_catalogue_is_read_by_every_role"] }]
+     witnesses := [authz "engine_catalogue_is_read_by_the_conferrable_roles"] }]
 
 /-- `aw engines list` and `aw agents create|update --engine`, replayed against the real binary. -/
 def cliFile : List Vector :=

@@ -45,9 +45,23 @@ import {
   ModelDiscoveryHttpError,
   registryProviderId,
   type ModelProvider as GatewayProviderAdapter,
+  type ScriptedModels,
 } from '@agent-workspace/gateway/providers/registry';
 
+import { systemClock } from '../clock';
+import { randomIds, type IdGenerator } from '../ids';
+import { PROVIDER_CONNECTION_FACTS } from './providers';
 import type { ResolvedModelConnection } from './store';
+
+/** The adapter's capabilities as this connection may claim them ({@link PROVIDER_CONNECTION_FACTS}). */
+function connectionCapabilities(
+  provider: ResolvedModelConnection['connection']['provider'],
+  capabilities: DiscoveredModelCapabilities,
+): DiscoveredModelCapabilities {
+  return PROVIDER_CONNECTION_FACTS[provider].mayClaimPromptCaching
+    ? capabilities
+    : { ...capabilities, promptCaching: false };
+}
 
 export type DiscoveredModelCapabilities = {
   readonly streaming: boolean;
@@ -188,9 +202,14 @@ function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 
 export type ModelDiscoveryOptions = {
   readonly fetch?: typeof fetch;
+  /** Scripted models, a test tool; the composition root reads them from the environment. */
+  readonly scripted?: ScriptedModels;
   /** How long a discovered list is served without a fresh call. Default 60s. */
   readonly ttlMs?: number;
+  /** Milliseconds since the epoch, for the cache's TTL. Defaults to the system clock. */
   readonly now?: () => number;
+  /** Where each provider call's request id comes from. Defaults to random UUIDs. */
+  readonly ids?: IdGenerator;
   /** How long one provider call may take. Default {@link DEFAULT_DISCOVERY_TIMEOUT_MS}. */
   readonly timeoutMs?: number;
   /**
@@ -209,14 +228,16 @@ function failed(failure: DiscoveryFailure): DiscoverModelsResult {
 
 /** Build a {@link ModelDiscovery}, with its own private TTL cache. */
 export function createModelDiscovery(options: ModelDiscoveryOptions = {}): ModelDiscovery {
-  const registry = createProviderRegistry(
-    options.fetch === undefined ? {} : { fetch: options.fetch },
-  );
+  const registry = createProviderRegistry({
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.scripted === undefined ? {} : { scripted: options.scripted }),
+  });
   const byId = new Map<string, GatewayProviderAdapter>(registry.map((row) => [row.id, row]));
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   const caching = options.cache ?? true;
   const timeoutMs = options.timeoutMs ?? DEFAULT_DISCOVERY_TIMEOUT_MS;
-  const now = options.now ?? (() => Date.now());
+  const now = options.now ?? (() => systemClock.now().getTime());
+  const ids = options.ids ?? randomIds;
   const log =
     options.log ?? ((message: string, cause: unknown) => webLog.error(message, { error: cause }));
   // One entry per connection id: storing a list for a new fingerprint replaces (evicts) the list
@@ -253,17 +274,18 @@ export function createModelDiscovery(options: ModelDiscoveryOptions = {}): Model
         row.listModels({
           providerId,
           credential,
-          requestId: crypto.randomUUID(),
+          requestId: ids.newId(),
           settings: connection.config,
           signal,
         }),
         signal,
       );
+      const capabilities = connectionCapabilities(connection.provider, row.capabilities);
       const models: readonly DiscoveredModel[] = infos.map((info) => ({
         connectionId: connection.id,
         providerModelId: info.id,
         displayName: info.display_name,
-        capabilities: row.capabilities,
+        capabilities,
       }));
       if (caching) cache.set(connection.id, { fingerprint, models, at: now() });
       return { ok: true, models, stale: false };

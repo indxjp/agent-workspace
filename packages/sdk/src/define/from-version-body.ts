@@ -1,6 +1,7 @@
 import {
   AgentVersionBodySchema,
   type AgentVersionBody,
+  type AgentVersionToolBundle,
 } from '@indx-workspace/contracts/agent-versions';
 import { claudeDeniedToolsFor, engineSettingsOf } from '@indx-workspace/contracts/agents';
 import { DEFAULT_ENGINE_ID } from '@indx-workspace/contracts/engines';
@@ -44,7 +45,7 @@ export interface ToolModuleExport {
 export interface AgentVersionSource {
   readonly body: AgentVersionBody;
   /** The parsed `agent-workspace.yaml`, or what stands for it. */
-  readonly project?: Pick<ProjectDocument, 'engine' | 'connectors' | 'models'> | undefined;
+  readonly project?: Pick<ProjectDocument, 'engine' | 'connectors'> | undefined;
   /** Every tool the project's modules export; see {@link toolModulesOf}. */
   readonly toolModules?: readonly ToolModuleExport[] | undefined;
   /** The project's surfaces that name this agent: `body.surfaces` must be exactly theirs. */
@@ -125,12 +126,23 @@ function differences(left: unknown, right: unknown, path: string): string[] {
 
 type CodeToolExport = ToolModuleExport & { readonly tool: CodeTool };
 
+/** An export that repeats the name of an earlier one: the earlier one is used, this one is ignored. */
+interface IgnoredToolExport {
+  /** The position of the ignored export in `toolModules`. */
+  readonly index: number;
+  readonly name: string;
+  readonly ignored: ToolModuleExport;
+  readonly used: ToolModuleExport;
+}
+
 function moduleToolsByName(toolModules: readonly ToolModuleExport[]): {
   readonly byName: ReadonlyMap<string, ToolModuleExport>;
   readonly codeByName: ReadonlyMap<string, CodeToolExport>;
+  readonly ignored: readonly IgnoredToolExport[];
 } {
   const byName = new Map<string, ToolModuleExport>();
   const codeByName = new Map<string, CodeToolExport>();
+  const ignored: IgnoredToolExport[] = [];
   for (const [index, entry] of toolModules.entries()) {
     const tool: unknown = entry.tool;
     if (!isOpenApiTool(tool) && !isPostgresTool(tool) && !isCodeTool(tool)) {
@@ -141,22 +153,65 @@ function moduleToolsByName(toolModules: readonly ToolModuleExport[]): {
         },
       ]);
     }
-    if (isCodeTool(tool)) {
-      if (!codeByName.has(tool.name)) codeByName.set(tool.name, { ...entry, tool });
-    } else if (!byName.has(toolNameOf(tool))) byName.set(toolNameOf(tool), entry);
+    const name = isCodeTool(tool) ? tool.name : toolNameOf(tool);
+    const used = isCodeTool(tool) ? codeByName.get(name) : byName.get(name);
+    if (used === undefined) {
+      if (isCodeTool(tool)) codeByName.set(name, { ...entry, tool });
+      else byName.set(name, entry);
+    } else if (used.tool !== tool) {
+      // The same tool exported under two names is one tool, not a clash.
+      ignored.push({ index, name, ignored: entry, used });
+    }
   }
-  return { byName, codeByName };
+  return { byName, codeByName, ignored };
 }
 
-/** A code tool's declaration in the shape a `toolBundles` entry pins it (aw's `pinnedOf`). */
-const pinnedOf = (tool: CodeTool) => ({
-  description: tool.description,
-  inputSchema: tool.inputSchema,
-  ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-  timeoutMs: tool.limits.timeoutMs,
-  ...(tool.secrets === undefined ? {} : { secrets: tool.secrets }),
-  ...(tool.allowedDomains === undefined ? {} : { allowedDomains: tool.allowedDomains }),
-});
+/**
+ * A repeated name matters only when the body uses it: another agent's tool may repeat freely.
+ * The first export in path order is used, so the report names it.
+ */
+function reportIgnoredExports(
+  ignored: readonly IgnoredToolExport[],
+  usedNames: ReadonlySet<string>,
+  drop: (path: string, reason: string) => void,
+): void {
+  for (const { index, name, ignored: entry, used } of ignored) {
+    if (!usedNames.has(name)) continue;
+    drop(
+      `toolModules.${index}`,
+      `${name}: ${entry.module}#${entry.exportName} repeats the name of ${used.module}#${used.exportName}, which is used; rename one of them`,
+    );
+  }
+}
+
+/** What {@link pinnedOf} reads of a code tool: the fields of `defineTool()` a bundle pins. */
+export interface PinnableCodeTool {
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+  readonly outputSchema?: Readonly<Record<string, unknown>> | undefined;
+  readonly limits: { readonly timeoutMs: number };
+  readonly secrets?: readonly string[] | undefined;
+  readonly allowedDomains?: readonly string[] | undefined;
+}
+
+/** A code tool's declaration in the shape a version's `toolBundles` entry pins it, without `tool` and `digest`. */
+export type PinnedToolDeclaration = Omit<AgentVersionToolBundle, 'tool' | 'digest'>;
+
+/**
+ * The declaration `aw push` pins for a code tool in a version's `toolBundles` entry: the fields a
+ * hosted sandbox serves (ADR-0118 TS1, TS4, TS5). An absent optional field stays absent, so the
+ * result compares equal to the entry the server stored.
+ */
+export function pinnedOf(tool: PinnableCodeTool): PinnedToolDeclaration {
+  return {
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
+    timeoutMs: tool.limits.timeoutMs,
+    ...(tool.secrets === undefined ? {} : { secrets: tool.secrets }),
+    ...(tool.allowedDomains === undefined ? {} : { allowedDomains: tool.allowedDomains }),
+  };
+}
 
 /**
  * The code tools to write at `aw-dev-tools`, in `names` order, and a reason for each name that
@@ -248,6 +303,24 @@ function engineSettingsFor(
 }
 
 /**
+ * Why `defineAgent()` cannot reproduce a body field, for the fields a person can act on; the
+ * others get the generic reason.
+ */
+function selfCheckReason(path: string, body: AgentVersionBody): string {
+  const under = (prefix: string) => path === prefix || path.startsWith(`${prefix}.`);
+  if (under('definition.agent.runtimeProfileName')) {
+    return `the runtime profile "${body.definition.agent.runtimeProfileName ?? ''}" is an Agent Workspace resource defineAgent() cannot name; switch it with aw agents update`;
+  }
+  if (under('definition.policy.skills')) {
+    return 'defineAgent() writes no skill allowlist, so every assigned skill stays allowed; set the allowlist with aw agents policy set';
+  }
+  if (under('definition.policy.tools')) {
+    return 'defineAgent() writes the base tool policy plus engine.autoApprove only; set any other tool rule with aw agents policy set';
+  }
+  return 'not reproduced by defineAgent()';
+}
+
+/**
  * The inverse of {@link toAgentVersionBody} for an Agent Workspace project: the agent a body came
  * from, with what the body only names taken from the project. Nothing is left out silently.
  *
@@ -264,12 +337,20 @@ function engineSettingsFor(
  *   no declaration (written before hosted sandboxes) matches by name.
  *   A repeated name, a name that a connector or module tool also has, and `codeToolNames` for a
  *   body with no `aw-dev-tools` are drops too (`codeToolNames.N`, the connector entry, `codeToolNames`).
+ * - Two module exports of one name: the first, in path order, is used. When the body uses the
+ *   name, the other is a drop at `toolModules.N`; the same tool exported twice is not.
  * - A name no module and no connector supplies (an inline tool looks the same), a name both
  *   supply (push refuses a tool with a connector's name), and code tools no source names or no
  *   module exports are drops.
  * - Last, the agent goes through `toAgentVersionBody()` again and the result is compared with
  *   the body, `toolBundles` aside: every differing path no drop covers becomes a drop, so a body
- *   field `defineAgent()` cannot write is reported at its path.
+ *   field `defineAgent()` cannot write is reported at its path, with the reason a person acts on
+ *   for a runtime profile, a skill allowlist and a stored tool policy.
+ * - The body does not record where a code tool stood among the other tools, only that
+ *   `aw-dev-tools` did, so the code tools come back together at that position (keeping their order
+ *   relative to the other tools needs a contract change).
+ * - `toolBundles` pin code tools only: a catalog tool (`openapiTool()`, `postgresTool()`) is
+ *   registered at push time and the body holds its name alone, so its declaration is not compared.
  *
  * @throws {DefinitionError} when the body, a module's tool or what `defineAgent()` is given is
  *   refused, or a surface is not made by `defineSurface()`.
@@ -290,11 +371,15 @@ export function agentFromVersionBody(source: AgentVersionSource): {
   const dropped: VersionBodyDrop[] = [];
   const drop = (path: string, reason: string) => dropped.push({ path, reason });
 
-  const { byName: fromModule, codeByName: codeFromModule } = moduleToolsByName(
-    source.toolModules ?? [],
-  );
+  const {
+    byName: fromModule,
+    codeByName: codeFromModule,
+    ignored,
+  } = moduleToolsByName(source.toolModules ?? []);
+  const codeToolNames = source.codeToolNames ?? bundles?.map(({ tool }) => tool);
+  reportIgnoredExports(ignored, new Set([...resources.connectors, ...(codeToolNames ?? [])]), drop);
   const code = resolveCodeTools(
-    source.codeToolNames ?? bundles?.map(({ tool }) => tool),
+    codeToolNames,
     source.codeToolNames,
     resources.connectors.includes(AW_DEV_TOOLS_CONNECTOR),
     bundles,
@@ -403,7 +488,7 @@ export function agentFromVersionBody(source: AgentVersionSource): {
   const covered = dropped.map(({ path }) => path.replace(/\.\d+$/u, ''));
   for (const path of differences(body, again, '')) {
     if (!covered.some((prefix) => path === prefix || path.startsWith(`${prefix}.`))) {
-      drop(path, 'not reproduced by defineAgent()');
+      drop(path, selfCheckReason(path, body));
     }
   }
 

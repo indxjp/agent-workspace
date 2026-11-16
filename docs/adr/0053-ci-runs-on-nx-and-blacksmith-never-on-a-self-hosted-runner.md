@@ -467,3 +467,95 @@ Decision.
 
 Consequence: a public pull request runs the inner loop on GitHub's 4-vCPU runners without the Nx
 remote cache (its OIDC exchange accepts INDXDev only), so it is slower than here and costs nothing.
+
+## Amendment 2026-11-05: the light jobs on GitHub-hosted runners, the builds on Blacksmith
+
+The pool now serves mostly short jobs, and they wait for it. Over the last 30 `CI` runs on
+2026-11-05, an MS-A2 job waited 4.6 min for a runner at p50, 12.8 min at p90 and 18 min at worst,
+while it then ran about 1.5 min; a Blacksmith job waited 6-8 s. `fast checks`, `build` and
+`build-embedded` sit at the head of every pull-request and queue run, so that wait is on the
+critical path of every change. The Owner asked for the light jobs to go back to GitHub-hosted
+runners and the heavy ones to stay on Blacksmith, as indx-everything#394 and indx-dev/.github#18
+did on 2026-11-04.
+
+Decision.
+
+1. **Light jobs on plain `ubuntu-latest`.** `fast-checks`, `cancel-on-fast-failure`,
+   `cancel-on-build-failure` and `ci-success` in `ci.yml`, and every job of `quality.yml`,
+   `security.yml`, `internal-checks.yml`, `ci-nx-cache.yml` and `nightly-alarm.yml`. They check,
+   call an API or summarise: 7 s to about 2 min, and they download their own pinned tools. The label
+   is plain, with no override variable, as in #394, and it is also the public export's free label.
+   `scripts/check-workflows.mjs` holds them to exactly that label (`HOSTED_JOBS`), and refuses
+   `ubuntu-latest` on any other job of the policy workflows.
+2. **The builds on Blacksmith.** `build` and `build-embedded` build the whole workspace; on a 2-vCPU
+   hosted runner `build-embedded`'s webpack build alone took about 9 minutes (Amendment
+   2026-10-16). They join `OFFLOADED_JOBS` on `blacksmith-8vcpu-ubuntu-2404`. The host handoff
+   directory is not set there, so the jobs behind them download the `workspace-build` artifact.
+3. **`ubuntu-latest` is Ubuntu 26.04 now.** It broke `actions/setup-python` for Python 3.12.8 in
+   another repository. The light jobs here use Node and pinned downloads only; a job that needs a
+   tool missing on 26.04 moves to a pinned label in its own pull request.
+4. **Unchanged:** the nightly and `ci:full` heavy tier and the live lanes stay on the pool. With
+   the light jobs and the builds off it, the Owner confirmed on 2026-11-06 that the pool is fine for
+   them.
+
+Revert: set the `runs-on` back to the pool expression and empty `HOSTED_JOBS`, and drop `build` and
+`build-embedded` from `OFFLOADED_JOBS`.
+
+## Amendment 2026-11-08: the test shards on the org runner group heavy-ci
+
+By the Blacksmith bill, the four `tests · <shard>` jobs (`heavy-checks`) cost $18.22, the most of
+any job of this repository. The Owner asked for the heaviest job to leave Blacksmith for the
+organisation's own machines, as another repository of the organisation did the same day.
+
+Decision. `heavy-checks` runs on the organisation's runner group `heavy-ci` with the labels
+`[self-hosted, docker]`. The group holds the eight MS-A2 runners (x86_64) and the GX10's eight CI
+runners (arm64); only the runners with a Docker daemon carry `docker` (the MS-A2 runners and the
+GX10's `dgx-ci-docker`), because the job runs PostgreSQL and the object-store emulators. GitHub
+hands each shard to whichever of them is idle. The job already published its services on random
+host ports and named its containers per runner from its MS-A2 days (Amendment 2026-10-23), so it
+needs one change for the GX10: pnpm is installed with setup-node's npm into the runner's own temp
+directory, not by pnpm/action-setup, whose self-installer runs the runner's bundled npm (broken on the
+GX10's runners) into `~/setup-pnpm`, one directory for runners that share one home. `scripts/check-workflows.mjs` moves the job from `OFFLOADED_JOBS` to
+`HEAVY_CI_JOBS`, which holds it to exactly the group's expression (still `ubuntu-latest` outside
+INDXDev). Only this job goes to the group: the hosts' cores, not money, limit how many jobs run at
+once, so they take the one that costs most.
+
+Revert: set `heavy-checks`' `runs-on` back to the Blacksmith expression and move it back from
+`HEAVY_CI_JOBS` to `OFFLOADED_JOBS`.
+
+## Amendment 2026-11-10: fewer short Blacksmith jobs
+
+The Owner asked to trim CI cost (about $50 on busy days). The Blacksmith bill for 1–9 November was
+$253 for the whole organisation; this repository was $102 of it. Read from every job of that
+period: 74% of the organisation's jobs finished in under two minutes, and whole-minute rounding
+alone was about a fifth of the bill. Since Amendment 2026-11-08, the test shards no longer cost
+Blacksmith money, so what is left here is mostly short jobs whose minutes are setup: checkout,
+install and restoring the build. On 8–9 November, `typecheck · Nx task graph` and
+`lint · Nx task graph` took a median 53 s and 80 s, each on its own 8-vCPU runner, and
+`formal · warm the Lean cache on main` took a median 8 s on 8 vCPU, because most pushes find their
+cache entry and stop.
+
+Decision.
+
+1. **`typecheck-lint` is one job, not a matrix of two.** Typecheck and lint run one after the other
+   on one 8-vCPU runner with `--parallel=4` (each had `--parallel=2` on its own runner), so the
+   setup is paid once and rounded up once. Every check in the job runs when the build was restored
+   and the run was not cancelled, whatever an earlier check answered, so a red typecheck still
+   reports lint and the job fails if any check failed. `ci-success` needs the same job id.
+2. **The Lean cache lookup on main runs on the smallest Blacksmith runner.** `formal-cache-lookup`
+   (`blacksmith-2vcpu-ubuntu-2404`) looks up the commit's entry; `formal-cache` (8 vCPU, unchanged
+   build) starts only on a miss. Both stay on Blacksmith, whose runners read Blacksmith's cache.
+   Neither is required by `ci-success`.
+
+Estimate from the same data: about $1.5 a day off this repository on a busy day, most of it from
+item 1. Not changed, and why:
+
+- **The `aw-cli` and `rest` test shards stay separate.** They run on `heavy-ci` (Amendment
+  2026-11-08), which costs no Blacksmith money; merging them would only lengthen the run.
+- **`formal` in the merge queue keeps its 8-vCPU runner even when its scope step skips the
+  build.** A required job may not be skipped at job level, and choosing the runner before the job
+  starts needs the diff in another job first. That is a larger change than this one, for about
+  $0.45 a day.
+
+Revert: restore the `target: [typecheck, lint]` matrix and its `${{ matrix.target }}` commands,
+and fold `formal-cache-lookup` back into `formal-cache` as its first step.

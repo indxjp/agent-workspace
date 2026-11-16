@@ -10,8 +10,10 @@ updates):
 
 * `markRunning` moves a run only from `queued` to `running`; anything else is a no-op;
 * `finish s` requires a terminal `s` (a non-terminal target is a programming error, which both
-  stores throw) and moves any non-terminal run to `s`; on a terminal run it is a no-op, so the
-  first terminal transition wins.
+  stores throw) and moves the run to `s` when `runStatusesThatMayMoveTo s` lists its status;
+  otherwise it is a no-op. A terminal run is never listed, so the first terminal transition wins.
+  A paused run (`awaitingApproval`) may finish `completed` or `cancelled` but not `failed`: a
+  decision resolves a pause to one of those two (ADR-0145).
 
 Interrupt (`POST /api/runs/:id/interrupt`) is `finish cancelled` on a live run and the problem
 `run_not_interruptible` on a terminal one (ADR SDK-03-RUN-235); it is modelled with the runs
@@ -21,6 +23,20 @@ behaviour, not here.
 namespace AgentWorkspace.Lifecycle
 
 open AgentWorkspace.Contracts
+
+/-- The statuses a run may move to `to` from: the one rule both run stores read. -/
+@[aw_spec (ts := "packages/core/src/runs/transitions.ts#runStatusesThatMayMoveTo")]
+def runStatusesThatMayMoveTo : RunStatus → List RunStatus
+  | .running => [.queued]
+  | .awaitingApproval => [.running]
+  | .completed | .cancelled => [.queued, .running, .awaitingApproval]
+  | .failed => [.queued, .running]
+  | .queued => []
+
+/-- Whether a run at `current` may move to `next`. -/
+@[aw_spec (ts := "packages/core/src/runs/transitions.ts#runMayMove")]
+def runMayMove (current next : RunStatus) : Bool :=
+  (runStatusesThatMayMoveTo next).contains current
 
 /-- A status-changing store operation. -/
 inductive RunOp where
@@ -41,14 +57,14 @@ inductive RunStepOutcome where
 /-- One operation on a run whose current status is `current`. -/
 @[aw_spec (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 def runStep (current : RunStatus) : RunOp → RunStepOutcome
-  | .markRunning => if current = .queued then .moved .running else .noOp
+  | .markRunning => if runMayMove current .running then .moved .running else .noOp
   | .finish target =>
     if !target.isTerminal then .invalidCall
-    else if current.isTerminal then .noOp
-    else .moved target
+    else if runMayMove current target then .moved target
+    else .noOp
 
 /-- The status after an operation: unchanged unless the operation moved the run. -/
 def applyRunOp (current : RunStatus) (op : RunOp) : RunStatus :=
@@ -95,8 +111,8 @@ inductive RunAction where
 /-- One store/control-plane operation. An append is allowed until `finish` closes the log.
 The repository revokes gateway run tokens in the same transaction as terminal `finish`. -/
 @[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")
-  (ts := "apps/web/server/composition/wiring/run-api.ts#interruptRun")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
+  (ts := "apps/web/server/composition/wiring/run-api-credentials.ts#interruptRun")]
 def runAction (s : RunState) : RunAction → RunState
   | .markRunning elapsed =>
     if s.status = .queued then
@@ -113,22 +129,24 @@ def runAction (s : RunState) : RunAction → RunState
       { appended with terminalEvents := s.terminalEvents ++ [target] }
     else s
   | .finish target elapsed =>
-    if target.isTerminal && !s.status.isTerminal then
+    if target.isTerminal && runMayMove s.status target then
       let now := s.clock + elapsed
       let finished := { s with status := target }
       let finished := { finished with clock := now }
       let finished := { finished with startedAt := some (s.startedAt.getD now) }
-      let finished := { finished with endedAt := some now }
+      -- A paused run keeps the end time of its pause (`coalesce(ended_at, now())`).
+      let finished := { finished with endedAt := some (s.endedAt.getD now) }
       let finished := { finished with logClosed := true }
       { finished with runTokenRevoked := true }
     else s
   | .finishWithStatusEvent target elapsed =>
-    if target.isTerminal && !s.status.isTerminal then
+    if target.isTerminal && runMayMove s.status target then
       let now := s.clock + elapsed
       let finished := { s with status := target }
       let finished := { finished with clock := now }
       let finished := { finished with startedAt := some (s.startedAt.getD now) }
-      let finished := { finished with endedAt := some now }
+      -- A paused run keeps the end time of its pause (`coalesce(ended_at, now())`).
+      let finished := { finished with endedAt := some (s.endedAt.getD now) }
       let finished := { finished with statusEvents := s.statusEvents ++ [target] }
       let finished := { finished with terminalEvents := s.terminalEvents ++ [target] }
       let finished := { finished with logClosed := true }

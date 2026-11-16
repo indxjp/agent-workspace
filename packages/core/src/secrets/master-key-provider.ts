@@ -1,8 +1,7 @@
+import { configuredMasterKeyBackend, type MasterKeyBackend } from './master-key-config.js';
 import { loadMasterKey, type MasterKey } from './master-key.js';
 
-export const MASTER_KEY_PROVIDER_ENV_VAR = 'MASTER_KEY_PROVIDER';
-
-export type MasterKeyBackend = 'local-key' | 'kms' | 'secret-manager' | 'key-vault';
+export { MASTER_KEY_PROVIDER_ENV_VAR, type MasterKeyBackend } from './master-key-config.js';
 
 export interface MasterKeyProvider {
   /** Public backend name used in diagnostics. Never key material or a credential-bearing URL. */
@@ -13,7 +12,7 @@ export interface MasterKeyProvider {
 
 /** The existing development provider, retained as the backward-compatible default. */
 export function createLocalMasterKeyProvider(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
 ): MasterKeyProvider {
   return {
     backend: 'local-key',
@@ -21,26 +20,11 @@ export function createLocalMasterKeyProvider(
   };
 }
 
-function configuredBackend(env: Readonly<Record<string, string | undefined>>): MasterKeyBackend {
-  const backend = env[MASTER_KEY_PROVIDER_ENV_VAR]?.trim() || 'local-key';
-  if (
-    backend === 'local-key' ||
-    backend === 'kms' ||
-    backend === 'secret-manager' ||
-    backend === 'key-vault'
-  ) {
-    return backend;
-  }
-  throw new Error(
-    `${MASTER_KEY_PROVIDER_ENV_VAR} must be one of local-key, kms, secret-manager, or key-vault.`,
-  );
-}
-
 /** Select the deployment's master-key boundary without loading an unused cloud SDK. */
 export async function createMasterKeyProvider(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<MasterKeyProvider> {
-  switch (configuredBackend(env)) {
+  switch (configuredMasterKeyBackend(env)) {
     case 'local-key':
       return createLocalMasterKeyProvider(env);
     case 'kms': {

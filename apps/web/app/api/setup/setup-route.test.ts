@@ -119,6 +119,28 @@ describe('POST /api/setup refuses in the standard envelope', () => {
   });
 });
 
+describe('POST /api/setup keyless provider', () => {
+  const VERTEX_INPUT: SetupInput = {
+    ...VALID_INPUT,
+    provider: 'vertex',
+    providerApiKey: '',
+    runtime: 'cloud-run-service',
+  };
+
+  it('passes an empty key to the runtime for vertex only', async () => {
+    const received = install({
+      complete: () =>
+        Promise.resolve({ ok: false, status: 422, code: 'vertex_not_configured', message: 'm' }),
+    });
+    const accepted = await POST(setupRequest(VERTEX_INPUT));
+    expect(accepted.status).toBe(422);
+    expect(received).toEqual([VERTEX_INPUT]);
+    const refused = await POST(setupRequest({ ...VALID_INPUT, providerApiKey: '' }));
+    expect(refused.status).toBe(400);
+    expect(received).toHaveLength(1);
+  });
+});
+
 describe('POST /api/setup when the runtime throws', () => {
   it('answers a typed 500 setup_failed instead of an empty body, without any secret', async () => {
     const spy = captureLog();

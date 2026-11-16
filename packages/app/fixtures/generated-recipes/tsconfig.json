@@ -1,0 +1,13 @@
+{
+  // The generated-recipe fixture's own view, as a generated app's tsconfig is: the recipe test
+  // imports its recipe by its `.ts` path, as Node runs it, so nothing is emitted.
+  // `pnpm --filter @indx-workspace/app typecheck` checks it beside the package's `src`.
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

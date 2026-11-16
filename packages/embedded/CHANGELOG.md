@@ -3,6 +3,24 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts`, with
 the same version (ADR-0082 D3).
 
+## 0.6.13 — unreleased
+
+### Added
+
+- The local runtime's `ready` message names its database (`databaseUrl`) when the workspace runs on
+  a loopback PostgreSQL, the embedded one by default, so `aw dev` can migrate and run a generated
+  app on it. A remote `DATABASE_URL` is never named.
+- The local runtime sets `AW_DEPLOYMENT_FEATURES` from `start.environment.features`. A hand-set value in `.env` or the environment must be a valid comma-separated feature list (`invalid_value`) naming the same features (`conflicting_value`); with no `features` sent, a valid hand-set value applies with a warning.
+
+### Fixed
+
+- `aw dev` starts the embedded PostgreSQL from a Windows account with administrator rights, as a
+  GitHub-hosted Windows runner is (#892). `postgres.exe` refuses such an account, so the runtime
+  starts it again through the bundled `pg_ctl.exe`, which drops those rights the way PostgreSQL's
+  own tooling does. Should that be refused as well, `aw dev` stops with `windows_administrator`,
+  which names both fixes: a terminal that is not elevated, or `DATABASE_URL` set to an existing
+  PostgreSQL. Other accounts and platforms start as before.
+
 ## 0.6.12 — unreleased
 
 ### Changed

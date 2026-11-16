@@ -281,11 +281,13 @@ function startedRunBody(agent, sessionId) {
         toolCalls: 0,
       },
       cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+      spendCeilingUsd: null,
       error: null,
       output: null,
       pendingApproval: null,
       accountingState: 'pending',
       accountingError: null,
+      parentRunId: null,
     },
     events: `/api/runs/attach-journey-${sessionId}/events`,
   };

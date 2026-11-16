@@ -34,7 +34,7 @@ import type { AgentResourceStoreProvider } from '../agents/resource-store';
 import type { AgentStoreProvider } from '../agents/store';
 import { isBuilderAgent } from '../builder/agent/is-builder-agent';
 import { resolveBuilderDefinition } from '../builder/agent/model-connection';
-import { engineForStoredPolicy } from '../engines/session-engine';
+import { engineForStoredPolicy } from '../execution';
 import { DomainError } from '../errors';
 import { toAgentVersionResource } from './contract';
 import { materialise } from './materialise';

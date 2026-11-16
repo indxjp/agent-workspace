@@ -56,6 +56,7 @@ export const PortableAgentSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>>;
         id: z.ZodString;
     }, z.core.$strict>>>;
@@ -68,6 +69,9 @@ export const PortableAgentSchema: z.ZodReadonly<z.ZodObject<{
     permissions: z.ZodReadonly<z.ZodObject<{
         readFiles: z.ZodBoolean;
         writeFiles: z.ZodBoolean;
+        memory: z.ZodOptional<z.ZodEnum<{
+            agent: "agent";
+        }>>;
         runCommands: z.ZodBoolean;
         unrestrictedNetwork: z.ZodBoolean;
     }, z.core.$strict>>;
@@ -150,12 +154,12 @@ export const PortableAgentSchema: z.ZodReadonly<z.ZodObject<{
             mastra: "mastra";
         }> & z.core.$partial, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodUnknown>>>>;
         platforms: z.ZodOptional<z.ZodRecord<z.ZodEnum<{
+            "aws-agentcore": "aws-agentcore";
             "claude-managed-agents": "claude-managed-agents";
             "copilot-studio": "copilot-studio";
             "m365-declarative-agent": "m365-declarative-agent";
             "microsoft-foundry": "microsoft-foundry";
             "gemini-enterprise": "gemini-enterprise";
-            "aws-agentcore": "aws-agentcore";
             "eject-claude-agent-sdk": "eject-claude-agent-sdk";
             "eject-mastra": "eject-mastra";
             "eject-openai-agents": "eject-openai-agents";
@@ -256,6 +260,7 @@ export const PortableModelSchema: z.ZodReadonly<z.ZodObject<{
         openai: "openai";
         "azure-openai": "azure-openai";
         "openai-compatible": "openai-compatible";
+        vertex: "vertex";
     }>>;
     id: z.ZodString;
 }, z.core.$strict>>;
@@ -298,6 +303,7 @@ export const PortableProjectSchema: z.ZodReadonly<z.ZodObject<{
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>>;
             id: z.ZodString;
         }, z.core.$strict>>>;
@@ -310,6 +316,9 @@ export const PortableProjectSchema: z.ZodReadonly<z.ZodObject<{
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;
@@ -392,12 +401,12 @@ export const PortableProjectSchema: z.ZodReadonly<z.ZodObject<{
                 mastra: "mastra";
             }> & z.core.$partial, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodUnknown>>>>;
             platforms: z.ZodOptional<z.ZodRecord<z.ZodEnum<{
+                "aws-agentcore": "aws-agentcore";
                 "claude-managed-agents": "claude-managed-agents";
                 "copilot-studio": "copilot-studio";
                 "m365-declarative-agent": "m365-declarative-agent";
                 "microsoft-foundry": "microsoft-foundry";
                 "gemini-enterprise": "gemini-enterprise";
-                "aws-agentcore": "aws-agentcore";
                 "eject-claude-agent-sdk": "eject-claude-agent-sdk";
                 "eject-mastra": "eject-mastra";
                 "eject-openai-agents": "eject-openai-agents";

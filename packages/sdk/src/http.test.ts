@@ -318,6 +318,35 @@ describe('browser-token auth (issue #236, SDK-04, S-1)', () => {
   });
 });
 
+describe('access-token auth (ADR-0161)', () => {
+  const ACCESS_TOKEN = `awo_live_${'a'.repeat(22)}_${'b'.repeat(43)}`;
+
+  it('sends the exchanged token as a bearer and never sets credentials: include', async () => {
+    const api = fetchDouble(() => jsonResponse(200, { ok: true }));
+    const client = new HttpClient({
+      baseUrl: 'https://aw.example.com',
+      auth: { kind: 'access-token', token: ACCESS_TOKEN },
+      fetch: api.fetch,
+    });
+    await echo(client);
+    const [call] = api.calls;
+    expect(call?.headers.get('authorization')).toBe(`Bearer ${ACCESS_TOKEN}`);
+    expect(call?.init.credentials).toBeUndefined();
+    expect(client.authKind).toBe('access-token');
+  });
+
+  it('is bound to one workspace, so ClientOptions.workspace is refused', () => {
+    expect(
+      () =>
+        new HttpClient({
+          baseUrl: 'https://x',
+          auth: { kind: 'access-token', token: ACCESS_TOKEN },
+          workspace: 'acme',
+        }),
+    ).toThrow(/session/u);
+  });
+});
+
 describe('ClientOptions.workspace (issue #236, SDK-04, S-2)', () => {
   it('rejects at construction for any auth kind other than session', () => {
     expect(

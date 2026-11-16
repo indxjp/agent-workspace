@@ -9,6 +9,7 @@ import { AgentVersionPointer } from '@indx-workspace/contracts/agent-versions';
 import { AgentVersionResource } from '@indx-workspace/contracts/agent-versions';
 import { ConnectorResource } from '@indx-workspace/contracts/connectors';
 import { ModelConnectionResource } from '@indx-workspace/contracts/models';
+import { RunDetail } from '@indx-workspace/contracts/runs';
 import { RunResource } from '@indx-workspace/contracts/runs';
 import { SessionResource } from '@indx-workspace/contracts/sessions';
 
@@ -48,6 +49,7 @@ export function fetchDouble(route: (request: RecordedRequest) => Response | Prom
 export const fixtures: {
     readonly agent: typeof agent;
     readonly run: typeof run;
+    readonly runDetail: typeof runDetail;
     readonly session: typeof session;
     readonly agentVersion: typeof agentVersion;
     readonly agentVersionPointer: typeof agentVersionPointer;
@@ -92,6 +94,9 @@ export interface RecordedRequest {
 // @public
 function run(overrides?: Partial<RunResource>): RunResource;
 
+// @public
+function runDetail(base?: RunResource, tree?: Partial<Pick<RunDetail, 'children' | 'treeCost'>>): RunDetail;
+
 // @public (undocumented)
 function session(overrides?: Partial<SessionResource>): SessionResource;
 
@@ -99,6 +104,7 @@ function session(overrides?: Partial<SessionResource>): SessionResource;
 //
 // dist/testing.d.ts - (ae-forgotten-export) The symbol "agent" needs to be exported by the entry point testing.d.ts
 // dist/testing.d.ts - (ae-forgotten-export) The symbol "run" needs to be exported by the entry point testing.d.ts
+// dist/testing.d.ts - (ae-forgotten-export) The symbol "runDetail" needs to be exported by the entry point testing.d.ts
 // dist/testing.d.ts - (ae-forgotten-export) The symbol "session" needs to be exported by the entry point testing.d.ts
 // dist/testing.d.ts - (ae-forgotten-export) The symbol "agentVersion" needs to be exported by the entry point testing.d.ts
 // dist/testing.d.ts - (ae-forgotten-export) The symbol "agentVersionPointer" needs to be exported by the entry point testing.d.ts

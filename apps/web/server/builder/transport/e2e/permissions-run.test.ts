@@ -7,7 +7,14 @@ import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { draftBody } from '../../adapters/checker/checker.contract';
-import { WORKSPACE, builderDoor, scriptedModel, toolResults, toolUse, type Door } from './harness';
+import {
+  WORKSPACE,
+  builderDoor,
+  scriptedModel,
+  toolResults,
+  toolUse,
+  type Door,
+} from './harness.test-support';
 
 const scopes = () => createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]);
 

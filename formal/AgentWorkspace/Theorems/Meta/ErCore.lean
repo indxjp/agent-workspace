@@ -13,7 +13,7 @@ open AgentWorkspace AgentWorkspace.Er.Core
 composite `SET NULL` keys that include the `NOT NULL` `workspace_id`, so the action they declare
 cannot execute: deleting the parent fails with a `NOT NULL` violation instead (finding: see
 `docs/formal/units/er-core.md`). Every other `SET NULL` key is executable. -/
-@[aw_spec (tier := T5) (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")
+@[aw_spec (tier := T5) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")
   (ts := "packages/core/src/db/schema/projects.ts#projects_default_agent_workspace_fk")
   (ts := "packages/core/src/db/schema/sessions.ts#sessions_project_workspace_fk")]
 theorem unexecutable_set_null_keys :
@@ -40,7 +40,7 @@ private theorem lookup_filtered (c : String) (cs : List String) (hc : c ∈ cs) 
 /-- `projects_default_agent_workspace_fk` is `ON DELETE SET NULL`, and for any project row,
 clearing that key's columns (what the action does when the default agent is deleted) leaves the
 row violating the catalogue's `NOT NULL` on `projects.workspace_id`. -/
-@[aw_spec (tier := T5) (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")
+@[aw_spec (tier := T5) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")
   (ts := "packages/core/src/db/schema/projects.ts#projects_default_agent_workspace_fk")]
 theorem project_default_agent_set_null_violates_not_null :
     ∃ fk c, (catalogue .projects).foreignKey? "projects_default_agent_workspace_fk" = some fk ∧
@@ -62,30 +62,32 @@ schema six tables have neither and twenty more have no `updated_at` (finding). -
 @[aw_spec (tier := T5) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem timestamps_are_not_on_every_table :
     allTables.filter (fun t => !(catalogue t).hasColumn "created_at") =
-        [.agentPointerMoves, .endpointClientAgents, .endpointClientApiKeys, .projectFiles,
-          .projectMcpServers, .runtimeVerifications, .storageMigrationRuns] ∧
+        [.agentPointerMoves, .demoDailyCosts, .demoEntryStates, .endpointClientAgents, .endpointClientApiKeys, .projectFiles,
+          .projectMcpServers, .runtimeVerifications, .storageMigrationRuns,
+          .agentTeamVersionMembers] ∧
       allTables.filter (fun t => !(catalogue t).hasColumn "updated_at") =
         [.agentGrants, .agentMcpServers, .agentSkills, .agentStorageGrants,
           .agentVersionStorageGrants, .agentPointerMoves, .agentVersionEvaluations, .agentVersions,
           .auditEvents,
-          .browserTokens, .builderToolCalls, .cliSessions, .endpointClientAgents, .endpointClientApiKeys, .fileTexts, .oauthTokens, .projectFiles, .projectMcpServers, .runEvents,
-          .runFeedback, .runUsageRecords, .runTokens, .runtimeVerifications, .sessionMessages, .sessionStateEntries, .storageMigrationRuns, .shareViews,
+          .browserTokens, .builderToolCalls, .cliSessions, .demoRunAdmissions, .endpointClientAgents, .endpointClientApiKeys, .fileTexts, .loginTokens, .oauthTokens, .projectFiles, .projectMcpServers, .runEvents,
+          .runFeedback, .runUsageRecords, .runTokens, .runtimeVerifications, .sessionMessages, .sessionStateEntries, .storageMigrationRuns, .storeLeads, .shareViews,
           .shares, .skillRevisions, .surfaceSessionKeys, .triggerDeliveries, .workspacePrincipals,
-          .workspaceFeatures] := by
+          .workspaceFeatures, .webhooks, .webhookDeliveries, .agentTeamVersions,
+          .agentTeamVersionMembers] := by
   decide +kernel
 
 /-- The structure map says "every cross-table foreign key is composite on `(id, workspace_id)`";
-in today's schema the single-column keys other than the root references are the seven
+in today's schema the single-column keys other than the root references are the eight
 references to `users` and the seven `SET NULL` siblings, and neither kind can cross a tenant
 (finding: the sentence should say "tenant-paired, by itself or by a sibling"). -/
 @[aw_spec (tier := T5) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem single_column_references_are_global_or_siblings :
     (allTables.flatMap fun t => ((catalogue t).foreignKeys.filter fun fk =>
         fk.columns.length == 1 && classify catalogue t fk != .rootReference).map
           fun fk => classify catalogue t fk) =
       [.siblingPaired, .siblingPaired, .siblingPaired, .globalReference, .globalReference,
-        .globalReference, .siblingPaired, .globalReference, .siblingPaired, .siblingPaired,
+        .globalReference, .globalReference, .siblingPaired, .globalReference, .siblingPaired, .siblingPaired,
         .globalReference, .globalReference, .globalReference, .siblingPaired] := by
   decide +kernel
 
@@ -103,26 +105,32 @@ theorem only_principal_kind_escapes_the_value_gate :
   decide +kernel
 
 /-- The header of `workspaces.ts` says it is "one of exactly two tables … that carry no
-`workspace_id`"; today there are four (finding): the two identity tables, the tenant root and the
-deployment-wide `storage_migration_runs`. -/
+`workspace_id`"; today there are nine (finding): the two identity tables, the tenant root, the
+deployment-wide `storage_migration_runs` and the Agent Store's `login_tokens`, `demo_run_admissions`,
+`demo_daily_costs`, `demo_entry_states` and `store_leads`. -/
 @[aw_spec (tier := T5) (ts := "packages/core/src/db/schema/workspaces.ts#workspaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem three_tables_carry_no_workspace_id :
     allTables.filter (fun t => !(catalogue t).hasColumn "workspace_id") =
-      [.storageMigrationRuns, .userIdentities, .users, .workspaces] := by
+      [.demoDailyCosts, .demoEntryStates, .demoRunAdmissions, .loginTokens, .storageMigrationRuns,
+        .storeLeads, .userIdentities, .users, .workspaces] := by
   decide +kernel
 
-/-- The `columns.ts` comment says "Every table's primary key is a database-generated UUID"; thirteen
+/-- The `columns.ts` comment says "Every table's primary key is a database-generated UUID"; sixteen
 tables are keyed otherwise (finding 4): the agent-version pointers (one per agent and
 environment), the endpoint client's agents and its bound API keys (one binding per key), the two
 project join tables, the run-event and transcript tables, the three ENG-06 session-state tables,
-the per-run share charge, and the per-session surface key. -/
+the per-run share charge, the per-session surface key, an agent-team version's members (one per
+version and agent), the per-UTC-day demo cost (`demo_daily_costs`, keyed by `day`) and the
+verdict on each live store entry (`demo_entry_states`, keyed by `entry`). -/
 @[aw_spec (tier := T5) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
 theorem primary_keys_other_than_id :
     allTables.filterMap (fun t =>
         if (catalogue t).primaryKey == ["id"] then none else some (t, (catalogue t).primaryKey)) =
       [(.agentVersionPointers, ["agent_id", "environment"]),
+        (.demoDailyCosts, ["day"]),
+        (.demoEntryStates, ["entry"]),
         (.endpointClientAgents, ["client_id", "agent_id"]),
         (.endpointClientApiKeys, ["api_key_id"]),
         (.projectFiles, ["project_id", "file_id"]),
@@ -135,7 +143,8 @@ theorem primary_keys_other_than_id :
         (.sessionStateStreams, ["workspace_id", "session_id", "engine", "stream_key"]),
         (.sessionTranscripts, ["workspace_id", "project_key", "session_id", "subpath"]),
         (.shareRunCharges, ["run_id"]),
-        (.surfaceSessionKeys, ["session_id"])] := by
+        (.surfaceSessionKeys, ["session_id"]),
+        (.agentTeamVersionMembers, ["team_version_id", "agent_id"])] := by
   decide +kernel
 
 

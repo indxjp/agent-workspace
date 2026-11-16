@@ -11,7 +11,7 @@ def serverControlNames : List String := ["done", "run-failed", "stream-reset", "
 
 /-- Runner outcome details are untrusted and remain in server diagnostics. Public terminal
 records and frames use a stable message chosen by the outcome kind. -/
-@[aw_spec (ts := "apps/web/server/runs/launcher.ts#publicRelayFailure")]
+@[aw_spec (ts := "apps/web/server/runs/launcher-outcomes.ts#publicRelayFailure")]
 def publicRuntimeOutcomeReason (cancelled : Bool) (_privateReason : String) : String :=
   if cancelled then "The run was interrupted." else "The runtime reported a run failure."
 

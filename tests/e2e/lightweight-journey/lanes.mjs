@@ -183,6 +183,43 @@ export function resourceNames(lane, runId) {
   };
 }
 
+/** The driver a lane's profile and runtime connection name: E2B is the `external` driver. */
+export function laneRuntimeDriver(/** @type {{ sandbox: string }} */ lane) {
+  return lane.sandbox === 'e2b' ? 'external' : lane.sandbox;
+}
+
+const RUNTIME_DEFAULT = /(runtime:\s*\n\s*default:\s*)\S+/u;
+
+/**
+ * The profile with `runtime.default` set to `driver`, or `null` when it names no default. Every
+ * profile-path lane sets it: `create-agent-workspace --cloud cloudflare` writes `external` (E2B,
+ * BH061-029), so a Cloudflare Sandbox lane that kept the generated default deployed an E2B runtime
+ * with no template and was refused at `deploy`.
+ *
+ * @param {string} yaml @param {string} driver
+ */
+export function withRuntimeDefault(yaml, driver) {
+  return RUNTIME_DEFAULT.test(yaml) ? yaml.replace(RUNTIME_DEFAULT, `$1${driver}`) : null;
+}
+
+/**
+ * A thrown error's message with its cause: Node's `fetch` throws a bare `fetch failed` and keeps
+ * the network reason (`ECONNRESET`, `UND_ERR_SOCKET`...) on `cause`.
+ *
+ * @param {unknown} error
+ */
+export function errorMessage(error) {
+  if (!(error instanceof Error)) return String(error);
+  const { cause } = error;
+  if (cause === undefined || cause === null) return error.message;
+  const code =
+    typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string'
+      ? `${cause.code}: `
+      : '';
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  return `${error.message} (cause: ${code}${reason})`;
+}
+
 /**
  * Run the chapters of one lane and record each as it finishes.
  *
@@ -218,7 +255,7 @@ export async function runChapters(lane, env, steps, record, secretsMade = () => 
         record(chapter.id, 'pass');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       const redacted = redact(message, hiddenNow());
       // The job log is the only place the whole reason survives; the results file keeps the tail.
       process.stderr.write(`chapter "${chapter.id}" failed:\n${redacted}\n`);

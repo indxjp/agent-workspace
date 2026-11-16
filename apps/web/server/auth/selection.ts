@@ -15,6 +15,9 @@
  * deliberate absence of a sibling import: docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md.
  */
 
+import { systemClock } from '../clock.ts';
+import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
+
 const encoder = new TextEncoder();
 
 /** Distinct from `session.ts`'s `'aw1'`, so the two token kinds can never be confused. */
@@ -64,14 +67,31 @@ function base64UrlDecode(text: string): Uint8Array<ArrayBuffer> | null {
   return bytes;
 }
 
-function hmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
+function importHmacKey(bytes: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ]);
+}
+
+/** This token's own key, derived from the secret (part 06 step 5, `./core/key-ring.ts`). */
+async function purposeKey(secret: string): Promise<CryptoKey> {
+  return importHmacKey(await derivePurposeKey(crypto.subtle, secret, 'workspace-selection'));
+}
+
+/** The purpose key, then the raw secret every token was signed with before step 5 (roll-over). */
+async function verifiesUnderAnyKey(
+  secret: string,
+  signature: Uint8Array<ArrayBuffer>,
+  signed: Uint8Array<ArrayBuffer>,
+): Promise<boolean> {
+  for (const key of verificationKeys(
+    () => purposeKey(secret),
+    () => importHmacKey(encoder.encode(secret)),
+  )) {
+    if (await crypto.subtle.verify('HMAC', await key(), signature, signed)) return true;
+  }
+  return false;
 }
 
 /** Mint a selection token for `userId`/`email`. The caller has already resolved both. */
@@ -79,13 +99,17 @@ export async function mintSelectionToken(
   userId: string,
   email: string,
   secret: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<string> {
   const iat = Math.floor(nowMs / 1000);
   const claims: SelectionClaims = { userId, email, iat, exp: iat + SELECTION_TTL_SECONDS };
   const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
   const signed = `${TOKEN_VERSION}.${payload}`;
-  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(signed));
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await purposeKey(secret),
+    encoder.encode(signed),
+  );
   return `${signed}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
@@ -98,7 +122,7 @@ export async function mintSelectionToken(
 export async function verifySelectionToken(
   token: unknown,
   secret: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<SelectionVerifyResult> {
   if (typeof token !== 'string' || token.length === 0) {
     return { ok: false, reason: 'no selection cookie on the request' };
@@ -111,9 +135,8 @@ export async function verifySelectionToken(
   }
   const signature = base64UrlDecode(signaturePart);
   if (signature === null) return { ok: false, reason: 'signature segment is not base64url' };
-  const signatureValid = await crypto.subtle.verify(
-    'HMAC',
-    await hmacKey(secret),
+  const signatureValid = await verifiesUnderAnyKey(
+    secret,
     signature,
     encoder.encode(`${version}.${payloadPart}`),
   );

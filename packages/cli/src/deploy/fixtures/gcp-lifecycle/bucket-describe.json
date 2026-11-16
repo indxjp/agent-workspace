@@ -1,0 +1,18 @@
+{
+  "creation_time": "2026-11-04T15:46:12+0000",
+  "default_storage_class": "STANDARD",
+  "location": "ASIA-NORTHEAST1",
+  "location_type": "region",
+  "metageneration": 2,
+  "name": "acme-prod-aw-tfstate",
+  "public_access_prevention": "enforced",
+  "rpo": "DEFAULT",
+  "soft_delete_policy": {
+    "effectiveTime": "2026-11-04T15:46:12.519000+00:00",
+    "retentionDurationSeconds": "604800"
+  },
+  "storage_url": "gs://acme-prod-aw-tfstate/",
+  "uniform_bucket_level_access": true,
+  "update_time": "2026-11-04T15:46:14+0000",
+  "versioning_enabled": true
+}

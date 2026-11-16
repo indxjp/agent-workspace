@@ -1,0 +1,290 @@
+---
+title: "Webhooks"
+description: "Register an endpoint and receive a signed event when a run completes, fails or is cancelled, instead of polling."
+---
+
+<Info>
+**Resource guide** · [the chapter map](/path/embed)
+
+- **You will:** register an endpoint, keep its signing secret, and verify each delivery your backend receives.
+- **You will learn:** what an event carries, how the signature works, when a delivery is retried, and how to deduplicate.
+- **You need:** an API key for the workspace with the Owner or Admin role, and an HTTPS URL your backend answers on.
+
+</Info>
+
+`aw.webhooks` manages the run-outcome webhooks of a workspace. A webhook is an endpoint the
+platform posts a signed `WebhookEvent` to when one of the workspace's runs reaches a terminal
+status: `run.completed`, `run.failed` or `run.cancelled`. It wraps `/api/webhooks/**`
+(ADR-SDK-18-N3-250). Source: `packages/sdk/src/resources/webhooks.ts`, contract:
+`packages/contracts/src/webhooks.ts`. A receiver checks a delivery with
+[`verifyWebhookSignature`](#verify-a-delivery), which makes no request.
+
+**What you can do**
+
+- [Register an endpoint](#create) and keep the secret it returns once
+- [List the endpoints](#list), never with a secret
+- [Remove an endpoint](#remove)
+- [Verify a delivery](#verify-a-delivery) in your receiver
+- [Handle retries and duplicates](#delivery-retries-and-duplicates)
+
+A webhook is a `WebhookEndpoint`. A workspace holds at most ten (`WEBHOOK_MAX_PER_WORKSPACE`), so
+the list is not paginated. There is no update: to change the URL or the events, remove the webhook
+and create another.
+
+```ts title="illustrative" claim="illustrative"
+interface WebhookEndpoint {
+  id: string;
+  workspaceId: string;
+  url: string; // https: (http: for a loopback host), at most 2048 characters, no credentials or fragment
+  events: ('run.completed' | 'run.failed' | 'run.cancelled')[]; // all three when omitted at create
+  createdAt: string;
+}
+```
+
+<Warning>
+  The signing secret (`whsec_…`) is shown **once**, in the answer of `create`. The platform needs it
+  to sign, so it is kept encrypted in the workspace's secrets service under a name derived from the
+  webhook id, and no other answer carries it. To replace a secret, remove the webhook and create
+  another.
+</Warning>
+
+## The event
+
+Every delivery is a `POST` with `Content-Type: application/json` whose body is one `WebhookEvent`:
+
+```ts title="illustrative" claim="illustrative"
+interface WebhookEvent {
+  id: string; // the delivery id: the same on every retry, and equal to the webhook-id header
+  type: 'run.completed' | 'run.failed' | 'run.cancelled';
+  createdAt: string; // when the run stopped
+  workspaceId: string;
+  data: {
+    run: {
+      id: string;
+      agentId: string;
+      sessionId: string;
+      status: 'completed' | 'failed' | 'cancelled'; // the status the type names
+      endedAt: string | null;
+      error: string | null;
+      usage: RunUsage; // as runs.get renders it
+      cost: RunCost;
+      accountingState: 'pending' | 'complete' | 'partial' | 'unavailable' | 'failed';
+    };
+  };
+}
+```
+
+The event carries the outcome of the run and never its prompt, output or transcript: read those
+with [`aw.runs.result(runId)`](/resources/runs) when you need them. Usage and cost are read when the
+delivery is sent. The first attempt waits up to two minutes after the stop for accounting to
+settle, and `accountingState` says whether the numbers are final.
+
+A run that pauses for approval (`awaiting_approval`) sends nothing. It sends its event once its
+decision ends it: `run.completed` when the call is approved, `run.cancelled` when it is rejected
+or expires.
+
+## Complete example
+
+```ts title="webhooks-example.ts" claim="compile"
+import { ApiProblemError, createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({ baseUrl, auth: { kind: 'api-key', apiKey } });
+
+async function main(): Promise<void> {
+  const { webhook, secret } = await aw.webhooks.create({
+    url: 'https://hooks.example.com/agent-workspace',
+    events: ['run.completed', 'run.failed'],
+  });
+  // The only time the secret exists outside the control plane: store it with your receiver now.
+  console.log(`store ${webhook.id}'s secret (${String(secret.length)} characters)`);
+
+  console.log((await aw.webhooks.list()).map((endpoint) => endpoint.url));
+
+  try {
+    await aw.webhooks.remove(webhook.id);
+  } catch (error) {
+    if (error instanceof ApiProblemError) console.error(error.code);
+    else throw error;
+  }
+}
+
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+## `list`
+
+Every webhook of the workspace. No item carries a secret.
+
+**Route:** `GET /api/webhooks`
+
+```ts title="illustrative" claim="illustrative"
+const webhooks = await aw.webhooks.list();
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw webhooks list
+```
+
+</CodeGroup>
+
+See [`webhooks.list`](/reference/sdk/webhooks#list).
+
+## `create`
+
+Register an endpoint. `events` names the outcomes it receives, all three when omitted. The answer
+is `{ webhook, secret }`; store `secret` now, it is not shown again.
+
+**Route:** `POST /api/webhooks` — `201`
+
+```ts title="illustrative" claim="illustrative"
+const { webhook, secret } = await aw.webhooks.create({
+  url: 'https://hooks.example.com/agent-workspace',
+});
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw webhooks create --webhook-url https://hooks.example.com/agent-workspace \
+  --event run.completed --event run.failed
+```
+
+</CodeGroup>
+
+The receiver's URL is `--webhook-url`, because `--url` names the control plane. `--event` repeats;
+`--file <json>` carries the whole body instead. The secret is printed once, in the answer (and
+under `--json`), with a reminder on stderr.
+
+The URL is checked against the deployment's egress policy when you create the webhook and again
+before every attempt, because DNS answers change. A host that resolves to a loopback, private,
+link-local or cloud-metadata address is refused with `400 webhook_url_refused` unless the operator
+listed it in `EGRESS_ALLOW_HOSTS`; the message names only the host and the rule. An `http:` URL is
+accepted only for a loopback host on a non-production deployment, which is how you test a receiver
+on your own machine.
+
+## `remove`
+
+Delete the webhook and its signing secret. Deliveries not yet sent go with it. The answer is a
+`204` with no body.
+
+**Route:** `DELETE /api/webhooks/:id` — `204`
+
+```ts title="illustrative" claim="illustrative"
+await aw.webhooks.remove(webhookId);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw webhooks remove <id>
+```
+
+</CodeGroup>
+
+## Verify a delivery
+
+Deliveries follow [Standard Webhooks](https://www.standardwebhooks.com/) v1. Each request has
+three headers:
+
+| Header              | Value                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `webhook-id`        | The event `id`, the same on every retry of one delivery                                    |
+| `webhook-timestamp` | The attempt time in Unix seconds, new on every attempt                                     |
+| `webhook-signature` | `v1,<base64 HMAC-SHA256>` over `<webhook-id>.<webhook-timestamp>.<body>`, space-separated |
+
+`verifyWebhookSignature` checks all three against the secret and returns the contract-checked
+event. Pass the body exactly as it arrived: parsing it and serialising it again changes the bytes
+the signature covers. The timestamp must be within five minutes of your clock
+(`toleranceSeconds`, 300 by default), which stops an old delivery from being replayed. The helper
+uses Web Crypto only, so it runs in Node, a worker or at the edge.
+
+```ts title="verify.ts" claim="compile"
+import { verifyWebhookSignature, WebhookVerificationError } from '@indx-workspace/sdk';
+
+/** A receiver for the Fetch API: a route handler, a worker, an edge function. */
+export async function receive(request: Request, secret: string): Promise<Response> {
+  const body = await request.text();
+  try {
+    const event = await verifyWebhookSignature({ secret, headers: request.headers, body });
+    console.log(event.type, event.data.run.id, event.data.run.usage.totalTokens);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) {
+      return new Response(error.code, { status: 400 });
+    }
+    throw error;
+  }
+}
+```
+
+A refusal is a `WebhookVerificationError` whose `code` is one of:
+
+| Code                         | Meaning                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `missing_header`             | A `webhook-*` header is missing, repeated or malformed                    |
+| `invalid_secret`             | The secret is not the `whsec_` value `create` returned                   |
+| `timestamp_out_of_tolerance` | `webhook-timestamp` is more than `toleranceSeconds` from `now`            |
+| `signature_mismatch`         | No `v1` signature matches: a wrong secret, or the body was changed        |
+| `invalid_payload`            | The signature matched, but the body is not a `WebhookEvent` with this id |
+
+The full receiver, with deduplication and a fast answer, is on
+[Integrate a backend](/building/backend#receive-run-outcomes-with-a-webhook).
+
+## Delivery, retries and duplicates
+
+A delivery is written in the same transaction that stops the run, so a run that reached a terminal
+status always has one, even if the process stops right after. A worker inside the control plane
+sends it within seconds, using PostgreSQL only.
+
+- **Any 2xx** settles the delivery, and it is not sent again. Answer quickly: an attempt times
+  out after 10 seconds, and redirects are not followed.
+- **Anything else** (another status, a timeout, a network error) is retried after 30 s, 2 min,
+  10 min, 30 min, 2 h, 6 h and 12 h, each jittered by ±20 %: eight attempts over about 21 hours.
+  After the eighth failure the delivery is dropped. A `Retry-After` header is not read.
+- **At least once.** If your 2xx is lost on the way back, the same event arrives again with the
+  same `webhook-id`. Deduplicate on `webhook-id` (or on `data.run.id`: a run sends at most one event
+  to each webhook).
+- **No order.** Events of different runs may arrive in any order. Read `createdAt` if order
+  matters.
+
+On a serverless deployment, the worker runs only while an instance is warm, so a delivery can be
+late; it is not lost.
+
+## Who can manage webhooks
+
+An Owner or Admin lists, creates and removes webhooks; an API key acts with its role. A Builder or
+Viewer gets `403 forbidden` on every route, and a run token or a browser token reaches none of
+them. Where a workspace's run outcomes are sent is the same kind of authority as API keys and
+memberships. The routes belong to the `runs` feature, so a workspace with runs switched off
+answers `404 feature_disabled`.
+
+## Errors
+
+| Code                         | Status | Meaning                                                                      |
+| ---------------------------- | ------ | ---------------------------------------------------------------------------- |
+| `invalid_body`               | 400    | Unknown keys, or `events` empty, repeated or unknown                         |
+| `invalid_webhook_url`        | 400    | Not an absolute `https:` URL of at most 2048 characters without credentials  |
+| `webhook_url_refused`        | 400    | The deployment's egress policy refuses the host                              |
+| `invalid_webhook_id`         | 400    | The id is not a UUID                                                         |
+| `webhook_not_found`          | 404    | No webhook with that id in this workspace                                    |
+| `webhook_limit_reached`      | 409    | The workspace already has `WEBHOOK_MAX_PER_WORKSPACE` webhooks               |
+| `webhook_api_not_configured` | 503    | The deployment has no secrets service, so a signing secret cannot be stored  |
+
+The codes and their statuses are `WEBHOOK_PROBLEM_CODES` in `@indx-workspace/contracts/webhooks`.
+
+## See also
+
+- [WebhooksClient](/reference/sdk/webhooks): full method signatures and `verifyWebhookSignature`.
+- [Integrate a backend](/building/backend#receive-run-outcomes-with-a-webhook): the receiver.
+- [Runs](/resources/runs): read the output of the run an event names.
+- [Triggers](/resources/triggers): the other direction, a URL that starts a run.

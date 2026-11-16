@@ -5,8 +5,12 @@
  * `@indx-workspace/sdk` and `@indx-workspace/embedded` (what `npm create` pins) from a real
  * registry and the real model (issue #881, the `install-live` workflow). For each project: its own
  * MCP servers and stand-in APIs (the `#   ...` lines of its `agent-workspace.yaml`), then `aw dev`
- * until it is ready, signed in and has made its first sync, the folders its agents are granted
- * (`aw files mkdir`, then `aw files upload` of `data/<folder>/`), `aw push --yes`, `aw check`, one
+ * until it is ready, signed in and has made its first sync, the workspace secrets that sign its
+ * caller assertions (`aw secrets create --value-stdin`, with the value its servers verify with), the
+ * folders its agents are granted (`aw files mkdir`, then `aw files upload` of `data/<folder>/`),
+ * `aw push --yes`, a restart of each server that verifies the caller assertion with the connector
+ * id and workspace id `aw connectors list` now names (the project file's `<tool-id>` and
+ * `<workspace-id>`), `aw check`, one
  * `aw chat -p` turn with the first prompt of its eval file, `aw eval --json`, and Ctrl+C. A shared
  * skill an agent names is copied into the project's `skills/` first.
  *
@@ -101,22 +105,140 @@ function leadingEnvironment(line, secret) {
   return { env, rest };
 }
 
+const SECRET_CREATE = /\baw secrets create --name ([A-Z][A-Z0-9_]*) --value-stdin\b/u;
+const IDENTITY_KEY = /(?:^|_)IDENTITY_SECRET$/u;
+
+/**
+ * The workspace secrets a project file says to create (`aw secrets create --name <NAME>
+ * --value-stdin`), in its order: the keys that sign a caller assertion (ADR-0142 D1).
+ *
+ * @param {string} projectYaml
+ * @returns {string[]}
+ */
+export function workspaceSecrets(projectYaml) {
+  const names = commentCommands(projectYaml).flatMap((line) => {
+    const name = SECRET_CREATE.exec(line)?.[1];
+    return name === undefined ? [] : [name];
+  });
+  return [...new Set(names)];
+}
+
+/**
+ * @typedef {{ key: string, secret: string }} ServerIdentity the variable that holds a server's
+ *   verifying key, and the workspace secret whose value it must be
+ * @typedef {{ env: Record<string, string>, script: string, port: number, identity?: ServerIdentity }} ServerCommand
+ */
+
 /**
  * The MCP servers a project file says to run: `NAME=value ... node <script>.mjs`, with a placeholder
  * value replaced by `secret()` and a variable in `overrides` by its value there.
  *
+ * A server that verifies the caller assertion (it is given `IDENTITY_AUDIENCE`) has an `identity`:
+ * the variable holding its key (`IDENTITY_SECRET` or `<NAME>_IDENTITY_SECRET`) and the workspace
+ * secret that key is. A `<NAME>_IDENTITY_SECRET` is that secret; a bare `IDENTITY_SECRET` is the one
+ * the nearest `aw secrets create` line before the server's line creates, as the project file reads.
+ * When `overrides` holds that secret, the key is its value.
+ *
  * @param {string} projectYaml @param {() => string} secret
  * @param {Readonly<Record<string, string>>} [overrides]
- * @returns {{ env: Record<string, string>, script: string, port: number }[]}
+ * @returns {ServerCommand[]}
  */
 export function serverCommands(projectYaml, secret, overrides = {}) {
+  /** @type {string | undefined} */
+  let created;
   return commentCommands(projectYaml).flatMap((line) => {
+    const name = SECRET_CREATE.exec(line)?.[1];
+    if (name !== undefined) {
+      created = name;
+      return [];
+    }
     const { env, rest } = leadingEnvironment(line, secret);
     const script = /^node (\S+\.mjs)$/u.exec(rest)?.[1];
     if (script === undefined) return [];
-    for (const name of Object.keys(env)) if (name in overrides) env[name] = overrides[name] ?? '';
-    return [{ env, script, port: Number(env['PORT']) }];
+    for (const variable of Object.keys(env))
+      if (variable in overrides) env[variable] = overrides[variable] ?? '';
+    const key = Object.keys(env).find((variable) => IDENTITY_KEY.test(variable));
+    const signer = key === 'IDENTITY_SECRET' ? created : key;
+    if (!('IDENTITY_AUDIENCE' in env) || key === undefined || signer === undefined) {
+      return [{ env, script, port: Number(env['PORT']) }];
+    }
+    const value = overrides[signer];
+    if (value !== undefined) env[key] = value;
+    return [{ env, script, port: Number(env['PORT']), identity: { key, secret: signer } }];
   });
+}
+
+/**
+ * The command that stores a workspace secret, as the project file says: the value is read from
+ * `$IDENTITY_SECRET_VALUE` on stdin, so it never appears in a command line.
+ *
+ * @param {string} name
+ */
+export function secretCreateCommand(name) {
+  if (!/^[A-Z][A-Z0-9_]*$/u.test(name)) throw new JourneyFailure(`not a secret name: ${name}`);
+  return `printf '%s' "$IDENTITY_SECRET_VALUE" | aw secrets create --name ${name} --value-stdin`;
+}
+
+/**
+ * @typedef {{ connectorId: string, workspaceId: string }} IdentityTarget what a caller assertion
+ *   for one connector names: its `aud` and its `workspace`
+ */
+
+/**
+ * The connector each identity secret signs for, from `aw connectors list --json` once `aw push`
+ * has registered the project's tools and connectors: a caller assertion's `aud` is that
+ * connector's id (an MCP connector's or an `openapiTool()`'s alike) and its `workspace` is the
+ * connector's workspace.
+ *
+ * @param {string} listJson
+ * @returns {Map<string, IdentityTarget>}
+ */
+export function identityTargets(listJson) {
+  let parsed;
+  try {
+    parsed = JSON.parse(listJson);
+  } catch {
+    throw new JourneyFailure(`aw connectors list --json printed no JSON:\n${listJson}`);
+  }
+  const connectors = Array.isArray(parsed) ? parsed : parsed?.connectors;
+  if (!Array.isArray(connectors)) {
+    throw new JourneyFailure(`aw connectors list --json printed no connectors:\n${listJson}`);
+  }
+  /** @type {Map<string, IdentityTarget>} */
+  const targets = new Map();
+  for (const connector of connectors) {
+    const signer = connector?.identity?.secret;
+    if (typeof signer !== 'string') continue;
+    if (typeof connector.id !== 'string' || typeof connector.workspaceId !== 'string') continue;
+    if (targets.has(signer)) {
+      throw new JourneyFailure(`more than one connector signs with ${signer}`);
+    }
+    targets.set(signer, { connectorId: connector.id, workspaceId: connector.workspaceId });
+  }
+  return targets;
+}
+
+/**
+ * The environment a server that verifies the caller assertion is restarted with: the id of the
+ * connector its secret signs for and the workspace, in place of the project file's
+ * `<tool-id>` / `<connector-id>` and `<workspace-id>`.
+ *
+ * @param {ServerCommand} server @param {ReadonlyMap<string, IdentityTarget>} targets
+ * @returns {Record<string, string>}
+ */
+export function identityEnvironment(server, targets) {
+  if (server.identity === undefined) return server.env;
+  const target = targets.get(server.identity.secret);
+  if (target === undefined) {
+    throw new JourneyFailure(
+      `${server.script}: after aw push, no connector signs its caller assertion with ${server.identity.secret}`,
+    );
+  }
+  return {
+    ...server.env,
+    IDENTITY_AUDIENCE: target.connectorId,
+    IDENTITY_WORKSPACE: target.workspaceId,
+  };
 }
 
 /**
@@ -294,11 +416,15 @@ export function pointApisAtLoopback(dir, port) {
   }
 }
 
-/** @param {number} port @param {number} timeoutMs */
-async function listening(port, timeoutMs) {
+/**
+ * Wait until something listens on `port` (`up`), or nothing does any more.
+ *
+ * @param {number} port @param {number} timeoutMs @param {boolean} [up]
+ */
+async function listening(port, timeoutMs, up = true) {
   const until = Date.now() + timeoutMs;
   for (;;) {
-    const up = await new Promise((resolve) => {
+    const open = await new Promise((resolve) => {
       const socket = net.connect(port, '127.0.0.1');
       socket.once('connect', () => {
         socket.destroy();
@@ -306,8 +432,14 @@ async function listening(port, timeoutMs) {
       });
       socket.once('error', () => resolve(false));
     });
-    if (up) return;
-    if (Date.now() > until) throw new JourneyFailure(`nothing listens on port ${String(port)}`);
+    if (open === up) return;
+    if (Date.now() > until) {
+      throw new JourneyFailure(
+        up
+          ? `nothing listens on port ${String(port)}`
+          : `port ${String(port)} is still in use after the server was stopped`,
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 }
@@ -315,12 +447,13 @@ async function listening(port, timeoutMs) {
 /**
  * Start one MCP server in its own process group, with no model key in its environment.
  *
- * @param {string} cwd @param {{ env: Record<string, string>, script: string, port: number }} server
+ * @param {string} cwd @param {ServerCommand} server
+ * @param {Record<string, string>} [env] in place of `server.env`
  */
-async function startServer(cwd, server) {
+async function startServer(cwd, server, env = server.env) {
   const child = spawn(process.execPath, [server.script], {
     cwd,
-    env: { ...process.env, ...server.env },
+    env: { ...process.env, ...env },
     detached: true,
     stdio: 'ignore',
   });
@@ -351,8 +484,10 @@ async function projectRows(machine, id, dir, logs, how) {
   const steps = [
     'MCP servers',
     'aw dev',
+    'aw secrets create',
     'aw files',
     'aw push',
+    'MCP servers, with ids',
     'aw check',
     'aw chat -p',
     'aw eval',
@@ -365,7 +500,8 @@ async function projectRows(machine, id, dir, logs, how) {
   const projectYaml = readFileSync(path.join(dir, 'agent-workspace.yaml'), 'utf8');
   const prompt = firstPrompt(readFileSync(path.join(dir, 'evals', `${id}.yaml`), 'utf8'));
   if (prompt === undefined) return all('FAIL: no case in the eval file', `${id}: evals/${id}.yaml`);
-  const stops = [];
+  /** @type {{ server: ServerCommand, stop: () => void }[]} */
+  const running = [];
   let log = '';
   /** @type {Row[]} */
   const rows = [];
@@ -436,13 +572,19 @@ async function projectRows(machine, id, dir, logs, how) {
     const secret = how.secret;
     const dataRoot = path.join(dir, 'data');
     const devEnv = devEnvironment(projectYaml, secret);
+    // Each identity secret has one value: the workspace secret and the key its server verifies with.
+    /** @type {Record<string, string>} */
+    const identitySecrets = Object.fromEntries(
+      workspaceSecrets(projectYaml).map((name) => [name, secret()]),
+    );
     await step('MCP servers', async () => {
       // A secret both `aw dev` and a server are given is one value, as the project file says.
       for (const server of serverCommands(projectYaml, secret, {
         FILE_ROOT: dataRoot,
         ...devEnv,
+        ...identitySecrets,
       })) {
-        stops.push(await startServer(dir, server));
+        running.push({ server, stop: await startServer(dir, server) });
         if (STAND_IN.test(server.script)) pointApisAtLoopback(dir, server.port);
       }
       return '';
@@ -460,12 +602,41 @@ async function projectRows(machine, id, dir, logs, how) {
       readyLength = dev.state.log.length;
       return dev.state.log;
     });
+    await step('aw secrets create', async () => {
+      const names = Object.keys(identitySecrets);
+      if (names.length === 0) return 'no workspace secrets to create';
+      let output = '';
+      for (const name of names) {
+        const value = identitySecrets[name] ?? '';
+        output += (await aw(secretCreateCommand(name), { IDENTITY_SECRET_VALUE: value })).output;
+      }
+      return output;
+    });
     await step('aw files', async () => {
       const commands = fileSetupCommands(dir);
       if (commands.length === 0) return 'no files to upload';
       return (await aw(commands.join(' && '), {}, commands.length)).output;
     });
     await step('aw push', async () => (await aw('aw push --yes', devEnv)).output);
+    await step('MCP servers, with ids', async () => {
+      // A server that verifies the caller assertion was started with the project file's
+      // `<tool-id>` and `<workspace-id>`; the ids exist only now that aw push registered them.
+      const verifying = running.filter((entry) => entry.server.identity !== undefined);
+      if (verifying.length === 0) return 'no server verifies a caller assertion';
+      const listed = await aw('aw connectors list --json');
+      const targets = identityTargets(listed.stdout);
+      const restarted = [];
+      for (const entry of verifying) {
+        const env = identityEnvironment(entry.server, targets);
+        entry.stop();
+        await listening(entry.server.port, 30_000, false);
+        entry.stop = await startServer(dir, entry.server, env);
+        restarted.push(
+          `${entry.server.script}: IDENTITY_AUDIENCE=${env['IDENTITY_AUDIENCE'] ?? ''} IDENTITY_WORKSPACE=${env['IDENTITY_WORKSPACE'] ?? ''}`,
+        );
+      }
+      return restarted.join('\n');
+    });
     await step('aw check', async () => (await aw('aw check')).output);
     await step('aw chat -p', async () => {
       const command = `aw chat ${id} -p "$AW_PROMPT"`;
@@ -506,7 +677,7 @@ async function projectRows(machine, id, dir, logs, how) {
       // The server's side of every run after the ready screen: why a run failed is logged here.
       log += `== aw dev, after the ready screen\n${scrub(running.state.log.slice(readyLength))}\n`;
     }
-    for (const stop of stops) stop();
+    for (const { stop } of running) stop();
     writeFileSync(path.join(logs, `${id}.log`), log);
   }
   return rows;

@@ -25,7 +25,7 @@ import { POST as publishRoute } from '../../app/api/skills/[name]/revisions/rout
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { parseRole, type Role } from '../rbac/roles';
+import { parseRole, type Role } from '../rbac/core/roles';
 import { createStorageService, type StorageService } from '../storage/service';
 import { deleteSkill } from './delete';
 import { skillDeleteMarkerKey, skillMetaKey, skillRevisionRowFolder, skillRowFolder } from './keys';
@@ -38,6 +38,7 @@ import {
   createRepositorySkillsStoreProvider,
   type WorkspaceSkillsStoreProvider,
 } from '../storage/store';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
 const WORKSPACE_A = '33333333-3333-4333-8333-333333333333';
@@ -328,7 +329,7 @@ describe('DELETE /api/skills/:name', () => {
     });
 
     expect(refused).toMatchObject({ status: 409, body: { error: { code: 'skill_in_use' } } });
-    expect((await workspaceCatalog.listFiles()).map((row) => row.path)).toContain(
+    expect((await listCatalogFiles(workspaceCatalog)).map((row) => row.path)).toContain(
       '.skills/demo/SKILL.md',
     );
   });

@@ -13,8 +13,8 @@ import { createHash } from 'node:crypto';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 import { isBuiltinSkillName, SKILL_MD_FILENAME } from '@indx-workspace/contracts/skills';
 import type { BuiltinSkillName } from '@indx-workspace/contracts/skills';
-import { readWhole } from '@agent-workspace/core/storage/streams';
-import type { SkillObjects } from '../storage/store';
+import { readWhole } from '../storage/objects';
+import type { SkillObjects } from '../storage-and-sharing';
 
 import { withSkillMetaColumn } from './meta-column';
 import { skillSyncContext } from './pending-delete';
@@ -183,6 +183,25 @@ function skillNamesOf(body: unknown): string[] {
     : [];
 }
 
+/** The skills runtime that can install a built-in, or `null` when the deployment keeps no catalog. */
+function installingRuntime() {
+  const skills = applicationContext()?.skills;
+  const runtime = skills?.kind === 'serving' ? skills.runtime : null;
+  if (runtime?.catalog === undefined || runtime.storage === undefined) return null;
+  return { store: runtime.store, catalog: runtime.catalog, storage: runtime.storage };
+}
+
+/**
+ * The built-in skills a save of `body` installs before the save is checked
+ * ({@link installBuiltinSkillsNamedBy}): the built-ins it names, or none when the deployment keeps
+ * no skills catalog. A dry run installs nothing, so it resolves these as if they were already
+ * there, and answers what the save would (issue #890).
+ */
+export function builtinSkillsASaveInstalls(body: unknown): ReadonlySet<string> {
+  if (installingRuntime() === null) return new Set();
+  return new Set(skillNamesOf(body).filter(isBuiltinSkillName));
+}
+
 /**
  * Before a version body is saved: put the built-in skills it names into the caller's workspace, so
  * the save resolves them like any other skill. Does nothing when the body names none or the
@@ -193,9 +212,8 @@ export async function installBuiltinSkillsNamedBy(
   principal: SkillPrincipal & { readonly workspaceId: string },
 ): Promise<void> {
   const names = skillNamesOf(body).filter(isBuiltinSkillName);
-  const skills = applicationContext()?.skills;
-  const runtime = skills?.kind === 'serving' ? skills.runtime : null;
-  if (names.length === 0 || runtime?.catalog === undefined || runtime.storage === undefined) return;
+  const runtime = installingRuntime();
+  if (names.length === 0 || runtime === null) return;
   await ensureBuiltinSkills(
     runtime.store.forWorkspace(principal.workspaceId),
     await runtime.catalog.forWorkspace(principal.workspaceId),

@@ -169,6 +169,7 @@ export type StorageConnectionTestOutcome = z.infer<typeof StorageConnectionTestO
 // @public
 export const StorageConnectionTestOutcomeSchema: z.ZodDiscriminatedUnion<[z.ZodReadonly<z.ZodObject<{
     ok: z.ZodLiteral<true>;
+    emptyFolders: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
 }, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
     ok: z.ZodLiteral<false>;
     code: z.ZodEnum<{

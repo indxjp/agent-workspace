@@ -264,6 +264,8 @@ export const UpdateTriggerRequestSchema: z.ZodReadonly<z.ZodObject<{
     zoomSecretToken: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     outputSchema: z.ZodOptional<z.ZodNullable<z.ZodRecord<z.ZodString, z.ZodUnknown>>>;
     subject: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    cron: z.ZodOptional<z.ZodString>;
+    timezone: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public

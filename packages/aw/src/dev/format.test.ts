@@ -126,6 +126,16 @@ describe('readyScreen', () => {
     `);
   });
 
+  // Issue #1506: one app row, after the console's, only when the project has an app.
+  it('shows one app row with the app dev server, only when there is an app', () => {
+    expect(readyScreen(STATUS, { plain: true })).not.toContain('  app ');
+    const screen = readyScreen({ ...STATUS, app: 'http://127.0.0.1:3100' }, { plain: true });
+    expect(screen).toContain(
+      '\n            password in .agent-workspace/local-secrets.json\n  app       http://127.0.0.1:3100\n  chat      npx aw chat\n',
+    );
+    expect(screen.match(/127\.0\.0\.1:3100/gu)).toHaveLength(1);
+  });
+
   it('shows the evals row only when there are eval cases, singular for one', () => {
     expect(readyScreen(STATUS, { plain: true })).not.toContain('evals');
     const row = (evalCases: number): string =>

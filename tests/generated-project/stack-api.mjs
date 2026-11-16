@@ -98,8 +98,12 @@ export class StackClient {
    * @param {string} route @param {{ method?: string, body?: unknown, apiKey?: string, timeoutMs?: number }} [options]
    */
   async request(route, options = {}) {
+    // One connection per request. The journeys run `aw` as synchronous children for minutes, and a
+    // blocked event loop never runs undici's keep-alive timer, so a pooled socket the server or a
+    // NAT has dropped meanwhile is reused and the next request fails at once with `fetch failed`
+    // (ECONNRESET): the lightweight journey's Cloudflare E2B lane, after its gate chapter.
     /** @type {Record<string, string>} */
-    const headers = { accept: 'application/json' };
+    const headers = { accept: 'application/json', connection: 'close' };
     if (options.apiKey !== undefined) headers['authorization'] = `Bearer ${options.apiKey}`;
     else if (this.cookie !== null) headers['cookie'] = this.cookie;
     const method = options.method ?? 'GET';

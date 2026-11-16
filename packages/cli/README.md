@@ -380,18 +380,17 @@ ADR-0055.
 
 ## Doctor
 
-`agent-workspace doctor [directory] [--json]` runs six checks and prints one line for each result,
+`agent-workspace doctor [directory] [--json]` runs five checks and prints one line for each result,
 `pass`, `warn` or `fail`, with one line of advice under every warning and failure. It fixes
 nothing.
 
-| Check            | Pass                                           | Warn                                                                                                  | Fail                                                           |
-| ---------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `profile`        | `agent-workspace.yaml` validates               | it has no `apiVersion`                                                                                | it is missing or refused; the refusal names the line           |
-| `storage`        | `AW_STORAGE_URL` is set and agrees with `.env` | old storage variables are set (the line names them and the URL that replaces them), or nothing is set | `AW_STORAGE_URL` is invalid, or disagrees with an old variable |
-| `stores`         | the store answered the `validate` probe        | the store was not probed, or its bucket is not created yet                                            | the store did not answer, or `.env` is malformed               |
-| `storage-layout` | an area has no objects in the old layout       | objects remain (a count, capped), or the area cannot be counted from this host                        | never                                                          |
-| `prerequisites`  | the tool is on `PATH`; its version is shown    | an optional tool is missing, or a tool printed no version                                             | a tool the target needs is missing                             |
-| `version-skew`   | the server serves this CLI's contracts         | `AGENT_WORKSPACE_URL` is unset, the server is unreachable, or it states no version                    | the server is outside the range this CLI supports              |
+| Check           | Pass                                           | Warn                                                                                                  | Fail                                                           |
+| --------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `profile`       | `agent-workspace.yaml` validates               | it has no `apiVersion`                                                                                | it is missing or refused; the refusal names the line           |
+| `storage`       | `AW_STORAGE_URL` is set and agrees with `.env` | old storage variables are set (the line names them and the URL that replaces them), or nothing is set | `AW_STORAGE_URL` is invalid, or disagrees with an old variable |
+| `stores`        | the store answered the `validate` probe        | the store was not probed, or its bucket is not created yet                                            | the store did not answer, or `.env` is malformed               |
+| `prerequisites` | the tool is on `PATH`; its version is shown    | an optional tool is missing, or a tool printed no version                                             | a tool the target needs is missing                             |
+| `version-skew`  | the server serves this CLI's contracts         | `AGENT_WORKSPACE_URL` is unset, the server is unreachable, or it states no version                    | the server is outside the range this CLI supports              |
 
 The storage line decides with the function the server starts up with, so a disagreement fails
 with the server's own reason. It names variables and prints the URL only after parsing it, never
@@ -403,13 +402,6 @@ first boot is a warning until it exists. The store probes are the ones `validate
 stop at the first store that does not answer: that store fails and the others are reported as not
 checked. The version check is the one `validate` and `start` run (ADR-0078). When the profile is
 refused, the store and tool checks are reported as not checked; the version check still runs.
-
-The storage layout check counts the objects each area still holds in the old per-area naming
-(the prefixes the server's `AW_STORAGE_MIGRATE=adopt` stage lists), read-only: a `file://` root on
-this host is walked, and a bucket is listed after the `stores` check reached it. Each area is
-counted up to 10,000 and then reads "at least 10,000". Only counts are printed, never a key or a
-path. A root this host cannot see, or a bucket the `stores` check did not reach, is a warning
-"not counted", never a zero.
 
 The tools checked depend on the profile:
 

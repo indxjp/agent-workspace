@@ -4,7 +4,7 @@
  * old way (a bare object prefix, still read by the bridge) is seeded with {@link seedBareSkill}.
  */
 import { createStorageService } from '../storage/service';
-import type { SkillObjects } from '../storage/store';
+import type { SkillObjects } from '../storage-and-sharing';
 import { skillFileKey, skillMetaKey } from './keys';
 import type { SkillRowsWriter } from './tree';
 

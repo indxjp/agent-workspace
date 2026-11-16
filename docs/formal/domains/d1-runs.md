@@ -197,7 +197,7 @@ Server-side restatements that must equal the contract (T4 targets):
 - `POLICY` has 4 × 25 × 3 = **300 grant cells** (`permissions.ts:216`). Owner's fallback is `EVERYTHING`, with a `workspaces` override.
 - `applyGrant` has 4 × 5 = **20 cells**.
 - `decide` over (role, resource, op, ownership) has **1 500 cells**. The scope axis multiplies that by {null, run(id), session(id)} crossed with id match or mismatch or no id.
-- Accepted path shapes: 25 collections + 25 rows + **17 sub-resources**, 67 in all (`SPEC_34_SUB_RESOURCES`: `agents/runs`, `runs/events`, `sessions/messages`, plus 14 declared in `apps/web/server/rbac/declarations/*.ts`). These are crossed with 7 methods; `OPTIONS` and any other string are refused.
+- Accepted path shapes: 25 collections + 25 rows + **17 sub-resources**, 67 in all (`SPEC_34_SUB_RESOURCES`: `agents/runs`, `runs/events`, `sessions/messages`, plus 14 declared in `apps/web/server/rbac/core/declarations/*.ts`). These are crossed with 7 methods; `OPTIONS` and any other string are refused.
 - Route level (`authorisation-matrix.test.ts`): 102 declared routes, minus 5 `PUBLIC_ROUTES` and 1 `IDENTITY_ONLY_ROUTES`, leaves 96 routes. 96 × 4 roles × 5 ownerships = **1 920 route cells**. Every cell must be allow or deny.
 
 **Role-table cells D1 depends on** (`permissions.ts`), written read/write/run:

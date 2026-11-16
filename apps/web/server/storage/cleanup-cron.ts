@@ -8,7 +8,7 @@
 import type { Logger } from '@agent-workspace/core/telemetry';
 
 import { defineSlot } from '../runtime-slot';
-import { bearerMatches, problem } from '../sessions/retention-cron';
+import { bearerMatches, problem } from '../http/cron';
 import type { CleanupReport } from './cleanup';
 import type { LockOutcome } from './store';
 
@@ -124,7 +124,6 @@ export async function handleStorageCleanupCron(
       mode: report.mode,
       scanned: report.scanned,
       orphans: report.orphans,
-      legacyOrphans: report.legacyOrphans,
       stalePendingReady: report.stalePendingReady,
       stalePendingDeleted: report.stalePendingDeleted,
       deletingFinished: report.deletingFinished,

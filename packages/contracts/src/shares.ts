@@ -109,11 +109,6 @@ const shareFields = {
   revokedAt: IsoDateTimeSchema.nullable(),
   suspendedAt: IsoDateTimeSchema.nullable(),
   createdAt: IsoDateTimeSchema,
-  /**
-   * The public link, relative to the API origin (`/p/<token>`). Present exactly when
-   * `visibility` is `public`: the token of a private or workspace share never crosses the wire.
-   */
-  url: z.string().startsWith('/p/').optional(),
 };
 
 const PUBLIC_URL_INVARIANT = {
@@ -127,18 +122,28 @@ const PUBLIC_URL_INVARIANT = {
  * ISO-8601 strings; money is decimal strings.
  */
 export const ShareResourceSchema = z
-  .object(shareFields)
+  .object({
+    ...shareFields,
+    /**
+     * The public link, relative to the API origin (`/p/<token>`). Present exactly when
+     * `visibility` is `public`: the token of a private or workspace share never crosses the wire.
+     * This response is the only time it is shown: the server keeps only the token's hash.
+     */
+    url: z.string().startsWith('/p/').optional(),
+  })
   .strict()
   .refine(PUBLIC_URL_INVARIANT.check, { message: PUBLIC_URL_INVARIANT.message })
   .readonly();
 
 export type ShareResource = z.infer<typeof ShareResourceSchema>;
 
-/** Every item of `GET /api/shares`: the share plus how many times it has been opened. */
+/**
+ * Every item of `GET /api/shares`: the share plus how many times it has been opened. It never
+ * carries a link: a public link is shown once, in the publish response, and only its hash is kept.
+ */
 export const ShareListItemSchema = z
   .object({ ...shareFields, viewCount: z.number().int().nonnegative() })
   .strict()
-  .refine(PUBLIC_URL_INVARIANT.check, { message: PUBLIC_URL_INVARIANT.message })
   .readonly();
 
 export type ShareListItem = z.infer<typeof ShareListItemSchema>;

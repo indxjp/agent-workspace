@@ -8,6 +8,98 @@ what the policy covers are on the developer site's
 page. `@indx-workspace/contracts`, `@indx-workspace/sdk` and `@indx-workspace/aw` are released
 in lock-step with one version.
 
+## 0.6.13 — unreleased
+
+### Added
+
+- `@indx-workspace/contracts/agent-teams`: the agent-team wire contract of ADR-0104's acceptance
+  (spec 04 §5.18, #1516). `CreateAgentTeamRequestSchema` and `CreateAgentTeamVersionRequestSchema`
+  (a lead and 1–8 members, each pinned to an agent version; no repeated agent or member name, and
+  the lead is not a member), `AgentTeamResourceSchema`, `AgentTeamVersionSchema`, the cursor-paged
+  list responses, `AGENT_TEAM_PROBLEM_CODES` (`agent_team_not_found` 404, `agent_team_name_taken`
+  409, `agent_team_member_invalid` 422) and the tool error `team_member_limit`. A member name is a
+  slug of at most 52 characters, so `mcp__agent__<member>` fits the 64-character tool-name budget.
+- `MEMBERSHIP_ROLES` gains `guest`; `CONFERRABLE_ROLES` lists the four roles an invitation, an API
+  key or a role change may confer.
+- `@indx-workspace/contracts/email-link`: the request and response schemas of the email-link
+  sign-in, `EMAIL_LINK_TTL_SECONDS`, `DEMO_WORKSPACE_LIFETIME_SECONDS` and its problem codes.
+- `LocalRuntimeReadyMessageSchema` takes an optional `databaseUrl`: the local runtime's own
+  PostgreSQL, a `postgres://` or `postgresql://` URL on `127.0.0.1`, `localhost` or `[::1]` only
+  (`LocalRuntimeDatabaseUrlSchema`), for `aw dev` to migrate and run a generated app on. A
+  `ready` without it parses as before.
+- `environments.production.apps` in the project file: an optional map, keyed by app name, of the
+  portal apps production runs beside the platform. Each value is `{ image, url }`: a
+  digest-pinned image (`<repository>@sha256:<64 hex>`) and the app's own `https:` origin.
+  `ProductionAppSchema` and `ProductionApp` describe one app.
+- `appSchemaName(name)`: the PostgreSQL schema, and production database role, of an app
+  (`service-desk` → `app_service_desk`). It equals the app kit's `appSchemaName`.
+- `RunResourceSchema.parentRunId` (`null` for a root run), and `RunDetailSchema` /
+  `RunDetailResponseSchema` for `GET /api/runs/:id`: the run plus `children` (at most
+  `RUN_CHILDREN_MAX`, 16) and `treeCost` (`RunTreeCostSchema`), both optional on the read so a
+  control plane that predates run trees still parses (ADR-0104 acceptance, #1516). The route
+  catalogue gains the six `agentTeams.*` routes, and `runs.get` answers `RunDetailResponseSchema`.
+- `@indx-workspace/contracts/demo`: `DemoAllowanceSchema` and `DEMO_ALLOWANCE_PATH` for a demo
+  workspace's runs per day, runs left and deletion time, and `StorePrivacyFactsSchema` with
+  `STORE_PRIVACY_PATH` for the facts the Agent Store's privacy notice states.
+- `@indx-workspace/contracts/email-link`: the email-link request requires `consent: true`
+  (`VisitorConsentSchema`), and `StoreLeadRequestSchema` describes the store's enquiry and
+  launch-notice forms, with `STORE_LEAD_PROBLEM_CODES`.
+- The route catalogue gains `POST /api/store/leads`, `GET /api/store/privacy` and
+  `GET /api/demo/allowance`.
+- `@indx-workspace/contracts/demo-operator`: the schemas of the Agent Store's operator routes — a demo
+  template's seed (`PUT /api/demo/templates/{entry}`), which carries the files of each skill the demo
+  agent uses, and the templates report, the maintenance verdict (`PUT /api/demo/maintenance/{entry}`)
+  and the deployment readiness answer (`GET /api/demo/readiness`).
+- `@indx-workspace/contracts/demo`: the Agent Store demo's run caps (`DEMO_RUNS_PER_PERSON_PER_DAY`,
+  `DEMO_RUN_WINDOW_SECONDS`, `DEMO_RUNS_PER_CLIENT_PER_DAY`), its run-start refusals
+  (`DEMO_RUN_START_PROBLEM_CODES`, also in `RUN_START_PROBLEM_CODES`), `demoFallbackReason`, the
+  entry slug and template naming, and `DEMO_SEND_RESULT`.
+- The email-link sign-in request takes a `challenge` answer and an optional `entry`; the verify
+  request takes `entry`. New problem codes: `email_link_challenge_failed`,
+  `email_link_address_refused` and `demo_entry_unavailable`.
+- `@indx-workspace/contracts/token-exchange`: `TokenExchangeRequestSchema`,
+  `TokenExchangeResponseSchema`, `TOKEN_EXCHANGE_PROBLEM_CODES`, `TOKEN_EXCHANGE_TTL_SECONDS`,
+  `OAUTH_ACCESS_TOKEN_PATTERN` and the RFC 8693 type identifiers (ADR-0161). Endpoint clients gain
+  the `app-backend` kind and `oidcAudience`; the audit trail gains `user-token-exchanged`; the
+  route catalogue gains `auth.exchange`.
+- `@indx-workspace/contracts/demo`: a new run-start refusal, `demo_expired` (`409`). A demo
+  workspace whose end has passed starts no more runs, even before the retention sweep deletes it.
+  `demoFallbackReason` maps it to `unavailable`.
+- `ProductionAppSchema` takes three optional keys an app reads once its workspace exists:
+  `workspaceId` (a UUID), `connectorId` and `apiKeySecret`, the id of the Secret Manager secret
+  that holds the app's workspace API key, never the key (a value that starts with the API key
+  prefix is refused). `PRODUCTION_APP_CLOUD_RUN_KEYS` lists them. Only `target: gcp-cloudrun`
+  accepts them; the other targets refuse each at `environments.production.apps.<name>.<key>`.
+- `ProductionAppSchema` takes an optional `signIn` (`ProductionAppSignInSchema`): `oidcClientId`,
+  `oidcClientSecret`, `appClientId` and `appClientSecret`, all four together. The two secrets are
+  Secret Manager ids, never values: an id that starts with an API key, endpoint client secret or
+  Google OAuth client secret prefix is refused. `signIn` is one of `PRODUCTION_APP_CLOUD_RUN_KEYS`,
+  so only `target: gcp-cloudrun` accepts it, and only with `environments.production.gcp.oidc`.
+  `OAUTH_CLIENT_SECRET_PREFIX` (`awcs_live_`) is exported from `token-exchange`.
+- `UpdateTriggerRequestSchema` takes optional `cron` (1–256 characters) and `timezone` (1–64
+  characters), bounded as `CreateTriggerRequestSchema` bounds them.
+- `StorageConnectionTestOutcomeSchema`: a successful test may carry `emptyFolders`, the allowed
+  folders it found nothing in. A missing folder and an empty one look the same in an object store,
+  so neither fails the test.
+- `LocalRuntimeEnvironmentSchema` takes an optional `features` (`FeatureListSchema`), which `aw dev` sends only when the project file has a `features:` list (ADR-0160 D5); a runtime older than this key refuses it as an unknown key. `RESERVED_SECRET_NAMES` lists `AW_DEPLOYMENT_FEATURES`, which the `AW_` prefix already reserved.
+- `@indx-workspace/contracts/webhooks`: the run-outcome webhook contract (N-3, #250):
+  `WebhookEndpointSchema`, `CreateWebhookRequestSchema`, `CreateWebhookResponseSchema`,
+  `WebhookListResponseSchema`, the signed `WebhookEventSchema` envelope, `WEBHOOK_EVENT_TYPES`,
+  the Standard Webhooks v1 header names and `webhookSignedContent`, and `WEBHOOK_PROBLEM_CODES`.
+- `ApiRoute.headers` declares the request headers a route reads beyond the shared ones; `runs.start`
+  declares its optional `Idempotency-Key`, and the OpenAPI document emits it as a header parameter.
+
+### Changed
+
+- In the engine catalogue, `limits.maxBudget: 'adapter'` now means the platform around the engine
+  enforces the budget, and since ADR-0162 that is the gateway, not the adapter (#342). The OpenAI
+  Agents, Mastra and pi adapters no longer price usage or stop a run themselves, so a client that
+  shows who enforces a run's budget should name the gateway for `'adapter'`. `maxTurns: 'adapter'`
+  still means the adapter. The value names are unchanged.
+- `ShareListItemSchema` no longer has `url`, and refuses an item that carries one: a public link
+  is in the `201` of `POST /api/shares` only (`ShareResourceSchema.url`), because the server keeps
+  only the token's hash.
+
 ## 0.6.12 — unreleased
 
 ### Added

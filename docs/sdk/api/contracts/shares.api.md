@@ -96,7 +96,6 @@ export const ShareListItemSchema: z.ZodReadonly<z.ZodObject<{
     revokedAt: z.ZodNullable<z.ZodISODateTime>;
     suspendedAt: z.ZodNullable<z.ZodISODateTime>;
     createdAt: z.ZodISODateTime;
-    url: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -136,7 +135,6 @@ export const ShareListResponseSchema: z.ZodReadonly<z.ZodObject<{
         revokedAt: z.ZodNullable<z.ZodISODateTime>;
         suspendedAt: z.ZodNullable<z.ZodISODateTime>;
         createdAt: z.ZodISODateTime;
-        url: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>>>;
 }, z.core.$strict>>;
 
@@ -148,6 +146,7 @@ export type ShareResource = z.infer<typeof ShareResourceSchema>;
 
 // @public
 export const ShareResourceSchema: z.ZodReadonly<z.ZodObject<{
+    url: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     subjectType: z.ZodEnum<{
         agent: "agent";
@@ -178,7 +177,6 @@ export const ShareResourceSchema: z.ZodReadonly<z.ZodObject<{
     revokedAt: z.ZodNullable<z.ZodISODateTime>;
     suspendedAt: z.ZodNullable<z.ZodISODateTime>;
     createdAt: z.ZodISODateTime;
-    url: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public

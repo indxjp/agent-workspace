@@ -91,7 +91,7 @@ import type { VerifiedSessionClaims } from './session.js';
  * because it is real: one lookup on the `workspaces_slug_key` unique index in each handler that
  * needs `workspace_id`.
  *
- * The three public fields are plain, enumerable and frozen, so a handler reads them as it would
+ * The two public fields are plain, enumerable and frozen, so a handler reads them as it would
  * from any object and `JSON.stringify` produces exactly them, while nothing can write them. The
  * private fields are neither enumerable nor reachable from another module; they make the type
  * nominal and give the runtime guard something to compare against.
@@ -103,18 +103,14 @@ export class WorkspaceScope {
   /** Who is asking. `users.email`, lower-cased, as the session carried it. */
   public readonly actorEmail: string;
 
-  /** Spec §21's highest role, and the only one this wave mints or accepts. */
-  public readonly role: 'owner';
-
   /**
-   * The three values as the verified session gave them, kept where no other module can name them
+   * The two values as the verified session gave them, kept where no other module can name them
    * and no `Object.assign` can reach them. Unnameable outside this file and dropped by an object
    * spread — which is what makes the type nominal — and they exist so that `isWorkspaceScope`
    * can check an invariant rather than a shape.
    */
   readonly #tenantFromVerifiedSession: string;
   readonly #actorFromVerifiedSession: string;
-  readonly #roleFromVerifiedSession: 'owner';
 
   /**
    * Private, so the only way in is the static factory below, whose argument cannot be
@@ -133,10 +129,8 @@ export class WorkspaceScope {
   private constructor(claims: VerifiedSessionClaims) {
     this.workspaceSlug = claims.ws;
     this.actorEmail = claims.sub;
-    this.role = claims.role;
     this.#tenantFromVerifiedSession = claims.ws;
     this.#actorFromVerifiedSession = claims.sub;
-    this.#roleFromVerifiedSession = claims.role;
     Object.freeze(this);
   }
 
@@ -156,15 +150,15 @@ export class WorkspaceScope {
    * value that arrived as `unknown`, one rebuilt by a serialiser, or one some other module has
    * had its hands on.
    *
-   * This asks four questions, not one. The `#` check is the shape question and it alone is not
+   * This asks three questions, not one. The `#` check is the shape question and it alone is not
    * enough: it answered `true` for an object whose tenant had been overwritten in place, which
    * is exactly the hole verification round 2 found. So the guard also requires the object to be
    * frozen and requires each public field to still equal the value the constructor took from the
    * verified session. A cast, an object literal, a spread copy, a JSON round-trip and
    * `Object.create(WorkspaceScope.prototype)` all fail the first question; a tampered instance
-   * fails one of the other three.
+   * fails one of the other two.
    *
-   * Honestly: with the freeze in place, the last three questions are defence in depth and **no
+   * Honestly: with the freeze in place, the last two questions are defence in depth and **no
    * test proves them**, because no code outside this file can produce the value that would
    * distinguish them — that is what the freeze is for. Measured rather than assumed, by running
    * both mutations: reverting this method to the bare `#` check leaves the whole suite green,
@@ -180,8 +174,7 @@ export class WorkspaceScope {
     return (
       Object.isFrozen(value) &&
       value.workspaceSlug === value.#tenantFromVerifiedSession &&
-      value.actorEmail === value.#actorFromVerifiedSession &&
-      value.role === value.#roleFromVerifiedSession
+      value.actorEmail === value.#actorFromVerifiedSession
     );
   }
 }

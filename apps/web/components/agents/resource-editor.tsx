@@ -25,6 +25,9 @@ import {
   type FileCatalog,
   type NamedCatalog,
 } from './model';
+import { agentDetailStrings } from './agent-detail-messages';
+import { ProblemLine } from './problem-line';
+import type { VersionsLocale } from './versions-messages';
 import { FilePicker, type FilePickerSelection } from '../resources/resource-screens';
 import {
   ConnectedStorage,
@@ -33,6 +36,12 @@ import {
 } from '../storage/connected-storage';
 
 const CARD = 'rounded-(--radius) border border-border bg-surface p-4';
+/**
+ * A `<fieldset>` is as wide as its widest content by default (`min-inline-size: min-content`), so
+ * the file picker's table pushed the whole tab sideways on a phone; `min-w-0` lets the table scroll
+ * inside its own card instead.
+ */
+const FIELDSET = `${CARD} min-w-0`;
 const CONTROL =
   'rounded-(--radius-sm) border border-border-strong bg-surface px-2 py-1 text-[12.5px] text-text focus:border-accent focus:outline-2 focus:-outline-offset-1 focus:outline-accent';
 const ROW =
@@ -52,7 +61,7 @@ export type CatalogsState =
       readonly skills: NamedCatalog;
       readonly connectors: NamedCatalog;
     }
-  | { readonly kind: 'failed'; readonly reason: string };
+  | { readonly kind: 'failed'; readonly reason: string; readonly detail: string };
 
 /**
  * Files, skills, and connectors are optional subsystems in this deployment (each answers `503`
@@ -72,9 +81,11 @@ export function useResourceCatalogs(): CatalogsState {
       },
       (error: unknown) => {
         if (active) {
+          const detail = error instanceof Error ? error.message : String(error);
           setState({
             kind: 'failed',
-            reason: `Resource names could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+            reason: `Resource names could not be loaded: ${detail}`,
+            detail,
           });
         }
       },
@@ -89,7 +100,7 @@ export function useResourceCatalogs(): CatalogsState {
 export type ProjectsState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly projects: readonly ProjectResource[] }
-  | { readonly kind: 'failed'; readonly reason: string };
+  | { readonly kind: 'failed'; readonly reason: string; readonly detail: string };
 
 /** `GET /api/projects` for the read-only "project-provided" group. See `./model.ts`'s
  *  `projectProvidedGroups` for which projects this becomes visible on. */
@@ -103,9 +114,11 @@ export function useAgentProjects(): ProjectsState {
       },
       (error: unknown) => {
         if (active) {
+          const detail = error instanceof Error ? error.message : String(error);
           setState({
             kind: 'failed',
-            reason: `Project associations could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+            reason: `Project associations could not be loaded: ${detail}`,
+            detail,
           });
         }
       },
@@ -139,6 +152,7 @@ export function FileAssignments({
   writeFilesAllowed,
   onChange,
   storage,
+  locale = 'en',
 }: Readonly<{
   files: AgentResourceAssignments['files'];
   catalog: FileCatalog | null;
@@ -150,7 +164,10 @@ export function FileAssignments({
     grants: AgentResourceAssignments['storageGrants'];
     onGranted: (next: AgentResourceAssignments) => void;
   };
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const words = agentDetailStrings(locale).editor;
   const [browsing, setBrowsing] = useState(false);
   const [source, setSource] = useState<'workspace' | 'storage'>('workspace');
   const [pending, setPending] = useState<readonly FilePickerSelection[]>([]);
@@ -159,6 +176,7 @@ export function FileAssignments({
   const grants = storage?.grants ?? [];
   const connections = useStorageConnections(
     storage !== undefined && ((browsing && source === 'storage') || grants.length > 0),
+    locale,
   );
   const rows = resolveFileGrants(files, catalog);
 
@@ -179,38 +197,37 @@ export function FileAssignments({
   };
 
   return (
-    <fieldset className={CARD} aria-labelledby="agent-files-heading">
+    <fieldset className={FIELDSET} aria-labelledby="agent-files-heading">
       <legend id="agent-files-heading" className="px-1 text-[13px] font-semibold">
-        Files and folders
+        {words.filesAndFolders}
       </legend>
       {rows.length === 0 ? (
-        <p className="py-1 text-[12.5px] text-muted">No files or folders assigned.</p>
+        <p className="py-1 text-[12.5px] text-muted">{words.noFiles}</p>
       ) : (
         <ul>
           {rows.map((row) => (
             <li className={ROW} key={row.fileId}>
               <span className="min-w-0 flex-1 truncate">
-                {row.path ?? `Unresolved file (${row.fileId})`}
+                {row.path ?? words.unresolvedFile(row.fileId)}
               </span>
-              {row.missing ? <span className={BADGE_MISSING}>Missing</span> : null}
+              {row.missing ? <span className={BADGE_MISSING}>{words.missing}</span> : null}
               <select
-                aria-label={`Access for ${row.path ?? row.fileId}`}
+                aria-label={words.accessFor(row.path ?? row.fileId)}
                 className={CONTROL}
                 value={row.access}
                 onChange={(event) =>
                   setAccess(row.fileId, event.target.value as 'read' | 'read-write')
                 }
               >
-                <option value="read">Read</option>
-                <option value="read-write">Read/write</option>
+                <option value="read">{words.read}</option>
+                <option value="read-write">{words.readWrite}</option>
               </select>
               <button type="button" className={BTN_SM} onClick={() => remove(row.fileId)}>
-                Remove
+                {words.remove}
               </button>
               {row.access === 'read-write' && !writeFilesAllowed ? (
                 <p role="alert" className="w-full text-[12px] text-warn">
-                  This agent&rsquo;s Write files permission is off, so this read/write grant will be
-                  saved and enforced as read-only until Write files is turned on.
+                  {words.readOnlyUntilWriteFiles}
                 </p>
               ) : null}
             </li>
@@ -225,6 +242,7 @@ export function FileAssignments({
           listRef={grantsRef}
           focusWhenEmpty={addRef}
           onChanged={storage.onGranted}
+          locale={locale}
         />
       )}
       <div className="mt-3">
@@ -237,7 +255,7 @@ export function FileAssignments({
             setPending([]);
           }}
         >
-          {browsing ? 'Close browser' : 'Add files or folders'}
+          {browsing ? words.closeBrowser : words.addFiles}
         </button>
         {browsing ? (
           <div className="mt-3 rounded border border-border p-3">
@@ -249,7 +267,7 @@ export function FileAssignments({
                   aria-pressed={source === 'workspace'}
                   onClick={() => setSource('workspace')}
                 >
-                  Workspace files
+                  {words.workspaceFiles}
                 </button>
                 <button
                   type="button"
@@ -257,7 +275,7 @@ export function FileAssignments({
                   aria-pressed={source === 'storage'}
                   onClick={() => setSource('storage')}
                 >
-                  Connected storage
+                  {words.connectedStorage}
                 </button>
               </div>
             )}
@@ -268,17 +286,18 @@ export function FileAssignments({
                 writeFilesAllowed={writeFilesAllowed}
                 grantsRef={grantsRef}
                 onGranted={storage.onGranted}
+                locale={locale}
               />
             ) : (
               <>
-                <FilePicker onChange={setPending} />
+                <FilePicker onChange={setPending} locale={locale} />
                 <button
                   type="button"
                   className={`${BTN_SM} mt-2`}
                   disabled={pending.length === 0}
                   onClick={addPending}
                 >
-                  Add {pending.length} selected
+                  {words.addSelected(pending.length)}
                 </button>
               </>
             )}
@@ -291,16 +310,22 @@ export function FileAssignments({
 
 /** Skills or connectors: an id list with no access mode, shared between both groups. */
 export function NamedAssignments({
-  heading,
+  group,
   ids,
   catalog,
   onChange,
+  locale = 'en',
 }: Readonly<{
-  heading: string;
+  /** Which group this is; its id, heading and labels follow from it. */
+  group: 'skills' | 'connectors';
   ids: readonly string[];
   catalog: NamedCatalog | null;
   onChange: (next: readonly string[]) => void;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const words = agentDetailStrings(locale).editor;
+  const heading = group === 'skills' ? words.skills : words.connectors;
   const [selectedToAdd, setSelectedToAdd] = useState('');
   const rows = resolveNamedAssignments(ids, catalog);
   const options =
@@ -313,28 +338,30 @@ export function NamedAssignments({
     setSelectedToAdd('');
   };
 
-  const headingId = `agent-${heading.toLowerCase()}-heading`;
+  const headingId = `agent-${group}-heading`;
   return (
-    <fieldset className={CARD} aria-labelledby={headingId}>
+    <fieldset className={FIELDSET} aria-labelledby={headingId}>
       <legend id={headingId} className="px-1 text-[13px] font-semibold">
         {heading}
       </legend>
       {rows.length === 0 ? (
-        <p className="py-1 text-[12.5px] text-muted">No {heading.toLowerCase()} assigned.</p>
+        <p className="py-1 text-[12.5px] text-muted">
+          {group === 'skills' ? words.noSkills : words.noConnectors}
+        </p>
       ) : (
         <ul>
           {rows.map((row) => (
             <li className={ROW} key={row.id}>
               <span className="min-w-0 flex-1 truncate">
-                {row.name ?? `Unresolved (${row.id})`}
+                {row.name ?? words.unresolved(row.id)}
               </span>
               {row.missing ? (
-                <span className={BADGE_MISSING}>Missing</span>
+                <span className={BADGE_MISSING}>{words.missing}</span>
               ) : row.enabled === false ? (
-                <span className={BADGE_DISABLED}>Disabled</span>
+                <span className={BADGE_DISABLED}>{words.disabled}</span>
               ) : null}
               <button type="button" className={BTN_SM} onClick={() => remove(row.id)}>
-                Remove
+                {words.remove}
               </button>
             </li>
           ))}
@@ -343,12 +370,12 @@ export function NamedAssignments({
       {options.length === 0 ? null : (
         <div className="mt-3 flex items-center gap-2">
           <select
-            aria-label={`Add a ${heading.toLowerCase().replace(/s$/u, '')}`}
+            aria-label={group === 'skills' ? words.addSkill : words.addConnector}
             className={CONTROL}
             value={selectedToAdd}
             onChange={(event) => setSelectedToAdd(event.target.value)}
           >
-            <option value="">Choose one…</option>
+            <option value="">{words.chooseOne}</option>
             {options.map(([id, entry]) => (
               <option key={id} value={id}>
                 {entry.name}
@@ -356,7 +383,7 @@ export function NamedAssignments({
             ))}
           </select>
           <button type="button" className={BTN_SM} disabled={selectedToAdd === ''} onClick={add}>
-            Add
+            {words.add}
           </button>
         </div>
       )}
@@ -374,17 +401,27 @@ export function ProjectProvidedResources({
   projectsState,
   files,
   connectors,
+  locale = 'en',
 }: Readonly<{
   agentId: string;
   projectsState: ProjectsState;
   files: FileCatalog | null;
   connectors: NamedCatalog | null;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const strings = agentDetailStrings(locale);
+  const words = strings.editor;
   if (projectsState.kind === 'loading') return null;
   if (projectsState.kind === 'failed') {
     return (
       <p className="text-[12px] text-muted" role="status">
-        {projectsState.reason}
+        <ProblemLine
+          locale={locale}
+          english={projectsState.reason}
+          lead={strings.projectsFailed}
+          detail={projectsState.detail}
+        />
       </p>
     );
   }
@@ -393,12 +430,9 @@ export function ProjectProvidedResources({
   return (
     <section className={CARD} aria-labelledby="project-resources-heading">
       <h3 id="project-resources-heading" className="mb-1 text-[13px] font-semibold">
-        Project-provided (read-only)
+        {words.projectProvided}
       </h3>
-      <p className="mb-3 text-[12px] text-muted">
-        Added to every run of this agent that starts from one of these projects (this agent is their
-        default agent). Edit these on the project, not here.
-      </p>
+      <p className="mb-3 text-[12px] text-muted">{words.projectProvidedHelp}</p>
       {groups.map((group) => (
         <div
           key={group.projectId}
@@ -406,20 +440,22 @@ export function ProjectProvidedResources({
         >
           <p className="text-[12.5px] font-semibold">{group.projectName}</p>
           {group.files.length === 0 && group.connectors.length === 0 ? (
-            <p className="text-[12px] text-muted">No files or connectors.</p>
+            <p className="text-[12px] text-muted">{words.noFilesOrConnectors}</p>
           ) : (
             <ul className="text-[12.5px] text-muted">
               {group.files.map((file) => (
                 <li key={file.id}>
-                  {file.path ?? `Unresolved file (${file.id})`}
-                  {file.missing ? <span className={`${BADGE_MISSING} ml-2`}>Missing</span> : null}
+                  {file.path ?? words.unresolvedFile(file.id)}
+                  {file.missing ? (
+                    <span className={`${BADGE_MISSING} ml-2`}>{words.missing}</span>
+                  ) : null}
                 </li>
               ))}
               {group.connectors.map((connector) => (
                 <li key={connector.id}>
-                  {connector.name ?? `Unresolved connector (${connector.id})`}
+                  {connector.name ?? words.unresolvedConnector(connector.id)}
                   {connector.missing ? (
-                    <span className={`${BADGE_MISSING} ml-2`}>Missing</span>
+                    <span className={`${BADGE_MISSING} ml-2`}>{words.missing}</span>
                   ) : null}
                 </li>
               ))}
@@ -442,6 +478,7 @@ export function AgentResourcesEditor({
   catalogsState,
   projectsState,
   onChange,
+  locale = 'en',
 }: Readonly<{
   agentId: string;
   assignments: AgentResourceAssignments;
@@ -449,16 +486,24 @@ export function AgentResourcesEditor({
   catalogsState: CatalogsState;
   projectsState: ProjectsState;
   onChange: (next: AgentResourceAssignments) => void;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const strings = agentDetailStrings(locale);
   const { files, skills, connectors } = catalogsOf(catalogsState);
   return (
     <section className="space-y-4" aria-labelledby="resources-heading">
       <h2 id="resources-heading" className="text-[15px] font-semibold">
-        Assigned resources
+        {strings.editor.heading}
       </h2>
       {catalogsState.kind === 'failed' ? (
         <p className="text-[13px] text-danger" role="alert">
-          {catalogsState.reason}
+          <ProblemLine
+            locale={locale}
+            english={catalogsState.reason}
+            lead={strings.resourcesFailed}
+            detail={catalogsState.detail}
+          />
         </p>
       ) : null}
       <FileAssignments
@@ -471,24 +516,28 @@ export function AgentResourcesEditor({
           grants: assignments.storageGrants,
           onGranted: (next) => onChange({ ...assignments, storageGrants: next.storageGrants }),
         }}
+        locale={locale}
       />
       <NamedAssignments
-        heading="Skills"
+        group="skills"
         ids={assignments.skillIds}
         catalog={skills}
         onChange={(next) => onChange({ ...assignments, skillIds: next })}
+        locale={locale}
       />
       <NamedAssignments
-        heading="Connectors"
+        group="connectors"
         ids={assignments.connectorIds}
         catalog={connectors}
         onChange={(next) => onChange({ ...assignments, connectorIds: next })}
+        locale={locale}
       />
       <ProjectProvidedResources
         agentId={agentId}
         projectsState={projectsState}
         files={files}
         connectors={connectors}
+        locale={locale}
       />
     </section>
   );

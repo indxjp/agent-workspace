@@ -341,6 +341,16 @@ describe('POSIX ustar transfer', () => {
         await writeFile(path.join(root, 'out.txt'), 'regular');
         const transfer = new URL('./transfer.ts', import.meta.url).href;
         const script = [
+          `const { registerHooks } = await import('node:module');`,
+          `const { existsSync } = await import('node:fs');`,
+          `const { fileURLToPath } = await import('node:url');`,
+          `registerHooks({ resolve(specifier, context, nextResolve) {`,
+          `  if (specifier.startsWith('./') && specifier.endsWith('.js') && context.parentURL?.startsWith(${JSON.stringify(new URL('./', import.meta.url).href)})) {`,
+          `    const source = new URL(specifier.slice(0, -3) + '.ts', context.parentURL);`,
+          `    if (existsSync(fileURLToPath(source))) return nextResolve(source.href, context);`,
+          `  }`,
+          `  return nextResolve(specifier, context);`,
+          `} });`,
           `const { archiveWorkspacePaths, readStream } = await import(${JSON.stringify(transfer)});`,
           `const { execFileSync } = await import('node:child_process');`,
           `const { unlink } = await import('node:fs/promises');`,

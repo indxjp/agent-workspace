@@ -227,7 +227,7 @@ export async function installRf001LegacyFixture(db: Database): Promise<Rf001Lega
   await db.insert(shares).values({
     id: shareId,
     workspaceId,
-    token: `rf001_${shareId}`,
+    tokenHash: `rf001_${shareId}`,
     subjectType: 'agent',
     subjectId: usedAgentId,
     subjectLabel: 'Used legacy Agent',
@@ -251,6 +251,7 @@ export async function installRf001LegacyFixture(db: Database): Promise<Rf001Lega
     path: 'legacy/report.txt',
     kind: 'file',
     storageKey: catalogStorageKey,
+    objectId: crypto.randomUUID(),
     sizeBytes: 9,
     contentType: 'text/plain',
     createdBy: ownerUserId,

@@ -55,6 +55,8 @@
       "//workers": "Each PACKAGE's test target sets VITEST_MAX_WORKERS=4 in its own env (package.json) so ten Vitest processes started at once share a 16-core runner instead of each claiming every core. The root project's target deliberately sets none: the `tests` project is serial by design (tests/vitest.config.ts, fileParallelism: false), and a VITEST_MAX_WORKERS in its environment OVERRIDES that setting and runs its files in parallel — measured on Vitest 5.0.0 with a three-file probe (a/b/c start within 3 ms of each other under VITEST_MAX_WORKERS=4, strictly one after another without it). That is what made two `next dev` servers race for one lock in runs 35521409361 / 35521944657 / 35522535672 when the workflow step exported the variable for every task."
     }
   },
+  "//maxCacheSize": "Caps the LOCAL task cache. Without it Nx keeps up to 10% of the disk, and the cache is shared by every checkout and worktree of this repository on one machine (~/.nx/<workspace>/cache): on a shared development host it reached 82 GB in a day and filled the disk. 10 GB holds several full builds; Nx evicts the least recently used entries past it. CI is unaffected in practice: each job starts with an empty local cache and replays through the remote cache.",
+  "maxCacheSize": "10GB",
   "//neverConnectToCloud": "Nx Cloud is decommissioned (docs/adr/0110). This stops Nx from ever contacting it, whatever NX_CLOUD_* variable or nxCloudId reappears; it does NOT disable the self-hosted HTTP remote cache, which CI connects per job through .github/actions/nx-remote-cache (NX_SELF_HOSTED_REMOTE_CACHE_SERVER). scripts/ci/check-nx-cache-config.mjs keeps both true.",
   "neverConnectToCloud": true,
   "affected": {

@@ -332,8 +332,8 @@
    "input": {"kind": "ledger-provider"},
    "id": "ledger-provider",
    "expected":
-   {"targetValues": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"],
-    "runsValues": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"]}},
+   {"targetValues": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"],
+    "runsValues": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"]}},
   {"witnesses": ["AgentWorkspace.Theorems.Refinement.ErSynthesis.target_refuses_two_subjects"],
    "input": {"table": "shares", "kind": "target-check"},
    "id": "target-check/two-subjects",

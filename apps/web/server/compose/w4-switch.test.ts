@@ -59,8 +59,8 @@ describe('Wave 4 model switching exit', () => {
         agentId,
         sessionId,
       });
-      return buildRunRequestFor(
-        {
+      return buildRunRequestFor({
+        context: {
           run,
           agent: { id: agentId, workspaceId, engine: 'claude-agent-sdk' },
           session: { id: sessionId, agentId, engine: null },
@@ -74,15 +74,15 @@ describe('Wave 4 model switching exit', () => {
           prompt: 'hello',
           modelConnectionId,
         },
-        {
+        runAgent: {
           agent: stored,
           assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
           toolBundles: [],
           subagents: [],
         },
-        { runnerUrl: 'http://runner:8080', workspaceRoot: '/workspace' },
-        issuer,
-      );
+        settings: { runnerUrl: 'http://runner:8080', workspaceRoot: '/workspace' },
+        gateway: issuer,
+      });
     };
 
     await build('10000000-0000-4000-8000-000000000007', null);

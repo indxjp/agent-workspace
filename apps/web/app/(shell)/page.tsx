@@ -53,12 +53,10 @@
  *
  * ## What this file still does not build
  *
- * `WorkspaceAgentStore.list()` returns `AgentRecord`s, and this wave's schema gives an agent no file
- * or connector catalogue at all — the same absence `components/agents/agents-list.tsx`'s own header
- * records for the list screen's missing columns. `composerAgentFromRecord` below reflects that
- * honestly: `files: []` and `connectors: []` are not a placeholder for content nobody built, they are
- * §19.5.1 rule 2's narrowing applied to an agent that, in this wave, is permitted none because none
- * exist to be permitted.
+ * `composerAgentFromRecord` below still answers `connectors: []`, so the connectors picker says in
+ * words that the list is not shown. Files are listed (RF-502, #2089): `./composer-files.ts` lists
+ * each agent's granted workspace files and folders, and the composer sends the picks as the run's
+ * `fileScope`, which the run start re-checks against the grants. No pick keeps every grant.
  *
  * ## Recent
  *
@@ -68,11 +66,19 @@
  * this wave, and an empty list renders no section at all.
  */
 import { log } from '../../server/telemetry/logger';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 import { initialsFrom } from '../../components/shell/identity';
 import { HomeChat, type ComposerAgents } from '../../components/composer/home-chat';
-import { pinnedAgentFrom, type RecentSession } from '../../components/composer/model';
+import {
+  pinnedAgentFrom,
+  resumedSessionFrom,
+  type RecentSession,
+} from '../../components/composer/model';
+import { resumeStrings } from '../../components/composer/resume-messages';
+import { composerStrings, type ComposerStrings } from '../../components/composer/composer-messages';
+import type { HomeChatProps } from '../../components/composer/home-chat-types';
+import { versionsLocaleOf, type VersionsLocale } from '../../components/agents/versions-messages';
 import type { Speaker } from '@indx-workspace/react/run-model';
 import type { AgentPermissions } from '../../contracts/agents';
 import { getSession } from '../../server/auth';
@@ -82,16 +88,23 @@ import type {
   ComposerAgent,
   ComposerModelConnection,
   ComposerRunTarget,
+  PickerOption,
 } from '../../components/composer/model';
 import { registeredEngine } from '../../server/engines/registry';
 import { providersReachableBy } from '../../server/engines/protocol';
 import { engineForStoredPolicy } from '../../server/engines/session-engine';
 import { applicationContext } from '../../server/application-context';
+import { resumeTargetFor } from '../../server/sessions/resume';
+import type { ChatHistory } from '../../server/sessions/history';
+import { featureGate } from '../../server/features/console';
 import {
   getRunApi,
   type RunTargetDescription,
   type RunTargetDescriptions,
 } from '../../server/runs/environment';
+
+import { composerFilesByAgent } from './composer-files';
+import { switchedOffPanel } from './feature-gate';
 
 // W1-UI-04: without this, Next prerenders this route once at BUILD TIME — before
 // the application context is installed — and serves that one render to every request forever
@@ -103,16 +116,13 @@ import {
 // docs/adr/W1-UI-04-the-home-route-renders-per-request.md.
 export const dynamic = 'force-dynamic';
 
-/**
- * These are said in the composer's own status slot — where `ui/home.html` puts "Standard Sandbox ·
- * read-only" — because that slot's job is to tell the user what this message would run on, and the
- * true answer is that nothing would. Each names the check that did not pass rather than describing
- * the workspace, which is the distinction between "we looked and found none" and "we never looked".
+/*
+ * The reasons nothing can be sent (`ComposerStrings.noAgentStore` and the three after it) are said
+ * in the composer's own status slot — where `ui/home.html` puts "Standard Sandbox · read-only" —
+ * because that slot's job is to tell the user what this message would run on, and the true answer
+ * is that nothing would. Each names the check that did not pass rather than describing the
+ * workspace, which is the distinction between "we looked and found none" and "we never looked".
  */
-const NO_AGENT_STORE = 'No agent store is configured — nothing can run yet.';
-const NO_SESSION = 'You are not signed in — no agent can be offered.';
-const NO_MEMBERSHIP = 'Your account is not a member of this workspace — no agent can be offered.';
-const NO_AGENTS_YET = 'This workspace has no agents yet — create one to run a message.';
 
 /**
  * Build a `Request` carrying exactly this render's session cookie and nothing else.
@@ -130,25 +140,29 @@ async function requestCarryingThisSessionCookie(): Promise<Request> {
 }
 
 /**
- * §19.5.1 rule 2's narrowing, applied to a record this wave's schema actually has. See this file's
- * own header for why `files` and `connectors` are `[]` for a real agent rather than a fixture's
- * demonstration rows.
+ * §19.5.1 rule 2's narrowing, applied to an agent record. `files` are the agent's granted
+ * workspace files and folders (RF-502, `./composer-files.ts`); `connectors` stay `[]`.
  */
-function composerAgentFromRecord(agent: AgentRecord, targets: ComposerRunTargets): ComposerAgent {
+function composerAgentFromRecord(
+  agent: AgentRecord,
+  targets: ComposerRunTargets,
+  strings: ComposerStrings,
+  files: readonly PickerOption[],
+): ComposerAgent {
   const { runTarget, runTargetByProject } = targets;
   const model =
     runTarget.kind === 'runnable'
       ? runTarget.model
-      : (agent.model ?? 'the workspace default model');
-  const sandbox = `Standard Sandbox · ${agent.permissions.writeFiles ? 'read/write' : 'read-only'}`;
-  const extra = permissionExtras(agent.permissions);
+      : (agent.model ?? strings.workspaceDefaultModel);
+  const sandbox = strings.sandbox(agent.permissions.writeFiles);
+  const extra = permissionExtras(agent.permissions, strings);
   const engine = engineForStoredPolicy(agent.policy);
   return {
     id: agent.id,
     modelConnectionId: agent.modelConnectionId,
     name: agent.name,
     detail: extra === '' ? `${model} · ${sandbox}` : `${model} · ${sandbox} · ${extra}`,
-    files: [],
+    files,
     connectors: [],
     sandbox,
     runTarget,
@@ -159,8 +173,6 @@ function composerAgentFromRecord(agent: AgentRecord, targets: ComposerRunTargets
     drivableProviders: providersReachableBy(
       registeredEngine(engine)?.capabilities.wireProtocols ?? [],
     ),
-    // #2012: listed like any agent, but never the composer's default.
-    ...(agent.builtin === undefined ? {} : { builtin: agent.builtin }),
   };
 }
 
@@ -240,11 +252,11 @@ async function composerModelConnections(): Promise<readonly ComposerModelConnect
 }
 
 /** The two permissions §17 Step 4 defines beyond file access, named only when the agent has them. */
-function permissionExtras(permissions: AgentPermissions): string {
+function permissionExtras(permissions: AgentPermissions, strings: ComposerStrings): string {
   const extras: string[] = [];
-  if (permissions.runCommands) extras.push('can run commands');
-  if (permissions.unrestrictedNetwork) extras.push('unrestricted network');
-  return extras.join(', ');
+  if (permissions.runCommands) extras.push(strings.canRunCommands);
+  if (permissions.unrestrictedNetwork) extras.push(strings.unrestrictedNetwork);
+  return extras.join(strings.listSeparator);
 }
 
 /**
@@ -254,25 +266,35 @@ function permissionExtras(permissions: AgentPermissions): string {
  * rejection that names its reason. There is no path on which an agent is offered because a check was
  * skipped. See this file's own header for what changed here in W1-UI-05 and why.
  */
-async function composerAgents(): Promise<ComposerAgents> {
+async function composerAgents(strings: ComposerStrings): Promise<ComposerAgents> {
   const runtime = applicationContext()?.agents ?? null;
-  if (runtime === null) return { kind: 'no-agents', reason: NO_AGENT_STORE };
+  if (runtime === null) return { kind: 'no-agents', reason: strings.noAgentStore };
 
   const request = await requestCarryingThisSessionCookie();
   const resolution: WorkspaceResolution = await runtime.resolveWorkspace(request);
 
   switch (resolution.kind) {
     case 'unauthenticated':
-      return { kind: 'no-agents', reason: NO_SESSION };
+      return { kind: 'no-agents', reason: strings.noSession };
     case 'forbidden':
-      return { kind: 'no-agents', reason: NO_MEMBERSHIP };
+      return { kind: 'no-agents', reason: strings.noMembership };
     case 'workspace': {
-      const records = await runtime.agents.forWorkspace(resolution.workspaceId).list();
+      const listed = await runtime.agents.forWorkspace(resolution.workspaceId).list();
+      // The built-in Builder has its own chat under New Agent, so the picker does not offer it.
+      const records = listed.filter((record) => record.builtin === undefined);
+      const filesByAgent = await composerFilesByAgent(
+        request.headers.get('cookie') ?? '',
+        resolution.workspaceId,
+        records,
+        strings,
+      );
       const mapped = await Promise.all(
         records.map(async (record) =>
           composerAgentFromRecord(
             record,
             await composerRunTargets(resolution.workspaceId, record.id),
+            strings,
+            filesByAgent.get(record.id) ?? [],
           ),
         ),
       );
@@ -280,7 +302,7 @@ async function composerAgents(): Promise<ComposerAgents> {
       // Checked positively — `first !== undefined` — rather than `mapped.length === 0`, so the
       // non-empty tuple `HomeChat` requires is built from a value TypeScript has actually narrowed,
       // not asserted past a length check a later edit could detach from the array it counted.
-      if (first === undefined) return { kind: 'no-agents', reason: NO_AGENTS_YET };
+      if (first === undefined) return { kind: 'no-agents', reason: strings.noAgentsYet };
       const [setupAgentId, viewer] = await Promise.all([
         runtime.setupAgentId?.(resolution.workspaceId) ?? Promise.resolve(null),
         composerViewer(request, resolution.workspaceId),
@@ -311,26 +333,106 @@ async function composerUser(): Promise<Speaker | null> {
   return { initials: initialsFrom(session.sub), name: session.sub };
 }
 
+/**
+ * What the composer says about the earlier chat `/?session=<id>` asks to continue (UX-05 in #2086),
+ * the agent it is locked to, and its earlier messages (step 2). `resumeTargetFor` decides whether
+ * it may be continued and reads the messages from the SDK transcript.
+ */
+async function resumeFor(
+  sessionId: string,
+  agents: ComposerAgents,
+  locale: VersionsLocale,
+): Promise<{
+  readonly resume: NonNullable<HomeChatProps['resume']>;
+  readonly agentId: string | null;
+}> {
+  const strings = resumeStrings(locale);
+  const offered = new Map(
+    agents.kind === 'agents' ? agents.agents.map((agent) => [agent.id, agent.name] as const) : [],
+  );
+  const target = await resumeTargetFor(
+    sessionId,
+    await requestCarryingThisSessionCookie(),
+    offered,
+  );
+  return target.kind === 'continue'
+    ? {
+        resume: {
+          kind: 'continue',
+          sessionId: target.sessionId,
+          notice: strings.continuing(target.label, shown(target.history)),
+          ...(shown(target.history)
+            ? {
+                history: {
+                  heading: strings.historyHeading,
+                  earlierNote:
+                    target.history.earlierHidden === 0
+                      ? null
+                      : strings.earlierHidden(target.history.earlierHidden),
+                  turns: target.history.turns,
+                },
+              }
+            : {}),
+        },
+        agentId: target.agentId,
+      }
+    : { resume: { kind: 'refused', notice: strings.refused }, agentId: null };
+}
+
+/** Whether a continued chat has earlier messages to show (UX-05 step 2). */
+function shown(history: ChatHistory | null): history is ChatHistory {
+  return history !== null && history.turns.length > 0;
+}
+
 /** No source of Recent rows exists in this wave. See the module header. */
 const RECENT: readonly RecentSession[] = [];
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ agent?: string | string[]; version?: string | string[] }>;
+  searchParams: Promise<{
+    agent?: string | string[];
+    version?: string | string[];
+    session?: string | string[];
+  }>;
 }) {
-  const [agents, user, modelConnections, pinned] = await Promise.all([
-    composerAgents(),
+  const off = await switchedOffPanel('chat');
+  if (off !== null) return off;
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
+  const [agents, user, modelConnections, pinned, files, resumed] = await Promise.all([
+    composerAgents(composerStrings(locale)),
     composerUser(),
     composerModelConnections(),
     searchParams.then(pinnedAgentFrom),
+    featureGate('files'),
+    searchParams.then(resumedSessionFrom),
   ]);
+  const resume = resumed === null ? null : await resumeFor(resumed, agents, locale);
+  if (resume !== null) {
+    // Continuing a chat keeps its agent, and a version applies only to a new session.
+    return (
+      <HomeChat
+        agents={agents}
+        modelConnections={modelConnections}
+        recent={RECENT}
+        user={user}
+        filesEnabled={files.enabled}
+        locale={locale}
+        resume={resume.resume}
+        {...(resume.agentId === null
+          ? {}
+          : { agent: { id: resume.agentId, locked: true as const } })}
+      />
+    );
+  }
   return (
     <HomeChat
       agents={agents}
       modelConnections={modelConnections}
       recent={RECENT}
       user={user}
+      filesEnabled={files.enabled}
+      locale={locale}
       {...(pinned === null
         ? {}
         : { agent: { id: pinned.agentId, locked: true as const }, version: pinned.version })}

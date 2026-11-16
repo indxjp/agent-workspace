@@ -5,6 +5,19 @@ description: "The @indx-workspace/contracts/local-runtime exports, sorted alphab
 
 <Note>This page is generated from `packages/contracts/src/local-runtime.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## LOCAL_CONSOLE_OIDC_CALLBACK_PATH
+
+The path the local console's OIDC callback is served at (`apps/web/app/api/auth/callback`).
+
+Value: `'/api/auth/callback'`
+
+## LOCAL_CONSOLE_OIDC_CLIENT_ID
+
+ADR-0161's 2026-11-01 amendment (DI5, issue #2075): the `client_id` the local console is
+registered under at `aw dev`'s development OIDC issuer.
+
+Value: `'aw-local-console'`
+
 ## LOCAL_RUNTIME_MESSAGE_TYPES
 
 Issue #439 (S1-01), ADR-0109: the messages `aw dev` and the local runtime it forks exchange over
@@ -32,6 +45,14 @@ to two project maps of at most 64 entries plus TypeScript `secret()` calls, and 
 input.
 
 Value: `256`
+
+## localConsoleRedirectUri
+
+The redirect URI the local console's client must name for a runtime on `port`.
+
+```ts
+localConsoleRedirectUri(port: number): string
+```
 
 ## LocalRuntimeChildMessage
 
@@ -67,7 +88,8 @@ every control-plane route with default security, which the person-facing CLI tok
 
 The key travels only over the IPC channel. Neither side ever prints or logs it; `aw` keeps it
 only in its own `0600` credentials file, keyed by the runtime's URL. This is the only
-local-runtime message that carries a credential.
+local-runtime message that carries a workspace credential (`ready`'s `databaseUrl` names only the
+embedded database's fixed local superuser).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -77,6 +99,39 @@ local-runtime message that carries a credential.
 | `workspaceId` | `string` | Yes |  |
 | `workspaceSlug` | `string` | Yes |  |
 
+## LocalRuntimeDatabaseUrlSchema
+
+Issue #1506: a `postgres:`/`postgresql:` URL on a loopback host, the database a local app runs on.
+
+`string`
+
+## LocalRuntimeDevIssuer
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `issuer` | `string` | Yes | `http://127.0.0.1:<port>`: never `localhost`, `::1`, another host, a path or `https:`. |
+| `clientId` | `"aw-local-console"` | Yes |  |
+| `clientSecret` | `string` | Yes | 32 random bytes, base64url (43 characters), made per `aw dev` process. |
+| `redirectUri` | `string` | Yes | `http://127.0.0.1:<environment.port>/api/auth/callback`, checked against the port. |
+| `ownerSubject` | `string` | Yes | The bootstrap Owner's `sub` at the issuer: `local:` + base64url(SHA-256(email)). |
+
+## LocalRuntimeDevIssuerSchema
+
+ADR-0161's 2026-11-01 amendment (DI5), amending ADR-0109's contract C1: the development OIDC
+issuer `aw dev` runs on `127.0.0.1`, and the local console's client there. `aw dev` sends it
+only when it runs that issuer, which it does only when no `OIDC_*` variable is set (DI2). The
+runtime sets `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_REDIRECT_URI`
+from it, and links `(issuer, ownerSubject)` to the bootstrap Owner (DI8). `clientSecret` is a
+credential: it travels only on the fork's IPC channel and is never logged.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `issuer` | `string` | Yes | `http://127.0.0.1:<port>`: never `localhost`, `::1`, another host, a path or `https:`. |
+| `clientId` | `"aw-local-console"` | Yes |  |
+| `clientSecret` | `string` | Yes | 32 random bytes, base64url (43 characters), made per `aw dev` process. |
+| `redirectUri` | `string` | Yes | `http://127.0.0.1:<environment.port>/api/auth/callback`, checked against the port. |
+| `ownerSubject` | `string` | Yes | The bootstrap Owner's `sub` at the issuer: `local:` + base64url(SHA-256(email)). |
+
 ## LocalRuntimeEnvironment
 
 | Name | Type | Required | Description |
@@ -85,8 +140,10 @@ local-runtime message that carries a credential.
 | `bootstrapAdmin` | `string` | Yes |  |
 | `runtimeDriver` | `undefined \| "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"` | No | Absent means the runtime picks its own default driver. |
 | `policy` | `undefined \| Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: number \| undefined; builder?: Readonly<{ allow: readonly string[]; }> \| undefined; network?: undefined; approval?: undefined; }>` | No | The project file's policy ceiling (C13, ADR-0102 SD6, issue #524). `aw` sends it only when the file has a `policy`, so a `start` message from a file without one is unchanged; a runtime older than this key refuses it as an unknown key rather than running unbounded. |
+| `features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No | The project file's features (ADR-0160 D5, issue #1495). `aw` sends it only when the file has a `features` list, so a `start` message from a file without one is unchanged; a runtime older than this key refuses it as an unknown key rather than install every feature. |
 | `withheld` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the project references (C10, SD17; ADR-0109 slice-2 amendment, issue #564): each a `SecretNameSchema`, so a reserved name such as `PATH` is refused here too, unique, at most `LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES`. A `start` message without it starts as before; a runtime older than this key refuses it as an unknown key. The runtime refuses to start when, after `loadDotEnv`, its environment holds a withheld name in any case (S2-04a). |
 | `modelSecrets` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the model connections the project runs on are made from (issue #661): each connection's `credential.secret`, or `ANTHROPIC_API_KEY` for the `default` connection of a project with no `models`. The try page names them in the fix for a missing or rejected key. Unique, at most `LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES`; a runtime older than this key refuses it as an unknown key. |
+| `devIssuer` | `undefined \| LocalRuntimeDevIssuer` | No | ADR-0161's 2026-11-01 amendment (DI5): the development OIDC issuer, when `aw dev` runs one. A `start` message without it starts exactly as before; a runtime older than this key refuses it as an unknown key. |
 
 ## LocalRuntimeEnvironmentSchema
 
@@ -98,8 +155,10 @@ The environment `aw dev` resolved from the project file, passed whole so the run
 | `bootstrapAdmin` | `string` | Yes |  |
 | `runtimeDriver` | `undefined \| "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"` | No | Absent means the runtime picks its own default driver. |
 | `policy` | `undefined \| Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: number \| undefined; builder?: Readonly<{ allow: readonly string[]; }> \| undefined; network?: undefined; approval?: undefined; }>` | No | The project file's policy ceiling (C13, ADR-0102 SD6, issue #524). `aw` sends it only when the file has a `policy`, so a `start` message from a file without one is unchanged; a runtime older than this key refuses it as an unknown key rather than running unbounded. |
+| `features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No | The project file's features (ADR-0160 D5, issue #1495). `aw` sends it only when the file has a `features` list, so a `start` message from a file without one is unchanged; a runtime older than this key refuses it as an unknown key rather than install every feature. |
 | `withheld` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the project references (C10, SD17; ADR-0109 slice-2 amendment, issue #564): each a `SecretNameSchema`, so a reserved name such as `PATH` is refused here too, unique, at most `LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES`. A `start` message without it starts as before; a runtime older than this key refuses it as an unknown key. The runtime refuses to start when, after `loadDotEnv`, its environment holds a withheld name in any case (S2-04a). |
 | `modelSecrets` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the model connections the project runs on are made from (issue #661): each connection's `credential.secret`, or `ANTHROPIC_API_KEY` for the `default` connection of a project with no `models`. The try page names them in the fix for a missing or rejected key. Unique, at most `LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES`; a runtime older than this key refuses it as an unknown key. |
+| `devIssuer` | `undefined \| LocalRuntimeDevIssuer` | No | ADR-0161's 2026-11-01 amendment (DI5): the development OIDC issuer, when `aw dev` runs one. A `start` message without it starts exactly as before; a runtime older than this key refuses it as an unknown key. |
 
 ## LocalRuntimeFailedMessage
 
@@ -166,18 +225,21 @@ What the runtime accepts from `aw`: `start` only.
 | `type` | `"ready"` | Yes |  |
 | `url` | `string` | Yes |  |
 | `contractsVersion` | `string` | Yes |  |
+| `databaseUrl` | `undefined \| string` | No | Issue #1506: the runtime's own PostgreSQL, for `aw dev` to migrate and run a generated app on (its schema `app_<name>`). A `postgres:`/`postgresql:` URL on a loopback host only, so a runtime can never point an app at another machine's database. Absent when the runtime runs on a `DATABASE_URL` that is not loopback, and from a runtime older than this key; `aw` then uses its own `DATABASE_URL`. It names the embedded superuser and is never printed. |
 
 ## LocalRuntimeReadyMessageSchema
 
 Runtime → `aw`: the runtime is serving. `url` must be a loopback `http(s)` URL — stricter than
 ADR-0109's text, so a local runtime can never point `aw` at another host. `contractsVersion` is
-the runtime's own contracts version, for `aw` to judge skew.
+the runtime's own contracts version, for `aw` to judge skew; `databaseUrl` the database a local app
+runs on (issue #1506).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `type` | `"ready"` | Yes |  |
 | `url` | `string` | Yes |  |
 | `contractsVersion` | `string` | Yes |  |
+| `databaseUrl` | `undefined \| string` | No | Issue #1506: the runtime's own PostgreSQL, for `aw dev` to migrate and run a generated app on (its schema `app_<name>`). A `postgres:`/`postgresql:` URL on a loopback host only, so a runtime can never point an app at another machine's database. Absent when the runtime runs on a `DATABASE_URL` that is not loopback, and from a runtime older than this key; `aw` then uses its own `DATABASE_URL`. It names the embedded superuser and is never printed. |
 
 ## LocalRuntimeStartMessage
 

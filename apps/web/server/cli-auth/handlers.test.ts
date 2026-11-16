@@ -1,3 +1,5 @@
+import { createHmac, hkdfSync } from 'node:crypto';
+
 import type {
   CliSessionRepository,
   CliTokenExchangeOutcome,
@@ -25,9 +27,11 @@ import {
   switchCliWorkspace,
 } from './handlers';
 import { BoundedRecencyMap, FixedWindowLimiter } from '../http/rate-limit';
+import { Milliseconds } from '../newtypes';
 import { CLI_AUTH_LIMITS } from './rate-limit';
 import { renderVerifyPage, submitVerifyPage } from './verify-page';
 import { clearApplicationContext } from '../application-context';
+import { clearClientIdentity, installClientIdentity } from '../client-identity';
 import { installTestDomains } from '../application-context-fixtures';
 
 const SECRET = 'a-session-secret-that-is-long-enough-for-tests';
@@ -193,6 +197,22 @@ describe('the device code', () => {
     expect(verifyDeviceCode(code, 'another-secret-of-sufficient-length', 99).ok).toBe(false);
     expect(verifyDeviceCode(code.replace('BCDFGHJK', 'BCDFGHJL'), SECRET, 99).ok).toBe(false);
     expect(verifyDeviceCode('v1.BCDFGHJK.100', SECRET, 99).ok).toBe(false);
+  });
+
+  it('is signed with the device-code key; the old raw-secret form verifies during the roll-over', () => {
+    const body = 'v1.BCDFGHJK.100';
+    const signedWith = (key: Buffer | string) =>
+      `${body}.${createHmac('sha256', key).update(`aw-cli-device-code.${body}`).digest('base64url')}`;
+    const purposeKey = (purpose: string) =>
+      Buffer.from(
+        hkdfSync('sha256', SECRET, 'agent-workspace/key-ring', `agent-workspace/${purpose}/v1`, 32),
+      );
+    expect(mintDeviceCode('BCDFGHJK', 100, SECRET)).toBe(signedWith(purposeKey('cli-device-code')));
+    expect(verifyDeviceCode(signedWith(SECRET), SECRET, 99)).toEqual({
+      ok: true,
+      userCode: 'BCDFGHJK',
+    });
+    expect(verifyDeviceCode(signedWith(purposeKey('session')), SECRET, 99).ok).toBe(false);
   });
 
   it('normalises a typed user code and refuses anything outside the alphabet', () => {
@@ -443,22 +463,20 @@ describe('POST /api/auth/cli-workspace', () => {
 });
 
 describe('rate limits and the bounded slow_down memory (review round 1)', () => {
-  const ENV_KEYS = ['AW_TRUSTED_PROXY_HOPS', 'SESSION_SECRET'] as const;
-  let savedEnv: Record<(typeof ENV_KEYS)[number], string | undefined>;
+  // The device code is signed with SESSION_SECRET from the environment; the client's address is
+  // read through the installed client identity, cleared after each test.
+  let savedSecret: string | undefined;
   beforeEach(() => {
-    savedEnv = { AW_TRUSTED_PROXY_HOPS: undefined, SESSION_SECRET: undefined };
-    for (const key of ENV_KEYS) savedEnv[key] = process.env[key];
+    savedSecret = process.env['SESSION_SECRET'];
   });
   afterEach(() => {
-    for (const key of ENV_KEYS) {
-      const value = savedEnv[key];
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    if (savedSecret === undefined) delete process.env['SESSION_SECRET'];
+    else process.env['SESSION_SECRET'] = savedSecret;
+    clearClientIdentity();
   });
 
   it('refuses the start route with 429 and Retry-After once one client exceeds its limit', () => {
-    process.env['AW_TRUSTED_PROXY_HOPS'] = '1';
+    installClientIdentity({ trustedProxyHops: 1, sessionSecret: SECRET });
     process.env['SESSION_SECRET'] = SECRET;
     const from = (address: string) =>
       post('/api/auth/cli-device', {}, { 'x-forwarded-for': address });
@@ -475,7 +493,6 @@ describe('rate limits and the bounded slow_down memory (review round 1)', () => 
   });
 
   it('shares one wider bucket when no trusted proxy chain names the client', async () => {
-    delete process.env['AW_TRUSTED_PROXY_HOPS'];
     for (let index = 0; index < CLI_AUTH_LIMITS.poll * 10; index += 1) {
       await exchangeDeviceCode(post('/api/auth/cli-token', { deviceCode: 'x' }), NOW);
     }
@@ -485,7 +502,6 @@ describe('rate limits and the bounded slow_down memory (review round 1)', () => 
   });
 
   it('refuses the approval POST with 429 once the limit is spent', async () => {
-    delete process.env['AW_TRUSTED_PROXY_HOPS'];
     installTestDomains({
       rbac: {
         directory: createMemoryDirectory({ workspaces: [], users: [] }),
@@ -512,7 +528,7 @@ describe('rate limits and the bounded slow_down memory (review round 1)', () => 
 
   it('keeps the slow_down memory at its cap however many device codes poll', async () => {
     // A trusted chain, one client per poll, so the per-client limit does not stop the flood first.
-    process.env['AW_TRUSTED_PROXY_HOPS'] = '1';
+    installClientIdentity({ trustedProxyHops: 1, sessionSecret: SECRET });
     process.env['SESSION_SECRET'] = SECRET;
     const codes = 10_050;
     for (let index = 0; index < codes; index += 1) {
@@ -544,7 +560,11 @@ describe('rate limits and the bounded slow_down memory (review round 1)', () => 
   });
 
   it('counts per key per window and forgets the stalest key at capacity', () => {
-    const limiter = new FixedWindowLimiter({ limit: 2, windowMs: 1_000, capacity: 2 });
+    const limiter = new FixedWindowLimiter({
+      limit: 2,
+      windowMs: Milliseconds.parse(1_000),
+      capacity: 2,
+    });
     expect(limiter.admit('a', 0).admitted).toBe(true);
     expect(limiter.admit('a', 1).admitted).toBe(true);
     expect(limiter.admit('a', 2)).toEqual({ admitted: false, retryAfterSeconds: 1 });

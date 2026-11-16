@@ -56,18 +56,14 @@ import { decide, OWNERSHIPS } from './decide';
 import type { WorkspaceDirectory } from './directory';
 import {
   changeMembershipRole,
-  createApiKey,
   createMembership,
-  createUser,
   deleteMembership,
-  listApiKeys,
   listMemberships,
-  listUsers,
-  revokeApiKey,
-} from './handlers';
+} from './membership-handlers';
+import { createApiKey, createUser, listApiKeys, listUsers, revokeApiKey } from './handlers';
 import type { ApiResult } from '../http/result';
 import { createMemoryDirectory } from './memory-directory';
-import { ROLES, type Role } from './roles';
+import { ROLES, type Role } from './core/roles';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
 import { clearApplicationContext } from '../application-context';
 
@@ -199,10 +195,10 @@ const MEMBERS = ROLES.map((role) => ({
 }));
 
 describe('every route this task declares is exercised here', () => {
-  it('enumerates every membership route across all four roles', () => {
+  it('enumerates every membership route across all five roles', () => {
     const membershipRoutes = WIRED.filter((route) => route.declared.includes('/memberships'));
     expect(membershipRoutes).toHaveLength(4);
-    expect(membershipRoutes.length * ROLES.length).toBe(16);
+    expect(membershipRoutes.length * ROLES.length).toBe(20);
   });
 
   it('drives exactly the routes tests/route-declarations/W2-CP-06.ts declares', () => {

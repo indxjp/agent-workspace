@@ -54,3 +54,16 @@ from "I navigated to a folder that has always been empty." Given the object-stor
 built on, that distinction does not exist to be shown. Download is unaffected by any of this: it is
 never offered for a folder row regardless of staleness, because `FileTable` renders a Download link
 only for `kind: 'file'` — a structural fact, not a check that could be defeated by a stale read.
+
+## Amendment (2026-11-05): the parent listing now tells empty from missing
+
+The Context above no longer holds: since issue #899 the catalog records a row for every parent
+folder (`insertParentFolders` in `packages/core/src/db/repositories/resource-catalogs.ts`), and a
+folder keeps its row when its last file is removed. So the server already answers the question this
+decision said it could not: a folder exists when its parent's listing has a `folder` row at its
+path. When a non-root listing is empty, the Files screen now reads the parent folder once and says
+"This folder is empty." for a folder row, that the path is a file for a file row, and "There is no
+folder …" otherwise. This is the second alternative above, made possible by #899, not the rejected
+client-side cache: nothing is remembered between navigations. Until the parent answers, the status
+line is blank rather than "This folder is empty.", which would be wrong for a missing folder; if the
+parent cannot be read, the screen keeps "This folder is empty.". Issue UX-20 in #2086.

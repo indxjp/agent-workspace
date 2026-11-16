@@ -197,7 +197,7 @@ describe('the OpenAI Agents adapter', () => {
     expect(OPENAI_AGENTS_ADAPTER_VERSION).toBe(`${manifest.version}+${OPENAI_AGENTS_SDK_VERSION}`);
   });
 
-  it('declares what it does: no skills, no fork, an adapter-enforced (provisional) budget, three protocols with Responses first', () => {
+  it('declares what it does: no skills, no fork, a budget enforced outside the engine (the gateway), three protocols with Responses first', () => {
     expect(OPENAI_AGENTS_CAPABILITIES).toEqual({
       mcp: true,
       skills: false,

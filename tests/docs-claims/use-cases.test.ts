@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,10 +14,14 @@ import {
   failedRuns,
   fileSetupCommands,
   firstPrompt,
+  identityEnvironment,
+  identityTargets,
   installSteps,
   parseArguments,
   pointApisAtLoopback,
+  secretCreateCommand,
   serverCommands,
+  workspaceSecrets,
 } from './use-cases.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -74,6 +78,38 @@ describe('the ten use cases', () => {
     }
   });
 
+  it('start every stand-in API a project ships, each runnable from the command line (#890)', () => {
+    for (const id of PROJECTS) {
+      const standIns = readdirSync(path.join(GALLERY, id), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .flatMap((entry) =>
+          readdirSync(path.join(GALLERY, id, entry.name))
+            .map((file) => `${entry.name}/${file}`)
+            .filter((file) => STAND_IN.test(file)),
+        );
+      for (const file of standIns)
+        expect(read(id, file), `${id}/${file}`).toContain('process.argv[1]');
+      const started = serverCommands(read(id, 'agent-workspace.yaml'), secret).map(
+        (server) => server.script,
+      );
+      expect(started.filter((script) => STAND_IN.test(script)).sort(), id).toEqual(standIns.sort());
+    }
+  });
+
+  it('start a stand-in for every project whose OpenAPI document names a host that does not resolve (#890)', () => {
+    for (const id of PROJECTS) {
+      const apis = path.join(GALLERY, id, 'apis');
+      const documents = existsSync(apis)
+        ? readdirSync(apis).filter((file) => file.endsWith('.openapi.json'))
+        : [];
+      if (documents.length === 0) continue;
+      const started = serverCommands(read(id, 'agent-workspace.yaml'), secret).filter((server) =>
+        STAND_IN.test(server.script),
+      );
+      expect(started.length, id).toBeGreaterThan(0);
+    }
+  });
+
   it('start the quotation project stand-in ERP with the token aw dev is given', () => {
     const yaml = read('quotation', 'agent-workspace.yaml');
     const devEnv = devEnvironment(yaml, () => 'ONE');
@@ -88,6 +124,7 @@ describe('the ten use cases', () => {
         },
         script: 'erp/fake-erp.mjs',
         port: 8790,
+        identity: { key: 'ERP_IDENTITY_SECRET', secret: 'ERP_IDENTITY_SECRET' },
       },
     ]);
   });
@@ -196,6 +233,130 @@ describe('the commands of a project file', () => {
       },
       { env: { APPROVAL_SECRET: 'SECRET', PORT: '8789' }, script: '../b/mcp/b.mjs', port: 8789 },
     ]);
+  });
+});
+
+describe('the caller identity of a project (#890)', () => {
+  const values = (yaml: string): Record<string, string> =>
+    Object.fromEntries(workspaceSecrets(yaml).map((name) => [name, `value of ${name}`]));
+  const verifying = (id: string) => {
+    const yaml = read(id, 'agent-workspace.yaml');
+    return serverCommands(yaml, secret, values(yaml)).filter(
+      (server) => server.identity !== undefined,
+    );
+  };
+
+  it('creates the workspace secrets the project file names, once each', () => {
+    expect(workspaceSecrets(read('meeting-minutes', 'agent-workspace.yaml'))).toEqual([
+      'TASK_TRACKER_IDENTITY_SECRET',
+      'TRACKER_IDENTITY_SECRET',
+    ]);
+    expect(workspaceSecrets(read('quotation', 'agent-workspace.yaml'))).toEqual([
+      'ERP_IDENTITY_SECRET',
+    ]);
+    expect(workspaceSecrets(read('manual-search', 'agent-workspace.yaml'))).toEqual([]);
+    const twice = '#   x | aw secrets create --name A_KEY --value-stdin\n'.repeat(2);
+    expect(workspaceSecrets(twice)).toEqual(['A_KEY']);
+  });
+
+  it('gives each verifying server the value of the secret the nearest create line before it names', () => {
+    expect(
+      verifying('meeting-minutes').map((server) => [server.script, server.identity, server.env]),
+    ).toEqual([
+      [
+        'mcp/tasks.mjs',
+        { key: 'IDENTITY_SECRET', secret: 'TASK_TRACKER_IDENTITY_SECRET' },
+        expect.objectContaining({ IDENTITY_SECRET: 'value of TASK_TRACKER_IDENTITY_SECRET' }),
+      ],
+      [
+        'tracker/fake-tracker.mjs',
+        { key: 'IDENTITY_SECRET', secret: 'TRACKER_IDENTITY_SECRET' },
+        expect.objectContaining({ IDENTITY_SECRET: 'value of TRACKER_IDENTITY_SECRET' }),
+      ],
+    ]);
+  });
+
+  it('gives a server keyed by <NAME>_IDENTITY_SECRET the value of that secret', () => {
+    const [crm] = verifying('customer-inquiry');
+    expect(crm?.identity).toEqual({ key: 'CRM_IDENTITY_SECRET', secret: 'CRM_IDENTITY_SECRET' });
+    expect(crm?.env['CRM_IDENTITY_SECRET']).toBe('value of CRM_IDENTITY_SECRET');
+  });
+
+  it('pairs every server that verifies the assertion with a secret the project creates', () => {
+    for (const id of PROJECTS) {
+      const yaml = read(id, 'agent-workspace.yaml');
+      const servers = serverCommands(yaml, secret, values(yaml));
+      const created = workspaceSecrets(yaml);
+      for (const server of servers.filter((s) => 'IDENTITY_AUDIENCE' in s.env)) {
+        expect(server.identity, `${id}: ${server.script}`).toBeDefined();
+        expect(created, `${id}: ${server.script}`).toContain(server.identity?.secret);
+        expect(server.env[server.identity?.key ?? ''], id).toBe(
+          `value of ${server.identity?.secret ?? ''}`,
+        );
+      }
+      // Every secret the project creates is one some server verifies with.
+      expect(new Set(servers.flatMap((s) => s.identity?.secret ?? [])), id).toEqual(
+        new Set(created),
+      );
+    }
+  });
+
+  it('leaves a server that verifies nothing without an identity', () => {
+    const servers = serverCommands(read('ringi-review', 'agent-workspace.yaml'), secret);
+    expect(servers.find((s) => s.script === 'mcp/authority-server.mjs')?.identity).toBeUndefined();
+  });
+
+  it('stores a secret from stdin, never on the command line, and refuses a name that is not one', () => {
+    expect(secretCreateCommand('ERP_IDENTITY_SECRET')).toBe(
+      `printf '%s' "$IDENTITY_SECRET_VALUE" | aw secrets create --name ERP_IDENTITY_SECRET --value-stdin`,
+    );
+    expect(() => secretCreateCommand('X; rm -rf /')).toThrow('not a secret name');
+  });
+
+  it('reads the connector and workspace each secret signs for from aw connectors list --json', () => {
+    const listed = JSON.stringify(
+      {
+        connectors: [
+          { id: 'c-mcp', workspaceId: 'ws-1', name: 'task-tracker', identity: { secret: 'A' } },
+          { id: 'c-tool', workspaceId: 'ws-1', name: 'tracker', identity: { secret: 'B' } },
+          { id: 'c-plain', workspaceId: 'ws-1', name: 'authority' },
+        ],
+      },
+      null,
+      2,
+    );
+    expect(identityTargets(listed)).toEqual(
+      new Map([
+        ['A', { connectorId: 'c-mcp', workspaceId: 'ws-1' }],
+        ['B', { connectorId: 'c-tool', workspaceId: 'ws-1' }],
+      ]),
+    );
+    expect(identityTargets('[]')).toEqual(new Map());
+  });
+
+  it('refuses a list that is not one, or two connectors that sign with one secret', () => {
+    expect(() => identityTargets('error: unauthorized')).toThrow('no JSON');
+    expect(() => identityTargets('{"items": []}')).toThrow('no connectors');
+    const twice = { id: 'c', workspaceId: 'w', identity: { secret: 'A' } };
+    expect(() => identityTargets(JSON.stringify({ connectors: [twice, twice] }))).toThrow(
+      'more than one connector signs with A',
+    );
+  });
+
+  it('restarts a verifying server with the real connector id and workspace id', () => {
+    const [erp] = verifying('quotation');
+    if (erp === undefined) throw new Error('the quotation ERP verifies the caller assertion');
+    const targets = new Map([['ERP_IDENTITY_SECRET', { connectorId: 'c-erp', workspaceId: 'ws' }]]);
+    expect(identityEnvironment(erp, targets)).toEqual({
+      ...erp.env,
+      IDENTITY_AUDIENCE: 'c-erp',
+      IDENTITY_WORKSPACE: 'ws',
+    });
+    expect(() => identityEnvironment(erp, new Map())).toThrow(
+      'no connector signs its caller assertion with ERP_IDENTITY_SECRET',
+    );
+    const plain = { env: { PORT: '1' }, script: 'a.mjs', port: 1 };
+    expect(identityEnvironment(plain, new Map())).toBe(plain.env);
   });
 });
 

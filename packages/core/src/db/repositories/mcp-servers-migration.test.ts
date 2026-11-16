@@ -20,11 +20,11 @@ import { resolveMigrationsDir, runMigrations } from '../migrate.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
-import { workspaces } from '../schema/workspaces.js';
 import { createDatabaseMcpServerRepositoryProvider } from './mcp-servers.js';
 import { createDatabaseRunRepositoryProvider } from './runs.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { insertPriorWorkspaces } from './prior-workspaces.test-support.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -42,7 +42,7 @@ const REGUARDED_CHECKS = [
 /** The migration's SQL statements, comment lines removed. */
 async function migrationStatements(): Promise<readonly string[]> {
   const source = await readFile(
-    path.join(resolveMigrationsDir(), `${CONNECTOR_KINDS_MIGRATION}.sql`),
+    path.join(resolveMigrationsDir(process.env), `${CONNECTOR_KINDS_MIGRATION}.sql`),
     'utf8',
   );
   return source
@@ -109,7 +109,7 @@ describe.skipIf(!hasDatabase)('0036 against MCP connectors and runs that already
   const sseId = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-connector-kinds-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
     const journal = JSON.parse(
@@ -129,7 +129,7 @@ describe.skipIf(!hasDatabase)('0036 against MCP connectors and runs that already
     );
 
     isolated = await createIsolatedTestDatabase('aw_connector_kinds', databaseUrl, target);
-    await isolated.db.insert(workspaces).values({
+    await insertPriorWorkspaces(isolated.db, {
       id: workspaceId,
       slug: 'connector-kinds',
       name: 'Connector Kinds',

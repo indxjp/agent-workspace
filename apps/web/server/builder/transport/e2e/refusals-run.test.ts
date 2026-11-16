@@ -7,7 +7,7 @@ import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { describe, expect, it } from 'vitest';
 
 import { draftBody } from '../../adapters/checker/checker.contract';
-import { WORKSPACE, builderDoor, type Door } from './harness';
+import { WORKSPACE, builderDoor, type Door } from './harness.test-support';
 
 const scopes = () => createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]);
 const MODEL = 'scripted:builder-refusals';

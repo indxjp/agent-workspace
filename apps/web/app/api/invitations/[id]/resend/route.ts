@@ -2,7 +2,7 @@
  * `POST /api/invitations/:id/resend` — mint a fresh token and expiry for the same row. Issue #121.
  *
  * `resend` is declared a sub-resource of `invitations` in
- * `apps/web/server/rbac/declarations/W9-TEAM-121.ts`, so it inherits `invitations`' own grants —
+ * `apps/web/server/rbac/core/declarations/W9-TEAM-121.ts`, so it inherits `invitations`' own grants —
  * Owner and Admin, the same as `POST /api/invitations` and `DELETE /api/invitations/:id`.
  */
 import { resendInvitation } from '../../../../../server/invitations/handlers';

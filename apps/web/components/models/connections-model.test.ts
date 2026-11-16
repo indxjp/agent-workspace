@@ -18,6 +18,7 @@ import {
   testConnection,
   updateConnection,
 } from './connections-model';
+import { modelsStrings } from './models-messages';
 
 const connection = fixtures.modelConnection();
 const id = connection.id;
@@ -117,6 +118,8 @@ describe('createConnection', () => {
     baseUrl: '',
     deployment: '',
     apiVersion: '',
+    projectId: '',
+    location: 'global',
   };
 
   it('posts the credential to the create route only', async () => {
@@ -175,10 +178,30 @@ describe('testConnection', () => {
       'Credential rotated. Test failed: HTTP 404',
     );
   });
+
+  it("words the status and rotation lines in the reader's language (UX-15)", async () => {
+    const ja = modelsStrings('ja');
+    await expect(testConnection(api(() => problem(404)).client, id, ja)).rejects.toThrow(
+      '接続テストが 404 を返しました。',
+    );
+    await expect(
+      testAfterRotation(api(() => jsonResponse(502, outcome(false))).client, id, ja),
+    ).resolves.toBe('認証情報を更新しました。テストに失敗しました: Credential rejected.');
+    await expect(
+      testAfterRotation(api(() => jsonResponse(200, outcome(true))).client, id, ja),
+    ).resolves.toBe('認証情報を更新しました。Connected.');
+  });
 });
 
 describe('updateConnection', () => {
-  const values = { name: 'Renamed', baseUrl: '', deployment: '', apiVersion: '' };
+  const values = {
+    name: 'Renamed',
+    baseUrl: '',
+    deployment: '',
+    apiVersion: '',
+    projectId: '',
+    location: 'global',
+  };
 
   it('patches the connection and returns it as the panel shows it', async () => {
     const { client, calls } = api(() => jsonResponse(200, { ...connection, name: 'Renamed' }));

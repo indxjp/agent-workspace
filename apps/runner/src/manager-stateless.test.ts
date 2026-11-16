@@ -328,7 +328,12 @@ describe('RUNNER_MANAGER_STATELESS composition (ADR-0126)', () => {
     const failed = await fetch(`${base}/healthz`);
     expect(failed.status).toBe(500);
     expect(await failed.json()).toEqual({ error: 'runner_manager_unavailable' });
-    expect(write.mock.calls.map((call) => String(call[0])).join('')).toContain('VERCEL_TEAM_ID');
+    const logged = JSON.parse(write.mock.calls.map((call) => String(call[0])).join('')) as {
+      service: string;
+      refused: string[];
+    };
+    expect(logged.service).toBe('runner-manager');
+    expect(logged.refused).toEqual([expect.stringContaining('VERCEL_TEAM_ID')]);
 
     env['VERCEL_TEAM_ID'] = 'team_abc123';
     const healthy = await fetch(`${base}/healthz`);

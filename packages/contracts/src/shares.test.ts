@@ -104,7 +104,9 @@ describe('ShareResourceSchema', () => {
 
 describe('list envelope', () => {
   it('requires a view count on every item and refuses one on the bare resource', () => {
-    expect(ShareListItemSchema.safeParse({ ...publicShare, viewCount: 3 }).success).toBe(true);
+    expect(
+      ShareListItemSchema.safeParse({ ...share, visibility: 'public', viewCount: 3 }).success,
+    ).toBe(true);
     expect(ShareListItemSchema.safeParse(share).success).toBe(false);
     expect(ShareListItemSchema.safeParse({ ...share, viewCount: -1 }).success).toBe(false);
     expect(ShareListItemSchema.safeParse({ ...share, viewCount: 1.5 }).success).toBe(false);
@@ -113,6 +115,13 @@ describe('list envelope', () => {
     ).toBe(true);
     expect(ShareListResponseSchema.safeParse({ shares: [share] }).success).toBe(false);
     expect(ShareListResponseSchema.safeParse({ shares: [], total: 0 }).success).toBe(false);
+  });
+
+  it('refuses a link on any list item: a public link is shown once, when it is published', () => {
+    expect(ShareListItemSchema.safeParse({ ...publicShare, viewCount: 3 }).success).toBe(false);
+    expect(ShareListItemSchema.safeParse({ ...share, viewCount: 3, url: '/p/t' }).success).toBe(
+      false,
+    );
   });
 });
 

@@ -89,7 +89,7 @@ theorem anthropic_messages_is_accepted_by_every_family (family : ConnectionFamil
   cases family <;> decide +kernel
 
 /-- A body naming no model is refused before anything is relayed. -/
-@[aw_spec (tier := T1) (ts := "packages/gateway/src/router.ts#GatewayRequestSchema")]
+@[aw_spec (tier := T1) (ts := "packages/gateway/src/router-http.ts#GatewayRequestSchema")]
 theorem a_blank_model_is_refused :
     ingressDecision { clean .openaiResponses .openai with requestedModel := "   " } =
       .answered 400 "invalid_request_error" := by decide +kernel
@@ -268,7 +268,7 @@ SDK request keeps the envelope Claude Code depends on, and a request without it 
 OpenAI SDK request — gets the OpenAI shape. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/0068-openai-wire-protocols-are-passthrough-ingress.md#d6--get-v1models-negotiates-on-the-client")
-  (ts := "packages/gateway/src/router.ts#modelListingFormat")]
+  (ts := "packages/gateway/src/router-models.ts#modelListingFormat")]
 theorem model_listing_defaults_to_the_client_signal (anthropicVersion : Bool) :
     modelListingFormat anthropicVersion none none =
       (if anthropicVersion then .anthropic else .openai) := by
@@ -279,7 +279,7 @@ request gets the Anthropic envelope whichever family serves the run, including t
 that `ANTHROPIC_BASE_URL` also points at the gateway. The family is not an input to the decision. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/0068-openai-wire-protocols-are-passthrough-ingress.md#d6--get-v1models-negotiates-on-the-client")
-  (ts := "packages/gateway/src/router.ts#ANTHROPIC_CLIENT_HEADER")]
+  (ts := "packages/gateway/src/router-models.ts#ANTHROPIC_CLIENT_HEADER")]
 theorem an_anthropic_sdk_request_keeps_its_envelope_on_every_family :
     ConnectionFamily.all.all (fun _ => modelListingFormat true none none == .anthropic) = true ∧
       ConnectionFamily.all.all (fun _ => modelListingFormat false none none == .openai) = true := by
@@ -289,7 +289,7 @@ theorem an_anthropic_sdk_request_keeps_its_envelope_on_every_family :
 client signal. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/0068-openai-wire-protocols-are-passthrough-ingress.md#d6--get-v1models-negotiates-on-the-client")
-  (ts := "packages/gateway/src/router.ts#modelListingFormat")]
+  (ts := "packages/gateway/src/router-models.ts#modelListingFormat")]
 theorem model_listing_overrides_are_ordered (anthropicVersion : Bool) (query header : ModelFormat) :
     modelListingFormat anthropicVersion (some query) (some header) = query ∧
       modelListingFormat anthropicVersion none (some header) = header := by

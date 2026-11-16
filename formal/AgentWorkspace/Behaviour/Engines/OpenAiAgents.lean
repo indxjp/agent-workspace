@@ -196,7 +196,8 @@ structure Request where
   skills : List String
   session : SessionMode
   maxTurns : Option Nat
-  /-- `limits.maxBudgetUsd` is set. -/
+  /-- `limits.maxBudgetUsd` is set. Compile never reads it: the gateway enforces the cap
+  (ADR-0162), so a cap neither refuses a request nor reaches the compiled configuration. -/
   budgetCap : Bool
   /-- `(baseUrl, token, protocol)`, or `none` for a request carrying no gateway. -/
   gateway : Option (String × String × String)
@@ -236,9 +237,6 @@ structure Compiled where
   connection : Connection
   connectors : List String
   maxTurns : Option Nat
-  /-- The provisional cap is compiled, to be enforced from the usage the gateway reports back
-  (ADR-0074 D7; `limits.budget` is not `null`). -/
-  budgetCap : Bool
   grants : List Grant
   tracingDisabled : Bool
   deriving DecidableEq, Repr, Inhabited
@@ -263,48 +261,6 @@ generated here, beside the definition, rather than in the theorem module that fi
 theorem compileConnectors_nil : compileConnectors [] = .ok [] := by
   rw [compileConnectors.eq_def]
 
-/-! ## The provisional budget (ADR-0074 D7, #342) -/
-
-/-- The models the provisional price table prices: the keys of `OPENAI_AGENTS_PROVISIONAL_PRICES`,
-in its order. A cap on any other model (or on the SDK's unnamed default) is refused. -/
-@[aw_spec (ts := "packages/engine-openai-agents/src/budget.ts#OPENAI_AGENTS_PROVISIONAL_PRICES")]
-def pricedModels : List String :=
-  ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini", "claude-opus-5",
-   "claude-sonnet-5", "claude-sonnet-4-5", "claude-haiku-4-5"]
-
-/-- Can a cap on this model be priced? `openAiAgentsPriceFor(model) !== null`. -/
-@[aw_spec (ts := "packages/engine-openai-agents/src/budget.ts#openAiAgentsPriceFor")]
-def priced : Option String → Bool
-  | none => false
-  | some m => pricedModels.contains m
-
-/-- The boundary's budget stop over the estimated cost of each model response, in order, in
-micro-dollars: after each response the spend so far is compared with the cap, and the run stops
-`max_budget` at the first response that brings it to the cap or over; a run whose responses stay
-under it ends as the model ends it. The first component is the responses performed. -/
-@[aw_spec (ts := "packages/engine-openai-agents/src/boundary.ts#startOpenAiAgentsRun")
-  (ts := "packages/engine-openai-agents/src/budget.ts#openAiAgentsBudgetSpent")]
-def budgetRunFrom (cap spent : Nat) : List Nat → Nat × StopReason
-  | [] => (0, .endTurn)
-  | c :: rest =>
-    if cap ≤ spent + c then (1, .maxBudget)
-    else ((budgetRunFrom cap (spent + c) rest).1 + 1, (budgetRunFrom cap (spent + c) rest).2)
-
-/-- The spend of a list of response costs. -/
-def spend : List Nat → Nat
-  | [] => 0
-  | c :: rest => c + spend rest
-
-/-- A run with no response is not stopped by its budget. Proved through `budgetRunFrom.eq_def` so
-that equation is generated here, beside the definition, rather than in the theorem module that
-first unfolds it. -/
-theorem budgetRunFrom_nil (cap spent : Nat) : budgetRunFrom cap spent [] = (0, .endTurn) := by
-  rw [budgetRunFrom.eq_def]
-
-/-- No response spends nothing. Proved through `spend.eq_def`, for the reason above. -/
-theorem spend_nil : spend [] = 0 := by
-  rw [spend.eq_def]
-
 /-- The compiled half after the gateway has been read. -/
 def compileWith (r : Request) (grants : List Grant) (baseUrl token : String) (p : Protocol) :
     Outcome :=
@@ -314,7 +270,7 @@ def compileWith (r : Request) (grants : List Grant) (baseUrl token : String) (p 
   | .ok names =>
     .ok { tools := plan, networkEgress := r.permissions.unrestrictedNetwork,
           connection := connectionFor p baseUrl token, connectors := names,
-          maxTurns := r.maxTurns, budgetCap := r.budgetCap, grants, tracingDisabled := true }
+          maxTurns := r.maxTurns, grants, tracingDisabled := true }
 
 /-- `compileOpenAiAgentsRun`, check for check and in the same order. -/
 @[aw_spec (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
@@ -325,7 +281,6 @@ def compile (r : Request) : Outcome :=
   | some grants =>
     if !r.skills.isEmpty then .refused (.capabilityUnsupported "skills")
     else if r.session == .fork then .refused (.capabilityUnsupported "fork")
-    else if r.budgetCap && !priced r.model then .refused (.capabilityUnsupported "maxBudget")
     else match r.gateway with
     | none => .refused (.credentialRefused "gateway")
     | some (baseUrl, token, wire) =>
@@ -347,13 +302,13 @@ private theorem compileWith_ok {r : Request} {grants : List Grant} {b t : String
     {c : Compiled} (h : compileWith r grants b t p = .ok c) :
     c.tools = toolPlan r.permissions (grants.any (·.readOnly)) ∧ c.grants = grants ∧
       c.networkEgress = r.permissions.unrestrictedNetwork ∧ c.connection = connectionFor p b t ∧
-      c.tracingDisabled = true ∧ c.maxTurns = r.maxTurns ∧ c.budgetCap = r.budgetCap := by
+      c.tracingDisabled = true ∧ c.maxTurns = r.maxTurns := by
   unfold compileWith at h
   dsimp only at h
   split at h
   · cases h
   · cases h
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The shape of every accepted compile: the request's grants normalised, its gateway read, and
 the compiled half built from them. A lemma the family's theorems share; it states no property of its own. -/
@@ -363,7 +318,7 @@ theorem compile_ok_shape {r : Request} {c : Compiled} (h : compile r = .ok c) :
       r.gateway = some (b, t, w) ∧ Protocol.ofWire? w = some p ∧
       c.tools = toolPlan r.permissions (grants.any (·.readOnly)) ∧ c.grants = grants ∧
       c.networkEgress = r.permissions.unrestrictedNetwork ∧ c.connection = connectionFor p b t ∧
-      c.tracingDisabled = true ∧ c.maxTurns = r.maxTurns ∧ c.budgetCap = r.budgetCap := by
+      c.tracingDisabled = true ∧ c.maxTurns = r.maxTurns := by
   unfold compile at h
   split at h
   · cases h
@@ -376,18 +331,16 @@ theorem compile_ok_shape {r : Request} {c : Compiled} (h : compile r = .ok c) :
         · cases h
         · split at h
           · cases h
-          · split at h
+          · rename_i b t w hgw
+            split at h
             · cases h
-            · rename_i b t w hgw
+            · rename_i p hp
               split at h
               · cases h
-              · rename_i p hp
-                split at h
+              · split at h
                 · cases h
-                · split at h
-                  · cases h
-                  · obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := compileWith_ok h
-                    exact ⟨grants, b, t, w, p, hg, hgw, hp, h1, h2, h3, h4, h5, h6, h7⟩
+                · obtain ⟨h1, h2, h3, h4, h5, h6⟩ := compileWith_ok h
+                  exact ⟨grants, b, t, w, p, hg, hgw, hp, h1, h2, h3, h4, h5, h6⟩
 
 /-! ## The event mapping -/
 

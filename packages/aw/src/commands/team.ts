@@ -1,4 +1,4 @@
-import { MEMBERSHIP_ROLES } from '@indx-workspace/contracts/team';
+import { CONFERRABLE_ROLES } from '@indx-workspace/contracts/team';
 
 import { command, enumValue, positional, readBody, value, type Command } from '../command.js';
 import { UsageError } from '../io.js';
@@ -9,10 +9,10 @@ const USER_COLUMNS = ['id', 'email', 'name', 'createdAt'];
 const INVITATION_COLUMNS = ['id', 'email', 'role', 'expiresAt', 'acceptedAt', 'revokedAt'];
 const API_KEY_COLUMNS = ['id', 'name', 'role', 'keyPrefix', 'lastUsedAt', 'expiresAt', 'revokedAt'];
 
-function roleWord(word: string): (typeof MEMBERSHIP_ROLES)[number] {
-  const role = MEMBERSHIP_ROLES.find((candidate) => candidate === word);
+function roleWord(word: string): (typeof CONFERRABLE_ROLES)[number] {
+  const role = CONFERRABLE_ROLES.find((candidate) => candidate === word);
   if (role === undefined)
-    throw new UsageError(`<role> must be one of ${MEMBERSHIP_ROLES.join(', ')}`);
+    throw new UsageError(`<role> must be one of ${CONFERRABLE_ROLES.join(', ')}`);
   return role;
 }
 
@@ -41,7 +41,7 @@ export const teamCommands: readonly Command[] = [
       value: await context.client.team.members.add(
         await readBody(context, EmailRoleBody, {
           email: value(context, 'email'),
-          role: enumValue(context, 'role', MEMBERSHIP_ROLES),
+          role: enumValue(context, 'role', CONFERRABLE_ROLES),
         }),
         { signal: context.signal },
       ),
@@ -83,7 +83,7 @@ export const teamCommands: readonly Command[] = [
         await readBody(context, CreateUserBody, {
           email: value(context, 'email'),
           name: value(context, 'name'),
-          role: enumValue(context, 'role', MEMBERSHIP_ROLES),
+          role: enumValue(context, 'role', CONFERRABLE_ROLES),
         }),
         { signal: context.signal },
       ),
@@ -106,7 +106,7 @@ export const teamCommands: readonly Command[] = [
       value: await context.client.team.invitations.create(
         await readBody(context, EmailRoleBody, {
           email: value(context, 'email'),
-          role: enumValue(context, 'role', MEMBERSHIP_ROLES),
+          role: enumValue(context, 'role', CONFERRABLE_ROLES),
         }),
         { signal: context.signal },
       ),
@@ -144,7 +144,7 @@ export const teamCommands: readonly Command[] = [
       value: await context.client.team.apiKeys.create(
         await readBody(context, CreateApiKeyBody, {
           name: value(context, 'name'),
-          role: enumValue(context, 'role', MEMBERSHIP_ROLES),
+          role: enumValue(context, 'role', CONFERRABLE_ROLES),
         }),
         { signal: context.signal },
       ),

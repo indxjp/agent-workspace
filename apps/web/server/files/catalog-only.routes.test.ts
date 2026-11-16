@@ -30,6 +30,7 @@ import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { createCatalogFilesWorld, type CatalogFilesWorld } from './catalog-runtime-fixtures';
 import { encodeFileId } from './file-id';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const WORKSPACE = '55555555-5555-4555-8555-555555555555';
 const PRINCIPAL = '37d41bbb-42d1-4a16-8f5d-de3fef42eed0';
@@ -122,7 +123,7 @@ async function seedPendingUpload(w: CatalogFilesWorld, path: string): Promise<vo
 async function snapshot(w: CatalogFilesWorld): Promise<string> {
   const repository = await w.catalogs.forWorkspace(WORKSPACE);
   return JSON.stringify({
-    rows: await repository.listFiles(),
+    rows: await listCatalogFiles(repository),
     pending: await repository.countPending(),
     objects: (await w.objects.listPage('')).entries,
   });
@@ -326,7 +327,7 @@ describe('two writers on one path', () => {
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
     const loser = responses.find((response) => response.status === 409);
     expect(await loser?.json()).toMatchObject({ error: { code: 'upload_in_progress' } });
-    const rows = (await (await w.catalogs.forWorkspace(WORKSPACE)).listFiles()).filter(
+    const rows = (await listCatalogFiles(await w.catalogs.forWorkspace(WORKSPACE))).filter(
       (row) => row.path === 'race.txt',
     );
     expect(rows).toHaveLength(1);

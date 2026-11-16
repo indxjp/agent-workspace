@@ -826,7 +826,58 @@ test('cloudflare fails when wrangler fails or no registry digest can be read bac
     'wrangler containers build failed with exit 1: [redacted]',
   );
   const unreadable = fakeDeps({ run: () => '' });
-  assert.match((await prepare('cloudflare', cloudflareEnv, [KEY], unreadable)).failure, /no registry digest/u);
+  assert.match(
+    (await prepare('cloudflare', cloudflareEnv, [KEY], unreadable)).failure,
+    /neither docker nor the registry reports its digest/u,
+  );
+  const denied = fakeDeps({
+    run: (command, args) => {
+      if (command === 'npx') return '';
+      throw new Error(`docker ${args[0] === 'image' ? 'image' : 'buildx imagetools'} inspect failed with exit 1: denied ${KEY}`);
+    },
+  });
+  assert.equal(
+    (await prepare('cloudflare', cloudflareEnv, [KEY], denied)).failure,
+    'wrangler pushed the image but neither docker nor the registry reports its digest: docker buildx imagetools inspect failed with exit 1: denied [redacted]',
+  );
+  const malformed = fakeDeps({
+    run: (command, args) => (command === 'docker' && args[1] === 'imagetools' ? JSON.stringify({ digest: 'sha256:short' }) : ''),
+  });
+  assert.match(
+    (await prepare('cloudflare', cloudflareEnv, [KEY], malformed)).failure,
+    /neither docker nor the registry reports its digest/u,
+  );
+});
+
+test('cloudflare reads the digest from the registry when wrangler skipped the push', async () => {
+  // Wrangler found the image already in the registry: it removed its local tag and never added the
+  // registry tag, so `docker image inspect` of the registry name fails (the daily lane, Nov 2026).
+  const registryName = `registry.cloudflare.com/acct0123/aw-providers-probe:${TAG}`;
+  const deps = fakeDeps({
+    run: (command, args) => {
+      if (command === 'npx') return 'Image already exists remotely, skipping push\n';
+      if (args[0] === 'image') throw new Error(`docker image inspect failed with exit 1: No such image: ${registryName}`);
+      if (args[1] === 'imagetools') {
+        assert.equal(args[3], registryName);
+        return JSON.stringify({ mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: DIGEST, size: 1 });
+      }
+      throw new Error(`unexpected ${command} ${args.join(' ')}`);
+    },
+  });
+  assert.deepEqual(await prepare('cloudflare', cloudflareEnv, [KEY], deps), {
+    env: { CLOUDFLARE_PROBE_IMAGE: `registry.cloudflare.com/acct0123/aw-providers-probe@${DIGEST}` },
+  });
+  assert.deepEqual(
+    deps.calls.run.map(({ command, args }) => `${command} ${args[0]} ${args[1]}`),
+    ['npx --yes wrangler@4.147.0', 'docker image inspect', 'docker buildx imagetools'],
+  );
+});
+
+test('cloudflare does not ask the registry when docker already reports the digest', async () => {
+  const reference = `registry.cloudflare.com/acct0123/aw-providers-probe@${DIGEST}`;
+  const deps = fakeDeps({ run: (command, args) => (command === 'docker' && args[0] === 'image' ? `${reference}\n` : '') });
+  assert.equal((await prepare('cloudflare', cloudflareEnv, [KEY], deps)).env.CLOUDFLARE_PROBE_IMAGE, reference);
+  assert.ok(!deps.calls.run.some(({ args }) => args[1] === 'imagetools'));
 });
 
 const BRIDGE = 'https://bridge-ci-1.acct.workers.dev';

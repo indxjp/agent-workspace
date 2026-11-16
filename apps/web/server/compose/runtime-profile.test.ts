@@ -368,8 +368,6 @@ describe('runtime profile launch composition', () => {
     );
 
     it.each([
-      ['cloud-run-service', true],
-      ['cloud-run-service', false],
       ['aca-sessions', true],
       ['aca-sessions', false],
     ] as const)(
@@ -388,6 +386,31 @@ describe('runtime profile launch composition', () => {
         );
       },
     );
+
+    it('lowers open to restricted on cloud-run-service when the egress proxy is configured, never open', async () => {
+      const { target } = await resolveWith(
+        open('cloud-run-service'),
+        { unrestrictedNetwork: false, connectorHosts: hosts },
+        true,
+      );
+      expect(target.networkPolicy).toBe('restricted');
+      expect(target.allowedDomains).toEqual(['a.example.com', 'b.example.com']);
+    });
+
+    it('refuses a lowered restricted on cloud-run-service without an egress proxy, naming the option', async () => {
+      const resolved = resolveWith(
+        open('cloud-run-service'),
+        { unrestrictedNetwork: false, connectorHosts: hosts },
+        false,
+      );
+      await expect(resolved).rejects.toMatchObject({ code: 'network_policy_unenforceable' });
+      await expect(resolved).rejects.toThrow(
+        'network_policy_unenforceable: open lowered to restricted (a.example.com, ' +
+          'b.example.com) because the agent lacks unrestrictedNetwork; cloud-run-service cannot ' +
+          'enforce restricted without an egress proxy (gcp.sandboxInternet: true); ' +
+          'grant unrestrictedNetwork or remove remote connectors',
+      );
+    });
 
     it.each(
       ['docker', 'kubernetes', 'cloud-run-service', 'aca-sessions'].flatMap((driver) => [

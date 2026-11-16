@@ -352,8 +352,9 @@ policy:
     writeFiles: false
     runCommands: false
     unrestrictedNetwork: false
-  # The only openapiTool any agent in this project may use.
-  tools: [workflow]
+  # The only connectors any agent in this project may use: the authority MCP server and the
+  # workflow openapiTool. A connector left out here refuses the push (policy_cannot_widen).
+  tools: [authority, workflow]
   limits:
     maxBudgetUsd: 1
   promotion:

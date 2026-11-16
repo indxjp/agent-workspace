@@ -25,7 +25,7 @@ private def notAbove (hi lo : Role) : List (Resource × Operation) :=
 
 /-- Owner dominates every role on every cell: no role holds a grant Owner lacks. -/
 @[aw_spec (tier := T5) (doc := "docs/spec.md#21-users-and-rbac")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem owner_dominates_every_role :
     ∀ r : Role, ∀ res : Resource, ∀ op : Operation,
       Grant.le (grantFor r res op) (grantFor .owner res op) = true := by decide +kernel
@@ -35,17 +35,35 @@ Viewer hold, and Builder every grant Viewer holds. Before it, Admin was below Bu
 `(connectors, run)`, `(projects, read)`, `(projects, write)` and `(triggers, run)`, and Builder
 below Viewer at `(agents, run)` (suspicious point 11). -/
 @[aw_spec (tier := T5) (doc := "docs/adr/0152-roles-are-monotonic.md#decision")
-  (ts := "apps/web/server/rbac/roles.ts#ROLES") (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/roles.ts#ROLES") (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem roles_are_monotonic :
     notAbove .admin .builder = [] ∧ notAbove .admin .viewer = [] ∧
       notAbove .builder .viewer = [] := by decide +kernel
+
+/-- `guest` is the narrowest role: every grant it holds is within Viewer's (and so within every
+other role's), so adding it widened no one's access. The order is `owner ≥ admin ≥ builder ≥
+viewer ≥ guest`. -/
+@[aw_spec (tier := T5) (doc := "docs/spec.md#21-users-and-rbac")
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
+theorem guest_is_below_viewer_and_every_other_role :
+    notAbove .viewer .guest = [] ∧ notAbove .builder .guest = [] ∧
+      notAbove .admin .guest = [] ∧ notAbove .owner .guest = [] := by decide +kernel
+
+/-- The guest is strictly narrower than Viewer: Viewer's grants are not all within the guest's
+(`shares`, `metrics`, `engines`, `platforms`, `sharingPolicies`, and `workspaces` write), so the new role is a real step down, not an alias. -/
+@[aw_spec (tier := T5) (doc := "docs/spec.md#21-users-and-rbac")
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
+theorem viewer_exceeds_guest_at_named_cells :
+    notAbove .guest .viewer =
+      [(.engines, .read), (.metrics, .read), (.platforms, .read), (.shares, .read),
+        (.shares, .write), (.sharingPolicies, .read), (.workspaces, .write)] := by decide +kernel
 
 /-- Suspicious point 11 through `decide()`, closed by ADR-0152: a Builder named by an
 `agent_grants` row runs that agent as a Viewer with the same grant does, either runs an agent it
 owns, and neither runs an agent it neither owns nor was granted. -/
 @[aw_spec (tier := T5) (doc := "docs/adr/0152-roles-are-monotonic.md#decision")
   (ts := "apps/web/server/agents/run-ownership.ts#resolveAgentRunOwnership")
-  (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
+  (ts := "apps/web/server/rbac/core/decide.ts#applyGrant")]
 theorem granted_builder_runs_the_agent_a_granted_viewer_can :
     (decideAuth ⟨"builder", "POST", "/api/agents/:id/runs", .permitted, none⟩).effect = .allow ∧
       (decideAuth ⟨"viewer", "POST", "/api/agents/:id/runs", .permitted, none⟩).effect = .allow ∧
@@ -63,11 +81,11 @@ Viewer deny, independently of the ownership answer. -/
   (ts := "apps/web/server/runs/api.ts#revokeRunTokens") (ts := "apps/web/server/rbac/decide.ts#decide")]
 theorem decide_and_the_revoke_gate_agree_for_every_role :
     ∀ path ∈ ["/api/runs/:id/revoke-tokens", "/api/runs/:id"],
-      ["owner", "admin", "builder", "viewer"].map (fun role =>
+      ["owner", "admin", "builder", "viewer", "guest"].map (fun role =>
         (revokeTokensRoleGate role,
           (WireEnum.all : List Ownership).all fun o =>
             (decideAuth ⟨role, "POST", path, o, none⟩).effect == .deny)) =
-        [(true, false), (true, false), (false, true), (false, true)] := by decide +kernel
+        [(true, false), (true, false), (false, true), (false, true), (false, true)] := by decide +kernel
 
 /-! ## ADR against ADR (suspicious point 12) -/
 
@@ -76,7 +94,7 @@ theorem decide_and_the_revoke_gate_agree_for_every_role :
 `(admin, runs, run)`, so an Admin's interrupt is allowed today and denied under W9-AUTH-165. -/
 @[aw_spec (tier := T5) (doc := "docs/adr/W9-AUTH-165-admin-reads-workspace-run-history.md#decision")
   (doc := "docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md#decision")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem admin_run_verbs_adrs_disagree_at_one_cell :
     (∀ r : Role, ∀ res : Resource, ∀ op : Operation,
         ((grantsFor r res).get op ≠ (grantsForW9Auth165 r res).get op) ↔
@@ -89,10 +107,10 @@ theorem admin_run_verbs_adrs_disagree_at_one_cell :
 
 /-- §3.3's table disagrees with `permissions.ts` on a reachable operation at exactly four cells —
 Admin over `secrets` and `audit-events`, Builder and Viewer over `audit-events` — and
-is silent on `endpoint-clients`, `me`, `setup`, `storage-connections`, `tool-bundles` and
+is silent on `demo`, `endpoint-clients`, `me`, `setup`, `storage-connections`, `tool-bundles` and
 `triggers`. -/
 @[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#33-roles")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem documented_table_diverges_exactly_at :
     (Resource.all.flatMap fun res => (roles.filter fun r =>
         (documentedGrants r res).map (fun g => !agreeOnReachable res g (grantsFor r res)) =
@@ -100,7 +118,7 @@ theorem documented_table_diverges_exactly_at :
       [(.admin, .auditEvents), (.builder, .auditEvents), (.viewer, .auditEvents),
         (.admin, .secrets)] ∧
       (Resource.all.filter fun res => (docRow res).isNone) =
-        [.endpointClients, .me, .setup, .storageConnections, .toolBundles, .triggers] := by
+        [.demo, .endpointClients, .me, .setup, .storageConnections, .toolBundles, .triggers] := by
   decide +kernel
 
 /-- §3.1.1 lists two routes a run scope reaches, but `decide()`'s run-scope cell is by
@@ -108,7 +126,7 @@ theorem documented_table_diverges_exactly_at :
 `GET`/`HEAD` on every other `runs` sub-resource of its run (`interrupt`, `revoke-tokens`,
 `feedback`), shapes with no `GET` handler. -/
 @[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR")]
+  (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")]
 theorem run_scope_passes_every_get_on_its_runs_shapes :
     ["/api/runs/r", "/api/runs/r/events", "/api/runs/r/interrupt", "/api/runs/r/revoke-tokens",
       "/api/runs/r/feedback"].all
@@ -118,7 +136,7 @@ theorem run_scope_passes_every_get_on_its_runs_shapes :
 
 /-- The upper-case spelling of the scoped UUID is admitted as the same run. -/
 @[aw_spec (tier := T5) (doc := "docs/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_scope_id_accepts_equivalent_uuid_spelling :
     decideAuth ⟨"owner", "GET", "/api/runs/0f8fad5b-d9cb-469f-a165-70867728950e", .own,
         some (.run ⟨"0f8fad5b-d9cb-469f-a165-70867728950e"⟩)⟩ = .allow (some ⟨.runs, .read, .any⟩) ∧
@@ -134,7 +152,8 @@ theorem path_classifier_reads_four_decodings :
 
 /-! ## The route inventory against the classification -/
 
-/-- Of the 173 declared routes, `decide()` refuses exactly the ten `/api/auth/*` routes,
+/-- Of the 210 declared routes, `decide()` refuses exactly the twelve `/api/auth/*` routes (two of
+them the store's pre-session email-link sign-in, spec §21 "Guest"),
 the three `/api/cron/*` routes, the readiness probe `GET /api/readyz` and the two `/api/a2a/*` routes
 (an unclassified resource each; the cron routes authenticate themselves with `CRON_SECRET`,
 ADR-0120 clause 7, ADR-0144 D5 and issue #1674, the readiness probe takes no credential, issue #1562, and the
@@ -146,16 +165,26 @@ browser session, ADR-0134 part 3), `POST /api/triggers/:id/fire/:secret` (a path
 `POST /api/invitations/:id/accept` (an unclassified sub-resource) and `POST /api/builder/mcp`
 (an unclassified resource; the route verifies a run token itself, issue #1846), `POST /mcp/builder` and
 its protected-resource metadata route (paths outside `/api`, read as pages; the door admits only an OAuth
-token of the `builder` client kind, issue #1846) — twenty-nine of the
-thirty routes the matrix exempts by name; the thirtieth,
-`GET /api/setup/runtime-detect`, parses as a `setup` row and is decided. -/
-@[aw_spec (tier := T5) (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#PUBLIC_ROUTES")
-  (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#IDENTITY_ONLY_ROUTES")]
+token of the `builder` client kind, issue #1846) and `POST /api/auth/token-exchange` (an app
+backend's ID-token exchange, which authenticates its endpoint client itself, ADR-0161) and
+`POST /api/runs/:id/members/mcp` (a path deeper than `/api/<resource>/:id/<sub>`; the route verifies
+the lead run's token itself, issue #1517) and the store's two public routes `POST /api/store/leads` and
+`GET /api/store/privacy` (an unclassified resource each; the lead form does its own origin check,
+challenge and per-client limit) and four Agent Store routes, `PUT /api/demo/maintenance/:entry`,
+`PUT /api/demo/templates/:entry` and `PUT /api/demo/verification/:workspaceId` (an unclassified
+sub-resource of `demo`; all three are operator routes that check the `AW_DEMO_OPERATOR_TOKEN` bearer
+themselves) and `GET /api/store/demos` (an unclassified
+resource; public, read by the store cards) — thirty-nine of the forty-two routes the matrix exempts
+by name; the other three, `GET /api/setup/runtime-detect` (a `setup` row) and the operator routes
+`GET /api/demo/templates` and `GET /api/demo/readiness` (`demo` rows), parse and are decided. -/
+@[aw_spec (tier := T5) (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#PUBLIC_ROUTES")
+  (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#IDENTITY_ONLY_ROUTES")]
 theorem refused_declared_routes_are_the_auth_routes_and_accept :
     ((declaredRoutes.filter fun r =>
         (decideAuth ⟨"owner", r.method, r.path, .own, none⟩).effect == .refuse).map
         fun r => (r.method, r.path)) =
-      [("POST", "/api/builder/mcp"), ("POST", "/mcp/builder"),
+      [("POST", "/api/auth/token-exchange"), ("POST", "/api/runs/:id/members/mcp"),
+        ("POST", "/api/builder/mcp"), ("POST", "/mcp/builder"),
         ("GET", "/.well-known/oauth-protected-resource/mcp/builder"), ("GET", "/api/cron/retention"),
         ("GET", "/api/readyz"),
         ("POST", "/api/a2a/agents/:agentName"),
@@ -169,6 +198,10 @@ theorem refused_declared_routes_are_the_auth_routes_and_accept :
         ("GET", "/api/cron/triggers"), ("POST", "/api/auth/cli-device"), ("GET", "/api/auth/cli-verify"),
         ("POST", "/api/auth/cli-verify"), ("POST", "/api/auth/cli-token"),
         ("DELETE", "/api/auth/cli-token"), ("POST", "/api/auth/cli-workspace"),
+        ("POST", "/api/auth/email-link"), ("POST", "/api/auth/email-link/verify"),
+        ("POST", "/api/store/leads"), ("GET", "/api/store/privacy"),
+        ("PUT", "/api/demo/maintenance/:entry"), ("GET", "/api/store/demos"),
+        ("PUT", "/api/demo/templates/:entry"), ("PUT", "/api/demo/verification/:workspaceId"),
         ("GET", "/api/cron/storage-cleanup"), ("GET", "/api/auth/login"), ("POST", "/api/auth/callback"), ("GET", "/api/auth/workspace"),
         ("POST", "/api/auth/workspace"), ("POST", "/api/invitations/:id/accept")] := by
   decide +kernel
@@ -177,7 +210,7 @@ theorem refused_declared_routes_are_the_auth_routes_and_accept :
 prints as `POST /api/sessions/:id/messages`, is classified (and read as the `run` verb) while no
 route declares it. -/
 @[aw_spec (tier := T5) (doc := "docs/spec.md#34-api-design")
-  (ts := "apps/web/server/rbac/permissions.ts#SPEC_34_SUB_RESOURCES")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#SPEC_34_SUB_RESOURCES")]
 theorem classified_sub_without_a_declared_route :
     (pairsOf subResources).filter (fun (res, sub) => !declaredRoutes.any fun r =>
         match parsePath r.path with

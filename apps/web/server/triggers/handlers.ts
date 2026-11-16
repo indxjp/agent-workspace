@@ -19,10 +19,8 @@ import {
 import type { ZodError } from 'zod';
 
 import { problemWithDetail as problem, readJsonBody, type ApiResult } from '../http/result';
-import { mintClientSecret } from '../oauth/tokens';
-import { decide } from '../rbac/decide';
+import { decide, mintClientSecret, type Principal } from '../identity';
 import { authorise, type OwnershipResolver } from '../rbac/http';
-import type { Principal } from '../rbac/principal';
 import { applicationContext } from '../application-context';
 import type { TriggerRecord, TriggersRuntime, ZoomSecretTokens } from './runtime';
 import { findScheduleError } from './schedule';
@@ -332,6 +330,21 @@ export async function update(request: Request, id: unknown): Promise<ApiResult> 
       const refusal = scheduleBodyRefusal(patch.prompt);
       if (refusal !== null) return refusal;
     }
+    if (patch.cron !== undefined || patch.timezone !== undefined) {
+      if (before.kind !== 'schedule' || before.cron === null || before.timezone === null) {
+        return problem(
+          400,
+          'invalid_field',
+          'only a schedule trigger has a cron expression and a time zone.',
+        );
+      }
+      // The pair is checked together: a new time zone can make the kept cron mean another instant.
+      const invalid = findScheduleError(
+        patch.cron ?? before.cron,
+        patch.timezone ?? before.timezone,
+      );
+      if (invalid !== null) return problem(400, 'invalid_field', invalid);
+    }
     if (patch.zoomSecretToken !== undefined) {
       if (before.kind !== 'webhook') {
         return domainProblem(
@@ -348,6 +361,8 @@ export async function update(request: Request, id: unknown): Promise<ApiResult> 
       enabled: patch.enabled,
       outputSchema: patch.outputSchema,
       subject: patch.subject,
+      cron: patch.cron,
+      timezone: patch.timezone,
     });
     switch (outcome.kind) {
       case 'updated': {

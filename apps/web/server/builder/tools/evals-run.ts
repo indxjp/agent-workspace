@@ -25,7 +25,8 @@ function failureCode(failure: string): string {
  */
 export const evalsRun: Executor<'evals_run'> = async (call, ctx, ports) => {
   const { agentId, version, cases } = call.input;
-  const result = await ports.runner.evaluate(ctx, agentId, version, cases);
+  const { trialBudgetUsd } = await ports.policy.limits(ctx);
+  const result = await ports.runner.evaluate(ctx, agentId, version, trialBudgetUsd, cases);
   if (!result.ok) {
     const { code, message } = result;
     // The route's own code is never a Builder code such as `approval_required`.

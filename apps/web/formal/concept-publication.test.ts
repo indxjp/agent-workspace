@@ -6,13 +6,14 @@
  *   - `options.json`, `fields.json`, `vocabularies.json`: `PublishShareRequestSchema` accepts
  *     exactly the commands whose options fit their subject type, and exactly the field values and
  *     vocabulary members the model accepts.
- *   - `shares.json`: `toShareResource` renders exactly the model's keys (with and without a view
- *     count) and the model's `url`; `ShareService.resolve` opens a public link at the vector's
+ *   - `shares.json`: `toShareResource` (the publish response) and `toShareListItem` (a list item)
+ *     render exactly the model's keys, and the publish response the model's `url`; `ShareService.resolve` opens a public link at the vector's
  *     instant exactly when the model's `publiclyOpen` says so, and refuses it with
  *     `share_unavailable` otherwise.
  *   - `publish.json`: `ShareService.publish` (with the release gate passed explicitly) refuses
  *     exactly the model's requests with the model's `invalid_share` message, and otherwise writes
- *     the model's mode, budget, expiry and passphrase hash with a `pub_` token.
+ *     the model's mode, budget, expiry and passphrase hash, returning a `pub_` token it stores only
+ *     as a hash.
  *   - `resolve.json`: `ShareService.resolve` with a missing, wrong or right passphrase answers the
  *     model's `resolveAt` (the passphrase hash is one the real `publish` produced).
  *   - `listing.json`: the real `GET /api/shares` handler, behind the real RBAC decision, lists a
@@ -23,6 +24,8 @@
  * The package side (tables, checks, the contracts' Zod resource schema) is
  * `tests/formal/concept-publication.test.ts`.
  */
+import { createHash } from 'node:crypto';
+
 import type { CreateShareInput, ShareRecord } from '@agent-workspace/core/db';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -30,11 +33,11 @@ import { GET as listShares } from '../app/api/shares/route';
 import { DomainError } from '../server/errors';
 import { createMemoryDirectory } from '../server/rbac/memory-directory';
 import { Principal } from '../server/rbac/principal';
-import { ROLES, type Role } from '../server/rbac/roles';
+import { ROLES, type Role } from '../server/rbac/core/roles';
 import { PublishShareRequestSchema, type PublishShareInput } from '../server/shares/core/input';
-import { toShareResource } from '../server/shares/core/resource';
-import { type WorkspaceSharing } from '../server/shares/core/runtime';
-import { ShareService } from '../server/shares/core/service';
+import { toShareListItem, toShareResource } from '../server/shares/core/resource';
+import { type WorkspaceSharing } from '../server/shares/runtime';
+import { ShareService } from '../server/shares/service';
 import { RunnableShareService } from '../server/shares/runnable/service';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 import { clearApplicationContext } from '../server/application-context';
@@ -143,6 +146,11 @@ describe('publish vocabularies', () => {
   });
 });
 
+/** The modelled share's link token: minted by the publish and never part of the stored record. */
+function shareToken(value: unknown, what: string): string {
+  return asString(asRecord(value, what)['token'], `${what} token`);
+}
+
 function shareRecord(value: unknown, what: string): ShareRecord {
   const s = asRecord(value, what);
   const include = asRecord(s['include'], `${what} include`);
@@ -168,7 +176,7 @@ function shareRecord(value: unknown, what: string): ShareRecord {
   return {
     id: asString(s['id'], `${what} id`),
     workspaceId: asString(s['workspaceId'], `${what} workspaceId`),
-    token: asString(s['token'], `${what} token`),
+    tokenHash: 'not-checked-here',
     subjectType,
     subjectId: asString(s['subjectId'], `${what} subjectId`),
     subjectLabel: asString(s['subjectLabel'], `${what} subjectLabel`),
@@ -206,7 +214,7 @@ function fakeSharing(options: FakeSharingOptions = {}) {
     shares: {
       list: vi.fn(() => Promise.resolve([...(options.listed ?? [])])),
       get: vi.fn(),
-      findByToken: vi.fn(() => Promise.resolve(options.found ?? null)),
+      findByTokenHash: vi.fn(() => Promise.resolve(options.found ?? null)),
       create,
       getPublicSharingEnabled: vi.fn(() => Promise.resolve(options.publicSharingEnabled ?? true)),
       setPublicSharingEnabled: vi.fn(),
@@ -227,7 +235,7 @@ function recordFromCreate(values: CreateShareInput): ShareRecord {
   return {
     id: '00000000-0000-4000-8000-0000000000aa',
     workspaceId: '00000000-0000-4000-8000-000000000002',
-    token: values.token,
+    tokenHash: values.tokenHash,
     subjectType: values.subjectType,
     subjectId: values.subjectId,
     subjectLabel: values.subjectLabel,
@@ -317,17 +325,18 @@ describe('typed shares against the wire rendering and public resolution', () => 
     const input = asRecord(vector.input, vector.id);
     const expected = asRecord(vector.expected, vector.id);
     const record = shareRecord(input['share'], `${vector.id} share`);
+    const token = shareToken(input['share'], `${vector.id} share`);
 
-    const resource = toShareResource(record);
+    const resource = toShareResource(record, token);
     expect(Object.keys(resource)).toEqual(asStrings(expected['keys'], `${vector.id} keys`));
-    expect(Object.keys(toShareResource(record, 3))).toEqual(
+    expect(Object.keys(toShareListItem(record, 3))).toEqual(
       asStrings(expected['listKeys'], `${vector.id} listKeys`),
     );
     expect('url' in resource ? resource.url : null).toBe(expected['url']);
 
     vi.useFakeTimers({ now: asNumber(input['now'], `${vector.id} now`) });
     const { sharing, recordView } = fakeSharing({ found: record });
-    const outcome = await new ShareService(sharing, false).resolve(record.token).then(
+    const outcome = await new ShareService(sharing, false).resolve(token).then(
       () => 'opened',
       (error: unknown) =>
         error instanceof DomainError ? error.code : `unexpected: ${String(error)}`,
@@ -355,7 +364,7 @@ describe('ShareService.publish against the model', () => {
     const request = publishInput(input['request'], `${vector.id} request`);
     const role = asRole(input['role'], `${vector.id} role`);
     const outcome = await service.publish(request, { ...ACTOR, role }).then(
-      () => null,
+      (published) => published.token,
       (error: unknown) => error,
     );
     if (expected['outcome'] === 'refused') {
@@ -366,7 +375,7 @@ describe('ShareService.publish against the model', () => {
       expect(create).not.toHaveBeenCalled();
       return;
     }
-    expect(outcome).toBeNull();
+    if (typeof outcome !== 'string') throw new Error(`${vector.id}: publish refused`);
     expect(create).toHaveBeenCalledTimes(1);
     const values = create.mock.calls[0]?.[0];
     if (values === undefined) throw new Error(`${vector.id}: create was not called`);
@@ -376,7 +385,10 @@ describe('ShareService.publish against the model', () => {
     expect(values.passphraseHash !== null && values.passphraseHash !== undefined).toBe(
       expected['hasPassphraseHash'],
     );
-    expect(values.token.startsWith(asString(expected['tokenPrefix'], vector.id))).toBe(true);
+    expect(outcome.startsWith(asString(expected['tokenPrefix'], vector.id))).toBe(true);
+    // Part 06 step 3 phase 2: the token is returned once and only its hash is written.
+    expect(values).not.toHaveProperty('token');
+    expect(values.tokenHash).toBe(createHash('sha256').update(outcome, 'utf8').digest('hex'));
     expect(values.publisherPrincipalId).toBe(ACTOR.principalId);
   });
 });
@@ -395,12 +407,13 @@ describe('ShareService.resolve with a passphrase against the model', () => {
     const expected = asRecord(vector.expected, vector.id);
     const modelled = shareRecord(input['share'], `${vector.id} share`);
     const record = { ...modelled, passphraseHash: modelled.passphraseHash === null ? null : hash };
+    const token = shareToken(input['share'], `${vector.id} share`);
     const attempt = asString(input['attempt'], `${vector.id} attempt`);
     const presented =
       attempt === 'right' ? PASSPHRASE : attempt === 'wrong' ? 'not the passphrase' : undefined;
     vi.useFakeTimers({ now: asNumber(input['now'], `${vector.id} now`) });
     const { sharing, recordView } = fakeSharing({ found: record });
-    const code = await new ShareService(sharing, false).resolve(record.token, presented).then(
+    const code = await new ShareService(sharing, false).resolve(token, presented).then(
       () => null,
       (error: unknown) =>
         error instanceof DomainError ? error.code : `unexpected: ${String(error)}`,

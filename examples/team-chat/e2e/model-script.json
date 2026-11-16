@@ -1,0 +1,8 @@
+{
+  "conversations": [
+    {
+      "when": "@helper what changed today?",
+      "turns": [{ "text": "Two pull requests were merged today, and the release notes are ready." }]
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CreatedUserResponseSchema,
+  CONFERRABLE_ROLES,
   MEMBERSHIP_ROLES,
   MembershipListResponseSchema,
   MembershipResourceSchema,
@@ -59,10 +60,19 @@ function without(source: object, field: string): Record<string, unknown> {
 }
 
 describe('MEMBERSHIP_ROLES', () => {
-  it('is exactly §21’s four roles in §21’s order, and the bounds the routes apply', () => {
-    expect([...MEMBERSHIP_ROLES]).toEqual(['owner', 'admin', 'builder', 'viewer']);
+  it('is §21’s four roles in §21’s order then the store’s guest, and the bounds the routes apply', () => {
+    expect([...MEMBERSHIP_ROLES]).toEqual(['owner', 'admin', 'builder', 'viewer', 'guest']);
     expect(USER_EMAIL_MAX_LENGTH).toBe(320);
     expect(USER_NAME_MAX_LENGTH).toBe(200);
+  });
+});
+
+describe('CONFERRABLE_ROLES', () => {
+  it('is every membership role but guest, which no API route confers', () => {
+    expect([...CONFERRABLE_ROLES]).toEqual(['owner', 'admin', 'builder', 'viewer']);
+    expect(MEMBERSHIP_ROLES.filter((role) => !CONFERRABLE_ROLES.some((c) => c === role))).toEqual([
+      'guest',
+    ]);
   });
 });
 

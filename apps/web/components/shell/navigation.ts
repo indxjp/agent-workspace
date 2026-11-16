@@ -20,15 +20,43 @@
  *
  * The list of inert entries is therefore derived from this table, never asserted in prose. See
  * `navigation.test.ts`, which pins both the order and which entries resolve.
+ *
+ * ## Why each entry names a feature
+ *
+ * A workspace can switch features off (ADR-0160), and the console then hides their entries
+ * (spec §44 as amended). The hiding rule reads the `feature` tag on this table through
+ * `visibleNavigation`, rather than a second list that would drift from it.
  */
-import type { IconName } from './icons';
+import { FEATURE_IDS, type FeatureId, type RouteFeature } from '@indx-workspace/contracts/features';
 
-interface NavItem {
+import type { IconName } from './icons';
+import { groupLabel, navLabel, type ShellLocale } from './shell-messages';
+
+/** Every entry's stable id; `shell-messages.ts` names each one in Japanese. */
+export type NavId =
+  | 'home'
+  | 'projects'
+  | 'agents'
+  | 'files'
+  | 'skills'
+  | 'connectors'
+  | 'runs'
+  | 'models'
+  | 'storage'
+  | 'users'
+  | 'apikeys'
+  | 'runtimes'
+  | 'shares'
+  | 'settings';
+
+export interface NavItem {
   /** Stable id. Matches the mockups' `window.PAGE.nav` value for the same screen. */
-  readonly id: string;
+  readonly id: NavId;
   /** The visible label. Copied from §44; do not reword. */
   readonly label: string;
   readonly icon: IconName;
+  /** The feature that hides this entry when switched off, or `core` (ADR-0160 D4). */
+  readonly feature: RouteFeature;
   /**
    * The route this entry navigates to, or `null` when no task has built it yet. `null` is a
    * statement that the destination is absent, and the sidebar renders it as disabled — it is
@@ -36,8 +64,10 @@ interface NavItem {
    */
   readonly href: string | null;
   /**
-   * Shown only to a caller who may manage the workspace's storage, by the same `decide()` question
-   * the page gate asks (the shell layout's `managers`); everyone else does not see the entry.
+   * Shown only to a workspace Owner or Admin (the shell layout's `managers`); everyone else does not
+   * see the entry, because the API its screen loads refuses them (UX-12 in #2086). Settings stays
+   * for everyone: every member reads its Features card. `app/(shell)/admin-menu-access.test.ts`
+   * holds each entry to its API route's `decide()` answer, role by role.
    */
   readonly managersOnly?: true;
 }
@@ -52,34 +82,102 @@ export const NAVIGATION: readonly NavGroup[] = [
   {
     label: null,
     items: [
-      { id: 'home', label: 'New chat', icon: 'chat', href: '/' },
-      { id: 'projects', label: 'Projects', icon: 'projects', href: '/projects' },
-      { id: 'agents', label: 'Agents', icon: 'agents', href: '/agents' },
-      { id: 'files', label: 'Files', icon: 'files', href: '/files' },
-      { id: 'skills', label: 'Skills', icon: 'skills', href: '/skills' },
-      { id: 'connectors', label: 'Connectors', icon: 'connectors', href: '/connectors' },
-      { id: 'runs', label: 'Runs', icon: 'runs', href: '/runs' },
+      { id: 'home', label: 'New chat', icon: 'chat', feature: 'chat', href: '/' },
+      {
+        id: 'projects',
+        label: 'Projects',
+        icon: 'projects',
+        feature: 'projects',
+        href: '/projects',
+      },
+      { id: 'agents', label: 'Agents', icon: 'agents', feature: 'core', href: '/agents' },
+      { id: 'files', label: 'Files', icon: 'files', feature: 'files', href: '/files' },
+      { id: 'skills', label: 'Skills', icon: 'skills', feature: 'skills', href: '/skills' },
+      {
+        id: 'connectors',
+        label: 'Connectors',
+        icon: 'connectors',
+        feature: 'connectors',
+        href: '/connectors',
+      },
+      { id: 'runs', label: 'Runs', icon: 'runs', feature: 'runs', href: '/runs' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { id: 'models', label: 'Models', icon: 'models', href: '/admin/models' },
+      {
+        id: 'models',
+        label: 'Models',
+        icon: 'models',
+        feature: 'core',
+        href: '/admin/models',
+        managersOnly: true,
+      },
       {
         id: 'storage',
         label: 'Storage',
         icon: 'files',
+        feature: 'core',
         href: '/admin/storage',
         managersOnly: true,
       },
-      { id: 'users', label: 'Users', icon: 'users', href: '/admin/users' },
-      { id: 'apikeys', label: 'API Keys', icon: 'keys', href: '/admin/api-keys' },
-      { id: 'runtimes', label: 'Runtimes', icon: 'runtimes', href: '/admin/runtimes' },
-      { id: 'shares', label: 'Shared links', icon: 'share', href: '/admin/shares' },
-      { id: 'settings', label: 'Settings', icon: 'settings', href: '/admin/settings' },
+      {
+        id: 'users',
+        label: 'Users',
+        icon: 'users',
+        feature: 'core',
+        href: '/admin/users',
+        managersOnly: true,
+      },
+      {
+        id: 'apikeys',
+        label: 'API Keys',
+        icon: 'keys',
+        feature: 'core',
+        href: '/admin/api-keys',
+        managersOnly: true,
+      },
+      {
+        id: 'runtimes',
+        label: 'Runtimes',
+        icon: 'runtimes',
+        feature: 'core',
+        href: '/admin/runtimes',
+        managersOnly: true,
+      },
+      {
+        id: 'shares',
+        label: 'Shared links',
+        icon: 'share',
+        feature: 'sharing',
+        href: '/admin/shares',
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: 'settings',
+        feature: 'core',
+        href: '/admin/settings',
+      },
     ],
   },
 ];
+
+/**
+ * The navigation a workspace with `features` switched on shows: every `core` entry and every entry
+ * whose feature is listed, in §44's order, without a group left empty. With every feature on (the
+ * default) it is `NAVIGATION` itself. `activeNavId` and `crumbsFor` keep reading the whole table:
+ * a crumb for a hidden page is harmless, and that page explains it is switched off.
+ */
+export function visibleNavigation(
+  features: readonly FeatureId[] = FEATURE_IDS,
+): readonly NavGroup[] {
+  const shown = (item: NavItem) => item.feature === 'core' || features.includes(item.feature);
+  return NAVIGATION.map((group) => ({ ...group, items: group.items.filter(shown) })).filter(
+    (group) => group.items.length > 0,
+  );
+}
 
 /**
  * `usePathname()` is typed `string`, but a component can be rendered outside a router and a
@@ -122,13 +220,14 @@ export function activeNavId(pathname: unknown): string | null {
  * session, a single run) renders its own, which is the case from `agent.html` onwards and which
  * no Wave 1 route reaches.
  */
-export function crumbsFor(pathname: unknown): readonly string[] {
+export function crumbsFor(pathname: unknown, locale: ShellLocale = 'en'): readonly string[] {
   const path = normalisePathname(pathname);
   if (path === null) return [];
   for (const group of NAVIGATION) {
     for (const item of group.items) {
       if (item.href !== null && item.href === path) {
-        return group.label === null ? [item.label] : [group.label, item.label];
+        const heading = groupLabel(group, locale);
+        return heading === null ? [navLabel(item, locale)] : [heading, navLabel(item, locale)];
       }
     }
   }

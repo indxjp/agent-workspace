@@ -277,7 +277,7 @@ new adapter adds an id to `PROVIDER_IDS` and a `row(...)` entry.
   HTTP API directly over `fetch`, not through the `@anthropic-ai/claude-agent-sdk` npm package
   that gate confines to `apps/runner/src/claude.ts`. The two are unrelated surfaces that happen to
   share the name "Anthropic."
-- `tests/gateway-inventory.test.ts` and `apps/web/server/sdk-conformance.test.ts` both call
+- `tests/gateway-inventory.test.ts` and `apps/web/server/sdk-conformance.*.test.ts` both call
   `createProviderRegistry()` and assert against `PROVIDER_IDS` — a new row is visible to both
   without further wiring.
 
@@ -332,7 +332,7 @@ cancelled-before-start branch, the `completed` flag, `interrupt` and the engine 
 promise — so the adapter supplies `compile` and, per run, a plan: its events, the mapper from
 those to neutral frames, which event ends the run, and its durability verdict. The same package
 exports the helpers `compile` opens with: `parsePolicyArm`, `normaliseRequestGrants`,
-`provisionalBudget`, `requireGateway`, `sandboxRefusal` and `forkRefusal`; `permissionToolPlan` for
+`requireGateway`, `sandboxRefusal` and `forkRefusal`; `permissionToolPlan` for
 the permission-to-tool mapping; `workspacePathVerdict`, `workspaceWriteVerdict` and
 `resolvedWorkspacePathVerdict` for the tool guard; and `StoreWriteLog` with `storeDurability` for
 the session bridge. Derive the policy arm from the catalogue with `engineSettingsSchema(id)`
@@ -493,7 +493,7 @@ coverage table moves from "not yet" to done only when all four hold:
 1. **Contract** — the schema exists in `@indx-workspace/contracts` (a new or extended file under
    `packages/contracts/src/`), with valid, invalid, unknown-key, missing-field, and bound cases
    tested in that package.
-2. **Conformance** — `apps/web/server/sdk-conformance.test.ts` proves the server's real serializer
+2. **Conformance** — `apps/web/server/sdk-conformance.*.test.ts` proves the server's real serializer
    (or parser, for a request body) satisfies that schema. This is the seam that keeps the
    contracts package and the application from drifting: it fails the moment either side changes
    without the other.

@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 const WEB = path.resolve(import.meta.dirname, '../../../..');
 const TRIAL_ADAPTER = path.join('server', 'builder', 'adapters', 'runner', 'production.ts');
 const EVALUATION_HANDLER = path.join('server', 'evaluations', 'handlers.ts');
+// Not an origin: it forwards the override the paused run's own row stores (#1963), so a
+// continuation keeps the cap the run was started under. It never reads one from a request.
+const APPROVAL_CONTINUATION = path.join('server', 'runs', 'approval.ts');
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -37,12 +40,14 @@ function startCalls(source: string): string[] {
 // key, so no request can carry one. This test only scans the text of the `startRunOnSession(...)`
 // calls, to name the callers that pass `limits`; it cannot see a call made any other way.
 describe('the run-limits override has one origin', () => {
-  it('is passed to startRunOnSession by the trial adapter and the evaluation handler, and by no route', () => {
+  it('is set by the trial adapter and the evaluation handler, forwarded by the approval continuation, and passed by no route', () => {
     const withLimits = ['server', 'app']
       .flatMap((dir) => sourceFiles(path.join(WEB, dir)))
       .filter((file) => !file.endsWith(path.join('runs', 'service.ts')))
       .filter((file) => startCalls(readFileSync(file, 'utf8')).some((c) => /\blimits\b/.test(c)))
       .map((file) => path.relative(WEB, file));
-    expect(withLimits).toEqual([TRIAL_ADAPTER, EVALUATION_HANDLER]);
+    expect([...withLimits].sort()).toEqual(
+      [APPROVAL_CONTINUATION, EVALUATION_HANDLER, TRIAL_ADAPTER].sort(),
+    );
   });
 });

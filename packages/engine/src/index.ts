@@ -22,8 +22,6 @@
  *                        permission model, over an injected host (ADR-0137).
  *   * `refusal.ts`    — `EngineRefusalError`, the typed refusal an adapter can only reach in
  *                        `start()`, which the runner answers like a `compile` refusal.
- *   * `prices.ts`     — the provisional price table an adapter-level budget cap is measured with
- *                        (ADR-0074 D7), shared by every adapter that enforces one (ADR-0081).
  *
  * The conformance kit is **not** re-exported here. It lives at `@agent-workspace/engine/testing`
  * so that importing the port does not pull a fake gateway and a scripted engine into a runtime
@@ -38,7 +36,6 @@ export * from './sandbox-env.js';
 export * from './session-state.js';
 export * from './skills.js';
 export * from './skill-script.js';
-export * from './prices.js';
 export * from './credential-rejection.js';
 export * from './refusal.js';
 export * from './compile-checks.js';

@@ -7,7 +7,7 @@ import { HomeChat } from '../../components/composer/home-chat';
 import type { ComposerAgent } from '../../components/composer/model';
 import { createInMemoryAgentStoreProvider } from '../../server/agents/memory-store';
 import { createInMemoryConnectorsStoreProvider } from '../../server/connectors/memory-store';
-import { createInMemoryModelsStoreProvider } from '../../server/models/memory-store';
+import { createInMemoryModelsStoreProvider } from '../../server/models/store';
 import { createInMemoryCatalogStore } from '../../server/resources/catalog-store.memory';
 import { InMemoryRunStore } from '../../server/runs/memory-store';
 import HomePage from './page';
@@ -17,9 +17,12 @@ import {
   resetTestRunApi,
 } from '../../server/application-context-fixtures';
 import { clearApplicationContext } from '../../server/application-context';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 vi.mock('next/headers', () => ({
   cookies: () => Promise.resolve({ toString: () => '__Host-aw_session=fixture' }),
+  // The page reads Accept-Language for the composer's words (UX-15); English here.
+  headers: () => Promise.resolve(new Headers()),
 }));
 
 vi.mock('../../server/auth', () => ({
@@ -68,10 +71,9 @@ async function configuredProjection(): Promise<{
     ['assigned/brief.md', 42],
     ['private/notes.md', 99],
   ] as const) {
-    const row = await catalog.forWorkspaceSync(WORKSPACE).putFile({
+    const row = await seedCatalogFile(catalog.forWorkspaceSync(WORKSPACE), {
       path,
       kind: 'file',
-      storageKey: path,
       sizeBytes,
       contentType: 'text/markdown',
       ownerPrincipalId: CREATOR,

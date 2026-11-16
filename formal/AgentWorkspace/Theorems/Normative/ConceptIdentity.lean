@@ -16,16 +16,17 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Er.Current.Identity
 
 /-! ## Workspace, principal, role -/
 
-/-- "Every membership and every API key carries exactly one of four roles": the `role` column of
-`memberships` and of `api_keys` is `NOT NULL` and checked against exactly the four roles. -/
+/-- "Every membership and every API key carries exactly one role": the `role` column of
+`memberships` and of `api_keys` is `NOT NULL`; a membership is checked against the five roles and
+an API key against the four conferrable ones (a guest is never an API key's role). -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#membership-roles")
   (ts := "packages/core/src/db/schema/memberships.ts#memberships_role_valid")
   (ts := "packages/core/src/db/schema/api-keys.ts#api_keys_role_valid")]
-theorem every_membership_and_api_key_carries_one_of_four_roles :
+theorem every_membership_and_api_key_carries_one_role :
     (catalogue .memberships).isNotNull "role" = true ∧ (catalogue .apiKeys).isNotNull "role" = true ∧
       (catalogue .memberships).oneOfCheck? "memberships_role_valid" =
-        some ("role", ["owner", "admin", "builder", "viewer"]) ∧
+        some ("role", ["owner", "admin", "builder", "viewer", "guest"]) ∧
       (catalogue .apiKeys).oneOfCheck? "api_keys_role_valid" =
         some ("role", ["owner", "admin", "builder", "viewer"]) := by decide +kernel
 
@@ -92,7 +93,7 @@ theorem the_role_is_on_the_membership_not_the_user :
 /-- "Every resource below belongs to exactly one [workspace]": each tenant-scoped identity table
 has exactly one reference to `workspaces`, over a `NOT NULL` `workspace_id`. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem identity_rows_belong_to_exactly_one_workspace :
     [TableName.memberships, .workspacePrincipals, .apiKeys, .invitations, .browserTokens,
       .cliSessions, .endpointClients, .endpointClientAgents, .endpointClientApiKeys,

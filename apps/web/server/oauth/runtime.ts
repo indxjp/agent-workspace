@@ -23,6 +23,23 @@ export interface OAuthAuditEvent {
   readonly detail: string;
 }
 
+/** The person an ID token names, as a member of one workspace (ADR-0161 D5 step 7). */
+export interface ExchangeMember {
+  readonly userId: string;
+  readonly principalId: string;
+  /** The member's label at the time, for the audit row. */
+  readonly label: string;
+}
+
+/** The access-token row an exchange writes (ADR-0161 D1): its own family, no refresh. */
+export interface ExchangedToken {
+  readonly id: string;
+  readonly tokenHash: string;
+  readonly familyId: string;
+  readonly resource: string;
+  readonly expiresAt: Date;
+}
+
 export interface OAuthRuntime {
   /** An unrevoked client by its `client_id`, in whichever workspace it lives. */
   findClient(clientId: string): Promise<OAuthClient | null>;
@@ -33,4 +50,15 @@ export interface OAuthRuntime {
   tokens(workspaceId: string): Promise<OAuthTokenRows>;
   /** Audit as `actorPrincipalId`; the trail has no place for a secret and none is passed. */
   audit(workspaceId: string, actorPrincipalId: string, event: OAuthAuditEvent): Promise<void>;
+  /**
+   * The person `(issuer, subject)` names in `user_identities`, as an unrevoked member of
+   * `workspaceId`; `null` for an unknown pair and for a person who is not a member there alike.
+   * Nothing is written: there is no provisioning on exchange (ADR-0161 D5 step 7).
+   */
+  findMember(workspaceId: string, issuer: string, subject: string): Promise<ExchangeMember | null>;
+  /**
+   * Write an exchanged access token for `member` and its one `user-token-exchanged` audit row, in
+   * one transaction (ADR-0161 D11).
+   */
+  issueExchanged(client: OAuthClient, member: ExchangeMember, token: ExchangedToken): Promise<void>;
 }

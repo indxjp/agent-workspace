@@ -5,10 +5,19 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { isAgentEndpointRoute } from './server/auth/agent-endpoint-routes';
 import { isApiKeyRoute, matchApiRoute } from './server/auth/api-key-routes';
+import { isAppBackendRoute } from './server/auth/app-backend-routes';
 import { isOAuthRoute } from './server/auth/oauth-routes';
 import { checkRequestOrigin } from './server/auth/origin';
 import { classifyPath, enforcementFor } from './server/auth/paths';
 import { sessionCookieName, readSessionSecret, verifySessionToken } from './server/auth/session';
+import {
+  readStoreOrigin,
+  storeOriginFor,
+  storePreflightAllowed,
+  storePreflightHeaders,
+  storeRouteKind,
+  storeResponseHeaders,
+} from './server/auth/store-origin';
 import { isCliTokenRoutePath } from './server/cli-auth/token-routes';
 import { readDeploymentFeatures } from './server/features/deployment';
 import { routeFeatureOf } from './server/features/route-feature';
@@ -122,6 +131,19 @@ function isCliTokenRoute(request: NextRequest, authorization: string | null): bo
 }
 
 /**
+ * ADR-0161 D9: the credential shape of an access token from `POST /api/auth/token-exchange`,
+ * admitted only on the `app-backend` grammar's routes (`server/auth/app-backend-routes.ts`). The
+ * route resolves it, refuses one whose client is not an `app-backend` client, and `decide()`
+ * narrows it to the client's bound agents; a bearer header is never sent by a browser on its own,
+ * so these need no origin check.
+ */
+function isAppBackendTokenRoute(request: NextRequest, authorization: string | null): boolean {
+  const bearer = authorization === null ? null : /^Bearer[ ]([^ ]+)$/iu.exec(authorization.trim());
+  if (!bearer?.[1]?.startsWith('awo_live_')) return false;
+  return isAppBackendRoute(request.method, request.nextUrl.pathname);
+}
+
+/**
  * ADR-0144: Microsoft Graph and Zoom call a fixed URL with no session and no header, so the secret
  * in the path is the whole authentication, checked by the route. Exact by method and shape.
  */
@@ -140,11 +162,21 @@ function isBuilderMcpRoute({ method, nextUrl }: NextRequest): boolean {
   return method === 'POST' && nextUrl.pathname === '/api/builder/mcp';
 }
 
+/**
+ * Issue #1517 (ADR-0104 acceptance decision 4): a team lead run's member endpoint takes the lead
+ * run's own run token, as the runner's session seam does. The route verifies the token again and
+ * admits it only for the run its path names, so the edge lets exactly this method and shape by.
+ */
+function isTeamMemberMcpRoute({ method, nextUrl }: NextRequest): boolean {
+  return method === 'POST' && /^\/api\/runs\/[^/]+\/members\/mcp$/u.test(nextUrl.pathname);
+}
+
 /** The routes that carry their own credential and check it themselves, so they need no session. */
 function authenticatesItself(request: NextRequest): boolean {
   const { method, nextUrl } = request;
   return (
     isBuilderMcpRoute(request) ||
+    isTeamMemberMcpRoute(request) ||
     isAgentEndpointRoute(method, nextUrl.pathname) ||
     isOAuthRoute(method, nextUrl.pathname) ||
     isTriggerFire(request)
@@ -231,6 +263,44 @@ function isPreAuthenticationRoute(request: NextRequest): boolean {
   ) {
     return true;
   }
+  // ADR-0161 D3: an app backend exchanges a person's ID token. The handler authenticates the
+  // endpoint client with its secret and verifies the ID token; no session exists or is wanted.
+  if (request.method === 'POST' && request.nextUrl.pathname === '/api/auth/token-exchange') {
+    return true;
+  }
+  // Spec §21, "Guest": email-link sign-in. Issuing a link and opening one both happen before any
+  // session exists. Each handler does its own same-origin check and per-client rate limits.
+  if (
+    request.method === 'POST' &&
+    (request.nextUrl.pathname === '/api/auth/email-link' ||
+      request.nextUrl.pathname === '/api/auth/email-link/verify')
+  ) {
+    return true;
+  }
+  // The Agent Store's lead form and the privacy facts its notice page states: neither has a session.
+  // The lead form does its own same-origin check, challenge and per-client limit.
+  if (
+    (request.method === 'POST' && request.nextUrl.pathname === '/api/store/leads') ||
+    (request.method === 'GET' && request.nextUrl.pathname === '/api/store/privacy')
+  ) {
+    return true;
+  }
+  // The Agent Store's maintenance list (`GET /api/store/demos`) is public: the store's cards read it
+  // with no session. The demo operator routes are called by the deployment's own steps with
+  // `Authorization: Bearer $AW_DEMO_OPERATOR_TOKEN`, which each route checks itself and which answers
+  // 404 where the token is unset (`server/demo/operator.ts`). Exact by method and path.
+  if (
+    (request.method === 'GET' &&
+      (request.nextUrl.pathname === '/api/store/demos' ||
+        request.nextUrl.pathname === '/api/demo/readiness' ||
+        request.nextUrl.pathname === '/api/demo/templates')) ||
+    (request.method === 'PUT' &&
+      /^\/api\/demo\/(?:templates|maintenance|verification)\/[^/]+$/u.test(
+        request.nextUrl.pathname,
+      ))
+  ) {
+    return true;
+  }
   // Issue #121's one pre-membership operation. This exemption is exact by method and path: the
   // acceptance handler verifies the dedicated invitation-identity cookie and same-origin request
   // itself. No other invitation route can bypass the ordinary tenant-session gate.
@@ -250,9 +320,15 @@ function isPreAuthenticationRoute(request: NextRequest): boolean {
 // they are exactly the pages a session-less visitor must be able to reach.
 async function signInRedirect(request: NextRequest): Promise<NextResponse | null> {
   if (isAuthExemptPage(request.nextUrl.pathname)) return null;
+  // Read live here; the routes read the copy `register()` installed at start-up. They agree in
+  // production. Under `next dev` a `.env` edit reaches only this read, so a change to SESSION_SECRET
+  // or AW_INSTANCE_ID needs a dev-server restart (CONTRIBUTING.md, "Development setup").
   const pageSecret = readSessionSecret(process.env);
   const pageSession = pageSecret.ok
-    ? await verifySessionToken(request.cookies.get(sessionCookieName())?.value, pageSecret.secret)
+    ? await verifySessionToken(
+        request.cookies.get(sessionCookieName(process.env))?.value,
+        pageSecret.secret,
+      )
     : { ok: false as const };
   if (!pageSession.ok) {
     // The absolute argument is required here and does NOT reach the client as written, which is
@@ -340,6 +416,7 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
   if (isCliSignInRoute(request) || isCliTokenRoute(request, authorization)) {
     return NextResponse.next();
   }
+  if (isAppBackendTokenRoute(request, authorization)) return NextResponse.next();
   // ADR-0120 clause 7: Vercel Cron sends no session, only `Authorization: Bearer $CRON_SECRET`, which
   // the route checks itself and which answers 404 where `CRON_SECRET` is unset. Exact by method and path.
   // ADR-0144 D5: the schedule pass is called the same way, and so is the storage cleanup (#1674).
@@ -366,22 +443,25 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
 
   if (enforcement === 'allow') return NextResponse.next();
 
+  // Read live, as in `signInRedirect` above: restart `next dev` after changing it in `.env`.
   const secret = readSessionSecret(process.env);
   if (!secret.ok) {
     return deny(401, 'unauthenticated', UNAUTHENTICATED_MESSAGE, 'server_not_configured');
   }
   const result = await verifySessionToken(
-    request.cookies.get(sessionCookieName())?.value,
+    request.cookies.get(sessionCookieName(process.env))?.value,
     secret.secret,
   );
   if (!result.ok) return deny(401, 'unauthenticated', UNAUTHENTICATED_MESSAGE, result.code);
 
+  const store = storeOriginFor(storeFacts(request, result.claims.via ?? null));
   const origin = checkRequestOrigin({
     method: request.method,
     origin: request.headers.get('origin'),
     requestHost: request.nextUrl.host,
     hostHeader: request.headers.get('host'),
     forwardedHost: request.headers.get('x-forwarded-host'),
+    ...(store === null ? {} : { allowedOrigins: [store] }),
   });
   if (!origin.ok) {
     console.warn(`[auth] cross-origin write refused: ${origin.reason}`);
@@ -393,6 +473,51 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
     );
   }
   return NextResponse.next();
+}
+
+/** What {@link storeOriginFor} needs of a request, with the session mark the caller verified. */
+function storeFacts(request: NextRequest, via: 'email_link' | null) {
+  return {
+    origin: request.headers.get('origin'),
+    baseUrl: readStoreOrigin(process.env),
+    method: request.method,
+    pathname: request.nextUrl.pathname,
+    via,
+  };
+}
+
+/**
+ * The CORS headers the Agent Store's origin gets on this answer, or `null`. The guest-session
+ * routes grant only to a verified email-link session, so the cookie is read here too.
+ */
+async function storeCors(request: NextRequest): Promise<Readonly<Record<string, string>> | null> {
+  // Cheap guards first: a request from another origin, or to a route that is not the store's, never
+  // pays for a second session verification (`gateRequest` already did one).
+  const store = readStoreOrigin(process.env);
+  if (store === null || request.headers.get('origin')?.trim() !== store) return null;
+  const kind = storeRouteKind(request.method, request.nextUrl.pathname);
+  if (kind === null) return null;
+  // Only the guest-session set grants on a verified email-link session; the pre-session set needs none.
+  let via: 'email_link' | null = null;
+  if (kind === 'guest-session') {
+    const secret = readSessionSecret(process.env);
+    const session = secret.ok
+      ? await verifySessionToken(
+          request.cookies.get(sessionCookieName(process.env))?.value,
+          secret.secret,
+        )
+      : { ok: false as const };
+    via = session.ok ? (session.claims.via ?? null) : null;
+    // A signed-out visitor (no session that verifies, no credential header) only ever gets the
+    // gate's `401`, which holds no data. The store's page must be able to read it to say "sign in",
+    // so that refusal carries the CORS grant too. A session that verifies but is not an email-link
+    // one still gets none, so the store origin never reads a member's answer.
+    if (!session.ok && request.headers.get('authorization') === null) {
+      return storeResponseHeaders(store);
+    }
+  }
+  const origin = storeOriginFor(storeFacts(request, via));
+  return origin === null ? null : storeResponseHeaders(origin);
 }
 
 function isApiPath(pathname: string): boolean {
@@ -469,6 +594,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     }
     return response;
   }
+  const asked = request.headers.get('access-control-request-method');
+  if (
+    request.method === 'OPTIONS' &&
+    storePreflightAllowed(
+      request.headers.get('origin'),
+      readStoreOrigin(process.env),
+      asked,
+      request.nextUrl.pathname,
+    )
+  ) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: storePreflightHeaders(request.headers.get('origin')?.trim() ?? '', asked ?? ''),
+    });
+  }
   const visitorMethod = visitorRouteMethod(request.nextUrl.pathname);
   if (visitorMethod !== null && request.method === 'OPTIONS') {
     return new NextResponse(null, {
@@ -488,6 +628,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     for (const [name, value] of Object.entries(await visitorRunResponseHeaders(request.headers))) {
       response.headers.set(name, value);
     }
+  }
+  const storeHeaders = await storeCors(request);
+  if (storeHeaders !== null) {
+    for (const [name, value] of Object.entries(storeHeaders)) response.headers.set(name, value);
   }
   return withServedContracts(response);
 }

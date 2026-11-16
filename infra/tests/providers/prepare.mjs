@@ -34,7 +34,10 @@
  * - Cloudflare: `wrangler containers build -p -t <name:tag>` builds and pushes to
  *   `registry.cloudflare.com/<account>/<name>:<tag>`, and the digest reference comes from
  *   `docker image inspect` RepoDigests (https://developers.cloudflare.com/containers/platform-details/image-management/,
- *   https://developers.cloudflare.com/workers/wrangler/commands/containers/).
+ *   https://developers.cloudflare.com/workers/wrangler/commands/containers/). When the registry
+ *   already holds the image, Wrangler skips the push, removes its local tag and never adds the
+ *   registry tag, so the local inspect finds nothing; the digest is then read from the registry with
+ *   `docker buildx imagetools inspect`, which uses the login Wrangler made.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -335,13 +338,36 @@ async function deriveCloudflareImage({ env, deps, files, tag }) {
       cwd: dir,
       label: 'wrangler containers build',
     });
-    const reference = deps
-      .run('docker', ['image', 'inspect', '--format', '{{join .RepoDigests "\\n"}}', registryName], { label: 'docker image inspect' })
+    let local = '';
+    try {
+      local = deps.run('docker', ['image', 'inspect', '--format', '{{join .RepoDigests "\\n"}}', registryName], {
+        label: 'docker image inspect',
+      });
+    } catch {
+      // No local registry tag: Wrangler found the image already in the registry and skipped the push.
+    }
+    const reference = local
       .split('\n')
       .map((line) => line.trim())
       .find((line) => line.startsWith(`${CLOUDFLARE_REGISTRY}/`) && DIGEST.test(line.split('@')[1] ?? ''));
-    if (reference === undefined) throw new Error('wrangler pushed the image but docker reports no registry digest');
-    return reference;
+    if (reference !== undefined) return reference;
+    let manifest;
+    let registryError = '';
+    try {
+      manifest = JSON.parse(
+        deps.run('docker', ['buildx', 'imagetools', 'inspect', registryName, '--format', '{{json .Manifest}}'], {
+          label: 'docker buildx imagetools inspect',
+        }),
+      );
+    } catch (error) {
+      registryError = `: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    const digest = manifest?.digest;
+    if (typeof digest !== 'string' || !DIGEST.test(digest)) {
+      throw new Error(`wrangler pushed the image but neither docker nor the registry reports its digest${registryError}`);
+    }
+    // The same form as a RepoDigests entry, which is what the lane pinned on its green runs.
+    return `${CLOUDFLARE_REGISTRY}/${env.CLOUDFLARE_ACCOUNT_ID}/${IMAGE_REPOSITORY}@${digest}`;
   });
 }
 

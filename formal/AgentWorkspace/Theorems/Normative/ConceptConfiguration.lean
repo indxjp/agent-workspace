@@ -25,7 +25,8 @@ def documentedConfigRules : List (Provider × List ConfigField × List ConfigFie
     (.anthropicCompatible, [.baseUrl], []),
     (.openai, [.baseUrl], []),
     (.azureOpenai, [.baseUrl, .apiVersion, .deployment], [.baseUrl, .apiVersion, .deployment]),
-    (.openaiCompatible, [.baseUrl], [.baseUrl])]
+    (.openaiCompatible, [.baseUrl], [.baseUrl]),
+    (.vertex, [.projectId, .location], [.projectId])]
 
 /-- The model's provider config rule is the documented table: it lists every provider once, in
 `MODEL_PROVIDERS` order, and each provider's accepted and required fields are the table's. -/
@@ -34,7 +35,8 @@ def documentedConfigRules : List (Provider × List ConfigField × List ConfigFie
   (ts := "packages/contracts/src/models.ts#MODEL_PROVIDER_CONFIG_RULES")]
 theorem rule_is_the_documented_table :
     documentedConfigRules.map (·.1) = (WireEnum.all : List Provider) ∧
-      documentedConfigRules.all (fun (p, a, r) => rule p == ⟨a, r⟩) = true := by decide +kernel
+      documentedConfigRules.all (fun (p, a, r) => (rule p).allowed == a && (rule p).required == r) =
+        true := by decide +kernel
 
 section Generator
 
@@ -49,10 +51,13 @@ private def providerCtor : Provider → Name
   | .openai => ``Provider.openai
   | .azureOpenai => ``Provider.azureOpenai
   | .openaiCompatible => ``Provider.openaiCompatible
+  | .vertex => ``Provider.vertex
 
 private def fieldCtor : ConfigField → Name
   | .baseUrl => ``ConfigField.baseUrl
   | .deployment => ``ConfigField.deployment
+  | .projectId => ``ConfigField.projectId
+  | .location => ``ConfigField.location
   | .apiVersion => ``ConfigField.apiVersion
 
 private def snake (s : String) : String := s.map fun c => if c == '-' then '_' else c
@@ -60,6 +65,8 @@ private def snake (s : String) : String := s.map fun c => if c == '-' then '_' e
 private def fieldSnake : ConfigField → String
   | .baseUrl => "base_url"
   | .deployment => "deployment"
+  | .projectId => "project_id"
+  | .location => "location"
   | .apiVersion => "api_version"
 
 private def verdict (allowed required : Bool) : String :=
@@ -97,7 +104,8 @@ aw_model_rule_cells
 /-- Every set of config fields, in `MODEL_CONNECTION_CONFIG_FIELDS` order. -/
 def fieldSets : List (List ConfigField) :=
   [[], [.baseUrl], [.deployment], [.apiVersion], [.baseUrl, .deployment],
-    [.baseUrl, .apiVersion], [.deployment, .apiVersion], [.baseUrl, .deployment, .apiVersion]]
+    [.baseUrl, .apiVersion], [.deployment, .apiVersion], [.baseUrl, .deployment, .apiVersion],
+    [.projectId], [.location], [.projectId, .location], [.baseUrl, .projectId]]
 
 /-- The Anthropic, Anthropic-compatible and OpenAI providers accept exactly no config or a lone
 `baseUrl`. -/
@@ -107,6 +115,14 @@ def fieldSets : List (List ConfigField) :=
 theorem optional_base_url_providers_accept_nothing_or_a_base_url :
     [Provider.anthropic, .anthropicCompatible, .openai].all
       (fun p => fieldSets.filter (configAccepted p) == [[], [.baseUrl]]) = true := by decide +kernel
+
+/-- The Vertex AI provider accepts exactly a config with `projectId`, alone or with `location`. -/
+@[aw_spec (tier := T1)
+  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
+  (ts := "packages/contracts/src/models.ts#MODEL_PROVIDER_CONFIG_RULES")]
+theorem vertex_accepts_a_project_id_with_an_optional_location :
+    fieldSets.filter (configAccepted .vertex) = [[.projectId], [.projectId, .location]] := by
+  decide +kernel
 
 /-- The OpenAI-compatible provider accepts exactly a config that is a lone `baseUrl`. -/
 @[aw_spec (tier := T1)
@@ -181,20 +197,25 @@ theorem blank_values_by_character :
 
 /-! ## Readiness -/
 
-/-- A connection without a credential is never ready, whatever its provider and config. -/
+/-- A connection without a credential is never ready, whatever its config, unless its provider is
+keyless. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "apps/web/server/models/contract.ts#toModelConnectionResource")]
-theorem no_credential_is_never_ready (p : Provider) (c : ModelConnection.Config) :
-    ready false p c = false := rfl
+theorem no_credential_is_never_ready (p : Provider) (c : ModelConnection.Config)
+    (h : ModelConnection.isKeyless p = false) : ready false p c = false := by
+  simp [ready, h]
 
-/-- A connection without a credential is reported as `noCredential` whatever its config, even an
-incomplete one: the missing credential is reported first. -/
+/-- A connection without a credential, on a provider that stores one, is reported as
+`noCredential` whatever its config, even an incomplete one: the missing credential is reported
+first. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "packages/contracts/src/models.ts#ModelConnectionResourceSchema")]
-theorem missing_credential_is_reported_first (p : Provider) (c : ModelConnection.Config) :
-    ModelConnection.readiness false p c = .noCredential := rfl
+theorem missing_credential_is_reported_first (p : Provider) (c : ModelConnection.Config)
+    (h : ModelConnection.isKeyless p = false) :
+    ModelConnection.readiness false p c = .noCredential := by
+  simp [ModelConnection.readiness, h]
 
 /-- A connection with a credential is `incompleteConfig` exactly when its config is incomplete for
 its provider. -/
@@ -224,6 +245,21 @@ theorem credential_alone_readies_optional_providers (c : ModelConnection.Config)
       ready true .openai c = true := by
   simp [ready, ModelConnection.isComplete, rule]
 
+/-- A Vertex AI connection is keyless: it is ready without a credential exactly when its
+`projectId` is set and not blank, and it never reports `noCredential`. -/
+@[aw_spec (tier := T1)
+  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
+  (ts := "packages/contracts/src/models.ts#ModelConnectionResourceSchema")]
+theorem vertex_ready_without_a_credential (c : ModelConnection.Config) (h : Bool) :
+    ready h .vertex c = c.projectId.any (!ModelConnection.isBlank ·) ∧
+      ModelConnection.readiness h .vertex c ≠ .noCredential := by
+  constructor
+  · cases hp : c.projectId <;>
+      simp [ready, ModelConnection.isKeyless, ModelConnection.isComplete, rule,
+        ModelConnection.Config.get, hp]
+  · simp [ModelConnection.readiness, ModelConnection.isKeyless, rule]
+    split <;> simp
+
 /-- With a credential, an OpenAI-compatible connection is ready exactly when its `baseUrl` is set
 and not blank. -/
 @[aw_spec (tier := T1)
@@ -240,7 +276,7 @@ missing or blank. -/
   (ts := "apps/web/server/models/contract.ts#isModelConnectionConfigComplete")]
 theorem azure_ready_needs_all_three :
     ready true .azureOpenai (ModelConnection.Config.ofFields [.baseUrl, .deployment]) = false ∧
-      ready true .azureOpenai ⟨some "https://a.example", some "d", some "  "⟩ = false ∧
+      ready true .azureOpenai { baseUrl := some "https://a.example", deployment := some "d", apiVersion := some "  " } = false ∧
       ready true .azureOpenai (ModelConnection.Config.ofFields [.baseUrl, .deployment, .apiVersion]) =
         true := by decide +kernel
 

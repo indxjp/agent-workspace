@@ -7,6 +7,134 @@ what the policy covers are on the developer site's
 [Public surface and stability](../../docs/sdk/site/concepts/public-surface.mdx#versions-and-deprecation)
 page. Released in lock-step with `@indx-workspace/sdk`, with the same version.
 
+## 0.6.13 — unreleased
+
+### Added
+
+- The project loader behind `aw check`, `aw push` and `aw dev` now reads `agents/*.agent.md` (the
+  ADR-0133 interchange file, which an app blueprint ships its agents as) beside `agents/*.ts`
+  (ADR-0166 D12). The file is parsed, never run as code. A name defined both ways is refused as
+  `agent_defined_twice`, a conversion that would drop a field as `agent_conversion_lossy`, and a
+  bad file, or one whose agent name differs from its file name, as `agent_markdown_invalid`. A
+  project whose only agents are `.agent.md` files is now valid.
+- `aw blueprint add <npm-spec> [--yes]`, `aw blueprint list`, `aw blueprint diff <name> [--to <v>]`
+  and `aw blueprint update <name> [--to <v>] [--yes]` (ADR-0166, issue #1533) install an app
+  blueprint, a versioned npm release of app parts, and receive each new version as a proposal. The
+  package is fetched with `npm pack --ignore-scripts`, so its install scripts never run, with an
+  allowlisted environment, and its tarball is checked against npm's sha512 integrity before an
+  entry is read. The SDK's `readBlueprintArchive` then refuses links, unsafe paths and unlisted
+  files. `add` shows every file, edit and slot and exits 3 until `--yes`. `update` proposes `add`,
+  `update`, `remove` or `conflict` per file and exits 3 without `--yes`. With `--yes` it never
+  touches a file you edited: it writes the new version beside it as `<file>.blueprint-<version>`.
+  A version with a destructive migration is refused by name. `diff` prints line diffs and exits 3
+  when the blueprint is behind and 0 when it is not. `aw destroy blueprint <name>` removes an
+  installed blueprint.
+- `aw deploy production` refuses a project whose `aw-generated.json` names an app that
+  `environments.production.apps` does not list, and says which `apps:` entry to add. A project
+  with no `aw-generated.json` has no apps.
+- `aw dev` runs a generated app. With an `app:<name>` entry in `aw-generated.json`, after the
+  runtime is ready it migrates the app's schema `app_<name>` (`aw-app migrate`, spawned from the
+  project's own install), starts `next dev` on `127.0.0.1` on the first free port from the web port
+  plus 100, and registers the app's MCP endpoint as the connector `<name>` with
+  `identity: { secret: APP_<NAME>_IDENTITY }` through the same plan as the project file's
+  connectors, without editing `agent-workspace.yaml`. The identity key is made on the first run
+  and kept in `.aw/app-identity.json` (`0600`); it is never printed. `aw dev` stores it as that
+  workspace secret where its key may, and otherwise (secrets are an Owner's, the runtime's key an
+  Admin's) prints a `notice:` naming the secret an Owner adds in the console and the file its value
+  is in. The ready screen shows an `app` row. A connector named like the app that `aw dev` did not
+  create is refused as `app_connector_conflict`.
+- `aw generate app <name>` adds the script `image` (`docker build -t <name> .`) to `package.json`
+  with the app's `Dockerfile`, and `aw destroy app <name>` removes it while it still runs that
+  command. A project that already has an `image` script keeps its own. `package.json` keeps its key
+  order through both, so `aw destroy` restores it byte for byte.
+- `aw generate channel <resource> [--key <refField>]` (issue #1519) binds a resource to a realtime
+  channel: it writes `channels/<resource>.ts`, its events route
+  `app/api/channels/<resource>/events/route.ts` and its `ChannelView` page
+  `app/channels/<resource>/[key]/page.tsx`, and edits each of the resource's two route files by
+  one line to pass `{ publish: <channel> }`. A resource with no `ref()` field to key on is refused
+  with `channel_key_required`. `aw destroy channel <resource>` removes exactly that, restores the
+  route lines, and refuses a file edited since by name.
+- `aw generate resource` writes the resource's edit page, `app/<plural>/[id]/edit/page.tsx`, and
+  the detail page links to it (#1531). `aw generate app` (and `create --template portal`) adds a
+  `build` script, `next build`, which the generated `Dockerfile` runs, so `npm run image` builds.
+- `aw generate resource` also writes the resource's three pages from the app kit's parts, each a
+  few lines: `app/<plural>/page.tsx` (`ResourceList`, or `ResourceBoard` with `--board`),
+  `app/<plural>/[id]/page.tsx` (`ResourceDetailLoader`) and `app/<plural>/new/page.tsx`
+  (`ResourceForm`). They are recorded in the resource's `aw-generated.json` entry, so
+  `aw destroy resource` removes them too.
+- `aw generate page <name> --kind dashboard|list|custom [--resource <resource>]` writes
+  `app/<name>/page.tsx`: a placeholder dashboard, a list of `--resource`, or an empty page of your
+  own. It refuses an unknown `--kind`, a list page without an existing resource, and a name that is
+  a resource's plural (`app/<plural>/` holds that resource's pages). `aw destroy page <name>`
+  removes it.
+- `aw generate recipe <name> --on resource:<resource>.<created|updated|deleted>` and
+  `aw generate recipe <name> --on 'schedule:<cron>' [--tz <iana>]` write exactly
+  `recipes/<name>.ts` (a `defineRecipe` with one example step) and `tests/recipes/<name>.test.ts`
+  (a `recipeHarness` test that passes as generated), and add the recipe to `recipes: [...]` in
+  `app.config.ts`. A resource the app does not have, or a cron or time zone the project's
+  `aw-app recipe-on` refuses, is a usage error; `trigger:<name>` is not available yet.
+  `aw destroy recipe <name>` removes both files and reverts the `app.config.ts` edit, and refuses a
+  file edited since it was generated. The SDK's `renderRecipeSpec` and the `recipe` template back it.
+- `aw generate app <name>` writes a portal app into the current directory (`app.config.ts`, its
+  MCP route, layout and home page, its first migration and journal, `next.config.ts`,
+  `tsconfig.json`, a dependency-cruiser boundary config and a GitHub-hosted CI workflow) and pins
+  `@indx-workspace/app`, Next.js, React, Drizzle, `pg` and dependency-cruiser in `package.json`;
+  it refuses a package already pinned at another version, and keeps an existing `README.md`.
+- `aw generate resource <name> <field:type>... [--board <field>]` writes the resource, its
+  migration `db/migrations/<NNNN>_create_<plural>.sql` with its journal entry, its two route files
+  and its test, and adds it to `app.config.ts`. The migration SQL comes from the project's own
+  `aw-app sql`; a missing or skewed app kit is refused as `app_kit_not_installed` (fix:
+  `npm install`). A `ref()` to an unknown resource is refused.
+- `aw generate agent <name> --tools <resource>[,...]` writes an agent on the app's MCP connector
+  whose instructions name those resources' tools. `--tools` cannot restrict the agent to them: it
+  reaches every tool of the app, and each call is still limited to what the person may do.
+- `aw destroy <app|resource|agent> <name> [--yes]` shows what `aw generate` wrote for it and,
+  with `--yes`, removes exactly that and reverts its one-line edits. It refuses a file edited since
+  it was generated, a journal entry a later migration follows (write a drop migration instead),
+  and an app that still has resources or agents. What was generated is recorded with each file's
+  sha256 in `aw-generated.json`, which the project commits.
+- `aw webhooks list | create | remove` (N-3, issue #250). `aw webhooks create --webhook-url <url>
+  [--event <type> …]` (or `--file <json>`) prints the signing secret once, in its answer and under
+  `--json`, with a warning on stderr; `--url` stays the control plane's flag.
+- `aw agent-teams list|get|create|remove` and `aw agent-teams versions create|list` (ADR-0104,
+  #1516), each with `--json`. A team is named by its name or id; `--lead` and `--member` take
+  `[<member name>=]<agent>[@<version>]`, pinning the version `local` points at when none is given.
+  `versions create` keeps the team's current lead unless `--lead` names another.
+- `aw runs start --idempotency-key <key>` sends the key as the `Idempotency-Key` header (issue
+  #250, S-6), so a start rerun with the same key and prompt prints the run the first one started
+  instead of starting another. A key reused with another prompt exits with
+  `run_idempotency_conflict`; a blank key is a usage error, refused before any request.
+- `aw triggers update <id> --file` accepts `cron` and `timezone` to re-time a schedule trigger.
+- `aw dev` sends the project file's `features:` list to the local runtime, which installs only those features (ADR-0160 D5). A project without `features:` starts exactly as before. Changing `features:` while `aw dev` runs prints `agent-workspace.yaml: features changed; restart aw dev to apply`.
+
+### Changed
+
+- `aw destroy project <name>` is refused by name: the `project:<name>` entry `create --template`
+  records is the project's own files, so remove the directory instead. `aw destroy app` no longer
+  waits for that entry.
+- `aw shares list` no longer prints a `url` column: a public link is shown once, when it is
+  published, and the server keeps only its hash.
+
+### Fixed
+
+- `aw agents new --from-prompt` shows each check it asks you to run in full (name, input and
+  expectation), and writes every control, hidden, zero-width, bidirectional, tag or look-alike space
+  character in the text it asks you to approve as `<U+XXXX>` instead of deleting it, so two rules
+  that differ only by an invisible character no longer look the same and an escape sequence cannot
+  hide text.
+- The commands that print a run's events (`aw runs start`, `aw runs events`, `aw runs follow`) drop
+  control and escape sequences from the text they print, as do the human tables of `aw runs get`
+  and the other listings.
+- `aw agents export --format ts` (and the save in `aw agents new`) writes all of its files or none:
+  a write that fails part-way removes the files already written, restores the ones `--force` was
+  replacing, and names any path it could not put back; when it could not, it keeps the
+  `.aw-export-*` directory that holds the only copy of the replaced files and names it. On a
+  filesystem that cannot hard-link, or across devices, it copies instead. A process killed between
+  two moves can still leave a partial export and that directory.
+- A prompt on an input that has already ended (a closed pipe, Ctrl-D earlier) is an interrupt
+  instead of waiting forever, and Ctrl-C typed while a run was streaming before an approval question
+  now interrupts instead of being dropped with the typed-ahead keys.
+
 ## 0.6.12 — unreleased
 
 ### Added

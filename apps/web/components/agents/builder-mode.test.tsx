@@ -26,8 +26,13 @@ vi.mock('../composer/home-chat', async (importOriginal) => {
   };
 });
 
+/** What `loadAgents` answers next; no Builder by default, so the screen says it is unavailable. */
+const agentsAnswer = vi.hoisted(() => ({
+  next: (): Promise<unknown> => Promise.resolve({ ok: true, value: [] }),
+}));
+
 vi.mock('./agent-requests-model', () => ({
-  loadAgents: () => Promise.resolve({ ok: true, value: [] }),
+  loadAgents: () => agentsAnswer.next(),
 }));
 vi.mock('../../lib/request-outcome', () => ({
   requestOutcome: () => Promise.resolve({ ok: true, value: { label: 'Alex' } }),
@@ -106,8 +111,10 @@ describe('BuilderPreviewPanel', () => {
     );
     expect(html).toMatch(/Write files<\/dt><dd[^>]*>Allowed/u);
     expect(html).toContain('role="alert"');
-    expect(html).toContain('agent_definition_references_missing');
-    expect(html).toContain('connector:erp');
+    // The check's own sentence is the server's, marked as English.
+    expect(html).toContain('The last check failed. <span lang="en">missing</span>');
+    expect(html).toContain('<li>Connector: erp</li>');
+    expect(html).toContain('Code: <code>agent_definition_references_missing</code>');
     expect(html).not.toContain('<textarea');
   });
 
@@ -116,6 +123,25 @@ describe('BuilderPreviewPanel', () => {
       <BuilderPreviewPanel events={[]} onAskBuilder={() => undefined} />,
     );
     expect(html).toContain('The definition appears here once the Builder checks a draft.');
+  });
+
+  it('marks what changed since the last different draft, when a save repeats its check (UX-11)', () => {
+    const erp = definitionBody({ resources: { connectors: ['erp'] } });
+    const crm = definitionBody({ resources: { connectors: ['crm'] } });
+    const html = renderToStaticMarkup(
+      <BuilderPreviewPanel
+        events={[
+          toolCall('1', 'draft_check', { body: erp }),
+          toolCall('2', 'draft_check', { body: crm }),
+          toolResult('2', { ok: true }),
+          toolCall('3', 'draft_save', { body: crm }),
+        ]}
+        onAskBuilder={() => undefined}
+      />,
+    );
+    expect(html).toMatch(/data-section="resources" data-changed="true"/u);
+    expect(html).toContain('Connector: crm');
+    expect(html).not.toMatch(/data-section="model" data-changed/u);
   });
 });
 
@@ -182,8 +208,9 @@ describe('BuilderChat layout', () => {
       toolResult('1', { ok: false, code: 'builder_disabled', message: 'off' }),
     );
     const alert = container.querySelector('p[role="alert"]');
-    expect(alert?.textContent).toContain('The Builder is not available in this workspace');
-    expect(alert?.textContent).toContain('builder_disabled');
+    expect(alert?.textContent).toBe(
+      'The Builder is not available in this workspace. An admin has switched the Builder off. Code: builder_disabled',
+    );
   });
 
   it('shows the refusal code when a Builder tool answers builder_model_unavailable', () => {
@@ -239,16 +266,108 @@ describe('BuilderMode', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.body.replaceChildren();
+    agentsAnswer.next = () => Promise.resolve({ ok: true, value: [] });
   });
 
   it('says the Builder is unavailable, and offers no chat, when no agent is the built-in Builder', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     await act(async () => {
-      createRoot(container).render(<BuilderMode modeSwitch={null} />);
+      createRoot(container).render(<BuilderMode modeSwitch={null} filesEnabled />);
       await Promise.resolve();
     });
     expect(container.textContent).toContain('The Builder is not available in this workspace');
     expect(container.querySelector('textarea')).toBeNull();
+  });
+
+  // UX-21 in #2086: the Builder chat follows the Files switch the server page read.
+  it('hands the Files switch to the chat, so + Files is not offered while Files is off', async () => {
+    vi.stubGlobal('fetch', () => new Promise(() => undefined));
+    agentsAnswer.next = () =>
+      Promise.resolve({ ok: true, value: [{ id: 'b1', name: 'Builder', builtin: 'builder' }] });
+    for (const filesEnabled of [false, true]) {
+      const container = document.createElement('div');
+      document.body.append(container);
+      await act(async () => {
+        createRoot(container).render(<BuilderMode modeSwitch={null} filesEnabled={filesEnabled} />);
+        await Promise.resolve();
+      });
+      expect(homeChat.props?.filesEnabled).toBe(filesEnabled);
+      expect(container.querySelector('details[data-picker="files"]') !== null).toBe(filesEnabled);
+      document.body.replaceChildren();
+    }
+  });
+
+  // UX-23: "Skip to content" lands on the page's <main>, so the New Agent page has exactly one in
+  // every state, with its heading inside it, and the chat it holds draws no landmark of its own.
+  async function renderMode(): Promise<HTMLElement> {
+    vi.stubGlobal('fetch', () => new Promise(() => undefined));
+    const container = document.createElement('div');
+    document.body.append(container);
+    await act(async () => {
+      createRoot(container).render(
+        <BuilderMode modeSwitch={<nav>Form · Chat</nav>} filesEnabled />,
+      );
+      await Promise.resolve();
+    });
+    return container;
+  }
+
+  function expectOneLandmark(container: HTMLElement): void {
+    expect(container.querySelectorAll('main')).toHaveLength(1);
+    expect([...container.querySelectorAll('h1')].map((h) => h.textContent)).toEqual(['New Agent']);
+    expect(container.querySelector('main h1')?.textContent).toBe('New Agent');
+    expect(container.querySelector('main nav')?.textContent).toBe('Form · Chat');
+  }
+
+  it('has one main while the Builder loads, when it is unavailable and when loading fails', async () => {
+    agentsAnswer.next = () => new Promise(() => undefined);
+    const loading = await renderMode();
+    expect(loading.textContent).toContain('Loading the Builder');
+    expectOneLandmark(loading);
+    document.body.replaceChildren();
+
+    agentsAnswer.next = () => Promise.resolve({ ok: true, value: [] });
+    const unavailable = await renderMode();
+    expect(unavailable.textContent).toContain('The Builder is not available in this workspace');
+    expectOneLandmark(unavailable);
+    document.body.replaceChildren();
+
+    agentsAnswer.next = () =>
+      Promise.resolve({ ok: false, problem: { kind: 'transport', reason: 'offline' } });
+    const failed = await renderMode();
+    expect(failed.querySelector('[role="alert"]')?.textContent).toBe('offline');
+    expectOneLandmark(failed);
+  });
+
+  it('has one main once the Builder chat is loaded, on its start screen and on its run screen', async () => {
+    agentsAnswer.next = () =>
+      Promise.resolve({ ok: true, value: [{ id: 'b1', name: 'Builder', builtin: 'builder' }] });
+    const container = await renderMode();
+    const box = container.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]');
+    if (box === null) throw new Error('no Builder composer');
+    expectOneLandmark(container);
+    expect(container.querySelector('main h2')?.textContent).toContain('What can I help with?');
+
+    await act(async () => {
+      Reflect.set(HTMLTextAreaElement.prototype, 'value', 'An agent that files invoices', box);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      box.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          keyCode: 13,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="composer-input"]')).toBeNull();
+    expect(container.textContent).toContain('An agent that files invoices');
+    expectOneLandmark(container);
+    expect(container.querySelector('main h2')?.textContent).toBe('Builder');
   });
 });

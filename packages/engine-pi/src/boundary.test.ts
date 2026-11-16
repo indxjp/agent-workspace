@@ -19,8 +19,9 @@
  *    platform's placed skill is;
  *  * `bash` runs with the request's environment, never the runner's;
  *  * a second run on the session sends the first run's messages; a fork does too, under a new id;
- *  * `maxTurns` ends a looping agent `max_turns`, a spent budget `max_budget`, and an interrupt
- *    during `bash` ends the run `cancelled` promptly.
+ *  * `maxTurns` ends a looping agent `max_turns` (a spent `maxBudgetUsd` stops nothing here: the
+ *    gateway enforces it, ADR-0162), and an interrupt during `bash` ends the run `cancelled`
+ *    promptly.
  */
 import {
   existsSync,
@@ -547,23 +548,9 @@ describe('pi through the adapter, against a fake gateway', () => {
     expect(gateway.requests).toHaveLength(2);
   });
 
-  it('stops at the provisional budget cap with max_budget', async () => {
-    const cwd = workspace();
-    writeFileSync(path.join(cwd, 'a.md'), 'loop');
-    gateway.script(
-      Array.from({ length: 6 }, () => ({ call: { name: 'read', args: { path: 'a.md' } } })),
-    );
-    const request = baseRequest(cwd);
-    // claude-sonnet-4-5 at 3/15 USD per million: 10 in + 5 out is 0.000105 USD a response.
-    const frames = await run({
-      ...request,
-      portable: { ...request.portable, limits: { maxTurns: null, maxBudgetUsd: 0.0002 } },
-    });
-    expect(result(frames)).toMatchObject({ stopReason: 'max_budget' });
-    expect(gateway.requests.length).toBeLessThanOrEqual(3);
-  });
-
-  it('prices prompt-cache writes above the input rate, so they count against the cap', async () => {
+  // ADR-0162 (#342): the spend ceiling is the gateway's. 10 in + 5 out a response is past a 0.0002
+  // USD cap on any price within two responses, and the adapter still runs to its turn limit.
+  it('has no budget stop of its own: a spent cap runs on to maxTurns', async () => {
     const cwd = workspace();
     writeFileSync(path.join(cwd, 'a.md'), 'loop');
     gateway.script(
@@ -573,15 +560,12 @@ describe('pi through the adapter, against a fake gateway', () => {
       })),
     );
     const request = baseRequest(cwd);
-    // 10 in + 5 out at 3/15 USD per million is 0.000105 USD; 100 cache-write tokens at 1.25 × 3
-    // USD per million add 0.000375, so one response costs 0.00048 and passes a 0.00045 cap. At
-    // the plain input rate it would cost 0.000405 and a second request would be sent.
     const frames = await run({
       ...request,
-      portable: { ...request.portable, limits: { maxTurns: null, maxBudgetUsd: 0.00045 } },
+      portable: { ...request.portable, limits: { maxTurns: 3, maxBudgetUsd: 0.0002 } },
     });
-    expect(result(frames)).toMatchObject({ stopReason: 'max_budget' });
-    expect(gateway.requests).toHaveLength(1);
+    expect(result(frames)).toMatchObject({ stopReason: 'max_turns', turns: 3 });
+    expect(gateway.requests).toHaveLength(3);
   });
 
   it('ends an interrupted bash run cancelled, promptly', async () => {

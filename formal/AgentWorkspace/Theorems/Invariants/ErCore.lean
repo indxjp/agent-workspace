@@ -95,7 +95,7 @@ private theorem mem_of_contains {l : List (String × String)} {p : String × Str
 state and under any schema: the database compares the two tenant columns as part of the key. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem paired_reference_preserves_tenant (S : Schema) (st : State) {t : TableName}
     {fk : ForeignKey} {r r' : Row} (hp : isPaired S t fk = true)
     (href : References S st t fk r r') : tenantOf S t r = tenantOf S fk.refTable r' := by
@@ -117,7 +117,7 @@ joins two rows of the same workspace: the sibling pins a parent row in the child
 and the parent key is unique, so both constraints reach that one row. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem sibling_reference_preserves_tenant (S : Schema) (st : State)
     (hc : consistent S st = true) {t : TableName} {fk : ForeignKey} {r r' : Row}
     (hs : siblingCovers S t fk = true) (href : References S st t fk r r') :
@@ -172,7 +172,7 @@ theorem sibling_reference_preserves_tenant (S : Schema) (st : State)
 reference to a global table joins two rows of the same workspace. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reference_preserves_tenant (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {fk : ForeignKey} {r r' : Row} (hu : classify S t fk ≠ .unpaired)
     (hg : classify S t fk ≠ .globalReference) (href : References S st t fk r r') :
@@ -227,7 +227,7 @@ of one workspace to a tenant-carrying row of another: cross-tenant references ar
 unrepresentable in the database. -/
 @[aw_spec (tier := T2)
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem no_cross_tenant_reference (S : Schema) (hS : pairingComplete S = true) (st : State)
     (hc : consistent S st = true) {t : TableName} {fk : ForeignKey} {r r' : Row}
     (htarget : (S fk.refTable).tenantColumn?.isSome = true) (href : References S st t fk r r') :
@@ -239,7 +239,7 @@ theorem no_cross_tenant_reference (S : Schema) (hS : pairingComplete S = true) (
 references through tenant-carrying tables belongs to the starting row's workspace. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem tenant_path_preserves_tenant (S : Schema) (hS : pairingComplete S = true) (st : State)
     (hc : consistent S st = true) {t t' : TableName} {r r' : Row}
     (hpath : TenantPath S st t r t' r') : tenantOf S t r = tenantOf S t' r' := by
@@ -252,7 +252,7 @@ theorem tenant_path_preserves_tenant (S : Schema) (hS : pairingComplete S = true
 /-- In a consistent state every row of a tenant-carrying table has a workspace (its tenant
 column is `NOT NULL`), provided the schema declares that column `NOT NULL`. -/
 @[aw_spec (tier := T2) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenant_row_has_workspace (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {tc : String} (htc : (S t).tenantColumn? = some tc)
     (hnn : (S t).isNotNull tc = true) {r : Row} (hr : r ∈ st t) : (tenantOf S t r).isSome = true := by
@@ -322,7 +322,7 @@ theorem closed_set_value_is_in_its_set (S : Schema) (st : State) (hc : consisten
 
 /-- The typed owning workspace of a row of a tenant-scoped table is exactly its tenant:
 `Row.workspaceId?` reads the tenant column `workspace_id`. -/
-@[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
+@[aw_spec (tier := T2) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem scoped_workspace_id_is_the_tenant (S : Schema) {t : TableName}
     (h : (S t).tenancy = .scoped) (r : Row) :
     r.workspaceId?.map AgentWorkspace.Id.val = tenantOf S t r := by
@@ -332,7 +332,7 @@ theorem scoped_workspace_id_is_the_tenant (S : Schema) {t : TableName}
 /-- The typed primary key of a row of the tenant root is exactly its tenant: a `workspaces` row
 is its own workspace, so `Row.id?` at kind `workspace` reads the root's tenant column `id`. -/
 @[aw_spec (tier := T2)
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#workspaceSelfPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#workspaceSelfPairingFault")]
 theorem root_id_is_the_tenant (S : Schema) {t : TableName} (h : (S t).tenancy = .root) (r : Row) :
     (r.id? (k := .workspace)).map AgentWorkspace.Id.val = tenantOf S t r := by
   simp [Row.id?, tenantOf, TableSpec.tenantColumn?, h, Tenancy.column?, Option.map_map]
@@ -448,8 +448,8 @@ example : fkHolds (fun u => if u = .sessions then
   null_key_row_preserves_fk State.empty .sessions _ _ (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 
-/-- The witness membership's role is one of the four roles `memberships_role_valid` admits. -/
-example : "owner" ∈ ["owner", "admin", "builder", "viewer"] :=
+/-- The witness membership's role is one of the five roles `memberships_role_valid` admits. -/
+example : "owner" ∈ ["owner", "admin", "builder", "viewer", "guest"] :=
   closed_set_value_is_in_its_set catalogue Witness.state Witness.state_is_consistent
     (t := .memberships) (n := "memberships_role_valid") (c := "role") (by decide +kernel)
     (r := ⟨[("id", "m1"), ("workspace_id", "w1"), ("user_id", "u1"), ("role", "owner"),

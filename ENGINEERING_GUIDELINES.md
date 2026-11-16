@@ -136,13 +136,13 @@ tradeoffs. They do not narrate syntax.
   storage design (§06) fails while any remain. `git grep -n "storage-bridge(#1234)"` lists what
   issue #1234 must delete. Each kind of bridge has one removal issue:
 
-  | Bridge                                                                                                                                                                                                                          | Removed by |
-  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-  | dual-read of the old object naming, legacy area providers (`sessions/` dir), `workspaceKeyPrefix`, the one-step catalog methods (`putFile`, `listFiles`, `renameFile`, `deleteFile`, `*ByPrefix`), skill marker-object fallback | #1699      |
-  | JSON+base64 skill import                                                                                                                                                                                                        | #1700      |
-  | inline `contentBase64` arms of the run protocol                                                                                                                                                                                 | #1701      |
-  | Phase 1 in-place overwrite on a signed upload over an existing file                                                                                                                                                             | #1666      |
-  | optional `status`, `objectId`, `targetPath`, `uploadMode`, `reservationToken` and `updatedAt` on file-catalog rows until the hand-written file-catalog fakes are replaced                                                       | #1634      |
+  | Bridge                                                                                                                                                                    | Removed by |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+  | old skill forms (bare-prefix skills, skill marker objects, the skills adopt stage) and the old per-area layout helpers in `@indx-workspace/contracts`                     | #1699      |
+  | JSON+base64 skill import                                                                                                                                                  | #1700      |
+  | optional `status`, `objectId`, `targetPath`, `uploadMode`, `reservationToken` and `updatedAt` on file-catalog rows until the hand-written file-catalog fakes are replaced | #1634      |
+  | a folder move that refuses while an upload under it is pending                                                                                                            | #1657      |
+  | the deprecated 0.6.10 storage-settings exports                                                                                                                            | #1944      |
 
 - Exported reusable APIs get TSDoc when purpose, failure modes, units, or invariants are not clear
   from their signature. Do not repeat the parameter name in prose.
@@ -164,7 +164,7 @@ tradeoffs. They do not narrate syntax.
 - Boundary schemas need valid, invalid, unknown-key, missing-field, and numeric-bound cases as
   applicable. Wire mappers must prove that real persistence-shaped values satisfy the shared schema.
 - Every in-memory store passes the same conformance suite as its PostgreSQL adapter (see
-  `describeAgentStoreConformance` in `apps/web/server/agents/store.test.ts`).
+  `describeAgentStoreConformance` in `apps/web/server/agents/store.conformance.ts`).
 - A skipped test is not evidence. Required services are started by `pnpm test`; an unavailable
   prerequisite must fail explicitly in CI.
 - Storage story tests are named `[US-STO-xx][type][entry]` and the code they prove carries
@@ -172,7 +172,8 @@ tradeoffs. They do not narrate syntax.
   `two-server`, `load`; cli `api`; run `api`, `contract`, `load`; chat `api`, `browser`. US-STO-14
   needs `two-server`. The cells are the ● marks of the
   story × entry-point matrix in the storage design (§07 "How we prove it works"). `pnpm stories:check` reports gaps
-  and fails on a malformed tag; #1618 blocks new gaps.
+  and fails on a malformed tag; #1618 blocks new gaps, and `--require-complete` (run in CI) fails on any gap of a
+  storage story.
 - Coverage is a locator for untested risk, not a reason to add assertion-free tests.
 - Where a test goes, what CI enforces and how to run each lane: [docs/testing-strategy.md](docs/testing-strategy.md).
 

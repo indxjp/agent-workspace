@@ -26,6 +26,7 @@ scope grammar, and it lives at most an hour.
    scope's grammar with `403 token_out_of_scope`. No existing route changes to refuse it. The grammar
    of `a2a-agent` is `POST /api/agents/:id/runs` on the bound agent only; `mcp-project` has no
    catalogue route (T1b serves its own endpoint).
+   _Amended by [ADR-0161](0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md) D4 and D8:_ a fourth kind, `app-backend`, whose grammar is running a bound agent, reading and interrupting one run by id, and `GET /api/me`.
 3. **Acting identity.** A static key acts for the client's `actsForPrincipalId`, the member that
    created it, through the existing acts-for mechanism (`Principal.ownerPrincipalId`). This mirrors
    ADR-0105's surface publisher. Runs an external platform starts are owned by, and visible to, that
@@ -120,6 +121,7 @@ Enterprise's `serverSideOauth2`) obtain an access token bound to one endpoint cl
     `via: 'oauth-token'`, the endpoint scope and an `audience`; both endpoint handlers answer
     `401 invalid_token` unless the audience is their own URL, and every endpoint `401` carries
     `WWW-Authenticate: Bearer resource_metadata=...`. The access token is never forwarded.
+    _Amended by [ADR-0161](0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md) D9:_ a token whose client is the `app-backend` kind is also admitted on exactly that kind's grammar routes (`POST /api/agents/:id/runs` on a bound agent, `GET /api/runs/:id`, `GET /api/runs/:id/events`, `POST /api/runs/:id/interrupt`, `GET /api/me`), read from one list by the proxy and `resolveActor`.
 16. **Limits.** `/oauth/token` and `/oauth/revoke` admit 120 a minute per address and 60 a minute per
     client, the client counted only after it authenticated: a `client_id` is public, so counting it
     earlier would let anyone lock a client out by naming it. Guessing a secret is bounded by the
@@ -131,6 +133,7 @@ Enterprise's `serverSideOauth2`) obtain an access token bound to one endpoint cl
     columns, one new table), so the previous revision keeps running during a rollout.
 18. **Not adopted.** Dynamic client registration (RFC 7591), JWT access tokens, token introspection
     (RFC 7662) and federation to Entra or Google as the identity provider: no target needs them.
+    _Amended by [ADR-0161](0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md):_ exchanging an ID token from the deployment's one configured `OIDC_ISSUER_URL` for an `app-backend` access token is allowed. It is not federation: the platform accepts no other issuer and provisions no identity.
 
 19. **`next` is same-origin only; revocation audits once.** The sign-in page and the OIDC login carry
     `next` through to the destination, and it is honoured only as a relative path on this origin

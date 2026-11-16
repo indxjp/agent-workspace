@@ -5,6 +5,17 @@ description: "The @indx-workspace/contracts/project-file exports, sorted alphabe
 
 <Note>This page is generated from `packages/contracts/src/project-file.ts`, `packages/contracts/src/project-platforms.ts`, `packages/contracts/src/url-credential.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## appSchemaName
+
+The PostgreSQL schema an app's data lives in, which is also the name of the database role that
+owns it in production: `app_` and the app's name key with its hyphens as underscores
+(`service-desk` → `app_service_desk`). The app kit's `appSchemaName` derives the same name, and
+a parity test keeps the two equal.
+
+```ts
+appSchemaName(name: string): string
+```
+
 ## BOOTSTRAP_ADMIN_MAX_LENGTH
 
 The longest bootstrap Owner address, in characters (RFC 5321's path limit, rounded up).
@@ -207,23 +218,168 @@ only what no platform may accept is refused, on the raw input (before the record
 
 `Readonly<Record<string, unknown>>`
 
+## PRODUCTION_APP_CLOUD_RUN_KEYS
+
+The app keys that only the `gcp-cloudrun` target reads; see `ProductionAppSchema`.
+
+- `'workspaceId'`
+- `'connectorId'`
+- `'apiKeySecret'`
+- `'signIn'`
+
+## ProductionApp
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `image` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `workspaceId` | `undefined \| string` | No |  |
+| `connectorId` | `undefined \| string` | No |  |
+| `apiKeySecret` | `undefined \| string` | No |  |
+| `signIn` | `undefined \| ProductionAppSignIn` | No |  |
+
+## ProductionAppSchema
+
+One app the `production` environment runs beside the platform, under
+`environments.production.apps.<name>` (issue #1512, ADR-0103's production-apps amendment): the
+image built from the app's Next.js output, pinned by digest, and the https origin it is served
+at. Its database schema is not a field: it is `appSchemaName` of the key, so it cannot
+disagree with the schema the app kit migrates.
+
+`PRODUCTION_APP_CLOUD_RUN_KEYS` are what the app reads once its workspace exists, on
+`gcp-cloudrun` only (the other targets refuse them at the key's path): `workspaceId` becomes the
+app's `AW_WORKSPACE_ID`, `connectorId` its `AW_APP_CONNECTOR_ID`, and `apiKeySecret` names the
+Secret Manager secret in the deployment's own project that holds the app's workspace API key,
+never the key: the app's own service account may read that one secret, and the app reads it as
+`AW_APP_API_KEY`. `signIn` (`ProductionAppSignInSchema`) lets people sign in to the app;
+it needs `gcp.oidc`. A `single-vm` app takes the first three from `.env`
+(`AW_APP_<NAME>_WORKSPACE_ID`, `_CONNECTOR_ID`, `_API_KEY`) and a `kubernetes` app from the
+operator's Secret `agent-workspace-app-<name>`. Each is optional, so the first deploy, before
+any workspace exists, needs none.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `image` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `workspaceId` | `undefined \| string` | No |  |
+| `connectorId` | `undefined \| string` | No |  |
+| `apiKeySecret` | `undefined \| string` | No |  |
+| `signIn` | `undefined \| ProductionAppSignIn` | No |  |
+
+## ProductionAppSignIn
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `oidcClientId` | `string` | Yes |  |
+| `oidcClientSecret` | `string` | Yes |  |
+| `appClientId` | `string` | Yes |  |
+| `appClientSecret` | `string` | Yes |  |
+
+## ProductionAppSignInSchema
+
+An app's sign-in on `gcp-cloudrun` (ADR-0161 DI11): the four values a production operator
+registers, by hand, for one app. The issuer is not among them: it is always the deployment's own
+`gcp.oidc.issuer`, the one issuer the token exchange trusts, and becomes `AW_OIDC_ISSUER_URL`.
+
+- `oidcClientId`: the app's own client at that issuer, the ID token's `aud`
+  (`AW_OIDC_CLIENT_ID`); its redirect URI is the app's `<url>/api/sign-in/callback`.
+- `oidcClientSecret`: the id of the Secret Manager secret that holds that client's secret
+  (`AW_OIDC_CLIENT_SECRET`), never the secret.
+- `appClientId`: the id of the app's `app-backend` endpoint client, whose `oidcAudience` is
+  `oidcClientId` (`AW_APP_CLIENT_ID`).
+- `appClientSecret`: the id of the Secret Manager secret that holds that endpoint client's secret
+  (`AW_APP_CLIENT_SECRET`), never the secret.
+
+The four are set together: a partial sign-in would only answer `sign_in_not_configured`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `oidcClientId` | `string` | Yes |  |
+| `oidcClientSecret` | `string` | Yes |  |
+| `appClientId` | `string` | Yes |  |
+| `appClientSecret` | `string` | Yes |  |
+
 ## ProductionEnvironment
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | `"kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"` | Yes |  |
 | `url` | `string` | Yes |  |
+| `apps` | `undefined \| Readonly<Record<string, Readonly<{ image: string; url: string; workspaceId?: string \| undefined; connectorId?: string \| undefined; apiKeySecret?: string \| undefined; signIn?: Readonly<{ oidcClientId: string; oidcClientSecret: string; appClientId: string; appClientSecret: string; }> \| undefined; }>>>` | No |  |
+| `gcp` | `undefined \| ProductionGcp` | No |  |
 
 ## ProductionEnvironmentSchema
 
-The `production` environment (issue #621): the deploy recipe it uses and the URL it is served
-at — nothing else. Where its data lives follows from the recipe; `aw deploy` turns it into the
-CLI's v1 profile, which stays internal.
+The `production` environment (issue #621): the deploy recipe it uses, the URL it is served at
+and, optionally, the apps it runs beside the platform (issue #1512), keyed by app name, and the
+Google Cloud `gcp` project and region — nothing else. Where its data lives follows from the
+recipe; `aw deploy` turns it into the CLI's v1 profile, which stays internal. The
+`single-vm`, `kubernetes` and `gcp-cloudrun` targets deploy `apps`; the others refuse it at
+`environments.production.apps`. Only `gcp-cloudrun` accepts `gcp`; the others refuse it at
+`environments.production.gcp`, and refuse an app's `PRODUCTION_APP_CLOUD_RUN_KEYS` at
+`environments.production.apps.<name>.<key>`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | `"kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"` | Yes |  |
 | `url` | `string` | Yes |  |
+| `apps` | `undefined \| Readonly<Record<string, Readonly<{ image: string; url: string; workspaceId?: string \| undefined; connectorId?: string \| undefined; apiKeySecret?: string \| undefined; signIn?: Readonly<{ oidcClientId: string; oidcClientSecret: string; appClientId: string; appClientSecret: string; }> \| undefined; }>>>` | No |  |
+| `gcp` | `undefined \| ProductionGcp` | No |  |
+
+## ProductionGcp
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `string` | Yes |  |
+| `region` | `string` | Yes |  |
+| `domain` | `undefined \| string` | No |  |
+| `armor` | `undefined \| false \| true` | No |  |
+| `iap` | `undefined \| false \| true` | No |  |
+| `oidc` | `undefined \| Readonly<{ issuer: string; clientId: string; }>` | No |  |
+| `modelLocation` | `undefined \| "global" \| "us" \| "eu"` | No |  |
+| `size` | `undefined \| "small" \| "standard"` | No |  |
+| `dataProtection` | `undefined \| false \| true` | No |  |
+| `alertsEmail` | `undefined \| string` | No |  |
+| `sandboxInternet` | `undefined \| false \| true` | No |  |
+| `settings` | `undefined \| PlatformOptions` | No |  |
+| `secretSettings` | `undefined \| PlatformOptions` | No |  |
+
+## ProductionGcpSchema
+
+`environments.production.gcp`: where the `gcp-cloudrun` recipe creates its stack, in the user's
+own Google Cloud. `project` is a project id by the rule `infra/terraform/gcp-cloudrun`'s
+`project_id` variable applies; `region` is a region such as `asia-northeast1`. The region has no
+default here: the module's own default stays in Terraform. `modelLocation` is where Vertex AI
+serves the deployment's Claude models (`global`, `us` or `eu`); absent means `global`.
+
+Each optional key below is one Terraform variable of the module, and none holds a secret:
+`domain` is the host name the web app is served at behind the load balancer; `armor` puts Cloud
+Armor in front of it; `iap` puts Identity-Aware Proxy on it (it runs only with a `domain`);
+`oidc` names the single sign-on provider, whose client secret the CLI asks for once and keeps
+in Secret Manager, never in this file. `size` picks the D-12 preset (`small` or `standard`);
+`dataProtection` (on by default) keeps the Cloud SQL database, the buckets and the services from
+deletion, and `aw deploy destroy` needs it `false`, deployed first; `alertsEmail` is the address
+alert notifications go to, and no alert policy is created without it. `sandboxInternet` adds
+one egress-proxy VM and a Cloud NAT gateway, and enables restricted and open sandboxes on Cloud
+Run; without it neither is created. `settings` sets `PROJECT_WEB_SETTINGS` on the web
+service, and `secretSettings` maps each `PROJECT_WEB_SECRET_SETTINGS` name to the Secret
+Manager secret that holds its value.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `string` | Yes |  |
+| `region` | `string` | Yes |  |
+| `domain` | `undefined \| string` | No |  |
+| `armor` | `undefined \| false \| true` | No |  |
+| `iap` | `undefined \| false \| true` | No |  |
+| `oidc` | `undefined \| Readonly<{ issuer: string; clientId: string; }>` | No |  |
+| `modelLocation` | `undefined \| "global" \| "us" \| "eu"` | No |  |
+| `size` | `undefined \| "small" \| "standard"` | No |  |
+| `dataProtection` | `undefined \| false \| true` | No |  |
+| `alertsEmail` | `undefined \| string` | No |  |
+| `sandboxInternet` | `undefined \| false \| true` | No |  |
+| `settings` | `undefined \| PlatformOptions` | No |  |
+| `secretSettings` | `undefined \| PlatformOptions` | No |  |
 
 ## PROJECT_API_VERSION
 
@@ -275,6 +431,12 @@ the `infra/helm/agent-workspace` chart installed into the cluster the kubeconfig
 - `'kubernetes'`
 - `'vercel'`
 
+## PROJECT_FILE_CONFIG_FIELDS
+
+The settings a project file can carry: the keyless provider's `projectId` and `location` are not among them.
+
+Value: `MODEL_CONNECTION_CONFIG_FIELDS.filter( (field): field is Exclude<ModelConnectionConfigField, 'projectId' | 'location'> => field !== 'projectId' && field !== 'location', )`
+
 ## PROJECT_KIND
 
 The one kind of document a v2 project file holds.
@@ -286,6 +448,38 @@ Value: `'Project'`
 The most entries a project file's `models` or `connectors` map may hold (issue #524).
 
 Value: `64`
+
+## PROJECT_WEB_SECRET_SETTINGS
+
+The web settings whose value is a secret: the project file names the Secret Manager secret in
+the deployment's own project that holds it, never the value, and the web service reads its
+latest version. A person stores the value; nothing in the deploy prints or copies it.
+
+- `'AW_DEMO_OPERATOR_TOKEN'`
+- `'AW_DEMO_ANTHROPIC_API_KEY'`
+
+## PROJECT_WEB_SETTING_MAX_LENGTH
+
+The most characters one web setting's value has in a project file.
+
+Value: `2_048`
+
+## PROJECT_WEB_SETTINGS
+
+The web settings a `gcp-cloudrun` project file may set on the web service, by name: documented
+settings (`docs/operations/settings.md`) that hold no secret. A closed list, so a project file
+cannot reach a setting the deployment itself owns (the database, the keys, the runtime).
+
+- `'AW_DEPLOYMENT_DEFAULT_MODELS'`
+- `'AW_DEMO_RUNS_PER_PERSON_PER_DAY'`
+- `'AW_DEMO_RUNS_PER_CLIENT_PER_DAY'`
+- `'AW_DEMO_MAX_TURNS_PER_RUN'`
+- `'AW_DEMO_MAX_COST_PER_RUN_USD'`
+- `'AW_DEMO_SITE_MAX_COST_PER_DAY_USD'`
+- `'AW_STORE_LEAD_RETENTION_DAYS'`
+- `'AW_EMAIL_LINK_BASE_URL'`
+- `'AW_EMAIL_LINK_SENDER'`
+- `'AW_EMAIL_LINK_CHALLENGE'`
 
 ## ProjectCloud
 
@@ -342,9 +536,9 @@ only remote connectors.
 | `apiVersion` | `"agentworkspace.dev/v2"` | Yes |  |
 | `kind` | `"Project"` | Yes |  |
 | `name` | `string` | Yes |  |
-| `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>` | Yes |  |
+| `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; apps?: Readonly<Record<string, Readonly<{ image: string; url: string; workspaceId?: string \| undefined; connectorId?: string \| undefined; apiKeySecret?: string \| undefined; signIn?: Readonly<{ oidcClientId: string; oidcClientSecret: string; appClientId: string; appClientSecret: string; }> \| undefined; }>>> \| undefined; gcp?: Readonly<{ project: string; region: string; domain?: string \| undefined; armor?: boolean \| undefined; iap?: boolean \| undefined; oidc?: Readonly<{ issuer: string; clientId: string; }> \| undefined; modelLocation?: "global" \| "us" \| "eu" \| undefined; size?: "small" \| "standard" \| undefined; dataProtection?: boolean \| undefined; alertsEmail?: string \| undefined; sandboxInternet?: boolean \| undefined; settings?: Readonly<Partial<Record<"AW_DEPLOYMENT_DEFAULT_MODELS" \| "AW_DEMO_RUNS_PER_PERSON_PER_DAY" \| "AW_DEMO_RUNS_PER_CLIENT_PER_DAY" \| "AW_DEMO_MAX_TURNS_PER_RUN" \| "AW_DEMO_MAX_COST_PER_RUN_USD" \| "AW_DEMO_SITE_MAX_COST_PER_DAY_USD" \| "AW_STORE_LEAD_RETENTION_DAYS" \| "AW_EMAIL_LINK_BASE_URL" \| "AW_EMAIL_LINK_SENDER" \| "AW_EMAIL_LINK_CHALLENGE", string>>> \| undefined; secretSettings?: Readonly<Partial<Record<"AW_DEMO_OPERATOR_TOKEN" \| "AW_DEMO_ANTHROPIC_API_KEY", string>>> \| undefined; }> \| undefined; }> \| undefined; }>` | Yes |  |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
-| `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
+| `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
 | `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | No |  |
 | `policy` | `undefined \| PlatformOptions` | No |  |
 | `platforms` | `undefined \| ProjectPlatforms` | No |  |
@@ -353,7 +547,8 @@ only remote connectors.
 ## ProjectDocumentSchema
 
 A v2 project file: the `local` environment and, optionally, `production` (issue #621: a deploy
-`target` and a `url`). Any other key — at the root, under `environments` (`preview`), in `local`
+`target`, a `url` and, since issue #1512, optional `apps`, and `gcp` for the `gcp-cloudrun`
+target). Any other key — at the root, under `environments` (`preview`), in `local`
 (`storage`) or in `production` (`cloud`) — is refused by a strict object, which reports
 `unrecognized_keys` at the parent's path.
 
@@ -375,9 +570,9 @@ reads it.
 | `apiVersion` | `"agentworkspace.dev/v2"` | Yes |  |
 | `kind` | `"Project"` | Yes |  |
 | `name` | `string` | Yes |  |
-| `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>` | Yes |  |
+| `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; apps?: Readonly<Record<string, Readonly<{ image: string; url: string; workspaceId?: string \| undefined; connectorId?: string \| undefined; apiKeySecret?: string \| undefined; signIn?: Readonly<{ oidcClientId: string; oidcClientSecret: string; appClientId: string; appClientSecret: string; }> \| undefined; }>>> \| undefined; gcp?: Readonly<{ project: string; region: string; domain?: string \| undefined; armor?: boolean \| undefined; iap?: boolean \| undefined; oidc?: Readonly<{ issuer: string; clientId: string; }> \| undefined; modelLocation?: "global" \| "us" \| "eu" \| undefined; size?: "small" \| "standard" \| undefined; dataProtection?: boolean \| undefined; alertsEmail?: string \| undefined; sandboxInternet?: boolean \| undefined; settings?: Readonly<Partial<Record<"AW_DEPLOYMENT_DEFAULT_MODELS" \| "AW_DEMO_RUNS_PER_PERSON_PER_DAY" \| "AW_DEMO_RUNS_PER_CLIENT_PER_DAY" \| "AW_DEMO_MAX_TURNS_PER_RUN" \| "AW_DEMO_MAX_COST_PER_RUN_USD" \| "AW_DEMO_SITE_MAX_COST_PER_DAY_USD" \| "AW_STORE_LEAD_RETENTION_DAYS" \| "AW_EMAIL_LINK_BASE_URL" \| "AW_EMAIL_LINK_SENDER" \| "AW_EMAIL_LINK_CHALLENGE", string>>> \| undefined; secretSettings?: Readonly<Partial<Record<"AW_DEMO_OPERATOR_TOKEN" \| "AW_DEMO_ANTHROPIC_API_KEY", string>>> \| undefined; }> \| undefined; }> \| undefined; }>` | Yes |  |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
-| `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
+| `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
 | `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | No |  |
 | `policy` | `undefined \| PlatformOptions` | No |  |
 | `platforms` | `undefined \| ProjectPlatforms` | No |  |
@@ -432,7 +627,7 @@ Who may first sign in: the bootstrap Owner's email and, optionally, an https OID
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes |  |
 | `credential` | `Readonly<{ secret: string; }>` | Yes |  |
 | `baseUrl` | `undefined \| string` | No |  |
 | `deployment` | `undefined \| string` | No |  |
@@ -452,7 +647,7 @@ its model.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes |  |
 | `credential` | `Readonly<{ secret: string; }>` | Yes |  |
 | `baseUrl` | `undefined \| string` | No |  |
 | `deployment` | `undefined \| string` | No |  |
@@ -559,6 +754,24 @@ secret backend a cloud may name stays in the CLI until P-2.
 | `relational` | `string` | Yes |  |
 | `objects` | `string` | Yes |  |
 | `secrets` | `string` | Yes |  |
+
+## ProjectWebSecretSetting
+
+- `"AW_DEMO_OPERATOR_TOKEN"`
+- `"AW_DEMO_ANTHROPIC_API_KEY"`
+
+## ProjectWebSetting
+
+- `"AW_DEPLOYMENT_DEFAULT_MODELS"`
+- `"AW_DEMO_RUNS_PER_PERSON_PER_DAY"`
+- `"AW_DEMO_RUNS_PER_CLIENT_PER_DAY"`
+- `"AW_DEMO_MAX_TURNS_PER_RUN"`
+- `"AW_DEMO_MAX_COST_PER_RUN_USD"`
+- `"AW_DEMO_SITE_MAX_COST_PER_DAY_USD"`
+- `"AW_STORE_LEAD_RETENTION_DAYS"`
+- `"AW_EMAIL_LINK_BASE_URL"`
+- `"AW_EMAIL_LINK_SENDER"`
+- `"AW_EMAIL_LINK_CHALLENGE"`
 
 ## readProjectDocument
 

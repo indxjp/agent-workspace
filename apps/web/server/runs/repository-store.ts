@@ -1,4 +1,3 @@
-import { MODEL_PROVIDERS, type ModelProvider } from '@indx-workspace/contracts/runs';
 import type {
   RunEventRepository as CoreRunEventRepository,
   RunEventRepositoryProvider as CoreRunEventRepositoryProvider,
@@ -7,33 +6,32 @@ import type {
   WorkspaceScope as CoreWorkspaceScope,
   WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { MODEL_PROVIDERS, type ModelProvider } from '@indx-workspace/contracts/runs';
+import { openRepositoryStream } from './repository-stream';
 
-import {
-  classifyEventName,
-  classifyPlatformEventName,
-  renderEventData,
-  type SseEvent,
-} from './sse';
+import { RunId, WorkspaceId } from '../newtypes';
+import { storableJson } from './storable-text';
+import { classifyEventName, classifyPlatformEventName, renderEventData } from './sse';
+import { RecentRunWorkspaces } from './recent-run-workspaces';
 import {
   ApprovalDecisionError,
+  ChildRunLimitError,
   eventRetentionLimit,
   IdempotencyKeyTakenError,
   isStoppedRunStatus,
   isTerminalRunStatus,
+  ParentRunStoppedError,
   SessionBusyError,
-  type ApprovalCall,
   type AppendEventInput,
   type AppendResult,
+  type ApprovalCall,
   type CreateRunInput,
   type ListRunsInput,
   type PlatformEventInput,
   type RunListPage,
-  type RunOutput,
   type RunRecord,
-  type RunStatus,
   type RunStore,
   type RunStreamHandle,
-  type StreamResetNotice,
 } from './store';
 
 /** A provider read back from the database, narrowed by a positive assertion (ADR-0015). */
@@ -44,13 +42,11 @@ function parseModelProvider(value: string): ModelProvider {
   return value as ModelProvider;
 }
 
-/** How many events one stream reads per query, so a replay of a long run is never one huge read. */
-const EVENT_PAGE_SIZE = 500;
-/** A stream's poll interval: the first wait, and the longest one a quiet run backs off to. */
-const POLL_MIN_MS = 250;
-const POLL_MAX_MS = 2_000;
-/** How many run-to-workspace lookups one repository store remembers. */
-const REMEMBERED_RUN_WORKSPACES = 10_000;
+/** The repositories of one workspace scope that serve one run. */
+interface RunRepositories {
+  readonly runs: CoreRunRepository;
+  readonly events: CoreRunEventRepository;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // The PostgreSQL implementation of the same port.
@@ -101,301 +97,248 @@ export interface RepositoryRunStoreDependencies {
  * A reconnect to another process therefore replays committed events before following new ones.
  */
 export function createRepositoryRunStore(dependencies: RepositoryRunStoreDependencies): RunStore {
-  const maxEvents = eventRetentionLimit(dependencies.maxEventsPerRun);
-  const waiters = new Map<string, Set<() => void>>();
+  return new RepositoryRunStore(dependencies);
+}
 
-  /**
-   * The workspace a run belongs to, remembered once this process has looked it up. Bounded, oldest
-   * first out, so a long-lived replica does not keep one entry per run it ever served; a forgotten
-   * run costs one `findRunWorkspace` on its next use.
-   */
-  const workspaceOfRun = new Map<string, string>();
-  const remember = (runId: string, workspaceId: string): void => {
-    workspaceOfRun.delete(runId);
-    workspaceOfRun.set(runId, workspaceId);
-    if (workspaceOfRun.size > REMEMBERED_RUN_WORKSPACES) {
-      const oldest = workspaceOfRun.keys().next();
-      if (oldest.done !== true) workspaceOfRun.delete(oldest.value);
-    }
-  };
+class RepositoryRunStore implements RunStore {
+  private readonly maxEvents: number;
+  private readonly waiters = new Map<string, Set<() => void>>();
+  private readonly recentRuns = new RecentRunWorkspaces();
 
-  /** The scope for a workspace id, or a thrown error naming the workspace that is gone. */
-  const scopeFor = async (workspaceId: string): Promise<CoreWorkspaceScope> => {
-    const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
+  constructor(private readonly dependencies: RepositoryRunStoreDependencies) {
+    this.maxEvents = eventRetentionLimit(dependencies.maxEventsPerRun);
+  }
+
+  private async lookUpWorkspaceOfRun(runId: string): Promise<WorkspaceId | null> {
+    const found = await this.dependencies.findRunWorkspace(runId);
+    return found === null ? null : WorkspaceId.fromStore(found);
+  }
+
+  private async scopeFor(workspaceId: string): Promise<CoreWorkspaceScope> {
+    const scope = await this.dependencies.scopes.forWorkspaceId(workspaceId);
     if (scope === null) {
       throw new Error(
         `no workspace has id ${workspaceId}; a run store cannot be scoped to a workspace that does not exist`,
       );
     }
     return scope;
-  };
+  }
 
-  /** The repositories for the run's own workspace, or `null` when no run has that id. */
-  const repositoriesForRun = async (
-    runId: string,
-  ): Promise<{ runs: CoreRunRepository; events: CoreRunEventRepository } | null> => {
-    const workspaceId = workspaceOfRun.get(runId) ?? (await dependencies.findRunWorkspace(runId));
+  /** The run repository of `workspaceId`'s scope. */
+  private async runRepositoryOfWorkspace(workspaceId: string): Promise<CoreRunRepository> {
+    return this.dependencies.repositories.forScope(await this.scopeFor(workspaceId));
+  }
+
+  private async repositoriesServingRun(runId: string): Promise<RunRepositories | null> {
+    const workspaceId = this.recentRuns.get(runId) ?? (await this.lookUpWorkspaceOfRun(runId));
     // The explicit else: no workspace means no run, and every caller turns that into the same
     // answer the in-memory store gives for an id it has never seen.
     if (workspaceId === null) return null;
-    remember(runId, workspaceId);
-    const scope = await scopeFor(workspaceId);
+    // The database has a run with this id, so it is a stored id.
+    this.recentRuns.remember(RunId.fromStore(runId), workspaceId);
+    const scope = await this.scopeFor(workspaceId);
     return {
-      runs: dependencies.repositories.forScope(scope),
-      events: dependencies.events.forScope(scope),
+      runs: this.dependencies.repositories.forScope(scope),
+      events: this.dependencies.events.forScope(scope),
     };
-  };
+  }
 
-  const repositoryForRun = async (runId: string): Promise<CoreRunRepository | null> =>
-    (await repositoriesForRun(runId))?.runs ?? null;
+  private async runRepositoryOf(runId: string): Promise<CoreRunRepository | null> {
+    return (await this.repositoriesServingRun(runId))?.runs ?? null;
+  }
 
-  const wake = (runId: string): void => {
-    for (const notify of [...(waiters.get(runId) ?? [])]) notify();
-  };
+  private notifyWaiters(runId: string): void {
+    for (const notify of [...(this.waiters.get(runId) ?? [])]) notify();
+  }
 
-  const append = async (runId: string, type: string, data: unknown): Promise<AppendResult> => {
+  private async appendEvent(runId: string, type: string, data: unknown): Promise<AppendResult> {
     const payload = renderEventData(data);
     if (payload.kind !== 'ok') return { kind: 'rejected', reason: payload.reason };
-    const repositories = await repositoriesForRun(runId);
+    const repositories = await this.repositoriesServingRun(runId);
     if (repositories === null) return { kind: 'rejected', reason: `no run ${runId}` };
     const stored = await repositories.runs.get(runId);
     if (stored === null) return { kind: 'rejected', reason: `no run ${runId}` };
     if (isStoppedRunStatus(stored.status)) {
       return { kind: 'rejected', reason: `run ${runId} is finished; its event log is closed` };
     }
-    const event = await repositories.events.append(runId, type, data, maxEvents);
+    const event = await repositories.events.append(
+      runId,
+      type,
+      // The runtime's output is arbitrary text (a binary file read as UTF-8 holds NULs, a cut
+      // emoji a lone surrogate); jsonb refuses both, which would otherwise fail the whole run.
+      storableJson(data),
+      this.maxEvents,
+    );
     if (event === null) return { kind: 'rejected', reason: `no run ${runId}` };
-    wake(runId);
+    this.notifyWaiters(runId);
     return { kind: 'appended', event };
-  };
+  }
 
+  async create(input: CreateRunInput): Promise<RunRecord> {
+    const repository = await this.runRepositoryOfWorkspace(input.workspaceId);
+    const outcome = await repository.create(runRowInput(input, this.maxEvents));
+    if (outcome.kind === 'approval-expired') this.notifyWaiters(outcome.runId);
+    const run = requireCreatedRun(input, outcome);
+    this.recentRuns.remember(RunId.fromStore(run.id), WorkspaceId.fromStore(input.workspaceId));
+    // A decision completed the paused run in the same commit; its open streams may end now.
+    if (input.decides !== undefined) this.notifyWaiters(input.decides);
+    // `agentId` comes back from the session the run belongs to, never from the caller: the
+    // `runs` table stores no `agent_id`, precisely so it cannot disagree with the session's.
+    return run;
+  }
+
+  async get(runId: string): Promise<RunRecord | null> {
+    const repository = await this.runRepositoryOf(runId);
+    if (repository === null) return null;
+    return repository.get(runId);
+  }
+
+  async findByIdempotencyKey(workspaceId: string, principalId: string, key: string) {
+    const repository = await this.runRepositoryOfWorkspace(workspaceId);
+    const found = await repository.findByIdempotencyKey(principalId, key);
+    if (found === null) return null;
+    this.recentRuns.remember(RunId.fromStore(found.run.id), WorkspaceId.fromStore(workspaceId));
+    return { run: found.run, requestHash: found.requestHash };
+  }
+
+  async markRunning(runId: string): Promise<boolean> {
+    const repository = await this.runRepositoryOf(runId);
+    // A run this store does not have is a no-op, exactly as in memory: the launcher marks a run
+    // running without first asking whether it still exists.
+    if (repository === null) return false;
+    const outcome = await repository.markRunning(runId);
+    // `moved` is the only outcome that transitioned the row; `no-op` (not queued any more) and
+    // `not-found` both mean this call did not, which is what the port promises to report.
+    return outcome.kind === 'moved';
+  }
+
+  async finish(...args: Parameters<RunStore['finish']>): Promise<void> {
+    const [runId, status, error, emitStatusEvent = false, output = null] = args;
+
+    // Refused before any lookup, so an invalid status is the same failure whether or not the
+    // run exists.
+    if (!isTerminalRunStatus(status)) {
+      throw new Error(`${status} is not a terminal run status`);
+    }
+    const repository = await this.runRepositoryOf(runId);
+    if (repository === null) return;
+    const outcome = await repository.finish(
+      runId,
+      status,
+      error,
+      emitStatusEvent ? this.maxEvents : undefined,
+      output,
+    );
+    // The log is closed on `moved` and on `no-op` alike: `no-op` means the run was already
+    // terminal, and a log left open on a terminal run is a stream that never ends.
+    if (outcome.kind !== 'not-found') this.notifyWaiters(runId);
+  }
+
+  async awaitApproval(runId: string, call: ApprovalCall): Promise<void> {
+    const repository = await this.runRepositoryOf(runId);
+    if (repository === null) return;
+    const outcome = await repository.awaitApproval(runId, call, this.maxEvents);
+    if (outcome.kind !== 'not-found') this.notifyWaiters(runId);
+  }
+
+  async snapshotModel(
+    runId: string,
+    input: { readonly connectionId: string; readonly model: string; readonly provider: string },
+  ): Promise<void> {
+    const repository = await this.runRepositoryOf(runId);
+    if (repository === null) return;
+    await repository.snapshotModel(runId, {
+      connectionId: input.connectionId,
+      model: input.model,
+      provider: parseModelProvider(input.provider),
+    });
+  }
+
+  async append(runId: string, event: AppendEventInput): Promise<AppendResult> {
+    const name = classifyEventName(event.type);
+    if (name.kind !== 'ok') return { kind: 'rejected', reason: name.reason };
+    return this.appendEvent(runId, name.name, event.data);
+  }
+
+  async appendPlatformEvent(runId: string, event: PlatformEventInput): Promise<AppendResult> {
+    const name = classifyPlatformEventName(event.type);
+    if (name.kind !== 'ok') return { kind: 'rejected', reason: name.reason };
+    return this.appendEvent(runId, name.name, event.data);
+  }
+
+  async openStream(runId: string, after: bigint | null): Promise<RunStreamHandle | null> {
+    const repositories = await this.repositoriesServingRun(runId);
+    if (repositories === null || (await repositories.runs.get(runId)) === null) return null;
+    return openRepositoryStream({ runId, after, repositories, waiters: this.waiters });
+  }
+
+  async listRuns(workspaceId: string, input: ListRunsInput): Promise<RunListPage> {
+    const repository = await this.runRepositoryOfWorkspace(workspaceId);
+    const page = await repository.listRuns(input);
+    return { items: page.items, nextCursor: page.nextCursor };
+  }
+
+  async listChildren(
+    workspaceId: string,
+    parentRunId: string,
+    limit: number,
+  ): Promise<readonly RunRecord[]> {
+    const repository = await this.runRepositoryOfWorkspace(workspaceId);
+    return repository.listChildren(parentRunId, limit);
+  }
+}
+
+type CoreCreateOutcome = Awaited<ReturnType<CoreRunRepository['create']>>;
+type CoreCreateInput = Parameters<CoreRunRepository['create']>[0];
+
+/** The row a run store `create` asks the repository to insert; optional fields stay absent. */
+function runRowInput(input: CreateRunInput, maxEvents: number): CoreCreateInput {
   return {
-    async create(input: CreateRunInput): Promise<RunRecord> {
-      const repository = dependencies.repositories.forScope(await scopeFor(input.workspaceId));
-      const outcome = await repository.create({
-        id: input.id,
-        sessionId: input.sessionId,
-        engine: input.engine,
-        prompt: input.prompt ?? null,
-        outputSchema: input.outputSchema ?? null,
-        subject: input.subject ?? null,
-        ...(input.idempotency === undefined ? {} : { idempotency: input.idempotency }),
-        ...(input.approvedToolCalls === undefined
-          ? {}
-          : { approvedToolCalls: input.approvedToolCalls }),
-        ...(input.decides === undefined
-          ? {}
-          : { decides: { runId: input.decides, statusEventMaxEvents: maxEvents } }),
-      });
-      if (outcome.kind === 'duplicate-id') {
-        // The same message the in-memory store rejects with, because `api.ts` and the conformance
-        // suite both read it and two spellings of one failure is two failures to handle.
-        throw new Error(`run ${input.id} already exists`);
-      }
-      if (outcome.kind === 'session-busy') throw new SessionBusyError(input.sessionId);
-      if (outcome.kind === 'idempotency-key-taken') throw new IdempotencyKeyTakenError(outcome.key);
-      if (outcome.kind === 'already-decided') {
-        throw new ApprovalDecisionError(outcome.runId, 'already-decided');
-      }
-      if (outcome.kind === 'approval-expired') {
-        // The paused run was cancelled in that call, so its stream has ended.
-        wake(outcome.runId);
-        throw new ApprovalDecisionError(outcome.runId, 'expired');
-      }
-      if (outcome.kind === 'unknown-session') {
-        throw new Error(
-          `no session ${input.sessionId} in workspace ${input.workspaceId}; a run row references its session (runs_session_workspace_fk)`,
-        );
-      }
-      remember(input.id, input.workspaceId);
-      // A decision completed the paused run in the same commit; its open streams may end now.
-      if (input.decides !== undefined) wake(input.decides);
-      // `agentId` comes back from the session the run belongs to, never from the caller: the
-      // `runs` table stores no `agent_id`, precisely so it cannot disagree with the session's.
-      return outcome.run;
-    },
-
-    async get(runId: string): Promise<RunRecord | null> {
-      const repository = await repositoryForRun(runId);
-      if (repository === null) return null;
-      const run = await repository.get(runId);
-      return run;
-    },
-
-    async findByIdempotencyKey(workspaceId: string, principalId: string, key: string) {
-      const repository = dependencies.repositories.forScope(await scopeFor(workspaceId));
-      const found = await repository.findByIdempotencyKey(principalId, key);
-      if (found === null) return null;
-      remember(found.run.id, workspaceId);
-      return { run: found.run, requestHash: found.requestHash };
-    },
-
-    async markRunning(runId: string): Promise<boolean> {
-      const repository = await repositoryForRun(runId);
-      // A run this store does not have is a no-op, exactly as in memory: the launcher marks a run
-      // running without first asking whether it still exists.
-      if (repository === null) return false;
-      const outcome = await repository.markRunning(runId);
-      // `moved` is the only outcome that transitioned the row; `no-op` (not queued any more) and
-      // `not-found` both mean this call did not, which is what the port promises to report.
-      return outcome.kind === 'moved';
-    },
-
-    async finish(
-      runId: string,
-      status: RunStatus,
-      error: string | null,
-      emitStatusEvent = false,
-      output: RunOutput | null = null,
-    ): Promise<void> {
-      // Refused before any lookup, so an invalid status is the same failure whether or not the
-      // run exists.
-      if (!isTerminalRunStatus(status)) {
-        throw new Error(`${status} is not a terminal run status`);
-      }
-      const repository = await repositoryForRun(runId);
-      if (repository === null) return;
-      const outcome = await repository.finish(
-        runId,
-        status,
-        error,
-        emitStatusEvent ? maxEvents : undefined,
-        output,
-      );
-      // The log is closed on `moved` and on `no-op` alike: `no-op` means the run was already
-      // terminal, and a log left open on a terminal run is a stream that never ends.
-      if (outcome.kind !== 'not-found') wake(runId);
-    },
-
-    async awaitApproval(runId: string, call: ApprovalCall): Promise<void> {
-      const repository = await repositoryForRun(runId);
-      if (repository === null) return;
-      const outcome = await repository.awaitApproval(runId, call, maxEvents);
-      if (outcome.kind !== 'not-found') wake(runId);
-    },
-
-    async snapshotModel(
-      runId: string,
-      input: { readonly connectionId: string; readonly model: string; readonly provider: string },
-    ): Promise<void> {
-      const repository = await repositoryForRun(runId);
-      if (repository === null) return;
-      await repository.snapshotModel(runId, {
-        connectionId: input.connectionId,
-        model: input.model,
-        provider: parseModelProvider(input.provider),
-      });
-    },
-
-    async append(runId: string, event: AppendEventInput): Promise<AppendResult> {
-      const name = classifyEventName(event.type);
-      if (name.kind !== 'ok') return { kind: 'rejected', reason: name.reason };
-      return append(runId, name.name, event.data);
-    },
-
-    async appendPlatformEvent(runId: string, event: PlatformEventInput): Promise<AppendResult> {
-      const name = classifyPlatformEventName(event.type);
-      if (name.kind !== 'ok') return { kind: 'rejected', reason: name.reason };
-      return append(runId, name.name, event.data);
-    },
-
-    async openStream(runId: string, after: bigint | null): Promise<RunStreamHandle | null> {
-      const repositories = await repositoriesForRun(runId);
-      if (repositories === null || (await repositories.runs.get(runId)) === null) return null;
-
-      const bounds = await repositories.events.bounds(runId);
-      let cursor = after ?? 0n;
-      let reset: StreamResetNotice | null = null;
-      if (bounds === null && after !== null && after > 0n) {
-        reset = {
-          reason: `run ${runId} has no event after ${String(after)} (its latest id is 0); the stream restarts from the oldest retained event`,
-          resumedAfter: null,
-        };
-        cursor = 0n;
-      } else if (bounds !== null && cursor < bounds.oldest - 1n) {
-        reset = {
-          reason:
-            after === null
-              ? `the beginning of run ${runId}'s event log is no longer retained; the stream starts at the oldest retained event`
-              : `events after ${String(cursor)} are no longer retained for run ${runId}; the stream resumes at the oldest retained event and is not contiguous with what you already have`,
-          resumedAfter: String(bounds.oldest - 1n),
-        };
-        cursor = bounds.oldest - 1n;
-      } else if (bounds !== null && after !== null && after > bounds.latest) {
-        reset = {
-          reason: `run ${runId} has no event after ${String(after)} (its latest id is ${String(bounds.latest)}); the stream restarts from the oldest retained event`,
-          resumedAfter: String(bounds.oldest - 1n),
-        };
-        cursor = bounds.oldest - 1n;
-      }
-
-      let closed = false;
-      let releaseCurrentWait: (() => void) | null = null;
-      const close = (): void => {
-        if (closed) return;
-        closed = true;
-        releaseCurrentWait?.();
-      };
-
-      const durableEvents = (async function* (): AsyncGenerator<SseEvent> {
-        let idleMs = POLL_MIN_MS;
-        // Set once the run is seen terminal; the stream then drains what is left and ends.
-        let terminal = false;
-        try {
-          for (;;) {
-            let notify!: () => void;
-            const notified = new Promise<void>((resolve) => {
-              notify = resolve;
-            });
-            const listeners = waiters.get(runId) ?? new Set<() => void>();
-            listeners.add(notify);
-            waiters.set(runId, listeners);
-            releaseCurrentWait = notify;
-
-            try {
-              const page = await repositories.events.list(runId, cursor, EVENT_PAGE_SIZE);
-              for (const event of page) {
-                cursor = event.id;
-                yield event;
-              }
-              if (closed) return;
-              // A full page means more are waiting: read on before asking about the run.
-              if (page.length === EVENT_PAGE_SIZE) continue;
-              if (terminal) return;
-              const run = await repositories.runs.get(runId);
-              if (run === null) return;
-              if (isStoppedRunStatus(run.status)) {
-                // A final event may commit between the list above and this status read. Event
-                // append and finish share the run lock, so no append can commit after the terminal
-                // status becomes visible. One last drain is therefore complete.
-                terminal = true;
-                continue;
-              }
-              // Waking is in-process only, so polling is the cross-replica signal; it backs off
-              // while the run is quiet so idle viewers do not each query four times a second.
-              idleMs = page.length > 0 ? POLL_MIN_MS : Math.min(idleMs * 2, POLL_MAX_MS);
-              await Promise.race([
-                notified,
-                new Promise<void>((resolve) => setTimeout(resolve, idleMs)),
-              ]);
-            } finally {
-              listeners.delete(notify);
-              if (listeners.size === 0) waiters.delete(runId);
-              releaseCurrentWait = null;
-            }
-          }
-        } finally {
-          close();
-        }
-      })();
-
-      return { reset, events: durableEvents, close };
-    },
-
-    async listRuns(workspaceId: string, input: ListRunsInput): Promise<RunListPage> {
-      const repository = dependencies.repositories.forScope(await scopeFor(workspaceId));
-      const page = await repository.listRuns(input);
-      return { items: page.items, nextCursor: page.nextCursor };
-    },
+    id: input.id,
+    sessionId: input.sessionId,
+    engine: input.engine,
+    prompt: input.prompt ?? null,
+    outputSchema: input.outputSchema ?? null,
+    subject: input.subject ?? null,
+    limitsOverride: input.limitsOverride ?? null,
+    spendCeilingUsd: input.spendCeilingUsd ?? null,
+    ...(input.idempotency === undefined ? {} : { idempotency: input.idempotency }),
+    ...(input.approvedToolCalls === undefined
+      ? {}
+      : { approvedToolCalls: input.approvedToolCalls }),
+    ...(input.decides === undefined
+      ? {}
+      : { decides: { runId: input.decides, statusEventMaxEvents: maxEvents } }),
+    ...(input.parent === undefined ? {} : { parent: input.parent }),
+    ...(input.agentTeamVersionId === undefined
+      ? {}
+      : { agentTeamVersionId: input.agentTeamVersionId }),
   };
+}
+
+/** The run a successful create inserted, or the named failure its outcome stands for. */
+function requireCreatedRun(input: CreateRunInput, outcome: CoreCreateOutcome): RunRecord {
+  if (outcome.kind === 'duplicate-id') {
+    // The same message the in-memory store rejects with, because `api.ts` and the conformance
+    // suite both read it and two spellings of one failure is two failures to handle.
+    throw new Error(`run ${input.id} already exists`);
+  }
+  if (outcome.kind === 'session-busy') throw new SessionBusyError(input.sessionId);
+  if (outcome.kind === 'child-limit') throw new ChildRunLimitError(outcome.runId);
+  if (outcome.kind === 'parent-stopped') throw new ParentRunStoppedError(outcome.runId);
+  if (outcome.kind === 'idempotency-key-taken') throw new IdempotencyKeyTakenError(outcome.key);
+  if (outcome.kind === 'already-decided') {
+    throw new ApprovalDecisionError(outcome.runId, 'already-decided');
+  }
+  if (outcome.kind === 'approval-expired') {
+    // The paused run was cancelled in that call, so its stream has ended.
+    throw new ApprovalDecisionError(outcome.runId, 'expired');
+  }
+  if (outcome.kind === 'unknown-session') {
+    throw new Error(
+      `no session ${input.sessionId} in workspace ${input.workspaceId}; a run row references its session (runs_session_workspace_fk)`,
+    );
+  }
+
+  return outcome.run;
 }

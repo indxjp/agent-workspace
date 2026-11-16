@@ -34,11 +34,11 @@ machine-readable `RESULT {…}` line at the end.
                                                       (a §14.3-shaped runtime)
 ```
 
-* **`next start`, never `next dev`.** A stream verified against a dev server proves nothing about a
+- **`next start`, never `next dev`.** A stream verified against a dev server proves nothing about a
   production build.
-* **The probe's SSE client is written in `run-acceptance.mjs`, not imported from `relay.ts`.** A
+- **The probe's SSE client is written in `run-acceptance.mjs`, not imported from `relay.ts`.** A
   probe that reuses the server's own parser cannot detect a bug the two share.
-* **`fake-runner.mjs` imports no Anthropic package.** Spec §42 makes `apps/runner/src/claude.ts` the
+- **`fake-runner.mjs` imports no Anthropic package.** Spec §42 makes `apps/runner/src/claude.ts` the
   only file that may import the Agent SDK, and a probe fixture is not an exception to it. The real
   runtime is W1-RN-02's.
 
@@ -46,10 +46,10 @@ machine-readable `RESULT {…}` line at the end.
 
 `nginx.conf` serves the same upstream twice.
 
-| Location | Configuration | What a pass means |
-| --- | --- | --- |
+| Location  | Configuration                                                                                                 | What a pass means                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `/stock/` | nginx's own defaults: `proxy_buffering on`, `proxy_read_timeout 60s`, `gzip on` with the default `gzip_types` | the stream survives an nginx **nobody configured for SSE**, purely because the 15 s keep-alive of `sse.ts` clears the 60 s idle timeout |
-| `/tuned/` | the block R-13's contract summary prescribes for spec §33's self-hosted Compose deployment | the configuration we intend to ship also works |
+| `/tuned/` | the block R-13's contract summary prescribes for spec §33's self-hosted Compose deployment                    | the configuration we intend to ship also works                                                                                          |
 
 `/stock/` is the load-bearing one. R-13 marked the 15 s keep-alive interval **`inferred`** — it
 probed 1 s (survived 620 s) and 70 s of silence (killed at ~60 s), and never ran 15 s itself. This
@@ -72,39 +72,39 @@ the Windows host.
 
 Proven, by executed output:
 
-* a 200 `text/event-stream` reaches a client through nginx, ungzipped, with `Transfer-Encoding:
-  chunked`;
-* chunks arrive at the producer's cadence — no proxy buffering;
-* keep-alive comments cross the proxy and no inter-chunk gap approaches the stock 60 s timeout;
-* the stream runs past ten minutes and ends with a `done` frame rather than being cut;
-* a client that disconnects mid-run and reconnects with `Last-Event-ID: N` receives `N+1` first,
+- a 200 `text/event-stream` reaches a client through nginx, ungzipped, with `Transfer-Encoding:
+chunked`;
+- chunks arrive at the producer's cadence — no proxy buffering;
+- keep-alive comments cross the proxy and no inter-chunk gap approaches the stock 60 s timeout;
+- the stream runs past ten minutes and ends with a `done` frame rather than being cut;
+- a client that disconnects mid-run and reconnects with `Last-Event-ID: N` receives `N+1` first,
   contiguously, with no duplicate of what it already had;
-* `GET /api/runs/:id` afterwards reports the run `completed`.
+- `GET /api/runs/:id` afterwards reports the run `completed`.
 
 **Not** proven, and not claimed anywhere:
 
-* **This harness's durability.** The probe deliberately uses `InMemoryRunStore`, so it verifies
-  replay *within one server process* and does not exercise restart or cross-replica recovery. The
+- **This harness's durability.** The probe deliberately uses `InMemoryRunStore`, so it verifies
+  replay _within one server process_ and does not exercise restart or cross-replica recovery. The
   production repository adapter persists and polls `run_events`; the historical in-process
   decision in `docs/adr/W1-CP-04-run-events-are-in-process-in-wave-1.md` is superseded.
-* **A browser.** The probe client is `fetch`-based. R-13 verified that Chrome 152 and undici's
+- **A browser.** The probe client is `fetch`-based. R-13 verified that Chrome 152 and undici's
   `EventSource` send `Last-Event-ID` on their own automatic reconnects; this run verifies that the
-  *server* replays correctly from it. Nothing here re-verifies the browsers.
-* **Authentication, beyond the gate.** The request must carry a session cookie that verifies under
+  _server_ replays correctly from it. Nothing here re-verifies the browsers.
+- **Authentication, beyond the gate.** The request must carry a session cookie that verifies under
   the real `SESSION_SECRET` — that is W1-CP-06's real middleware, enforced for real, and this run
-  is the proof it does not block a legitimate signed-in request. What is still a stub is *behind*
+  is the proof it does not block a legitimate signed-in request. What is still a stub is _behind_
   that gate: `instrumentation.ts` in this directory authorizes every request that clears it as the
   same fixed principal, regardless of which workspace or account the cookie's claims name. The 401
   path (no cookie, or one that fails verification) has unit tests; the fine-grained authorization
   path (a verified session naming a workspace this account is not a member of) is W1-CP-06's, not
   this harness's.
-* **Any proxy other than this one.** One nginx version, one host, one operating system — the same
+- **Any proxy other than this one.** One nginx version, one host, one operating system — the same
   bound R-13 states for its own figures.
-* **The `run-failed` path.** The acceptance run's run succeeds, so the stream it measures ends
+- **The `run-failed` path.** The acceptance run's run succeeds, so the stream it measures ends
   with `done` and no `run-failed` frame. The failing outcomes — a run whose runtime is unreachable,
   and a stream that breaks while producing frames — are covered by unit tests in `api.test.ts` and
   `sse.test.ts`, not by anything that crossed nginx.
-* **The `stream-reset` path.** No eviction happens in ten minutes at this cadence; that path is
+- **The `stream-reset` path.** No eviction happens in ten minutes at this cadence; that path is
   covered by unit tests over an `InMemoryRunStore` whose retention cap is smaller than the number
   of events those tests append, which is what makes the eviction the assertion is about happen.
   `store.test.ts` covers the store's own notice, `api.test.ts` covers the frame that reaches a

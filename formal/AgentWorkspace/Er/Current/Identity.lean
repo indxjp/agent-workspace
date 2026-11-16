@@ -4,16 +4,16 @@ import AgentWorkspace.Concepts.Invitation
 /-!
 # Today's identity tables
 
-The fourteen tables of the identity cluster — `workspaces`, `users`, `user_identities`,
-`memberships`, `workspace_principals`, `api_keys`, `invitations`, `browser_tokens`,
+The nineteen tables of the identity cluster — `workspaces`, `users`, `user_identities`,
+`memberships`, `workspace_principals`, `api_keys`, `invitations`, `login_tokens`, `demo_run_admissions`, `demo_daily_costs`, `demo_entry_states`, `store_leads`, `browser_tokens`,
 `cli_sessions`, `endpoint_clients`, `endpoint_client_agents`, `endpoint_client_api_keys`,
 `oauth_tokens`, `runtime_verifications` — as `Er/Core.lean`'s `catalogue` records them (columns, foreign keys, unique keys,
 closed-set checks, all compared with the live Drizzle schema and the 0031 snapshot by the `er-core`
 suite), plus the one thing `Er/Core.lean` leaves to the clusters: the **meaning of every other
 check**.
 
-`Er/Core.lean` records 36 checks of these tables only by name (`Check.other`), and gives only
-`workspace_principals_source_xor` a semantics. This module gives each of the 36 a `CheckExpr`: a
+`Er/Core.lean` records 46 checks of these tables only by name (`Check.other`), and gives only
+`workspace_principals_source_xor` a semantics. This module gives each of the 46 a `CheckExpr`: a
 small SQL expression language whose `render` is exactly the text `drizzle-kit` stored in
 the latest snapshot (`Er.Snapshot.file`) (the conformance suite compares them), and whose `eval` is
 SQL's three-valued logic — a check passes unless its expression is `FALSE`.
@@ -32,18 +32,21 @@ namespace AgentWorkspace.Er.Current.Identity
 open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts.Workspace
   AgentWorkspace.Concepts.User
 
-/-- The fourteen tables of the identity cluster. `cli_sessions` (SDK-10, #242, ADR-0083) is one
+/-- The nineteen tables of the identity cluster. `cli_sessions` (SDK-10, #242, ADR-0083) is one
 `aw login` of one person, referenced through their membership. Then come ADR-0134's endpoint
 clients: what one external platform may reach (`endpoint_clients`), the agents it names
 (`endpoint_client_agents`), the API keys bound to it (`endpoint_client_api_keys`) and the OAuth
 codes and tokens issued to it for a member (`oauth_tokens`, part 3). The last,
 `runtime_verifications`, is the workspace's record of which runtime drivers passed Test Runtime
-(#827); it references only the workspace. -/
+(#827); it references only the workspace. `demo_run_admissions`, `demo_daily_costs` and `store_leads` are the
+Agent Store's global run-cap, site-wide cost and lead-retention tables (migration 0107), and
+`demo_entry_states` the daily production test's verdict on each live entry (migration 0109); like
+`login_tokens`, they belong to no workspace and outlive the demo workspace. -/
 @[aw_spec (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def tables : List TableName :=
   [.workspaces, .users, .userIdentities, .memberships, .workspacePrincipals, .apiKeys,
-    .invitations, .browserTokens, .cliSessions, .endpointClients, .endpointClientAgents,
+    .invitations, .loginTokens, .demoRunAdmissions, .demoDailyCosts, .demoEntryStates, .storeLeads, .browserTokens, .cliSessions, .endpointClients, .endpointClientAgents,
     .endpointClientApiKeys, .oauthTokens, .runtimeVerifications]
 
 /-! ## A SQL fragment for the identity checks -/
@@ -70,6 +73,8 @@ inductive Pattern where
   | email
   /-- `cli_sessions.user_code`: exactly eight upper-case ASCII letters. -/
   | userCode
+  /-- `login_tokens.token_hash` and `email_hash`: a lower-case SHA-256, 64 hex digits. -/
+  | sha256Hex
   deriving DecidableEq, Repr
 
 /-- The regular expression exactly as the check writes it. -/
@@ -77,6 +82,7 @@ def Pattern.toSql : Pattern → String
   | .slug => "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
   | .email => "^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$"
   | .userCode => "^[A-Z]{8}$"
+  | .sha256Hex => "^[0-9a-f]{64}$"
 
 /-- `^[A-Z]{8}$`: eight characters, each an upper-case ASCII letter
 (`cli_sessions_user_code_shape`). -/
@@ -84,12 +90,18 @@ def userCodeShape (s : String) : Bool :=
   let cs := s.toList
   cs.length == 8 && cs.all fun c => 'A' ≤ c && c ≤ 'Z'
 
+/-- `^[0-9a-f]{64}$`: sixty-four lower-case hexadecimal digits (`login_tokens_*_hash_shape`). -/
+def sha256HexShape (s : String) : Bool :=
+  let cs := s.toList
+  cs.length == 64 && cs.all fun c => ('0' ≤ c && c ≤ '9') || ('a' ≤ c && c ≤ 'f')
+
 /-- Whether a value matches the pattern (`Concepts.Workspace.slugFormat`,
 `Concepts.User.emailShape`). -/
 def Pattern.test : Pattern → String → Bool
   | .slug => slugFormat
   | .email => emailShape
   | .userCode => userCodeShape
+  | .sha256Hex => sha256HexShape
 
 /-- The number of elements of a PostgreSQL array literal as a cell holds it: `{}` has none, and
 otherwise the elements are the comma-separated items between the braces (the sample values never
@@ -97,7 +109,7 @@ quote an element). -/
 def arrayCardinality (s : String) : Nat :=
   if s == "{}" then 0 else (s.toList.filter (· == ',')).length + 1
 
-/-- The shapes the 36 non-closed-set checks of the identity tables take. -/
+/-- The shapes the 46 non-closed-set checks of the identity tables take. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browserTokens")
   (ts := "packages/core/src/db/schema/invitations.ts#invitations")
@@ -129,6 +141,11 @@ inductive CheckExpr where
   | nullOrDistinct (a b : String)
   /-- `cardinality(c) <= n`: the array column `c` holds at most `n` elements. -/
   | atMostElements (c : String) (n : Nat)
+  /-- `c >= 0`: the numeric column `c` is not negative. The model reads a leading `-` as negative, so
+  a negative zero (`-0`) is refused here although SQL accepts it; no stored cost is written so. -/
+  | nonNegative (c : String)
+  /-- `length(c) between lo and hi`: the text column `c` is `lo` to `hi` characters long. -/
+  | lengthBetween (c : String) (lo hi : Nat)
   deriving DecidableEq, Repr
 
 /-! ### Three-valued evaluation -/
@@ -179,6 +196,8 @@ def CheckExpr.eval (r : Row) : CheckExpr → Option Bool
   | .nullOrEquals a k v => or3 (some (r.get a).isNone) (eqText r k v)
   | .nullOrDistinct a b => or3 (some (r.get a).isNone) (neCells r a b)
   | .atMostElements c n => (r.get c).map fun v => decide (arrayCardinality v ≤ n)
+  | .nonNegative c => (r.get c).map fun v => !(v.startsWith "-")
+  | .lengthBetween c lo hi => (r.get c).map fun v => decide (lo ≤ v.length ∧ v.length ≤ hi)
 
 /-- A check holds on a row unless its expression is `FALSE` (a `NULL` check passes). -/
 def CheckExpr.holds (e : CheckExpr) (r : Row) : Bool := e.eval r != some false
@@ -214,8 +233,11 @@ def CheckExpr.render (table : String) : CheckExpr → String
   | .nullOrEquals a k v => quote table a ++ " is null or " ++ quote table k ++ " = '" ++ v ++ "'"
   | .nullOrDistinct a b => quote table a ++ " is null or " ++ quote table a ++ " <> " ++ quote table b
   | .atMostElements c n => "cardinality(" ++ quote table c ++ ") <= " ++ toString n
+  | .nonNegative c => quote table c ++ " >= 0"
+  | .lengthBetween c lo hi =>
+    "length(" ++ quote table c ++ ") between " ++ toString lo ++ " and " ++ toString hi
 
-/-! ### The 36 checks -/
+/-! ### The 46 checks -/
 
 /-- Every non-closed-set check of the identity tables, with its meaning, table by table in
 `tables` order and, within a table, in the order `catalogue` lists them. -/
@@ -233,6 +255,7 @@ def checks : List (TableName × String × CheckExpr) :=
    (.workspaces, "workspaces_name_not_blank", .notBlank "name"),
    (.workspaces, "workspaces_default_model_pair",
      .nullIff "default_model_connection_id" "default_model"),
+   (.workspaces, "workspaces_demo_expires_after_created", .nullOr "demo_expires_at" .gt "created_at"),
    (.users, "users_email_lowercase", .lowercase "email"),
    (.users, "users_email_shape", .matches "email" .email),
    (.users, "users_name_not_blank", .notBlank "name"),
@@ -258,6 +281,14 @@ def checks : List (TableName × String × CheckExpr) :=
    (.invitations, "invitations_accepted_after_created", .nullOr "accepted_at" .ge "created_at"),
    (.invitations, "invitations_revoked_after_created", .nullOr "revoked_at" .ge "created_at"),
    (.invitations, "invitations_not_accepted_and_revoked", .eitherNull "accepted_at" "revoked_at"),
+   (.loginTokens, "login_tokens_token_hash_shape", .matches "token_hash" .sha256Hex),
+   (.loginTokens, "login_tokens_email_hash_shape", .matches "email_hash" .sha256Hex),
+   (.loginTokens, "login_tokens_expires_after_created", .cmp "expires_at" .gt "created_at"),
+   (.loginTokens, "login_tokens_used_after_created", .nullOr "used_at" .ge "created_at"),
+   (.demoRunAdmissions, "demo_run_admissions_client_key_shape", .lengthBetween "client_key" 1 256),
+   (.demoDailyCosts, "demo_daily_costs_cost_not_negative", .nonNegative "cost_usd"),
+   (.storeLeads, "store_leads_email_lower_case", .lowercase "email"),
+   (.storeLeads, "store_leads_last_contact_after_created", .cmp "last_contact_at" .ge "created_at"),
    (.browserTokens, "browser_tokens_scope_xor",
      .xor "scope_kind" "run" "run_id" "session" "session_id"),
    (.browserTokens, "browser_tokens_expiry_after_created", .cmp "expires_at" .gt "created_at"),
@@ -271,6 +302,8 @@ def checks : List (TableName × String × CheckExpr) :=
    (.endpointClients, "endpoint_clients_tool_names_mcp_only",
      .nullOrEquals "tool_names" "kind" "mcp-project"),
    (.endpointClients, "endpoint_clients_redirect_uris_max", .atMostElements "redirect_uris" 10),
+   (.endpointClients, "endpoint_clients_oidc_audience_app_backend",
+     .valueIffPresent "kind" ["app-backend"] ["oidc_audience"]),
    (.endpointClients, "endpoint_clients_revoked_after_created",
      .nullOr "revoked_at" .ge "created_at"),
    (.oauthTokens, "oauth_tokens_code_fields",
@@ -281,7 +314,7 @@ def checks : List (TableName × String × CheckExpr) :=
 def checksOf (t : TableName) : List (String × CheckExpr) :=
   (checks.filter (·.1 == t)).map (·.2)
 
-/-- The meaning of a named check, if it is one of the 36. -/
+/-- The meaning of a named check, if it is one of the 46. -/
 def semantics? (n : String) : Option CheckExpr := (checks.find? (·.2.1 == n)).map (·.2.2)
 
 /-- The names of the checks `catalogue` records without a semantics, for one table. -/
@@ -292,7 +325,7 @@ def otherCheckNames (t : TableName) : List String :=
 
 /-! ## Sample rows: what each check accepts and refuses
 
-For every one of the 36 checks, rows it accepts and rows it refuses, chosen at the boundaries the
+For every one of the 46 checks, rows it accepts and rows it refuses, chosen at the boundaries the
 check draws (a `NULL`, an equal timestamp, a 63- and a 64-character slug, a tab-only name, a
 second `@`, a ten- and an eleven-element array). The T0 theorems `<check>_separates_its_samples` pin each verdict, and the vectors carry
 them. Each row holds only the columns its check reads. -/
@@ -387,6 +420,41 @@ def samples : List (String × List Row × List Row) :=
    ("invitations_not_accepted_and_revoked",
      [row [], row [("accepted_at", "11")], row [("revoked_at", "11")]],
      [row [("accepted_at", "11"), ("revoked_at", "12")]]),
+   ("login_tokens_token_hash_shape",
+     [row [("token_hash", rep 64 'a')], row [("token_hash", rep 64 '0')],
+      row [("token_hash", rep 32 'a' ++ rep 32 '9')]],
+     [row [("token_hash", rep 63 'a')], row [("token_hash", rep 65 'a')],
+      row [("token_hash", rep 64 'A')], row [("token_hash", rep 64 'g')],
+      row [("token_hash", "")]]),
+   ("login_tokens_email_hash_shape",
+     [row [("email_hash", rep 64 'f')], row [("email_hash", rep 64 '0')]],
+     [row [("email_hash", rep 63 'f')], row [("email_hash", rep 64 'F')],
+      row [("email_hash", rep 64 'z')]]),
+   ("login_tokens_expires_after_created",
+     [row [("created_at", "10"), ("expires_at", "11")]],
+     [row [("created_at", "10"), ("expires_at", "10")],
+      row [("created_at", "10"), ("expires_at", "9")]]),
+   ("login_tokens_used_after_created",
+     [row [("created_at", "10")], row [("created_at", "10"), ("used_at", "10")],
+      row [("created_at", "10"), ("used_at", "11")]],
+     [row [("created_at", "10"), ("used_at", "9")]]),
+   ("workspaces_demo_expires_after_created",
+     [row [("created_at", "10")], row [("created_at", "10"), ("demo_expires_at", "11")]],
+     [row [("created_at", "10"), ("demo_expires_at", "10")],
+      row [("created_at", "10"), ("demo_expires_at", "9")]]),
+   ("demo_run_admissions_client_key_shape",
+     [row [("client_key", "a")], row [("client_key", rep 256 'k')]],
+     [row [("client_key", "")], row [("client_key", rep 257 'k')]]),
+   ("demo_daily_costs_cost_not_negative",
+     [row [("cost_usd", "0")], row [("cost_usd", "0.000001")], row [("cost_usd", "12.5")]],
+     [row [("cost_usd", "-0.000001")], row [("cost_usd", "-1")]]),
+   ("store_leads_email_lower_case",
+     [row [("email", "ada@example.com")], row [("email", "a1+x@example.com")]],
+     [row [("email", "Ada@example.com")], row [("email", "ADA@EXAMPLE.COM")]]),
+   ("store_leads_last_contact_after_created",
+     [row [("created_at", "10"), ("last_contact_at", "10")],
+      row [("created_at", "10"), ("last_contact_at", "11")]],
+     [row [("created_at", "10"), ("last_contact_at", "9")]]),
    ("browser_tokens_scope_xor",
      [row [("scope_kind", "run"), ("run_id", "r1")],
       row [("scope_kind", "session"), ("session_id", "s1")]],
@@ -431,6 +499,10 @@ def samples : List (String × List Row × List Row) :=
      [row [("redirect_uris", "{}")], row [("redirect_uris", "{https://a.example/cb}")],
       row [("redirect_uris", "{a,b,c,d,e,f,g,h,i,j}")]],
      [row [("redirect_uris", "{a,b,c,d,e,f,g,h,i,j,k}")]]),
+   ("endpoint_clients_oidc_audience_app_backend",
+     [row [("kind", "app-backend"), ("oidc_audience", "portal-web")], row [("kind", "mcp-project")],
+      row [("kind", "builder")]],
+     [row [("kind", "app-backend")], row [("kind", "a2a-agent"), ("oidc_audience", "portal-web")]]),
    ("endpoint_clients_revoked_after_created",
      [row [("created_at", "10")], row [("created_at", "10"), ("revoked_at", "10")]],
      [row [("created_at", "10"), ("revoked_at", "9")]]),
@@ -484,7 +556,7 @@ def tableChecksHold (st : State) (t : TableName) : Bool :=
   (st t).all fun r => rowTyped t r && (checksOf t).all fun (_, e) => e.holds r
 
 /-- Today's identity cluster is consistent: every constraint of `catalogue` holds
-(`Er.Core.consistent`), and on the fourteen identity tables every refined check holds and every
+(`Er.Core.consistent`), and on the eighteen identity tables every refined check holds and every
 cell is well typed. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
@@ -531,7 +603,7 @@ structure Relationship where
   fk : ForeignKey
   deriving Repr
 
-/-- Every foreign key the fourteen identity tables declare. -/
+/-- Every foreign key the eighteen identity tables declare. -/
 @[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def relationships : List Relationship :=
   tables.flatMap fun t => (catalogue t).foreignKeys.map fun fk => ⟨t, fk⟩

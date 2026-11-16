@@ -54,6 +54,10 @@ import type {
 } from '@indx-workspace/contracts/runs';
 import { badgeForRunStatus, RUN_STATUS_NAMES } from '@indx-workspace/react/run-model';
 import type { RequestProblem } from '../agents/model';
+import { runsStrings, type RunFigureWords } from './runs-messages';
+
+/** The words a run's figures are built from when a caller passes none: English, as before. */
+const EN_FIGURES: RunFigureWords = runsStrings('en');
 
 export type { RequestProblem };
 
@@ -119,6 +123,8 @@ export interface RunListItem {
   readonly engineVersion: string | null;
   readonly usage: RunUsage;
   readonly cost: RunCost;
+  /** The run's spend ceiling in USD (ADR-0162), a six-place decimal; `null` when it has none. */
+  readonly spendCeilingUsd: string | null;
   readonly error: string | null;
   /** The run's final answer (ADR-0143); `null` until it completes, and for a run that did not. */
   readonly output: { readonly text: string; readonly structured: unknown } | null;
@@ -127,6 +133,8 @@ export interface RunListItem {
   /** Checked against {@link ACCOUNTING_STATE_NAMES} at the response boundary. */
   readonly accountingState: string;
   readonly accountingError: string | null;
+  /** The lead run a team member call started this one from (ADR-0104); `null` for a root run. */
+  readonly parentRunId: string | null;
 }
 
 /** {@link parseRunResource} refuses a value by throwing this, naming what it expected. */
@@ -162,11 +170,13 @@ export const RUN_KEYS = [
   'engineVersion',
   'usage',
   'cost',
+  'spendCeilingUsd',
   'error',
   'output',
   'pendingApproval',
   'accountingState',
   'accountingError',
+  'parentRunId',
 ] as const satisfies readonly (keyof RunResource)[];
 export const USAGE_KEYS = [
   'inputTokens',
@@ -410,11 +420,16 @@ export function parseRunResource(value: unknown, where = 'run'): RunListItem {
       currency,
       priceTableVersion,
     },
+    spendCeilingUsd:
+      record['spendCeilingUsd'] === null
+        ? null
+        : requireUsdAmount(record, 'spendCeilingUsd', where),
     error: requireNullableString(record, 'error', where),
     output: parseOutput(record['output'], `${where}.output`),
     pendingApproval: parsePendingApproval(record['pendingApproval'], `${where}.pendingApproval`),
     accountingState,
     accountingError,
+    parentRunId: requireNullableUuid(record, 'parentRunId', where),
   };
 }
 
@@ -614,14 +629,12 @@ export function formatSettledAmount(amount: string, currency: string): string {
 }
 
 /** One shared wording path for both the list and detail surfaces. */
-export function formatCostDisplay(run: RunListItem): string {
+export function formatCostDisplay(run: RunListItem, words: RunFigureWords = EN_FIGURES): string {
   const display = describeCost(run);
-  if (display.kind === 'pending') return 'Pending';
-  if (display.kind === 'unavailable') return 'Unavailable';
-  if (display.kind === 'failed') {
-    return `Accounting failed${display.reason === null ? '' : ` — ${display.reason}`}`;
-  }
-  return `${formatSettledAmount(display.amount, display.currency)} · Actual${display.partial ? ' · Partial' : ''}`;
+  if (display.kind === 'pending') return words.pending;
+  if (display.kind === 'unavailable') return words.unavailable;
+  if (display.kind === 'failed') return words.accountingFailed(display.reason);
+  return `${formatSettledAmount(display.amount, display.currency)} · ${words.actual}${display.partial ? ` · ${words.partial}` : ''}`;
 }
 
 /**
@@ -629,22 +642,32 @@ export function formatCostDisplay(run: RunListItem): string {
  * or has not ended), and {@link RunListItem.status} says which. Anything else is formatted from
  * the millisecond count the server derived from real timestamps (`renderRun`'s `durationMs`).
  */
-export function formatDuration(durationMs: number | null, status: string): string {
+export function formatDuration(
+  durationMs: number | null,
+  status: string,
+  words: RunFigureWords = EN_FIGURES,
+): string {
   if (durationMs === null) {
-    if (status === 'queued') return 'Not started';
-    if (status === 'running') return 'In progress';
-    return 'Unknown duration';
+    if (status === 'queued') return words.notStarted;
+    if (status === 'running') return words.inProgress;
+    return words.unknownDuration;
   }
-  if (durationMs < 1000) return `${String(durationMs)} ms`;
+  if (durationMs < 1000) return words.milliseconds(String(durationMs));
   const totalSeconds = Math.floor(durationMs / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   if (hours > 0) {
-    return `${String(hours)} h ${String(minutes).padStart(2, '0')} m ${String(seconds).padStart(2, '0')} s`;
+    return words.hoursMinutesSeconds(
+      String(hours),
+      String(minutes).padStart(2, '0'),
+      String(seconds).padStart(2, '0'),
+    );
   }
-  if (minutes > 0) return `${String(minutes)} m ${String(seconds).padStart(2, '0')} s`;
-  return `${String(seconds)} s`;
+  if (minutes > 0) {
+    return words.minutesSeconds(String(minutes), String(seconds).padStart(2, '0'));
+  }
+  return words.seconds(String(seconds));
 }
 
 /** A timestamp in words, or a named absence — never a blank cell. */
@@ -668,9 +691,13 @@ export function timestampAccessibilityLabel(iso: string): string {
 }
 
 /** Provider and model together, or a named absence for a run that has not resolved either yet. */
-export function formatProviderModel(provider: string | null, model: string | null): string {
-  if (provider === null && model === null) return 'Not yet resolved';
-  if (provider === null) return model ?? 'Not yet resolved';
+export function formatProviderModel(
+  provider: string | null,
+  model: string | null,
+  words: RunFigureWords = EN_FIGURES,
+): string {
+  if (provider === null && model === null) return words.notYetResolved;
+  if (provider === null) return model ?? words.notYetResolved;
   if (model === null) return provider;
   return `${provider} · ${model}`;
 }

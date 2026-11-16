@@ -161,6 +161,9 @@ export type CreateTriggerRequest = z.infer<typeof CreateTriggerRequestSchema>;
  * The body of `PATCH /api/triggers/:id`. `zoomSecretToken` is write-only; `null` clears it, and the
  * server refuses it on a `schedule` trigger. `outputSchema` replaces the trigger's schema; `null`
  * clears it (ADR-0154). `subject` replaces the caller its runs act for; `null` clears it (ADR-0156).
+ * `cron` and `timezone` re-time a `schedule` trigger, checked as on create; a `webhook` trigger
+ * refuses them with `400 invalid_field`. A change restarts the schedule's counting, so it owes no
+ * run for windows before it (ADR-0144 D5).
  */
 export const UpdateTriggerRequestSchema = z
   .object({
@@ -170,10 +173,13 @@ export const UpdateTriggerRequestSchema = z
     zoomSecretToken: ZoomSecretTokenSchema.nullable().optional(),
     outputSchema: TriggerOutputSchemaSchema.nullable().optional(),
     subject: TriggerSubjectSchema.nullable().optional(),
+    cron: z.string().min(1).max(256).optional(),
+    timezone: z.string().min(1).max(64).optional(),
   })
   .strict()
   .refine((patch) => Object.values(patch).some((value) => value !== undefined), {
-    message: 'send name, prompt, enabled, zoomSecretToken, outputSchema, subject or any of them',
+    message:
+      'send name, prompt, enabled, zoomSecretToken, outputSchema, subject, cron, timezone or any of them',
   })
   .readonly();
 

@@ -19,7 +19,7 @@ function toolCall(toolCallId: string, name: string, input: unknown): AgentEvent 
   };
 }
 
-function toolResult(toolCallId: string, output: unknown): AgentEvent {
+function toolResult(toolCallId: string, output: unknown, isError = false): AgentEvent {
   return {
     frame: 'agent.tool.result',
     engine: ENGINE,
@@ -27,7 +27,7 @@ function toolResult(toolCallId: string, output: unknown): AgentEvent {
     toolCallId,
     status: 'completed',
     output: typeof output === 'string' ? output : JSON.stringify(output),
-    isError: false,
+    isError,
   };
 }
 
@@ -66,6 +66,7 @@ describe('draftsFrom', () => {
       result: {
         ok: false,
         code: 'agent_definition_references_missing',
+        message: 'missing',
         details: ['connector:erp'],
       },
       saved: null,
@@ -115,12 +116,76 @@ describe('draftsFrom', () => {
     );
   });
 
+  it('has no result for a save the run paused on, whatever the engine answered it with (UX-11)', () => {
+    // The engine answers the paused call with its own stop text; the save runs only after Approve.
+    const stopped =
+      "The user doesn't want to proceed with this tool use. The tool use was rejected.";
+    const events: AgentEvent[] = [
+      toolCall('1', 'draft_check', { body: A }),
+      toolResult('1', { ok: true }),
+      toolCall('2', 'mcp__aw-control__draft_save', { body: B }),
+      toolResult('2', stopped, true),
+      {
+        frame: 'agent.approval.requested',
+        engine: ENGINE,
+        raw: null,
+        toolCallId: '2',
+        toolName: 'mcp__aw-control__draft_save',
+        canonicalCall: JSON.stringify({ input: { body: B } }),
+      },
+    ];
+    expect(draftsFrom(events).at(-1)).toEqual({
+      source: 'save',
+      body: B,
+      result: null,
+      saved: null,
+    });
+    // After Approve the model calls the tool again under a new id, and that answer is the save's.
+    const saved = {
+      ok: true,
+      agentId: '0b7f4f0e-6a38-4d6c-9d0e-0c7a1f5a8c11',
+      version: 1,
+      pointer: 'local',
+      awCommand: 'aw agents push',
+    };
+    expect(
+      draftsFrom([
+        ...events,
+        toolCall('4', 'mcp__aw-control__draft_save', { body: B }),
+        toolResult('4', saved),
+      ]).at(-1),
+    ).toEqual({
+      source: 'save',
+      body: B,
+      result: { ok: true },
+      saved: { agentId: saved.agentId, version: 1 },
+    });
+    // Only the paused call: another call's unreadable answer still reads as unreadable.
+    expect(
+      draftsFrom([
+        ...events,
+        toolCall('3', 'draft_check', { body: C }),
+        toolResult('3', stopped),
+      ]).at(-1)?.result,
+    ).toEqual({
+      ok: false,
+      code: 'unreadable_result',
+      message: "This page could not read the tool's answer.",
+      details: [],
+    });
+  });
+
   it('never reads an unreadable result as ok', () => {
     const [draft] = draftsFrom([
       toolCall('1', 'draft_check', { body: A }),
       toolResult('1', 'not json'),
     ]);
-    expect(draft?.result).toEqual({ ok: false, code: 'unreadable_result', details: [] });
+    expect(draft?.result).toEqual({
+      ok: false,
+      code: 'unreadable_result',
+      message: "This page could not read the tool's answer.",
+      details: [],
+    });
   });
 });
 

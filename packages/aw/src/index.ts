@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { chooseFromMenu, MenuCancelledError, type MenuSpec } from '@indx-workspace/sdk/project';
 
 import {
+  discardTypedAhead,
   InterruptedError,
   isInteractive,
   promptLine,
@@ -35,19 +36,12 @@ export { main } from './main.js';
 /** How long the terminal is read for what was typed ahead; it is already buffered, so this is short. */
 const DISCARD_WINDOW_MS = 30;
 
-/** Reads and drops what is waiting on the terminal, in raw mode so a half-typed line counts too. */
-async function discardInput(): Promise<void> {
-  const { stdin } = process;
-  if (!stdin.isTTY) return;
-  const drop = (): void => undefined;
-  stdin.setRawMode(true);
-  stdin.on('data', drop);
-  stdin.resume();
-  await new Promise((resolve) => setTimeout(resolve, DISCARD_WINDOW_MS));
-  stdin.off('data', drop);
-  stdin.pause();
-  stdin.setRawMode(false);
-}
+const discardInput = (): Promise<void> =>
+  discardTypedAhead(
+    process.stdin,
+    DISCARD_WINDOW_MS,
+    (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  );
 
 /** A setup menu on the terminal; Ctrl-C is the same interrupt as at any other prompt. */
 async function choose(spec: MenuSpec, signal: AbortSignal): Promise<readonly string[]> {

@@ -153,7 +153,7 @@ def wireFields : List String := ["id", "path", "kind", "sizeBytes", "contentType
 
 /-- `pathUnderPrefix`: `path = prefix` or `path` starts with `prefix` followed by an actual `/`,
 never merely the same leading characters. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/resource-catalogs.ts#pathUnderPrefix")]
+@[aw_spec (ts := "packages/core/src/db/repositories/resource-catalogs-sql.ts#pathUnderPrefix")]
 def underPrefix (pre path : String) : Bool :=
   path == pre || (pre.toList ++ ['/']).isPrefixOf path.toList
 

@@ -7,6 +7,7 @@
  * ponytail: per-process counters, so each replica admits its own limit and a restart resets them;
  * move them to PostgreSQL when the control plane runs more than one replica.
  */
+import { installedClientIdentity, type ClientIdentitySettings } from '../client-identity';
 import { admitClient, clientBucket, perMinuteLimiter, type Admission } from '../http/rate-limit';
 
 export const OAUTH_RATE_LIMITS = {
@@ -21,15 +22,13 @@ const byAddress = perMinuteLimiter(OAUTH_RATE_LIMITS.perAddressPerMinute);
 const bySession = perMinuteLimiter(OAUTH_RATE_LIMITS.authorizePerSessionPerMinute);
 const byFailure = perMinuteLimiter(OAUTH_RATE_LIMITS.failedAuthPerAddressPerMinute);
 
-type Env = Readonly<Record<string, string | undefined>>;
-
 /** Whether the source address may attempt client authentication; counts nothing. */
 export function admitOAuthAuthAttempt(
   headers: Headers,
   nowMs: number,
-  env: Env = process.env,
+  identity: ClientIdentitySettings = installedClientIdentity(),
 ): Admission {
-  const bucket = clientBucket(OAUTH_RATE_LIMITS.failedAuthPerAddressPerMinute, headers, env);
+  const bucket = clientBucket(OAUTH_RATE_LIMITS.failedAuthPerAddressPerMinute, headers, identity);
   return byFailure.peek(bucket.key, nowMs, bucket.limit);
 }
 
@@ -37,16 +36,17 @@ export function admitOAuthAuthAttempt(
 export function recordOAuthAuthFailure(
   headers: Headers,
   nowMs: number,
-  env: Env = process.env,
+  identity: ClientIdentitySettings = installedClientIdentity(),
 ): void {
-  admitClient(byFailure, OAUTH_RATE_LIMITS.failedAuthPerAddressPerMinute, headers, nowMs, env);
+  admitClient(byFailure, OAUTH_RATE_LIMITS.failedAuthPerAddressPerMinute, headers, nowMs, identity);
 }
 
 export const admitOAuthAddress = (
   headers: Headers,
   nowMs: number,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): Admission => admitClient(byAddress, OAUTH_RATE_LIMITS.perAddressPerMinute, headers, nowMs, env);
+  identity: ClientIdentitySettings = installedClientIdentity(),
+): Admission =>
+  admitClient(byAddress, OAUTH_RATE_LIMITS.perAddressPerMinute, headers, nowMs, identity);
 
 export const admitOAuthClient = (clientId: string, nowMs: number): Admission =>
   byClient.admit(clientId, nowMs);

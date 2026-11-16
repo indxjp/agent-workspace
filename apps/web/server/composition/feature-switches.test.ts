@@ -50,6 +50,14 @@ describe('workspaceFeatureSwitches (ADR-0160 D6)', () => {
     ]);
     expect(await switches.enabledFor('ws-1')).toEqual(['chat']);
   });
+
+  it('carries the deployment set, so a switched-off page can say the feature is not installed', () => {
+    const switches = workspaceFeatureSwitches(
+      { scopes, workspaceFeatures: switchedOff({}) },
+      deployment,
+    );
+    expect(switches.deployment).toEqual(deployment);
+  });
 });
 
 describe('workspaceFeaturesRuntime (ADR-0160 D6–D8)', () => {

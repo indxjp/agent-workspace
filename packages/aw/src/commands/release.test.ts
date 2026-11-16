@@ -135,7 +135,7 @@ describe('aw promote', () => {
 
       // Loading the project refuses it first, with the command that makes an agent.
       expect(run.code).toBe(EXIT_CODE.problem);
-      expect(run.stderr).toContain('no agents/*.ts in this directory');
+      expect(run.stderr).toContain('no agents/*.ts or agents/*.agent.md in this directory');
       expect(run.stderr).toContain('aw init --yes');
       expect(run.calls).toEqual([]);
     } finally {

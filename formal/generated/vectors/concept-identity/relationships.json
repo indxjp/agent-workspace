@@ -161,6 +161,19 @@
     "class": "global-reference",
     "child": "many"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptIdentity.demo_run_admissions_user_id_users_id_fk_parent_is_unique",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.demo_run_admissions_user_id_users_id_fk_is_required"],
+   "input": {"table": "demo_run_admissions", "foreignKey": "demo_run_admissions_user_id_users_id_fk"},
+   "id": "relationship/demo_run_admissions_user_id_users_id_fk",
+   "expected":
+   {"refTable": "users",
+    "refColumns": ["id"],
+    "parent": "exactly-one",
+    "onDelete": "cascade",
+    "columns": ["user_id"],
+    "class": "global-reference",
+    "child": "many"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Invariants.ConceptIdentity.browser_tokens_workspace_id_workspaces_id_fk_parent_is_unique",
     "AgentWorkspace.Theorems.Invariants.ConceptIdentity.browser_tokens_workspace_id_workspaces_id_fk_keeps_one_workspace",
     "AgentWorkspace.Theorems.Invariants.ConceptIdentity.browser_tokens_workspace_id_workspaces_id_fk_is_required"],

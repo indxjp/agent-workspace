@@ -9,7 +9,7 @@ import { POST as createRoute, GET as listRoute } from '../../app/api/secrets/rou
 import { DELETE as deleteRoute, PUT as replaceRoute } from '../../app/api/secrets/[id]/route';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { parseRole, type Role } from '../rbac/roles';
+import { parseRole, type Role } from '../rbac/core/roles';
 import type { SecretResource } from './contract';
 import { createInMemorySecretsStoreProvider } from './memory-store';
 import type { SecretReferrers } from './store';

@@ -88,9 +88,9 @@ product — OpenAPI, webhooks, idempotency, version negotiation — with the Typ
 first client, not its only one.
 
 **Today:** switching a model or a runtime already works, and so do embedding by browser token,
-promoting an agent with `agents.export`/`import`, and generating a client in any language from
-the [OpenAPI document](/building/http-api#generate-a-client-in-another-language); unattended
-webhooks do not yet. See [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes).
+promoting an agent with `agents.export`/`import`, generating a client in any language from the
+[OpenAPI document](/building/http-api#generate-a-client-in-another-language), and being told a
+run ended by a signed [webhook](/resources/webhooks) instead of polling.
 
 ## The eight principles
 
@@ -235,7 +235,7 @@ agent in your product](/building/embedding).
 | 4. Durable, owned, addressable, portable  | a file has no metadata-only read; agents already move by name with `agents.export`/`import`                                            | [S-11](/concepts/roadmap#s-11-file-metadata)                                                                                                                |
 | 5. Reach: catalog → assignment → grant    | catalog, assignment and Viewer grants are SDK-addressable; sharing stops at the workspace boundary                                                               | [N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces)                                                                                                                                     |
 | 6. Credentials cross the boundary once    | already write-only everywhere; the key that protects them sits in an environment variable, not the cloud's key service                                           | [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud)                                                                                                                                               |
-| 7. The API is the product                 | no webhooks; an OpenAPI 3.1 document is generated from the contracts; a browser credential exists (browser tokens)                                               | [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)                                                                                                                                                    |
+| 7. The API is the product                 | signed run-outcome webhooks; an OpenAPI 3.1 document is generated from the contracts; a browser credential exists (browser tokens)                               | —                                                                                                                                                                                                         |
 | 8. Time to deploy is the metric           | an agent moves between environments as one `AgentDefinition` file (`aw agents export`/`import`)                                                                  | —                                                                                                                                                                                                         |
 
 <CardGroup cols={2}>

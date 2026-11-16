@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DirectoryRoot } from '../rbac/directory';
 import { createMemoryDirectory } from '../rbac/memory-directory';
-import { ROLES, type Role } from '../rbac/roles';
+import { ROLES, type Role } from '../rbac/core/roles';
 import { resolveTeamViewer, type TeamViewerDirectory } from './team-viewer';
 
 const WORKSPACE = { id: 'ws-team-viewer', slug: 'acme', name: 'Acme' };

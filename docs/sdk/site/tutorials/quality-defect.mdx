@@ -175,7 +175,7 @@ if (!caller.ok) {
 const { processes } = access[caller.payload.sub];
 ```
 
-On your workspace, create the signing secret with `aw secrets set QMS_IDENTITY_SECRET` and start
+On your workspace, create the signing secret with `aw secrets create --name QMS_IDENTITY_SECRET --value-stdin` and start
 `aw dev` with the API token (see Run it). The project has no MCP connector and ships no MCP server.
 
 **Check:** `searchDefects`, `getDefect` and `causeStats` run against the thirty fixtures through the tool gateway, `causeStats` returns the `4M集計:` line to copy, and a person who may see only プレス gets no case of another 工程.
@@ -272,7 +272,7 @@ policy:
 The test checks the ceiling with the contract's own `policyWidenings`. If someone later adds web
 search "to compare with industry cases", the push is refused on three counts:
 
-```ts title="quality-defect.test.ts (excerpt)" file="tests/gallery/quality-defect/quality-defect.test.ts#excerpt"
+```ts title="quality-defect.definition.test-support.ts (excerpt)" file="tests/gallery/quality-defect/quality-defect.definition.test-support.ts#excerpt"
 const widened = defineAgent({
   ...agent,
   permissions: { ...agent.permissions, unrestrictedNetwork: true },
@@ -442,7 +442,7 @@ not by the eval, because they depend on the query the model chose.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    aw secrets set QMS_IDENTITY_SECRET           # the platform signs the caller with it
+    printf '%s' "$QMS_IDENTITY_SECRET" | aw secrets create --name QMS_IDENTITY_SECRET --value-stdin  # the platform signs the caller with it
     QMS_TOKEN=… aw dev     # keeps the QMS tool and the eight-d skill in step
     aw files upload fmea/press-pfmea.xlsx
     aw push --yes
