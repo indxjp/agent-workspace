@@ -50,6 +50,7 @@ import {
   useProjectCatalogs,
 } from './project-form';
 import { createProject, loadAgentOptions, loadProjects } from './project-requests-model';
+import { ProblemLine } from '../agents/problem-line';
 import type { VersionsLocale } from '../agents/versions-messages';
 import { projectsStrings, type ProjectsStrings } from './projects-messages';
 
@@ -175,7 +176,7 @@ export function ProjectsScreen({
 
       {creating ? (
         <ProjectCreateForm
-          strings={strings}
+          locale={locale}
           onCancel={() => setCreating(false)}
           onCreated={() => {
             setCreating(false);
@@ -207,10 +208,11 @@ export function ProjectsScreen({
 }
 
 function ProjectCreateForm({
-  strings,
+  locale,
   onCancel,
   onCreated,
-}: Readonly<{ strings: ProjectsStrings; onCancel: () => void; onCreated: () => void }>) {
+}: Readonly<{ locale: VersionsLocale; onCancel: () => void; onCreated: () => void }>) {
+  const strings = projectsStrings(locale);
   const catalogsState = useProjectCatalogs();
   const [draft, setDraft] = useState<ProjectDraft>(EMPTY_DRAFT);
   const [submitting, setSubmitting] = useState(false);
@@ -234,7 +236,12 @@ function ProjectCreateForm({
     <form className="mb-5" onSubmit={onSubmit} aria-label={strings.newProject}>
       {catalogsState.kind === 'failed' ? (
         <p className="mb-4 text-[13px] text-danger" role="alert">
-          {catalogsState.reason}
+          <ProblemLine
+            locale={locale}
+            english={catalogsState.reason}
+            lead={strings.form.optionsFailed}
+            detail={catalogsState.detail}
+          />
         </p>
       ) : null}
       <ProjectFields
@@ -246,6 +253,7 @@ function ProjectCreateForm({
         }
         onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
         idPrefix="project-new"
+        locale={locale}
       />
       <ProjectProblem problem={problem} />
       <div className="mt-4 flex items-center justify-end gap-2">
@@ -254,7 +262,7 @@ function ProjectCreateForm({
           className={`${BTN} ${BTN_DEFAULT}`}
           onClick={() => {
             const dirty = draft.name !== '' || draft.instructions !== '';
-            if (confirmDiscard(dirty)) onCancel();
+            if (confirmDiscard(dirty, strings)) onCancel();
           }}
         >
           {strings.cancel}

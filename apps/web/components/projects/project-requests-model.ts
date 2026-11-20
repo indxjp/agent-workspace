@@ -88,6 +88,8 @@ export function saveProject(
 export async function transitionProject(
   client: AgentWorkspaceClient,
   project: ProjectResource,
+  /** The 404 wording in the reader's language; English when absent. */
+  noLongerAvailable?: string,
 ): Promise<RequestOutcome<ProjectResource>> {
   const action = isProjectArchived(project) ? 'restore' : 'archive';
   const result = await outcome(
@@ -96,7 +98,9 @@ export async function transitionProject(
       : client.projects.archive(project.id),
     `The request to ${action} this project failed`,
   );
-  return result.ok ? result : { ok: false, problem: describeLifecycleFailure(result.problem) };
+  return result.ok
+    ? result
+    : { ok: false, problem: describeLifecycleFailure(result.problem, noLongerAvailable) };
 }
 
 /**

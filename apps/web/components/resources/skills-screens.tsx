@@ -23,7 +23,7 @@ import {
 import { BUTTON, CARD, INPUT } from './resource-styles';
 import { updateSkillSource } from './skill-source';
 import type { VersionsLocale } from '../agents/versions-messages';
-import { skillsStrings, type SkillsStrings } from './skills-messages';
+import { skillsStrings, type SkillDetailStrings, type SkillsStrings } from './skills-messages';
 
 export { updateSkillSource };
 
@@ -136,8 +136,8 @@ export function SkillsScreen({ locale = 'en' }: { readonly locale?: VersionsLoca
 }
 
 /** Each object in `items`, formatted and comma-joined; `none` when `items` is not a list. */
-function listField(items: unknown, format: (item: Row) => string): string {
-  if (!Array.isArray(items)) return 'none';
+function listField(items: unknown, format: (item: Row) => string, none: string): string {
+  if (!Array.isArray(items)) return none;
   const objects = items.filter((item): item is Row => typeof item === 'object' && item !== null);
   return objects.map(format).filter(Boolean).join(', ');
 }
@@ -148,24 +148,36 @@ function nonEmptyList(items: unknown): unknown {
 }
 
 /** The read-only part of a skill's detail: its supporting files and its published revisions. */
-function SkillFilesAndRevisions({ detail }: { detail: Row }) {
+function SkillFilesAndRevisions({ detail, words }: { detail: Row; words: SkillDetailStrings }) {
   return (
     <>
       <div className="text-xs text-muted">
-        Supporting files: {listField(detail['files'], (file) => display(file['path']))}
+        {words.supportingFiles}{' '}
+        {listField(detail['files'], (file) => display(file['path']), words.none)}
       </div>
       <div className="text-xs text-muted">
-        Published revisions (newest first; publish with <code>aw skills publish</code>):{' '}
+        {words.revisionsBefore}
+        <code>aw skills publish</code>
+        {words.revisionsAfter}{' '}
         {listField(
           nonEmptyList(detail['revisions']),
           (revision) => `#${display(revision['number'])}`,
+          words.none,
         )}
       </div>
     </>
   );
 }
 
-export function SkillDetailScreen({ name }: { name: string }) {
+export function SkillDetailScreen({
+  name,
+  locale = 'en',
+}: {
+  readonly name: string;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  readonly locale?: VersionsLocale;
+}) {
+  const words = skillsStrings(locale).detail;
   const state = useJson(useCallback((client: ResourcesClient) => loadSkill(client, name), [name]));
   const skill = state.value?.['skill'];
   const detail = typeof skill === 'object' && skill !== null ? (skill as Row) : null;
@@ -179,24 +191,24 @@ export function SkillDetailScreen({ name }: { name: string }) {
     await state.reload();
   };
   return (
-    <>
+    <div lang={locale}>
       {title(
         name,
-        'Skill manifest and installed files.',
+        words.intro,
         <Link className={BUTTON} href="/skills">
-          Back
+          {words.back}
         </Link>,
       )}
       <Status problem={state.problem} />
       {state.loading ? (
         <p className="text-sm text-muted" role="status">
-          Loading skill…
+          {words.loading}
         </p>
       ) : null}
       {detail === null ? null : (
         <form className={`${CARD} grid gap-3`} onSubmit={submitHandler(save, state.setProblem)}>
           <label className="grid gap-1 text-sm">
-            Description
+            {words.description}
             <input
               className={INPUT}
               defaultValue={display(detail['description'])}
@@ -204,7 +216,7 @@ export function SkillDetailScreen({ name }: { name: string }) {
             />
           </label>
           <label className="grid gap-1 text-sm">
-            Instructions
+            {words.instructions}
             <textarea
               className={INPUT}
               defaultValue={display(detail['instructions'])}
@@ -214,14 +226,14 @@ export function SkillDetailScreen({ name }: { name: string }) {
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input defaultChecked={detail['enabled'] !== false} name="enabled" type="checkbox" />{' '}
-            Enabled
+            {words.enabled}
           </label>
-          <SkillFilesAndRevisions detail={detail} />
+          <SkillFilesAndRevisions detail={detail} words={words} />
           <button className={BUTTON} type="submit">
-            Save changes
+            {words.saveChanges}
           </button>
         </form>
       )}
-    </>
+    </div>
   );
 }

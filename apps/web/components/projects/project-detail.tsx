@@ -43,6 +43,7 @@ import {
   type ProjectResource,
   type RequestProblem,
 } from './model';
+import type { VersionsLocale } from '../agents/versions-messages';
 import { ProjectLifecycleSection } from './project-archive';
 import {
   BTN,
@@ -61,6 +62,7 @@ import {
   saveProject,
   transitionProject,
 } from './project-requests-model';
+import { projectsStrings, type ProjectsStrings } from './projects-messages';
 
 /** A caller whose capability could not be resolved may do nothing — the page's own fail-closed
  *  answer, repeated here so a test (and a future caller) can mount this screen without one. */
@@ -73,7 +75,15 @@ const NO_CAPABILITY: ProjectArchiveCapability = {
 export function ProjectDetail({
   id,
   capability = NO_CAPABILITY,
-}: Readonly<{ id: string; capability?: ProjectArchiveCapability }>) {
+  locale = 'en',
+}: Readonly<{
+  id: string;
+  capability?: ProjectArchiveCapability;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
+}>) {
+  const strings = projectsStrings(locale);
+  const words = strings.detail;
   const [project, setProject] = useState<ProjectResource | null>(null);
   const [saved, setSaved] = useState<ProjectDraft | null>(null);
   const [draft, setDraft] = useState<ProjectDraft | null>(null);
@@ -108,22 +118,26 @@ export function ProjectDetail({
       className="ml-auto text-[13px] text-accent"
       href="/projects"
       onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-        if (!confirmDiscard(dirty)) event.preventDefault();
+        if (!confirmDiscard(dirty, strings)) event.preventDefault();
       }}
     >
-      Back to projects
+      {words.backToProjects}
     </Link>
   );
 
   if (loadProblem !== null) {
     return (
-      <main className="w-full max-w-[980px] px-8 pt-[26px]" role="alert">
+      <main lang={locale} className="w-full max-w-[980px] px-8 pt-[26px]" role="alert">
         {loadProblem.kind === 'api' ? loadProblem.message : loadProblem.reason}
       </main>
     );
   }
   if (project === null || draft === null || saved === null) {
-    return <main className="px-8 pt-[26px] text-muted">Loading project…</main>;
+    return (
+      <main lang={locale} className="px-8 pt-[26px] text-muted">
+        {words.loadingProject}
+      </main>
+    );
   }
 
   const catalogs =
@@ -163,7 +177,11 @@ export function ProjectDetail({
     // The transition's own response carries the whole project; local state is replaced from what
     // the server actually stored rather than from what this screen asked for — the same discipline
     // `projectModelSaveTookEffect` applies to the PATCH below.
-    const result = await transitionProject(browserClient(), current);
+    const result = await transitionProject(
+      browserClient(),
+      current,
+      strings.lifecycle.noLongerAvailable,
+    );
     if (!result.ok) {
       setDialog({ kind: 'failed', problem: result.problem });
       return;
@@ -191,25 +209,16 @@ export function ProjectDetail({
     setProject(updated);
     setSaved(draftFromProject(updated));
     setDraft(draftFromProject(updated));
-    setSaveProblem(
-      modelSaved
-        ? null
-        : {
-            kind: 'transport',
-            reason:
-              'Every other change saved, but the default model did not match the server response. ' +
-              'It has been reverted to what is actually saved.',
-          },
-    );
+    setSaveProblem(modelSaved ? null : { kind: 'transport', reason: words.modelNotSaved });
     setSaving(false);
   }
 
   return (
-    <main className="w-full max-w-[980px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[980px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-5 flex items-center gap-3">
         <div>
           <h1 className="text-[21px]">{project.name}</h1>
-          <p className="text-[13px] text-muted">Project settings</p>
+          <p className="text-[13px] text-muted">{words.subtitle}</p>
         </div>
         <ShareDialog subject={{ type: 'project', id: project.id, label: project.name }} />
         {backLink}
@@ -220,8 +229,7 @@ export function ProjectDetail({
           role="status"
           className="mb-4 rounded-(--radius) border border-border bg-surface-2 p-3 text-[13px] text-text-2"
         >
-          Archived on {describeArchivedOn(project) ?? 'an unknown date'}. Its settings are read-only
-          and no new sessions or runs can start in it. Completed work stays in history.
+          {words.archivedOn(describeArchivedOn(project) ?? words.unknownDate)}
         </p>
       ) : null}
 
@@ -241,6 +249,7 @@ export function ProjectDetail({
               setDraft((current) => (current === null ? current : { ...current, ...patch }))
             }
             idPrefix="project-detail"
+            locale={locale}
           />
         </fieldset>
 
@@ -249,10 +258,18 @@ export function ProjectDetail({
           aria-labelledby="project-resources-heading"
         >
           <h2 id="project-resources-heading" className="mb-3 text-[15px] font-semibold">
-            Assigned resources
+            {words.assignedResources}
           </h2>
-          <ResourceList heading="Files and folders" resources={resolvedFiles} />
-          <ResourceList heading="Connectors" resources={resolvedConnectors} />
+          <ResourceList
+            heading={strings.form.filesAndFolders}
+            resources={resolvedFiles}
+            words={words}
+          />
+          <ResourceList
+            heading={strings.form.connectors}
+            resources={resolvedConnectors}
+            words={words}
+          />
         </section>
 
         <ProjectProblem problem={saveProblem} />
@@ -263,17 +280,17 @@ export function ProjectDetail({
             className={`${BTN} ${BTN_DEFAULT}`}
             disabled={!dirty}
             onClick={() => {
-              if (confirmDiscard(dirty)) setDraft(saved);
+              if (confirmDiscard(dirty, strings)) setDraft(saved);
             }}
           >
-            Cancel
+            {strings.cancel}
           </button>
           <button
             type="submit"
             disabled={!canSave}
             className={`${BTN} ${BTN_PRIMARY} ${canSave ? '' : BTN_DISABLED}`}
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? words.saving : words.saveChanges}
           </button>
         </div>
       </form>
@@ -285,6 +302,7 @@ export function ProjectDetail({
         onOpen={openDialog}
         onCancel={() => setDialog(null)}
         onConfirm={() => void applyTransition()}
+        strings={strings}
       />
     </main>
   );
@@ -293,18 +311,23 @@ export function ProjectDetail({
 function ResourceList({
   heading,
   resources,
-}: Readonly<{ heading: string; resources: readonly { id: string; label: string | null }[] }>) {
+  words,
+}: Readonly<{
+  heading: string;
+  resources: readonly { id: string; label: string | null }[];
+  words: ProjectsStrings['detail'];
+}>) {
   return (
     <div className="mb-3 last:mb-0">
       <h3 className="mb-1 text-[12.5px] font-semibold text-text-2">{heading}</h3>
       {resources.length === 0 ? (
-        <p className="text-[12.5px] text-muted">None assigned.</p>
+        <p className="text-[12.5px] text-muted">{words.noneAssigned}</p>
       ) : (
         <ul className="text-[13px]">
           {resources.map((resource) => (
             <li key={resource.id} className="py-0.5">
               {resource.label === null ? (
-                <span className="text-danger">Deleted resource ({resource.id})</span>
+                <span className="text-danger">{words.deletedResource(resource.id)}</span>
               ) : (
                 resource.label
               )}

@@ -38,7 +38,7 @@
       "edits": [
         {
           "path": "package.json",
-          "added": "{\"dependencies\":{\"@indx-workspace/app\":\"0.6.12\"}}"
+          "added": "{\"dependencies\":{\"@indx-workspace/app\":\"0.6.13\"}}"
         },
         {
           "path": "package.json",
@@ -66,11 +66,11 @@
         },
         {
           "path": "package.json",
-          "added": "{\"dependencies\":{\"@indx-workspace/contracts\":\"0.6.12\"}}"
+          "added": "{\"dependencies\":{\"@indx-workspace/contracts\":\"0.6.13\"}}"
         },
         {
           "path": "package.json",
-          "added": "{\"dependencies\":{\"@indx-workspace/react\":\"0.6.12\"}}"
+          "added": "{\"dependencies\":{\"@indx-workspace/react\":\"0.6.13\"}}"
         },
         {
           "path": "package.json",
@@ -108,7 +108,7 @@
         "agent-workspace.yaml": "5e58ec4299cd36003e2128c320ba1ddd776d2a8c4ed735efa20f05fd008c9ad5",
         "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
         "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-        "package.json": "5d5dbe8970b207409e00dd6220a7076ef436cbec0896012d3dd6c816d20858a1",
+        "package.json": "8af47f41d665fad420ce29f44acda5aa7f1c334e66440f1b2952c86dd9da716c",
         "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
         "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
         "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39"

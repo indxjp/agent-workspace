@@ -39,6 +39,7 @@ import {
   type ProjectResource,
 } from './model';
 import { BTN, BTN_DEFAULT, BTN_DISABLED, BTN_PRIMARY, ProjectProblem } from './project-form';
+import { ENGLISH_PROJECTS_STRINGS, type ProjectsStrings } from './projects-messages';
 
 const DANGER_BTN = 'border-danger bg-surface text-danger';
 
@@ -53,6 +54,8 @@ interface LifecycleSectionProps {
   readonly onOpen: () => void;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
+  /** The screen's words in the reader's language (UX-15 in #2086); English by default. */
+  readonly strings?: ProjectsStrings;
 }
 
 /**
@@ -70,7 +73,9 @@ export function ProjectLifecycleSection({
   onOpen,
   onCancel,
   onConfirm,
+  strings = ENGLISH_PROJECTS_STRINGS,
 }: Readonly<LifecycleSectionProps>) {
+  const words = strings.lifecycle;
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   if (!canArchiveProject(capability, project)) return null;
 
@@ -83,12 +88,10 @@ export function ProjectLifecycleSection({
       aria-labelledby="project-lifecycle-heading"
     >
       <h2 id="project-lifecycle-heading" className="mb-1 text-[15px] font-semibold">
-        Project lifecycle
+        {words.heading}
       </h2>
       <p className="mb-3 text-[12.5px] text-muted">
-        {archived
-          ? 'This project is archived. Restoring it lets new sessions and runs start in it again.'
-          : 'Archiving keeps every completed session and run readable, and stops new ones from starting in this project.'}
+        {archived ? words.archivedHelp : words.activeHelp}
       </p>
       <button
         ref={triggerRef}
@@ -96,7 +99,7 @@ export function ProjectLifecycleSection({
         className={`${BTN} ${archived ? BTN_DEFAULT : DANGER_BTN}`}
         onClick={onOpen}
       >
-        {archived ? 'Restore project' : 'Archive project'}
+        {archived ? words.restoreProject : words.archiveProject}
       </button>
       {dialog === null ? null : (
         <ProjectArchiveDialog
@@ -106,6 +109,7 @@ export function ProjectLifecycleSection({
           returnFocusTo={triggerRef}
           onCancel={onCancel}
           onConfirm={onConfirm}
+          strings={strings}
         />
       )}
     </section>
@@ -120,6 +124,8 @@ interface DialogProps {
   readonly returnFocusTo?: { current: HTMLButtonElement | null };
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
+  /** The screen's words in the reader's language (UX-15 in #2086); English by default. */
+  readonly strings?: ProjectsStrings;
 }
 
 /**
@@ -133,7 +139,9 @@ export function ProjectArchiveDialog({
   returnFocusTo,
   onCancel,
   onConfirm,
+  strings = ENGLISH_PROJECTS_STRINGS,
 }: Readonly<DialogProps>) {
+  const words = strings.lifecycle;
   const panelRef = useRef<HTMLDivElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
@@ -198,15 +206,12 @@ export function ProjectArchiveDialog({
         className="w-full max-w-[520px] rounded-(--radius) border border-border bg-surface p-5 shadow-xl"
       >
         <h2 id={titleId} className="text-[18px]">
-          {archiving ? 'Archive' : 'Restore'} “{project.name}”?
+          {archiving ? words.archiveTitle(project.name) : words.restoreTitle(project.name)}
         </h2>
         {archiving ? (
-          <ArchiveImpact state={state} />
+          <ArchiveImpact state={state} words={words} />
         ) : (
-          <p className="mt-3 text-[13px] text-text-2">
-            New sessions and runs will be able to start in this project again. Nothing that already
-            ran changes.
-          </p>
+          <p className="mt-3 text-[13px] text-text-2">{words.restoreBody}</p>
         )}
         {state.kind === 'failed' ? <ProjectProblem problem={state.problem} /> : null}
         <div className="mt-5 flex justify-end gap-2">
@@ -217,7 +222,7 @@ export function ProjectArchiveDialog({
             disabled={busy}
             onClick={onCancel}
           >
-            Cancel
+            {strings.cancel}
           </button>
           <button
             type="button"
@@ -227,11 +232,11 @@ export function ProjectArchiveDialog({
           >
             {busy
               ? archiving
-                ? 'Archiving…'
-                : 'Restoring…'
+                ? words.archiving
+                : words.restoring
               : archiving
-                ? 'Archive project'
-                : 'Restore project'}
+                ? words.archiveProject
+                : words.restoreProject}
           </button>
         </div>
       </div>
@@ -246,32 +251,29 @@ export function ProjectArchiveDialog({
  * failure block a lifecycle transition the server would accept; saying "0 sessions and 0 runs"
  * would be a number nothing established. Saying so is the third option and the honest one.
  */
-function ArchiveImpact({ state }: Readonly<{ state: ArchiveDialogState }>) {
+function ArchiveImpact({
+  state,
+  words,
+}: Readonly<{ state: ArchiveDialogState; words: ProjectsStrings['lifecycle'] }>) {
   switch (state.kind) {
     case 'counting':
       return (
         <p className="mt-3 text-[13px] text-muted" role="status">
-          Counting the sessions and runs this affects…
+          {words.counting}
         </p>
       );
     case 'counted':
-      return <p className="mt-3 text-[13px] text-text-2">{summariseArchiveImpact(state.impact)}</p>;
-    case 'count-unavailable':
       return (
         <p className="mt-3 text-[13px] text-text-2">
-          The sessions and runs this affects could not be counted, so this summary is incomplete.
-          Archiving still keeps completed work readable and stops new work from starting.
+          {summariseArchiveImpact(state.impact, words)}
         </p>
       );
+    case 'count-unavailable':
+      return <p className="mt-3 text-[13px] text-text-2">{words.countUnavailable}</p>;
     case 'confirming':
     case 'submitting':
     case 'failed':
-      return (
-        <p className="mt-3 text-[13px] text-text-2">
-          Completed sessions and runs stay readable. No new sessions or runs can start in this
-          project.
-        </p>
-      );
+      return <p className="mt-3 text-[13px] text-text-2">{words.confirmBody}</p>;
     default: {
       const unreachable: never = state;
       throw new Error(`unhandled archive dialog state ${JSON.stringify(unreachable)}`);
