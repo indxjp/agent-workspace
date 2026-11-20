@@ -5,7 +5,7 @@ engine: claude-agent-sdk
 # No MCP connector: the ERP is an openapiTool() in tools/erp.ts. `aw dev` reads
 # apis/erp.openapi.json and registers it, taking ERP_TOKEN from its environment. The caller
 # assertion the tool opts in with is signed with the workspace secret ERP_IDENTITY_SECRET:
-#   printf '%s' "$ERP_IDENTITY_SECRET" | aw secrets create --name ERP_IDENTITY_SECRET --value-stdin
+#   add ERP_IDENTITY_SECRET under Secrets in the console, signed in as the Owner, once aw dev is ready
 #   ERP_TOKEN=... aw dev
 # The document's `servers` is the company's ERP (erp.example.co.jp), which is not reachable from
 # here. To try the project, run the bundled stand-in with the same token and set

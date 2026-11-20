@@ -388,12 +388,13 @@ approval as the engine does, so the backend reads the same tool calls a real run
     ```sh title="illustrative" claim="illustrative"
     export ERP_TOKEN=…                              # one token: the stand-in checks what aw dev registers
     export ERP_IDENTITY_SECRET=…                    # signs the caller; the stand-in verifies with the same value
-    printf '%s' "$ERP_IDENTITY_SECRET" | aw secrets create --name ERP_IDENTITY_SECRET --value-stdin  # the same value, for the tool's identity
     IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
       PORT=8790 node erp/fake-erp.mjs &             # the stand-in ERP; skip it with your own ERP
     # set servers[0].url in apis/erp.openapi.json to http://127.0.0.1:8790/api/v1 (your ERP's URL otherwise)
     aw dev   # imports the cost-model skill; registers the erp tool from
              # apis/erp.openapi.json with ERP_TOKEN read from its environment
+    # then, in the console signed in as the Owner, add ERP_IDENTITY_SECRET under Secrets with
+    # the same value, for the tool's identity (aw dev holds an Admin key)
     aw push --yes
     ```
     The document's `servers` names `erp.example.co.jp`, which does not resolve, so `aw push` refuses

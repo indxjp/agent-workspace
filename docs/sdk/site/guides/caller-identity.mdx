@@ -109,9 +109,11 @@ openapiTool({
 });
 ```
 
-Create the secret with `aw secrets create --name TASK_TRACKER_IDENTITY_SECRET --value-stdin` and give your server the same
-value. The platform signs the caller with it: an `openapiTool` call gets a fresh assertion each time,
-and an MCP connector gets one assertion when the run starts, valid for five minutes, so a longer run
+Create the secret with `aw secrets create --name TASK_TRACKER_IDENTITY_SECRET --value-stdin`,
+signed in as an Owner, and give your server the same value. Under `aw dev`, whose key is an Admin's,
+add it under Secrets in the console instead, signed in as the Owner ([`aw dev`](/cli/dev)). The
+platform signs the caller with it: an `openapiTool` call gets a fresh assertion each time, and an MCP
+connector gets one assertion when the run starts, valid for five minutes, so a longer run
 is refused with `identity_assertion_expired`. A connector without `identity` gets no header.
 
 ## Check the header in your server

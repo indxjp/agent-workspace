@@ -15,7 +15,6 @@ import {
   firstPrompt,
   identityEnvironment,
   identityTargets,
-  secretCreateCommand,
   serverCommands,
   STAND_IN,
   workspaceSecrets,
@@ -26,6 +25,7 @@ import {
   pointApisAtLoopback,
   startServer,
 } from './use-cases-server.mjs';
+import { storeSecretsAsOwner } from './use-cases-console.mjs';
 
 /** @typedef {import('./run.mjs').Row} Row */
 /** @typedef {import('./use-cases-parse.mjs').ServerCommand} ServerCommand */
@@ -37,7 +37,7 @@ const SERVER_PORT_MS = 30_000;
 const STEPS = [
   'MCP servers',
   'aw dev',
-  'aw secrets create',
+  'secrets, in the console as the Owner',
   'aw files',
   'aw push',
   'MCP servers, with ids',
@@ -181,15 +181,9 @@ async function startDev(session) {
 }
 
 /** @param {Session} session */
-async function createSecrets({ aw, identitySecrets }) {
-  const names = Object.keys(identitySecrets);
-  if (names.length === 0) return 'no workspace secrets to create';
-  let output = '';
-  for (const name of names) {
-    const env = { IDENTITY_SECRET_VALUE: identitySecrets[name] ?? '' };
-    output += (await aw(secretCreateCommand(name), { env })).output;
-  }
-  return output;
+async function addSecrets({ dir, dev, readyLength, identitySecrets }) {
+  // The project file adds each secret in the console as the Owner: aw dev's key is an Admin's.
+  return storeSecretsAsOwner(dir, dev?.state.log.slice(0, readyLength) ?? '', identitySecrets);
 }
 
 /** @param {Session} session */
@@ -251,7 +245,7 @@ async function runJourney(session, tracer, prompt) {
   const { aw, devEnv } = session;
   await step('MCP servers', () => startServers(session));
   await step('aw dev', () => startDev(session));
-  await step('aw secrets create', () => createSecrets(session));
+  await step('secrets, in the console as the Owner', () => addSecrets(session));
   await step('aw files', () => uploadFiles(session));
   await step('aw push', async () => (await aw('aw push --yes', { env: devEnv })).output);
   await step('MCP servers, with ids', () => restartVerifyingServers(session));

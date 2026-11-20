@@ -40,19 +40,25 @@ function leadingEnvironment(line, secret) {
   return { env, rest };
 }
 
-const SECRET_CREATE = /\baw secrets create --name ([A-Z][A-Z0-9_]*) --value-stdin\b/u;
+/**
+ * The line a project file adds a workspace secret with: `aw dev` holds an Admin key and only an
+ * Owner may store a secret (ADR-0109), so the secret is added in the console, in the words `aw dev`'s
+ * own notice uses (`add <NAME> under Secrets`).
+ */
+const SECRET_ADD =
+  /\badd ([A-Z][A-Z0-9_]*) under Secrets in the console, signed in as the Owner\b/u;
 const IDENTITY_KEY = /(?:^|_)IDENTITY_SECRET$/u;
 
 /**
- * The workspace secrets a project file says to create (`aw secrets create --name <NAME>
- * --value-stdin`), in its order: the keys that sign a caller assertion (ADR-0142 D1).
+ * The workspace secrets a project file says to add (`add <NAME> under Secrets in the console, signed
+ * in as the Owner`), in its order: the keys that sign a caller assertion (ADR-0142 D1).
  *
  * @param {string} projectYaml
  * @returns {string[]}
  */
 export function workspaceSecrets(projectYaml) {
   const names = commentCommands(projectYaml).flatMap((line) => {
-    const name = SECRET_CREATE.exec(line)?.[1];
+    const name = SECRET_ADD.exec(line)?.[1];
     return name === undefined ? [] : [name];
   });
   return [...new Set(names)];
@@ -71,7 +77,7 @@ export function workspaceSecrets(projectYaml) {
  * A server that verifies the caller assertion (it is given `IDENTITY_AUDIENCE`) has an `identity`:
  * the variable holding its key (`IDENTITY_SECRET` or `<NAME>_IDENTITY_SECRET`) and the workspace
  * secret that key is. A `<NAME>_IDENTITY_SECRET` is that secret; a bare `IDENTITY_SECRET` is the one
- * the nearest `aw secrets create` line before the server's line creates, as the project file reads.
+ * the nearest line before the server's line adds, as the project file reads.
  * When `overrides` holds that secret, the key is its value.
  *
  * @param {string} projectYaml @param {() => string} secret
@@ -82,7 +88,7 @@ export function serverCommands(projectYaml, secret, overrides = {}) {
   /** @type {string | undefined} */
   let created;
   return commentCommands(projectYaml).flatMap((line) => {
-    const name = SECRET_CREATE.exec(line)?.[1];
+    const name = SECRET_ADD.exec(line)?.[1];
     if (name !== undefined) {
       created = name;
       return [];
@@ -101,17 +107,6 @@ export function serverCommands(projectYaml, secret, overrides = {}) {
     if (value !== undefined) env[key] = value;
     return [{ env, script, port: Number(env['PORT']), identity: { key, secret: signer } }];
   });
-}
-
-/**
- * The command that stores a workspace secret, as the project file says: the value is read from
- * `$IDENTITY_SECRET_VALUE` on stdin, so it never appears in a command line.
- *
- * @param {string} name
- */
-export function secretCreateCommand(name) {
-  if (!/^[A-Z][A-Z0-9_]*$/u.test(name)) throw new JourneyFailure(`not a secret name: ${name}`);
-  return `printf '%s' "$IDENTITY_SECRET_VALUE" | aw secrets create --name ${name} --value-stdin`;
 }
 
 /**

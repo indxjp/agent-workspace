@@ -175,7 +175,15 @@ describe('countRawFetches', () => {
 });
 
 describe('raw browser fetch budget', () => {
-  it('matches the raw fetch budget; lower it when a family moves to the SDK (#247)', () => {
-    expect(collectAllCounts()).toEqual(BUDGET);
-  });
+  // Parses every source file under components/, app/ and lib/: well past the 5 s default under
+  // coverage instrumentation on a shared CI runner.
+  it(
+    'matches the raw fetch budget; lower it when a family moves to the SDK (#247)',
+    {
+      timeout: 60_000,
+    },
+    () => {
+      expect(collectAllCounts()).toEqual(BUDGET);
+    },
+  );
 });

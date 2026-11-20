@@ -55,6 +55,7 @@
         "{workspaceRoot}/tests/docs-claims/run.mjs",
         "{workspaceRoot}/tests/docs-claims/static.mjs",
         "{workspaceRoot}/tests/docs-claims/use-cases.mjs",
+        "{workspaceRoot}/tests/docs-claims/use-cases-console.mjs",
         "{workspaceRoot}/tests/docs-claims/use-cases-parse.mjs",
         "{workspaceRoot}/tests/docs-claims/use-cases-project.mjs",
         "{workspaceRoot}/tests/docs-claims/use-cases-server.mjs",
