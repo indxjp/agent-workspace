@@ -6,7 +6,7 @@ engine: claude-agent-sdk
 # apis/crm.openapi.json and registers it, taking CRM_TOKEN from its environment. The caller
 # assertion the tool opts in with (`identity`, ADR-0142) is signed with the workspace secret
 # CRM_IDENTITY_SECRET; give the CRM the same value so it can verify whose records are asked for:
-#   printf '%s' "$CRM_IDENTITY_SECRET" | aw secrets create --name CRM_IDENTITY_SECRET --value-stdin
+#   add CRM_IDENTITY_SECRET under Secrets in the console, signed in as the Owner, once aw dev is ready
 #   CRM_TOKEN=... aw dev
 # The document's `servers` is the company's CRM (crm.example.co.jp), which is not reachable from
 # here. To try the project, run the bundled stand-in with the same token and set

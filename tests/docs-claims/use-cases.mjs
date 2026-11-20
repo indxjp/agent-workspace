@@ -6,7 +6,8 @@
  * registry and the real model (issue #881, the `install-live` workflow). For each project: its own
  * MCP servers and stand-in APIs (the `#   ...` lines of its `agent-workspace.yaml`), then `aw dev`
  * until it is ready, signed in and has made its first sync, the workspace secrets that sign its
- * caller assertions (`aw secrets create --value-stdin`, with the value its servers verify with), the
+ * caller assertions (added in the console as the Owner, as the project file says, since `aw dev`
+ * holds an Admin key; with the value its servers verify with), the
  * folders its agents are granted (`aw files mkdir`, then `aw files upload` of `data/<folder>/`),
  * `aw push --yes`, a restart of each server that verifies the caller assertion with the connector
  * id and workspace id `aw connectors list` now names (the project file's `<tool-id>` and
@@ -48,11 +49,11 @@ export {
   firstPrompt,
   identityEnvironment,
   identityTargets,
-  secretCreateCommand,
   serverCommands,
   workspaceSecrets,
 } from './use-cases-parse.mjs';
 export { fileSetupCommands, pointApisAtLoopback } from './use-cases-server.mjs';
+export { consoleSignIn, signInFormFields } from './use-cases-console.mjs';
 
 /** @typedef {import('./run.mjs').Row} Row */
 

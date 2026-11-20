@@ -12,7 +12,13 @@ export function serverCommands(
   secret: () => string,
   overrides?: Readonly<Record<string, string>>,
 ): ServerCommand[];
-export function secretCreateCommand(name: string): string;
+export interface ConsoleSignIn {
+  url: string;
+  email: string;
+  passwordFile: string;
+}
+export function consoleSignIn(readyScreen: string): ConsoleSignIn;
+export function signInFormFields(html: string): [string, string][];
 export interface IdentityTarget {
   connectorId: string;
   workspaceId: string;

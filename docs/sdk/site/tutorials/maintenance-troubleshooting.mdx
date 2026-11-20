@@ -440,11 +440,12 @@ the file is refused.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    printf '%s' "$MAINTENANCE_IDENTITY_SECRET" | aw secrets create --name MAINTENANCE_IDENTITY_SECRET --value-stdin  # the maintenance tool's caller assertion
-    printf '%s' "$MAINTENANCE_TOKEN" | aw secrets create --name MAINTENANCE_TOKEN --value-stdin  # the credential the gateway sends to the system
     MAINTENANCE_TOKEN=... IDENTITY_SECRET=... IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
       TROUBLE_LOG_STORE=./trouble-log.store.json PORT=8793 node maintenance/fake-maintenance.mjs &
-    aw dev                              # keeps the tool and the skill in step
+    MAINTENANCE_TOKEN=... aw dev        # keeps the tool and the skill in step; the token is the
+                                        # credential the gateway sends to the system
+    # then, in the console signed in as the Owner, add MAINTENANCE_IDENTITY_SECRET under Secrets:
+    # the tool's caller assertion (aw dev holds an Admin key)
     (cd data && for f in $(find trouble-log expert-notes manuals -type f); do aw files upload "$f" "$f"; done)
     aw push --yes
     aw eval maintenance-troubleshooting # the four cases, on a real model

@@ -19,7 +19,8 @@ import {
   installSteps,
   parseArguments,
   pointApisAtLoopback,
-  secretCreateCommand,
+  consoleSignIn,
+  signInFormFields,
   serverCommands,
   workspaceSecrets,
 } from './use-cases.mjs';
@@ -255,7 +256,7 @@ describe('the caller identity of a project (#890)', () => {
       'ERP_IDENTITY_SECRET',
     ]);
     expect(workspaceSecrets(read('manual-search', 'agent-workspace.yaml'))).toEqual([]);
-    const twice = '#   x | aw secrets create --name A_KEY --value-stdin\n'.repeat(2);
+    const twice = '#   add A_KEY under Secrets in the console, signed in as the Owner\n'.repeat(2);
     expect(workspaceSecrets(twice)).toEqual(['A_KEY']);
   });
 
@@ -306,11 +307,39 @@ describe('the caller identity of a project (#890)', () => {
     expect(servers.find((s) => s.script === 'mcp/authority-server.mjs')?.identity).toBeUndefined();
   });
 
-  it('stores a secret from stdin, never on the command line, and refuses a name that is not one', () => {
-    expect(secretCreateCommand('ERP_IDENTITY_SECRET')).toBe(
-      `printf '%s' "$IDENTITY_SECRET_VALUE" | aw secrets create --name ERP_IDENTITY_SECRET --value-stdin`,
-    );
-    expect(() => secretCreateCommand('X; rm -rf /')).toThrow('not a secret name');
+  it('adds a secret in the console, never with aw secrets create, which aw dev cannot', () => {
+    // aw dev holds an Admin key and only an Owner may store a secret (ADR-0109).
+    for (const id of PROJECTS) {
+      expect(read(id, 'agent-workspace.yaml'), id).not.toMatch(/\baw secrets create\b/u);
+    }
+  });
+
+  it('reads the console sign-in from the ready screen', () => {
+    const ready = [
+      '  console   http://127.0.0.1:3001',
+      '            sign in as admin@localhost.test',
+      '            password in .agent-workspace/secrets/local-secrets.json',
+    ].join('\n');
+    expect(consoleSignIn(ready)).toEqual({
+      url: 'http://127.0.0.1:3001',
+      email: 'admin@localhost.test',
+      passwordFile: '.agent-workspace/secrets/local-secrets.json',
+    });
+    expect(() => consoleSignIn('  chat      npx aw chat')).toThrow('names no console sign-in');
+  });
+
+  it('posts the hidden fields of the password form, and only that form', () => {
+    const html = [
+      '<form action="/api/auth/login"><input type="hidden" name="next" value="/"/></form>',
+      '<form action="" method="POST"><input type="hidden" name="$ACTION_ID_ab12" value=""/>',
+      '<input type="hidden" name="next" value="/a?b=1&amp;c=2"/>',
+      '<input type="email" name="email"/><input type="password" name="password"/></form>',
+    ].join('');
+    expect(signInFormFields(html)).toEqual([
+      ['$ACTION_ID_ab12', ''],
+      ['next', '/a?b=1&c=2'],
+    ]);
+    expect(() => signInFormFields('<form></form>')).toThrow('no password form');
   });
 
   it('reads the connector and workspace each secret signs for from aw connectors list --json', () => {

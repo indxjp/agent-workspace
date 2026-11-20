@@ -175,8 +175,9 @@ if (!caller.ok) {
 const { processes } = access[caller.payload.sub];
 ```
 
-On your workspace, create the signing secret with `aw secrets create --name QMS_IDENTITY_SECRET --value-stdin` and start
-`aw dev` with the API token (see Run it). The project has no MCP connector and ships no MCP server.
+On your workspace, start `aw dev` with the API token (see Run it), then add the signing secret
+`QMS_IDENTITY_SECRET` under Secrets in the console, signed in as the Owner (`aw dev` holds an Admin
+key and only an Owner may store a secret). The project has no MCP connector and ships no MCP server.
 
 **Check:** `searchDefects`, `getDefect` and `causeStats` run against the thirty fixtures through the tool gateway, `causeStats` returns the `4M集計:` line to copy, and a person who may see only プレス gets no case of another 工程.
 
@@ -442,8 +443,9 @@ not by the eval, because they depend on the query the model chose.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    printf '%s' "$QMS_IDENTITY_SECRET" | aw secrets create --name QMS_IDENTITY_SECRET --value-stdin  # the platform signs the caller with it
     QMS_TOKEN=… aw dev     # keeps the QMS tool and the eight-d skill in step
+    # then, in the console signed in as the Owner, add QMS_IDENTITY_SECRET under Secrets:
+    # the platform signs the caller with it (aw dev holds an Admin key)
     aw files upload fmea/press-pfmea.xlsx
     aw push --yes
     ```

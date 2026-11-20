@@ -243,9 +243,10 @@ key; how the gallery tests a use case, and what each tier proves, is on the
       with `created: false`. A start retried without an `idempotencyKey` runs again, so a
       retried run must not be able to create a task twice.
 
-    The opt-in for the reads is two lines in the connector. Create the signing secret with
-    `aw secrets create --name TASK_TRACKER_IDENTITY_SECRET --value-stdin`. The tool signs its callers with
-    `TRACKER_IDENTITY_SECRET`, set the same way, and `aw dev` takes `TRACKER_TOKEN` from its
+    The opt-in for the reads is two lines in the connector. Add the signing secret
+    `TASK_TRACKER_IDENTITY_SECRET` under Secrets in the console, signed in as the Owner: `aw dev` holds
+    an Admin key and only an Owner may store a secret. The tool signs its callers with
+    `TRACKER_IDENTITY_SECRET`, added the same way, and `aw dev` takes `TRACKER_TOKEN` from its
     environment:
 
     ```yaml title="agent-workspace.yaml (excerpt)" file="tests/gallery/meeting-minutes/agent-workspace.yaml#excerpt"
@@ -474,8 +475,6 @@ key; how the gallery tests a use case, and what each tier proves, is on the
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    printf '%s' "$TASK_TRACKER_IDENTITY_SECRET" | aw secrets create --name TASK_TRACKER_IDENTITY_SECRET --value-stdin  # the platform signs the reads' caller with it
-    printf '%s' "$TRACKER_IDENTITY_SECRET" | aw secrets create --name TRACKER_IDENTITY_SECRET --value-stdin  # and the createTask caller with this one
     IDENTITY_SECRET=… IDENTITY_AUDIENCE=<connector-id> IDENTITY_WORKSPACE=<workspace-id> \
       MCP_TRANSPORT=http PORT=8788 TASKS_FILE=./tasks.json node mcp/tasks.mjs &
     # to try it without a real tracker: the stand-in for POST /tasks, on the same tasks file, with
@@ -483,6 +482,9 @@ key; how the gallery tests a use case, and what each tier proves, is on the
     TRACKER_TOKEN=… IDENTITY_SECRET=… IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
       TASKS_FILE=./tasks.json PORT=8789 node tracker/fake-tracker.mjs &
     TRACKER_TOKEN=… aw dev     # keeps the connector, the tool and the skill in step
+    # then, in the console signed in as the Owner, add under Secrets (aw dev holds an Admin key):
+    # TASK_TRACKER_IDENTITY_SECRET, which signs the reads' caller, and TRACKER_IDENTITY_SECRET,
+    # which signs the createTask caller
     aw files upload transcripts/2026-10-02_生産会議.txt data/transcripts/2026-10-02_生産会議.txt
     aw push --yes
     ```
