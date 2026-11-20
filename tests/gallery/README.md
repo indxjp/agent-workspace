@@ -6,9 +6,9 @@ each kept as a **benchmark** of what the SDK does today. The tutorials are on th
 code, and the tests here are what make every claim in them true.
 
 ```sh
-pnpm vitest run --project tests tests/gallery                  # everything, offline, no API key
-pnpm vitest run --project tests tests/gallery/manual-search    # one use case
-GALLERY_WRITE=1 pnpm vitest run --project tests tests/gallery/benchmark.test.ts   # regenerate tables
+pnpm vitest run --project tests-gallery tests/gallery                  # everything, offline, no API key
+pnpm vitest run --project tests-gallery tests/gallery/manual-search    # one use case
+GALLERY_WRITE=1 pnpm vitest run --project tests-gallery tests/gallery/benchmark.test.ts   # regenerate tables
 ```
 
 ## Layout

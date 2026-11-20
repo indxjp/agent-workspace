@@ -11,7 +11,7 @@ import {
   BROWSER_TOKEN_DEFAULT_TTL_SECONDS,
 } from '@indx-workspace/contracts/tokens';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
-import type { TokensRuntime } from './runtime';
+import type { TokensRuntime } from './wiring';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 

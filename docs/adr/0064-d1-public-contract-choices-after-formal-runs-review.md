@@ -7,7 +7,7 @@ Scope: run HTTP responses and SSE frames, browser-token lifetime, SDK decoding a
 
 ## Context
 
-The D1 [triage](../formal/domains/d1-runs-triage.md) separated repairs that preserve the current
+The D1 [triage](../20-design/formal/domains/d1-runs-triage.md) separated repairs that preserve the current
 public contract (PRs #282–#294) from disagreements whose resolution changes, or could change, a
 shipped contract. The latter cannot be silently folded into a formal-model update. Each numbered
 choice below is independent; the Owner can accept, reject or amend it separately. This ADR records

@@ -11,7 +11,7 @@ import { apiResultResponse } from '../../../server/http/json-transport';
 import { enforceableNetworkPoliciesFromRegistry } from '../../../server/runtimes/registry';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`): every route runs on the
 // Node runtime and is never prerendered — these handlers read the session cookie, so prerendering
 // is never correct.
 export const dynamic = 'force-dynamic';

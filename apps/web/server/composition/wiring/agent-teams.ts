@@ -1,7 +1,7 @@
 import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 
 import { createMemberCallerVerifier } from '../../agent-teams/member-tools';
-import type { AgentTeamsRuntime } from '../../agent-teams/runtime';
+import type { AgentTeamsRuntime } from '../../agent-teams/wiring';
 import { createRepositoryAgentTeamsRuntime } from '../../agent-teams/store';
 import type { RunTokenDatabase } from '../../gateway/run-token-verifier';
 import type { DirectoryRoot } from '../../rbac/directory';

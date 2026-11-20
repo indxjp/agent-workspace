@@ -1,0 +1,11 @@
+id: boot-control-plane
+title: Boot the control plane
+trigger: "Next.js calls register() once per server process"
+steps:
+  - { from: web-routes, to: composition, verb: "calls register", returns: "one installed ApplicationContext" }
+  - { from: composition, to: persistence, verb: "opens the database" }
+  - { from: composition, to: runtime-drivers, verb: "builds runtime drivers" }
+  - { from: composition, to: identity, verb: "wires identity" }
+  - { from: composition, to: storage-sharing, verb: "wires storage" }
+  - { from: composition, to: execution, verb: "wires run domains" }
+  - { from: composition, to: agent-authoring, verb: "wires agents" }

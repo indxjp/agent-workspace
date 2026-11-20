@@ -5,7 +5,7 @@
  */
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 
-import type { AgentTeamsRuntime } from './runtime';
+import type { AgentTeamsRuntime } from './wiring';
 
 type StoreRoot = Pick<DatabaseRoot, 'scopes' | 'agentTeams' | 'recordAuditEvent'>;
 

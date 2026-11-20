@@ -21,7 +21,7 @@ import {
 } from '../server/agent-versions/release';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 
-/** The scenarios `docs/formal/domains/release.md` assigns to `decidePromote` and `decideRollback`. */
+/** The scenarios `docs/20-design/formal/domains/release.md` assigns to `decidePromote` and `decideRollback`. */
 const REPLAYED = [
   'promote-without-a-bar-needs-no-evaluation',
   'promote-passes-the-gate',
@@ -134,7 +134,7 @@ function step(
 }
 
 describe('release: decideRollback and decidePromote replay the model (80-08, 80-12)', () => {
-  it('replays exactly the scenarios docs/formal/domains/release.md assigns to 80-08 and 80-12', () => {
+  it('replays exactly the scenarios docs/20-design/formal/domains/release.md assigns to 80-08 and 80-12', () => {
     expect(vectors.map(({ id }) => id)).toStrictEqual(REPLAYED);
   });
 

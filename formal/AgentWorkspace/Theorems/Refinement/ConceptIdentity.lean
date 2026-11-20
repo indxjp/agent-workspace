@@ -35,7 +35,7 @@ private def membershipWithoutPrincipal : Er.Core.State
 /-- Every state the RF-101 target admits, today's schema admits; today's schema also admits a
 membership with no principal, which the target refuses. -/
 @[aw_spec (tier := T4)
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_workspace_membership_key")]
 theorem principal_coverage_target_refines_current :
     (∀ st : Er.Core.State, consistentTarget st = true →
@@ -49,7 +49,7 @@ theorem principal_coverage_target_refines_current :
 /-- The target is satisfiable by a realistic state: the witness state of the invariants, where
 every membership and every key has its principal. -/
 @[aw_spec (tier := T4)
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")]
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")]
 theorem principal_coverage_target_is_satisfiable :
     ∃ st : Er.Core.State, consistentTarget st = true :=
   ⟨Invariants.ConceptIdentity.Witness.state, by decide +kernel⟩

@@ -33,7 +33,7 @@ import {
   createRepositoryAgentResourceStoreProvider,
   createRepositoryAgentStoreProvider,
 } from '../agents/store';
-import { type WorkspaceResolution } from '../agents/runtime';
+import { type WorkspaceResolution } from '../agents/wiring';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { FIXTURE_PERMISSIONS, fixtureSurface, fromVersionRequest } from './fixtures';

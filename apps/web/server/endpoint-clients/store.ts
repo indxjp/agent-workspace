@@ -13,7 +13,7 @@ import type { ApiKeyResource } from '@indx-workspace/contracts/api-keys';
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
 
 import { mintApiKey, type ResolveRunOwnership } from '../identity';
-import type { EndpointClientsRuntime } from './runtime';
+import type { EndpointClientsRuntime } from './wiring';
 
 type StoreRoot = Pick<
   DatabaseRoot,

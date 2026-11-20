@@ -71,7 +71,8 @@ export const storageConnectionRoutes: readonly ApiRoute[] = [
     operationId: 'storage.connections.browse',
     tag: 'storage-connections',
     feature: 'core',
-    summary: 'List a folder of a storage connection inside its allowed prefixes (?prefix=&cursor=)',
+    summary: 'List a folder of a storage connection inside its allowed prefixes',
+    description: 'Query parameters: `prefix` names the folder and `cursor` reads the next page.',
     success: ok(json('StorageConnectionBrowseResponseSchema')),
   },
 

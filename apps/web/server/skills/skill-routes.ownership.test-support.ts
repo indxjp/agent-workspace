@@ -21,7 +21,7 @@ import { createPostgresDirectory } from '../rbac/postgres-directory';
 import { Principal } from '../rbac/principal';
 import { createResourceCatalogStoreProvider } from '../storage/store';
 import { createRepositorySkillsStoreProvider } from '../storage/store';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 import {
   ACTOR_HEADER,
   nameContext,

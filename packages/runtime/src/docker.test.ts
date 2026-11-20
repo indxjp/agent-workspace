@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildDockerRunArgs, createDockerDriver, DOCKER_RUNTIME_CAPABILITIES } from './docker.js';
-import type { DockerCommand, DockerCommandResult } from './docker.js';
-import type { RuntimeRunSpec } from './driver.js';
+import type { DockerCommand } from './docker.js';
+import { createFakeDockerDriver, unusedStartAgent } from './docker.driver.test-support.js';
 import {
   commandResult,
   networkInspection,
@@ -62,9 +62,7 @@ describe('Docker command construction', () => {
       createDockerDriver({
         images: new Map([['claude-agent-sdk', 'agent-workspace/runtime:latest']]),
         requireDigest: true,
-        startAgent: () => {
-          throw new Error('not used');
-        },
+        startAgent: unusedStartAgent,
       }),
     ).toThrow(/pinned by sha256 digest/u);
 
@@ -104,14 +102,7 @@ describe('Docker command construction', () => {
       }
       return commandResult(0, args[0] === 'run' ? 'validated-container' : '');
     };
-    const driver = createDockerDriver<never, never>({
-      images: new Map([['claude-agent-sdk', 'alpine:3.20']]),
-      workspaceStorage: 'anonymous-volume',
-      docker,
-      startAgent: () => {
-        throw new Error('not used');
-      },
-    });
+    const driver = createFakeDockerDriver(docker, { workspaceStorage: 'anonymous-volume' });
     const handle = await driver.create(config);
     await driver.destroy(handle);
     const run = calls.find((call) => call[0] === 'run') ?? [];
@@ -134,13 +125,7 @@ describe('Docker command construction', () => {
       return Promise.resolve(commandResult(1, '', 'unexpected command'));
     };
     const root = await mkdtemp(path.join(tmpdir(), 'w3-docker-unit-'));
-    const driver = createDockerDriver<never, never>({
-      images: new Map([['claude-agent-sdk', 'alpine:3.20']]),
-      startAgent: () => {
-        throw new Error('not used');
-      },
-      docker,
-    });
+    const driver = createFakeDockerDriver(docker);
     try {
       const first = await driver.create({
         sessionId: 'one',
@@ -160,179 +145,6 @@ describe('Docker command construction', () => {
       expect(calls.filter((call) => call[0] === 'rm')).toEqual([
         ['rm', '--force', '--volumes', 'container-1'],
         ['rm', '--force', '--volumes', 'container-2'],
-      ]);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  describe("publish: 'loopback' (#786)", () => {
-    const openSpec: RuntimeRunSpec = {
-      runtimeProfileId: 'rp-docker',
-      driver: 'docker',
-      networkPolicy: 'open',
-      filesystem: 'read-write',
-      diskMb: 1024,
-    };
-    function publishingDriver(port: DockerCommandResult) {
-      const calls: string[][] = [];
-      const docker: DockerCommand = (args) => {
-        calls.push([...args]);
-        if (args[0] === 'run') return Promise.resolve(commandResult(0, 'container-p\n'));
-        if (args[0] === 'port') return Promise.resolve(port);
-        if (args[0] === 'rm') return Promise.resolve(commandResult(0));
-        return Promise.resolve(commandResult(1, '', 'unexpected command'));
-      };
-      const driver = createDockerDriver<never, never>({
-        images: new Map([['claude-agent-sdk', 'alpine:3.20']]),
-        workspaceStorage: 'anonymous-volume',
-        publish: 'loopback',
-        startAgent: () => {
-          throw new Error('not used');
-        },
-        docker,
-      });
-      return { calls, driver };
-    }
-    const config = { sessionId: 's', engine: 'claude-agent-sdk', workspacePath: '/unused' };
-
-    it('publishes the runtime port on 127.0.0.1 and answers where docker put it', async () => {
-      const { calls, driver } = publishingDriver(commandResult(0, '127.0.0.1:49153\n'));
-      const handle = await driver.create({ ...config, runSpec: openSpec });
-      const run = calls.find((call) => call[0] === 'run') ?? [];
-      expect(includesSequence(run, ['--publish', '127.0.0.1::8080/tcp'])).toBe(true);
-      expect(includesSequence(run, ['--add-host', 'host.docker.internal:host-gateway'])).toBe(true);
-      expect(includesSequence(run, ['--network', 'bridge'])).toBe(true);
-      // No environment crosses into the sandbox: a run's gateway URL and token come in its request.
-      expect(run.filter((arg) => arg === '-e' || arg.startsWith('--env'))).toEqual([]);
-      expect(calls).toContainEqual(['port', 'container-p', '8080/tcp']);
-      expect(driver.publishedOrigin(handle)).toBe('http://127.0.0.1:49153');
-      await driver.destroy(handle);
-      expect(() => driver.publishedOrigin(handle)).toThrow(/no longer live/u);
-    });
-
-    it('removes the sandbox and fails the create when the published port cannot be read', async () => {
-      const { calls, driver } = publishingDriver(commandResult(1, '', 'no public port'));
-      await expect(driver.create({ ...config, runSpec: openSpec })).rejects.toThrow(
-        /published runtime port failed: no public port/u,
-      );
-      expect(calls).toContainEqual(['rm', '--force', '--volumes', 'container-p']);
-    });
-
-    it('refuses a policy whose internal network publishes nothing, before starting anything', async () => {
-      const { calls, driver } = publishingDriver(commandResult(0, '127.0.0.1:49153\n'));
-      await expect(
-        driver.create({ ...config, runSpec: { ...openSpec, networkPolicy: 'none' } }),
-      ).rejects.toThrow(/needs network policy open/u);
-      expect(calls).toEqual([]);
-    });
-
-    it('has no published origin without the option', () => {
-      const { driver } = publishingDriver(commandResult(0));
-      const plain = buildDockerRunArgs({
-        name: 'n',
-        image: 'i',
-        workspacePath: '/w',
-        networkPolicy: 'open',
-        networkName: 'agent-egress',
-      });
-      expect(plain).not.toContain('--publish');
-      expect(() =>
-        driver.publishedOrigin({
-          id: 'x',
-          driver: 'docker',
-          externalId: 'y',
-          workspacePath: '/w',
-          createdAt: new Date(),
-        }),
-      ).toThrow(/no longer live/u);
-    });
-  });
-
-  it.each([
-    ['non-internal', networkInspection('agent-egress', { Internal: false }), /not internal/u],
-    ['wrong-driver', networkInspection('agent-egress', { Driver: 'overlay' }), /bridge/u],
-    ['unowned', networkInspection('agent-egress', { Labels: {} }), /ownership label/u],
-    ['wrong-name', networkInspection('other-network'), /name does not match/u],
-    ['malformed', commandResult(0, '{not-json'), /malformed JSON/u],
-    ['empty-result', commandResult(0, '[]'), /exactly one network/u],
-  ])(
-    'refuses an existing %s network before starting a container',
-    async (_case, inspection, error) => {
-      const calls: string[][] = [];
-      const docker: DockerCommand = (args) => {
-        calls.push([...args]);
-        if (args[0] === 'network' && args[1] === 'inspect') return Promise.resolve(inspection);
-        return Promise.resolve(commandResult(1, '', 'must not be called'));
-      };
-      const root = await mkdtemp(path.join(tmpdir(), 'w3-docker-invalid-network-'));
-      const driver = createDockerDriver<never, never>({
-        images: new Map([['claude-agent-sdk', 'alpine:3.20']]),
-        startAgent: () => {
-          throw new Error('not used');
-        },
-        docker,
-      });
-      try {
-        await expect(
-          driver.create({
-            engine: 'claude-agent-sdk',
-            sessionId: 'network-check',
-            workspacePath: root,
-          }),
-        ).rejects.toThrow(error);
-        expect(calls.some((call) => call[0] === 'run')).toBe(false);
-      } finally {
-        await rm(root, { recursive: true, force: true });
-      }
-    },
-  );
-
-  it('validates the winner of a network create race before trusting it', async () => {
-    const calls: string[][] = [];
-    let inspectCount = 0;
-    const docker: DockerCommand = (args) => {
-      calls.push([...args]);
-      if (args[0] === 'network' && args[1] === 'inspect') {
-        inspectCount += 1;
-        return Promise.resolve(
-          inspectCount === 1
-            ? commandResult(1, '', 'not found')
-            : networkInspection('agent-egress'),
-        );
-      }
-      if (args[0] === 'network' && args[1] === 'create') {
-        return Promise.resolve(commandResult(1, '', 'already exists'));
-      }
-      if (args[0] === 'run') return Promise.resolve(commandResult(0, 'container-race-winner\n'));
-      return Promise.resolve(commandResult(1, '', 'unexpected command'));
-    };
-    const root = await mkdtemp(path.join(tmpdir(), 'w3-docker-network-race-'));
-    const driver = createDockerDriver<never, never>({
-      images: new Map([['claude-agent-sdk', 'alpine:3.20']]),
-      startAgent: () => {
-        throw new Error('not used');
-      },
-      docker,
-    });
-    try {
-      await expect(
-        driver.create({ engine: 'claude-agent-sdk', sessionId: 'race', workspacePath: root }),
-      ).resolves.toMatchObject({
-        externalId: 'container-race-winner',
-      });
-      expect(calls.filter((call) => call.slice(0, 2).join(' ') === 'network inspect')).toHaveLength(
-        2,
-      );
-      expect(calls.find((call) => call.slice(0, 2).join(' ') === 'network create')).toEqual([
-        'network',
-        'create',
-        '--driver',
-        'bridge',
-        '--internal',
-        '--label',
-        'agent-workspace.runtime=docker-network',
-        'agent-egress',
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });

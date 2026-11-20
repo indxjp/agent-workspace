@@ -23,7 +23,11 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from '../auth/session';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { memberOwnershipResolver, ownerOwnershipResolver } from './access';
@@ -49,11 +53,11 @@ const REMOVED_IDENTITIES: Readonly<
 };
 
 async function sessionPrincipalFor(email: string, role: 'owner' | 'viewer'): Promise<Principal> {
-  const token = await mintSessionToken(
-    newSessionClaims(email, WORKSPACE_SLUG),
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims(email, WORKSPACE_SLUG),
     TEST_SESSION_SECRET,
   );
-  const verified = await verifySessionToken(token, TEST_SESSION_SECRET);
+  const verified = await verifySignInSessionToken(token, TEST_SESSION_SECRET);
   if (!verified.ok) throw new Error(`test setup failed to mint a session: ${verified.reason}`);
   const identity = REMOVED_IDENTITIES[email];
   if (identity === undefined) throw new Error(`no exact identity fixture for ${email}`);

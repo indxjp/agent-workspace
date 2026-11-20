@@ -209,7 +209,9 @@ prints the token.
 - `tool-close` (web service account) deletes the sandbox with `ISOLATION_TOOL_CLIENT_ID` and
   `ISOLATION_TOOL_WORKSPACE_ID`; result `tool-sandbox-close`.
 
-The image also needs `attempts.mjs` and `tool-probe.mjs` (`cloud-run-lane.Dockerfile` copies them).
+The image also needs `attempts.mjs`, `tool-probe.mjs` and the lane's modules (`lane-result.mjs`,
+`manager-client.mjs`, `probe-evaluation.mjs`, `proxy-attempts.mjs`, `proxy-evaluation.mjs`,
+`proxy-lane.mjs`, `tool-lane.mjs`); `cloud-run-lane.Dockerfile` copies them.
 
 ### Proxy modes (restricted and open sandboxes)
 

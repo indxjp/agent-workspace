@@ -28,7 +28,7 @@ variable (systemSubtypes resultSubtypes eventTypes : List String)
 
 Stated over the envelope the relay actually wrote, so the theorem is about the stored shape and not
 about an idealised one. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/domains/d1-runs.md#events")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/domains/d1-runs.md#events")
   (ts := "apps/web/server/runs/agent-frames.ts#upgradeStoredEvent")]
 theorem legacy_replay_equals_fresh_run (kind : String) (message : JValue) :
     upgradeLegacy systemSubtypes resultSubtypes eventTypes (legacyEnvelope kind message) =

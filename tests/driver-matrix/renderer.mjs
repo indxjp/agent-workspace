@@ -18,7 +18,7 @@ export const NO_SCENARIO_ROWS = new Set([
 const ENGINE_IMAGES_NOTE = [
   '## Engine images',
   '',
-  'A runtime image carries exactly one engine adapter, and a deployment configures one image per engine it offers ([ADR-0073](adr/0073-one-runtime-image-per-engine.md)).',
+  'A runtime image carries exactly one engine adapter, and a deployment configures one image per engine it offers ([ADR-0073](../../adr/0073-one-runtime-image-per-engine.md)).',
   '',
   "- `docker`, `k8s` and `cloudrun` take the deployment's `engine → image` map and start each run in the image for the run's engine. An engine with no image is refused as `engine_not_installed` before a container, pod or service is created.",
   '- `local` and `sbx-rt` take no image: they run the runner in-process and load whatever adapters are installed in the workspace.',

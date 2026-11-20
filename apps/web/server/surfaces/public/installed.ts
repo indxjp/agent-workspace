@@ -4,7 +4,7 @@
  */
 import { applicationContext } from '../../application-context';
 import type { SurfaceConditionEnvironment } from './conditions';
-import type { SurfaceSessionsRuntime } from './runtime';
+import type { SurfaceSessionsRuntime } from './wiring';
 
 /** The installed bootstrap, or `null` while it is not `serving`. */
 export function surfaceSessions(): SurfaceSessionsRuntime | null {

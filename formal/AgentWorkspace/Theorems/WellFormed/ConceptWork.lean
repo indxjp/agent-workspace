@@ -90,7 +90,7 @@ theorem check_value_lists_match_the_concepts :
 /-- Every check of a work table that is not a closed set has semantics in `workCheck`, and
 `workCheckSql` names exactly those checks, table by table, in declaration order. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/runs.ts#runs")]
 theorem every_work_check_is_refined :
     (workTables.all fun t => (otherChecks t).all fun n => (workCheck n).isSome) ∧
@@ -99,7 +99,7 @@ theorem every_work_check_is_refined :
 
 /-- The work tables carry 34 checks that are not closed sets and 22 closed-set checks. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
 theorem work_check_counts :
     (workTables.flatMap otherChecks).length = 34 ∧
@@ -149,7 +149,7 @@ elab "aw_work_fk_cardinality_theorems" : command => do
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T0))
-        (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+        (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
         (ts := $fkTs)]
       theorem $thm :
           ((catalogue $tIdent).foreignKey? $(Syntax.mkStrLit fk.name)).map
@@ -164,7 +164,7 @@ aw_work_fk_cardinality_theorems
 /-- The work tables declare 66 foreign keys: 48 whose every column is `NOT NULL` and 18 with a
 nullable column. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem work_foreign_key_counts :
     workForeignKeys.length = 66 ∧
       (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 48 := by
@@ -254,7 +254,7 @@ private theorem project_get (p : Project) (c : String) :
 
 /-- Every project encodes to a row that fits `projects`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/projects.ts#projects")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem project_row_fits (p : Project) : rowFits .projects (projectCells p) = true := by
   simp only [rowFits, catalogue, List.all_cons, List.all_nil, notNullHolds, checkHolds,
     project_get, otherCheckHolds]
@@ -284,7 +284,7 @@ private theorem session_nd (s : Session) : ((sessionCells s).map Prod.fst).Nodup
 
 /-- Every session encodes to a row that fits `sessions`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/sessions.ts#sessions")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem session_row_fits (s : Session) : rowFits .sessions (sessionCells s) = true := by
   have g := fun c => get_ofCells (sessionCells s) c (session_nd s)
   simp only [rowFits, catalogue, List.all_cons, List.all_nil, notNullHolds, checkHolds, g]
@@ -327,7 +327,7 @@ private theorem run_get (r : Run) (c : String) :
 
 /-- Every run encodes to a row that fits `runs` (including the three closed-set checks). -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runs.ts#runs")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem run_row_fits (r : Run) : rowFits .runs (runCells r) = true := by
   simp only [rowFits, catalogue, List.all_cons, List.all_nil, notNullHolds, checkHolds, run_get,
     otherCheckHolds]
@@ -464,7 +464,7 @@ run is well formed if and only if its row passes all of them (`runs_output_only_
 consumed-approval, idempotency, parent or spend-ceiling columns). -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")
   (ts := "packages/core/src/db/schema/runs.ts#runs_price_version_matches_accounting_state")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem run_invariants_are_the_row_checks (r : Run) :
     ((otherChecks .runs).all fun n => workCheckHolds n (ofCells (runCells r))) = r.wellFormed := by
   simp only [otherChecks, catalogue, List.filterMap_cons, List.filterMap_nil, List.all_cons,
@@ -774,7 +774,7 @@ end Witness
 state is consistent under every constraint of the catalogue and every refined check, has a row in
 every work table, and uses every one of the cluster's 48 foreign keys. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem work_constraints_are_satisfiable :
     workConsistent Witness.state = true ∧ (workTables.all fun t => !(Witness.state t).isEmpty) ∧

@@ -17,7 +17,7 @@ has three verbs, and the schema has one table per edge:
 The word "grant" is overloaded in today's code and docs: an `agent_files` row is also called a
 "file grant" (its `access` is a "read-only grant" in the data-plane page). This model keeps
 **assignment** for the three agent-resource tables and **grant** for `agent_grants` only; the
-glossary in `docs/formal/units/concept-catalog.md` records the aliases.
+glossary in `docs/20-design/formal/units/concept-catalog.md` records the aliases.
 
 Also here: the two repository operations that define what an assignment and a grant *mean*
 observably: `replace` (`AgentResourceRepository.replace`) and `grantsRead` / `grantsReplace`
@@ -34,7 +34,7 @@ open AgentWorkspace
 /-- `fileAccessModes`: §16's "read-only or read-write access". -/
 @[aw_spec (ts := "packages/core/src/db/schema/agent-files.ts#fileAccessModes")
   (ts := "packages/contracts/src/agents.ts#AgentResourceAssignmentsSchema")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 inductive FileAccess where
   | read
   | readWrite
@@ -143,7 +143,7 @@ structure FileEntry where
 
 /-- `AgentResourceAssignments`: what `PUT /api/agents/:id/resources` sends and answers. -/
 @[aw_spec (ts := "packages/contracts/src/agents.ts#AgentResourceAssignmentsSchema")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 structure Assignments where
   files : List FileEntry
   skills : List String
@@ -250,7 +250,7 @@ def PrincipalView.grantable (p : PrincipalView) : Bool := p.user.isSome && !p.re
 
 /-- `listPrincipalIds`: the active membership principals whose user holds a grant row. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/agent-grants.ts#createDatabaseAgentGrantRepositoryProvider")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def grantsRead (ps : List PrincipalView) (users : List UserId) : List PrincipalId :=
   (ps.filter fun p => p.grantable && p.user.any users.contains).map (·.id)
 
@@ -394,7 +394,7 @@ def fileEntry? (e : RawFileEntry) : Option FileEntry :=
 /-- `AgentResourceAssignmentsSchema.safeParse`: every id non-empty, every access a member of the
 closed set, no unknown key; duplicates are *not* refused here (the repository decides them). -/
 @[aw_spec (ts := "packages/contracts/src/agents.ts#AgentResourceAssignmentsSchema")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 def assignmentsBody (b : RawAssignments) : Option Assignments :=
   if b.extra.isEmpty && b.files.all (fun e => (fileEntry? e).isSome) &&
       b.skillIds.all (!·.isEmpty) && b.connectorIds.all (!·.isEmpty) then
@@ -408,7 +408,7 @@ def lowerAscii (s : String) : String := String.ofList (s.toList.map Char.toLower
 /-- `AgentGrantsSchema`: every id a canonical UUID, lower-cased, and no two equal after
 lower-casing; the parsed ids, or `none` when the schema refuses the body. -/
 @[aw_spec (ts := "packages/contracts/src/agents.ts#AgentGrantsSchema")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 def grantsBody (ids : List String) : Option (List String) :=
   if ids.all Uuid.isCanonical then
     let l := ids.map lowerAscii

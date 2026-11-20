@@ -124,7 +124,7 @@ wire shape `test-connection.ts` and the routes already agree on.
 ## Decision 4 — `test-connection` rides `POST /api/connectors` as a `dryRun` flag, not a route of its own
 
 The first draft of this task shipped `POST /api/connectors/test-connection` (the wizard's pre-save
-probe) as its own route. `tests/route-inventory.test.ts`'s shape rule (ADR-0026 decision 3) admits
+probe) as its own route. `tests/route-inventory.policy-check.ts`'s shape rule (ADR-0026 decision 3) admits
 only `/api/<resource>`, `/api/<resource>/:id` and `/api/<resource>/:id/<sub>` — a literal second
 path segment with **no** id first is refused as *"a second resource that has not been named"* the
 moment it carries a `mandate` rather than being printed by §34. Declaring `test-connection` as a

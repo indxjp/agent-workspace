@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W0-INF-03, Infra agent
-Scope: `scripts/check-licenses.mjs`, `docs/dependency-policy.md`, the `Licence gate` step of `.github/workflows/ci.yml`
+Scope: `scripts/check-licenses.mjs`, `docs/30-reference/policies/dependency-policy.md`, the `Licence gate` step of `.github/workflows/ci.yml`
 
 ## Context
 

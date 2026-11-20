@@ -21,7 +21,7 @@ private theorem every_frame_is_neutral (f : Frame) : isNeutral f = true := by
 
 /-- The mapping never drops an event: each one becomes at least one frame, and every frame is a
 neutral frame, `agent.native` or `agent.malformed`. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#events")
   (ts := "packages/engine-openai-agents/src/frames.ts#createOpenAiAgentsFrameMapper")]
 theorem the_mapping_never_drops_an_event (ctx : FrameContext) (announced : List String)
     (e : Event) :
@@ -66,7 +66,7 @@ private theorem paired_from (ctx : FrameContext) (events : List Event) :
 
 /-- Tool pairing holds on every mapped stream: every `agent.tool.result` answers a call an earlier
 `agent.tool.call` announced and no earlier result answered. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#events")
   (ts := "packages/engine-openai-agents/src/frames.ts#createOpenAiAgentsFrameMapper")]
 theorem tool_pairing_holds (ctx : FrameContext) (events : List Event) :
     pairedFrom [] (mapAll ctx events) = true :=
@@ -80,7 +80,7 @@ example :
 
 /-- The adapter stops at or before `limits.maxTurns`, and a run the limit cut short ends with
 `agent.result {stopReason: 'max_turns'}` carrying the turns it took. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#turns")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#turns")
   (ts := "packages/engine-openai-agents/src/boundary.ts#startOpenAiAgentsRun")
   (ts := "packages/engine-openai-agents/src/frames.ts#createOpenAiAgentsFrameMapper")]
 theorem the_run_stops_at_or_before_max_turns (ctx : FrameContext) (announced : List String)

@@ -144,7 +144,7 @@ def requireWorkspaceScope (v : ScopeValue) : Option WorkspaceScope :=
 
 /-- How a principal was authenticated (`Via`, in `principal.ts` order). -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#Via")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 inductive Via where
   | session
   | apiKey
@@ -169,7 +169,7 @@ instance : WireEnum Via where
 /-- The request principal (`apps/web/server/rbac/principal.ts#Principal`): who acts, in which
 one workspace, with which role, and the browser-token attenuation if any. -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#Principal")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 structure RequestPrincipal where
   principalId : String
   kind : Concepts.Principal.Kind
@@ -183,7 +183,7 @@ structure RequestPrincipal where
   scope : Option Scope
   deriving DecidableEq, Repr
 
-/-- `VerifiedSessionClaims`, the two claims selection reads: the subject (an email) and the
+/-- `VerifiedSignInSessionClaims`, the two claims selection reads: the subject (an email) and the
 workspace slug the session names. -/
 structure SessionClaims where
   sub : String
@@ -212,7 +212,7 @@ inductive SessionRefusal where
 /-- `Principal.fromSession`: refuse a workspace whose slug is not the verified session's, refuse
 a blank identity, otherwise a `session` principal of that workspace's id. -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#fromSession")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 def fromSession (claims : SessionClaims) (ws : SessionWorkspace) (role : String)
     (identity : MemberIdentity) : Except SessionRefusal RequestPrincipal :=
   if ws.slug != claims.ws then .error .workspaceMismatch
@@ -233,7 +233,7 @@ structure ApiKeyIdentity where
 
 /-- `Principal.fromApiKey`: the key's workspace, fixed. -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#fromApiKey")
-  (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")]
 def fromApiKey (i : ApiKeyIdentity) : RequestPrincipal :=
   { principalId := i.principalId, kind := .apiKey, workspaceId := i.workspaceId, label := i.label,
     actor := i.label, role := i.role, via := .apiKey, userId := none,
@@ -260,7 +260,7 @@ def fromDirectoryRecord (r : DirectoryRecord) : RequestPrincipal :=
 
 /-- `Principal.fromBrowserToken`: the minter's identity and workspace, with the token's scope. -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#fromBrowserToken")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def fromBrowserToken (minter : RequestPrincipal) (s : Scope) : RequestPrincipal :=
   { minter with via := .browserToken, scope := some s }
 
@@ -277,7 +277,7 @@ structure WorkspaceMembership where
 by the email, their membership, and its unrevoked membership principal; `null` unless all four
 rows exist. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/root.ts#resolveMembership")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 def resolveMembership (st : State) (email slug : String) : Option WorkspaceMembership := do
   let w ← (st .workspaces).find? (colIs · "slug" slug)
   let wid ← w.get "id"
@@ -304,7 +304,7 @@ inductive Resolution where
 the membership by `(claims.sub, claims.ws)`, then build the principal with the slug **copied from
 the claims** (`{ id: member.workspaceId, slug: verified.claims.ws }`). -/
 @[aw_spec (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 def identifySessionCurrent (st : State) (claims : SessionClaims) : Resolution :=
   match resolveMembership st claims.sub claims.ws with
   | none => .forbidden
@@ -321,7 +321,7 @@ def after (cell : Option String) (now : Nat) : Bool :=
 (`workspace_principals.(workspace_id, api_key_id) = api_keys.(workspace_id, id)`), neither revoked,
 the key unexpired. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 def authenticateApiKey (st : State) (keyHash : String) (now : Nat) : Option ApiKeyIdentity :=
   let pairs := (st .apiKeys).flatMap fun k =>
     ((st .workspacePrincipals).filter fun p =>
@@ -378,7 +378,7 @@ def scopedSelect (st : State) (s : WorkspaceScope) (t : TableName) (p : Row → 
 scope, the scoped run (not terminal) or session (not archived), and the minter re-read from the
 directory in the token's workspace, attenuated by the token's scope. -/
 @[aw_spec (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def resolveBrowserToken (st : State) (tokenHash : String) (now : Nat) : Option RequestPrincipal := do
   let row ← (st .browserTokens).find? fun b =>
     colIs b "token_hash" tokenHash && (b.get "revoked_at").isNone && after (b.get "expires_at") now
@@ -472,7 +472,7 @@ structure RunProblem where
 
 /-- The one 404 every run route answers for a missing or foreign run. -/
 @[aw_spec (ts := "apps/web/server/runs/api.ts#readRun")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 def runNotFound (runId : String) : RunProblem :=
   ⟨404, "run_not_found", "no run " ++ runId ++ " in this workspace."⟩
 
@@ -851,7 +851,7 @@ def workspaceNotFound : ResolverOutcome := .refuse 404 "workspace_not_found"
 
 /-- `apiKeyRefusal`: `403 api_key_not_permitted`. -/
 @[aw_spec (ts := "apps/web/server/workspaces/access.ts#apiKeyRefusal")
-  (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")]
 def apiKeyNotPermitted : ResolverOutcome := .refuse 403 "api_key_not_permitted"
 
 /-- `resolveMembershipView`: malformed id, API-key caller, vanished membership, not a member.

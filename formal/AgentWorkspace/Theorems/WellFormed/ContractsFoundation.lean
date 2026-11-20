@@ -44,7 +44,7 @@ private theorem sum_units_bounds :
     omega
 
 /-- A string's JavaScript `length` lies between its character count and twice that count. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#MAX_PROMPT_CHARS")]
 theorem utf16_length_between_chars_and_twice (s : String) :
     s.toList.length ≤ utf16Length s ∧ utf16Length s ≤ 2 * s.toList.length :=
@@ -52,7 +52,7 @@ theorem utf16_length_between_chars_and_twice (s : String) :
 
 /-- A character above `U+FFFF` counts as two UTF-16 units and one in the Basic Multilingual Plane
 as one, at both edges of the plane. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#MAX_PROMPT_CHARS")]
 theorem utf16_units_at_the_plane_edges :
     utf16Units (Char.ofNat 0xFFFF) = 1 ∧ utf16Units (Char.ofNat 0x10000) = 2 ∧
@@ -73,7 +73,7 @@ example : lengthWithin 1 (some 2) (String.ofList [Char.ofNat 0x1F600]) = true �
 /-- The JavaScript whitespace predicate holds for each of its 25 listed code points and for none
 of the look-alikes `trim` keeps: next line `U+0085`, the Mongolian vowel separator `U+180E`, the
 zero-width space `U+200B`, the word joiner `U+2060`, and the letters and digits. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem js_whitespace_is_the_listed_set :
     jsWhitespaceCodePoints.all (fun n => isJsWhitespace (Char.ofNat n)) = true ∧
@@ -97,7 +97,7 @@ private theorem all_dropWhile (p : Char → Bool) :
     cases hc : p c <;> simp [hc, all_dropWhile p cs]
 
 /-- `trim` empties a string exactly when every character of it is JavaScript whitespace. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem js_trim_empty_iff_blank (s : String) : jsTrimList s.toList = [] ↔ isBlank s = true := by
   unfold jsTrimList isBlank
@@ -107,7 +107,7 @@ example : isBlank "\u3000 \t" = true ∧ isBlank " a " = false := by decide +ker
 
 /-- `trim` removes leading and trailing whitespace of every kind the set lists and keeps the
 characters JavaScript does not treat as whitespace. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem js_trim_examples :
     jsTrim " \t\n a b \r\u00A0\u2028\uFEFF" = "a b" ∧ jsTrim "\u0085x\u180E" = "\u0085x\u180E" ∧
@@ -308,7 +308,7 @@ example : ¬ ∃ j, apiProblemBareCodeCodec.decode j = some ⟨"", none⟩ := fu
 
 /-- `details` is any list of strings, the empty list included (`z.array(z.string())` has no
 length bound), and is read back unchanged. -/
-@[aw_spec (tier := T0) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T0) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")]
 theorem api_problem_accepts_any_details_list (d : List String) :
     apiProblemCodec.decode (.obj [("error", .obj [("code", .str "x"), ("message", .str ""),
@@ -345,7 +345,7 @@ theorem problem_code_min_one :
 /-- Missing and mistyped fields are refused: a missing `message` or `code`, `details: null`
 (optional is not nullable), a non-string detail, a bare `error` string where the standard envelope
 wants an object, a `null` bare `message`, a non-object body, and an array body. -/
-@[aw_spec (tier := T0) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T0) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")
   (ts := "packages/contracts/src/problem.ts#ApiProblemBareCodeSchema")]
 theorem problem_envelopes_refuse_missing_and_mistyped_fields :

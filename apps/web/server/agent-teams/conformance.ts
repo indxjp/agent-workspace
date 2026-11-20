@@ -5,7 +5,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import type { AgentTeamsRuntime } from './runtime';
+import type { AgentTeamsRuntime } from './wiring';
 
 interface Pin {
   readonly agentId: string;

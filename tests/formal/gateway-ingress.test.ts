@@ -18,7 +18,7 @@
  *     neither), through `createGatewayApplication`.
  *
  * A disagreement is a failing test, and the fix is never to edit a vector
- * (docs/formal/00-orchestrator-prompt.md §10). The accounting state a settlement leaves the run in
+ * (docs/20-design/formal/00-orchestrator-prompt.md §10). The accounting state a settlement leaves the run in
  * is the repository's derivation and is covered by the PostgreSQL-backed
  * `packages/core/src/db/repositories/run-usage.test.ts`, not here.
  */

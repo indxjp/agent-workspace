@@ -1,0 +1,142 @@
+kind: data
+title: Agents, sessions and runs
+description: A run belongs to a session of an agent in one workspace; the runner receives a RunRequest with file references, never bytes, and streams agent frames back.
+entities:
+  - id: workspace
+    name: WorkspaceScope
+    path: packages/core/src/db/repositories/scope.ts
+    description: The only tenant value a repository takes; minted from a lookup, never from caller input.
+    fields:
+      - { name: workspaceId, type: "string" }
+  - id: principal
+    name: Principal
+    path: apps/web/server/rbac/principal.ts
+    description: The resolved caller of one request.
+    fields:
+      - { name: principalId, type: "string" }
+      - { name: kind, type: "PrincipalKind" }
+      - { name: workspaceId, type: "string" }
+      - { name: role, type: "Role", note: "Owner, Admin, Builder, Viewer; monotonic (ADR-0152)" }
+      - { name: via, type: "Via" }
+      - { name: scope, type: "TokenScope | null" }
+  - id: agent
+    name: AgentRecord
+    path: packages/core/src/db/repositories/agents.ts
+    description: A stored agent row.
+    fields:
+      - { name: id, type: "string" }
+      - { name: workspaceId, type: "string" }
+      - { name: name, type: "string" }
+      - { name: instructions, type: "string" }
+      - { name: modelConnectionId, type: "string | null" }
+      - { name: runtimeProfileId, type: "string | null" }
+      - { name: permissions, type: "AgentPermissions" }
+      - { name: policy, type: "AgentStoredPolicy | null" }
+      - { name: ownerPrincipalId, type: "string" }
+  - id: version
+    name: AgentVersionRecord
+    path: packages/core/src/db/repositories/agent-versions.ts
+    description: An immutable numbered version of an agent; environment pointers name which one runs.
+    fields:
+      - { name: id, type: "string" }
+      - { name: agentId, type: "string" }
+      - { name: number, type: "number" }
+      - { name: summary, type: "string" }
+      - { name: body, type: "unknown", note: "parsed as AgentVersionBody" }
+  - id: body
+    name: AgentVersionBody
+    path: packages/contracts/src/agent-versions/body.ts
+    description: What a version holds, as published on the wire.
+    fields:
+      - { name: definition, type: "AgentDefinition" }
+      - { name: surfaces, type: "Surface[]" }
+      - { name: toolBundles, type: "ToolBundleRef[]" }
+      - { name: subagents, type: "SubagentRef[]" }
+  - id: assignments
+    name: AgentResourceAssignments
+    path: packages/contracts/src/agents/resource.ts
+    description: The files, skills, connectors and storage grants an agent may use.
+    fields:
+      - { name: files, type: "{ fileId, access }[]" }
+      - { name: skillIds, type: "string[]" }
+      - { name: connectorIds, type: "string[]" }
+      - { name: storageGrants, type: "StorageGrantRef[]" }
+  - id: file
+    name: CatalogFile
+    path: packages/core/src/db/repositories/resource-catalogs-model.ts
+    description: A catalog row naming one stored object; only a ready row is listed or granted.
+    fields:
+      - { name: id, type: "string" }
+      - { name: path, type: "string" }
+      - { name: status, type: "FileStatus", note: "pending, ready or deleting" }
+      - { name: objectId, type: "string | null" }
+      - { name: sizeBytes, type: "number" }
+      - { name: sha256, type: "string | null" }
+  - id: session
+    name: SessionRecord
+    path: packages/core/src/db/repositories/runs/types.ts
+    description: A conversation with one agent; runs continue in it.
+    fields:
+      - { name: id, type: "string" }
+      - { name: agentId, type: "string" }
+      - { name: agentVersionId, type: "string | null" }
+      - { name: engine, type: "EngineId | null" }
+      - { name: engineSessionId, type: "string | null" }
+      - { name: status, type: "SessionStatus" }
+  - id: run
+    name: RunRecord
+    path: packages/core/src/db/repositories/runs/types.ts
+    description: One execution of an agent, with its accounting.
+    fields:
+      - { name: id, type: "string" }
+      - { name: sessionId, type: "string" }
+      - { name: status, type: "RunStatus", note: "vocabulary from packages/contracts/src/runs.ts" }
+      - { name: engine, type: "EngineId | null" }
+      - { name: provider, type: "string | null", note: "the model provider, not the engine" }
+      - { name: inputTokens, type: "number" }
+      - { name: outputTokens, type: "number" }
+      - { name: costUsd, type: "string" }
+      - { name: spendCeilingUsd, type: "string | null" }
+      - { name: accountingState, type: "AccountingState" }
+  - id: launch
+    name: LaunchContext
+    path: apps/web/server/runs/environment.ts
+    description: Everything the launcher needs for one run, assembled in memory.
+    fields:
+      - { name: run, type: "RunRecord" }
+      - { name: agent, type: "AgentRef" }
+      - { name: session, type: "SessionRef" }
+      - { name: principal, type: "RunPrincipal" }
+      - { name: prompt, type: "string" }
+      - { name: attachments, type: "ResolvedAttachment[]" }
+  - id: request
+    name: RunRequest
+    path: packages/run-protocol/src/schemas.ts
+    description: The body of POST /run that the runtime server receives.
+    fields:
+      - { name: runId, type: "uuid" }
+      - { name: sessionId, type: "uuid" }
+      - { name: prompt, type: "string" }
+      - { name: engine, type: "string" }
+      - { name: portable, type: "PortableAgentConfig" }
+      - { name: gateway, type: "RunGatewayConnection" }
+      - { name: resources, type: "RunResources", note: "file references with size and checksum" }
+  - id: frame
+    name: AgentFrame
+    path: packages/contracts/src/run-events.ts
+    description: One agent.* frame of a run's stream, discriminated by frame.
+    fields:
+      - { name: frame, type: "session | message | tool_call | tool_result | usage | result | approval_requested | handoff | ..." }
+relations:
+  - { from: principal, to: workspace, cardinality: many-to-one, label: acts in }
+  - { from: workspace, to: agent, cardinality: one-to-many, label: owns }
+  - { from: agent, to: version, cardinality: one-to-many, label: has versions }
+  - { from: version, to: body, cardinality: one-to-one, label: holds }
+  - { from: agent, to: assignments, cardinality: one-to-one, label: is granted }
+  - { from: assignments, to: file, cardinality: one-to-many, label: grants }
+  - { from: agent, to: session, cardinality: one-to-many, label: has sessions }
+  - { from: session, to: run, cardinality: one-to-many, label: holds }
+  - { from: launch, to: run, cardinality: one-to-one, label: launches }
+  - { from: launch, to: request, cardinality: one-to-one, label: becomes }
+  - { from: request, to: file, cardinality: one-to-many, label: references }
+  - { from: run, to: frame, cardinality: one-to-many, label: streams }

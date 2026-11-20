@@ -14,6 +14,7 @@
  * whenever `TEST_DATABASE_URL` names a database (`pnpm test` provides one, through Docker or the
  * embedded-postgres fallback); skipped, by name, otherwise.
  */
+
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,19 +24,19 @@ import { eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { clearApplicationContext } from '../application-context';
-import { installTestRunApi } from '../application-context-fixtures';
 import { interruptRunFor, readRun } from '../runs/api';
-import type {
-  AgentRef,
-  LaunchContext,
-  RunApiEnvironment,
-  RunPrincipal,
-  SessionRef,
-} from '../runs/environment';
-import { createRepositoryRunStore } from '../runs/repository-store';
-import type { RunStore } from '../runs/store';
-import { serveMemberTools, type MemberToolsEnvironment } from './member-tools';
-import type { AgentTeamVersionRecord } from './runtime';
+import {
+  COSTS,
+  environment,
+  runStore,
+  seed,
+  settle,
+  startLead,
+  waitFor,
+  type CoreDb,
+  type IsolatedDatabase,
+  type TeamRunHarness,
+} from './team-run.integration.test-support';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';
@@ -49,15 +50,10 @@ if (!hasDatabase) {
 /** `apps/web/server/agent-teams/<this file>` → the repository root, five levels up. */
 const repoRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..', '..');
 
-/** The declared test-only escape to the raw handle and the tables (see `store.test.ts`). */
-type CoreDb = typeof import('@agent-workspace/core/db/unscoped');
-
-/** The cost each run settles with: the lead's, then each member's, in the smallest unit summed. */
-const COSTS = { lead: '0.125000', writer: '0.250000', critic: '0.062500' } as const;
-
 describe.skipIf(!hasDatabase)('an agent team run over PostgreSQL', () => {
   let core: CoreDb;
-  let isolated: Awaited<ReturnType<CoreDb['createIsolatedTestDatabase']>>;
+  let isolated: IsolatedDatabase;
+  const harness = (): TeamRunHarness => ({ core, isolated });
 
   beforeAll(async () => {
     const dist = path.join(
@@ -86,273 +82,25 @@ describe.skipIf(!hasDatabase)('an agent team run over PostgreSQL', () => {
     clearApplicationContext();
   });
 
-  interface Seeded {
-    readonly workspaceId: string;
-    readonly person: RunPrincipal;
-    readonly agents: Readonly<Record<'lead' | 'writer' | 'critic', string>>;
-    readonly version: AgentTeamVersionRecord;
-  }
-
-  /** A workspace, its owner, three agents with a version each, and a team of them. */
-  async function seed(): Promise<Seeded> {
-    const workspaceId = crypto.randomUUID();
-    const userId = crypto.randomUUID();
-    const membershipId = crypto.randomUUID();
-    await isolated.db
-      .insert(core.workspaces)
-      .values({ id: workspaceId, slug: workspaceId, name: 'Team' });
-    await isolated.db
-      .insert(core.users)
-      .values({ id: userId, email: `${userId}@example.com`, name: 'Ada' });
-    await isolated.db
-      .insert(core.memberships)
-      .values({ id: membershipId, workspaceId, userId, role: 'owner' });
-    const principal = (await isolated.db.select().from(core.workspacePrincipals)).find(
-      (candidate) => candidate.membershipId === membershipId,
-    );
-    if (principal === undefined) throw new Error('the membership trigger created no principal');
-    const pins: Record<string, { agentId: string; agentVersionId: string }> = {};
-    for (const name of ['lead', 'writer', 'critic'] as const) {
-      const agentId = crypto.randomUUID();
-      const agentVersionId = crypto.randomUUID();
-      await isolated.db.insert(core.agents).values({
-        id: agentId,
-        workspaceId,
-        name,
-        instructions: '',
-        modelConnectionId: null,
-        model: null,
-        createdBy: userId,
-        ownerPrincipalId: principal.id,
-        permissions: {
-          readFiles: false,
-          writeFiles: false,
-          runCommands: false,
-          unrestrictedNetwork: false,
-        },
-      });
-      await isolated.db.insert(core.agentVersions).values({
-        id: agentVersionId,
-        workspaceId,
-        agentId,
-        number: 1,
-        summary: 'first',
-        via: 'api',
-        body: {},
-        createdByPrincipalId: principal.id,
-      });
-      pins[name] = { agentId, agentVersionId };
-    }
-    const scope = await core
-      .createDatabaseWorkspaceScopeResolver(isolated.db)
-      .forWorkspaceId(workspaceId);
-    if (scope === null) throw new Error('the seeded workspace did not resolve');
-    const lead = pins['lead'];
-    const writer = pins['writer'];
-    const critic = pins['critic'];
-    if (lead === undefined || writer === undefined || critic === undefined)
-      throw new Error('unseeded');
-    const created = await core
-      .createDatabaseAgentTeamRepositoryProvider(isolated.db)
-      .forScope(scope)
-      .create({
-        name: 'Launch',
-        ownerPrincipalId: principal.id,
-        createdBy: userId,
-        version: { lead, members: [writer, critic] },
-      });
-    if (created.kind !== 'created' || created.team.latestVersion === null)
-      throw new Error(created.kind);
-    return {
-      workspaceId,
-      person: {
-        principalId: principal.id,
-        ownerPrincipalId: principal.id,
-        userId,
-        workspaceId,
-        role: 'owner',
-        scope: null,
-        via: 'session',
-        kind: 'membership',
-      },
-      agents: { lead: lead.agentId, writer: writer.agentId, critic: critic.agentId },
-      version: created.team.latestVersion,
-    };
-  }
-
-  function runStore(): RunStore {
-    return createRepositoryRunStore({
-      repositories: core.createDatabaseRunRepositoryProvider(isolated.db),
-      events: core.createDatabaseRunEventRepositoryProvider(isolated.db),
-      scopes: core.createDatabaseWorkspaceScopeResolver(isolated.db),
-      findRunWorkspace: (id: string): Promise<string | null> =>
-        core.findRunWorkspace(isolated.db, id),
-    });
-  }
-
-  /** Settle a run as the runtime and the ledger would: priced, with its cost, then `completed`. */
-  async function settle(store: RunStore, runId: string, cost: string, text: string): Promise<void> {
-    await isolated.db
-      .update(core.runs)
-      .set({ costUsd: cost, accountingState: 'complete', priceTableVersion: '2026-11' })
-      .where(eq(core.runs.id, runId));
-    await store.finish(runId, 'completed', null, true, { text, structured: null });
-  }
-
-  /**
-   * The run routes over the real store and session rows, with a runtime double: `play` runs the
-   * agent of each launched run. The member endpoint is served in-process with the lead's identity.
-   */
-  function environment(
-    seeded: Seeded,
-    store: RunStore,
-    play: (
-      context: LaunchContext,
-      members: (name: string, prompt: string) => Promise<unknown>,
-    ) => Promise<void>,
-  ) {
-    const scopes = core.createDatabaseWorkspaceScopeResolver(isolated.db);
-    const sessions = core.createDatabaseSessionRepositoryProvider(isolated.db);
-    const settled: Promise<void>[] = [];
-    const env: RunApiEnvironment = {
-      authenticate: () => Promise.resolve(seeded.person),
-      findAgent: (principal, agentId): Promise<AgentRef | null> =>
-        Promise.resolve({
-          id: agentId,
-          workspaceId: principal.workspaceId,
-          engine: 'claude-agent-sdk',
-        }),
-      openSession: async (
-        principal,
-        agent,
-        requested,
-        agentVersionId,
-      ): Promise<SessionRef | null> => {
-        if (requested !== null) return { id: requested, agentId: agent.id, engine: null };
-        const id = crypto.randomUUID();
-        await isolated.db.insert(core.sessions).values({
-          id,
-          workspaceId: principal.workspaceId,
-          userId: principal.userId,
-          agentId: agent.id,
-          ownerPrincipalId: principal.ownerPrincipalId,
-          agentVersionId: agentVersionId ?? null,
-        });
-        const scope = await scopes.forWorkspaceId(principal.workspaceId);
-        if (scope === null || (await sessions.forScope(scope).get(id)) === null) return null;
-        return { id, agentId: agent.id, engine: null };
-      },
-      ownsRun: () => Promise.resolve(true),
-      store,
-      launch: (context) => {
-        const members = async (name: string, prompt: string) => {
-          const response = await serveMemberTools(
-            memberCall(context.run.id, name, prompt),
-            context.run.id,
-            memberEnv,
-          );
-          return ((await response.json()) as { result: unknown }).result;
-        };
-        settled.push(
-          (async () => {
-            await store.markRunning(context.run.id);
-            await play(context, members);
-          })(),
-        );
-      },
-      interruptRun: async (_principal, run) => {
-        await store.finish(run.id, 'cancelled', 'the run was interrupted by request', true);
-      },
-    };
-    const memberEnv: MemberToolsEnvironment = {
-      verifyCaller: (authorization) => {
-        const runId = /^Bearer lead:(.+)$/u.exec(authorization ?? '')?.[1];
-        return Promise.resolve(
-          runId === undefined
-            ? null
-            : {
-                runId,
-                workspaceId: seeded.workspaceId,
-                expiresAtMs: Date.now() + 60_000,
-                person: seeded.person,
-              },
-        );
-      },
-      runs: env,
-      teamVersion: async (workspaceId, versionId) => {
-        const scope = await scopes.forWorkspaceId(workspaceId);
-        return scope === null
-          ? null
-          : core
-              .createDatabaseAgentTeamRepositoryProvider(isolated.db)
-              .forScope(scope)
-              .getVersion(versionId);
-      },
-      mayRunAgent: () => Promise.resolve(true),
-      pollIntervalMs: 5,
-    };
-    installTestRunApi(env);
-    return { env, settled };
-  }
-
-  function memberCall(leadRunId: string, name: string, prompt: string): Request {
-    return new Request(`http://web.test/api/runs/${leadRunId}/members/mcp`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer lead:${leadRunId}` },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name, arguments: { prompt } },
-      }),
-    });
-  }
-
-  /** Start the team's lead as `POST /api/agent-teams/:id/runs` does: the lead, its version, the team version. */
-  async function startLead(seeded: Seeded, env: RunApiEnvironment) {
-    const { startRunOnSession } = await import('../runs/service');
-    const started = await startRunOnSession(
-      env,
-      seeded.person,
-      { id: seeded.agents.lead, workspaceId: seeded.workspaceId, engine: 'claude-agent-sdk' },
-      {
-        prompt: 'Write and review the launch note.',
-        sessionId: null,
-        modelOverride: null,
-        agentVersionId: seeded.version.lead.agentVersionId,
-        agentTeamVersionId: seeded.version.id,
-      },
-    );
-    if (started.kind !== 'started') throw new Error(started.code);
-    return started.run;
-  }
-
-  async function waitFor(check: () => Promise<boolean>): Promise<void> {
-    for (let attempt = 0; attempt < 400; attempt += 1) {
-      if (await check()) return;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error('the condition was never met');
-  }
-
   it('gives a lead that calls two members one root, two children and the summed treeCost', async () => {
-    const seeded = await seed();
-    const store = runStore();
+    const seeded = await seed(harness());
+    const store = runStore(harness());
     const answers: unknown[] = [];
-    const { env, settled } = environment(seeded, store, async (context, members) => {
+    const { env, settled } = environment(harness(), seeded, store, async (context, members) => {
       if (context.agent.id === seeded.agents.lead) {
         answers.push(await members('writer', 'Draft the note.'));
         answers.push(await members('critic', 'Review the draft.'));
-        await settle(store, context.run.id, COSTS.lead, 'the reviewed note');
+        await settle(harness(), store, context.run.id, {
+          cost: COSTS.lead,
+          text: 'the reviewed note',
+        });
         return;
       }
       const writer = context.agent.id === seeded.agents.writer;
-      await settle(
-        store,
-        context.run.id,
-        writer ? COSTS.writer : COSTS.critic,
-        writer ? 'a draft' : 'a review',
-      );
+      await settle(harness(), store, context.run.id, {
+        cost: writer ? COSTS.writer : COSTS.critic,
+        text: writer ? 'a draft' : 'a review',
+      });
     });
     const root = await startLead(seeded, env);
     await waitFor(async () => (await store.get(root.id))?.status === 'completed');
@@ -384,10 +132,10 @@ describe.skipIf(!hasDatabase)('an agent team run over PostgreSQL', () => {
   });
 
   it('leaves no child queued or running once the root is interrupted', async () => {
-    const seeded = await seed();
-    const store = runStore();
+    const seeded = await seed(harness());
+    const store = runStore(harness());
     const lead: { pending?: Promise<unknown> } = {};
-    const { env } = environment(seeded, store, async (context, members) => {
+    const { env } = environment(harness(), seeded, store, async (context, members) => {
       // The lead hands work to the writer and waits; the writer never finishes on its own.
       if (context.agent.id === seeded.agents.lead)
         lead.pending = members('writer', 'Draft forever.');

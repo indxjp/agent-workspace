@@ -8,13 +8,13 @@ import { hkdfSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
-  clearedSessionCookie,
-  mintSessionToken,
-  newEmailLinkSessionClaims,
-  newSessionClaims,
-  SESSION_TTL_SECONDS,
-  sessionCookie,
-  verifySessionToken,
+  clearedSignInSessionCookie,
+  mintSignInSessionToken,
+  newEmailLinkSignInSessionClaims,
+  newSignInSessionClaims,
+  SIGN_IN_SESSION_TTL_SECONDS,
+  signInSessionCookie,
+  verifySignInSessionToken,
 } from './session';
 
 const SECRET = 'golden-session-secret-0123456789abcdef';
@@ -27,7 +27,10 @@ function base64Url(text: string): string {
 
 async function signed(payload: string): Promise<string> {
   // A token with any payload, signed with the real MAC: what a holder of the secret could mint.
-  const valid = await mintSessionToken(newSessionClaims('a@b.test', 'default', NOW_MS), SECRET);
+  const valid = await mintSignInSessionToken(
+    newSignInSessionClaims('a@b.test', 'default', NOW_MS),
+    SECRET,
+  );
   const [version] = valid.split('.');
   const head = `${version ?? ''}.${base64Url(payload)}`;
   // The session's purpose key (part 06 step 5), so these refusals do not lean on the roll-over.
@@ -51,7 +54,7 @@ async function signed(payload: string): Promise<string> {
 
 describe('session token and cookies, pinned', () => {
   it('builds the same claims and mints the same bytes', async () => {
-    const claims = newSessionClaims('admin@example.com', 'default', NOW_MS);
+    const claims = newSignInSessionClaims('admin@example.com', 'default', NOW_MS);
     expect(claims).toEqual({
       sub: 'admin@example.com',
       ws: 'default',
@@ -62,20 +65,20 @@ describe('session token and cookies, pinned', () => {
     const payload =
       'aw1.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsIndzIjoiZGVmYXVsdCIsInJvbGUiOiJvd25lciIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ.';
     // Part 06 step 5: the payload bytes are unchanged; the MAC is now under the session key.
-    expect(await mintSessionToken(claims, SECRET)).toBe(
+    expect(await mintSignInSessionToken(claims, SECRET)).toBe(
       `${payload}2vrJRvITvhRxMkbBTWnmPjygzyz_HijT0mD96Y67BLI`,
     );
     // The token this build minted before step 5 still verifies during the roll-over.
     const before = `${payload}jL-VAltkbyZjbxOKVUvMwSQxukHmr8c06dE_bMuyIRg`;
-    expect((await verifySessionToken(before, SECRET, NOW_MS)).ok).toBe(true);
-    expect(SESSION_TTL_SECONDS).toBe(43_200);
+    expect((await verifySignInSessionToken(before, SECRET, NOW_MS)).ok).toBe(true);
+    expect(SIGN_IN_SESSION_TTL_SECONDS).toBe(43_200);
   });
 
   it('accepts a session that carries no role, and exposes no role from any session (part 06, step 9)', async () => {
     const withoutRole = await signed(
       `{"sub":"a@b.test","ws":"default","iat":${String(NOW_S)},"exp":${String(NOW_S + 60)}}`,
     );
-    const verified = await verifySessionToken(withoutRole, SECRET, NOW_MS);
+    const verified = await verifySignInSessionToken(withoutRole, SECRET, NOW_MS);
     expect(verified.ok).toBe(true);
     if (verified.ok) {
       expect({ ...verified.claims }).toEqual({
@@ -85,13 +88,16 @@ describe('session token and cookies, pinned', () => {
         exp: NOW_S + 60,
       });
     }
-    const minted = await mintSessionToken(newSessionClaims('a@b.test', 'default', NOW_MS), SECRET);
-    const withRole = await verifySessionToken(minted, SECRET, NOW_MS);
+    const minted = await mintSignInSessionToken(
+      newSignInSessionClaims('a@b.test', 'default', NOW_MS),
+      SECRET,
+    );
+    const withRole = await verifySignInSessionToken(minted, SECRET, NOW_MS);
     expect(withRole.ok && Object.keys(withRole.claims)).toEqual(['sub', 'ws', 'iat', 'exp']);
   });
 
   it('marks an email-link session, pinned, and carries the mark through verification (P3)', async () => {
-    const claims = newEmailLinkSessionClaims('guest@example.com', 'demo-1', NOW_MS);
+    const claims = newEmailLinkSignInSessionClaims('guest@example.com', 'demo-1', NOW_MS);
     expect(claims).toEqual({
       sub: 'guest@example.com',
       ws: 'demo-1',
@@ -100,11 +106,11 @@ describe('session token and cookies, pinned', () => {
       iat: NOW_S,
       exp: NOW_S + 43_200,
     });
-    expect(await mintSessionToken(claims, SECRET)).toBe(
+    expect(await mintSignInSessionToken(claims, SECRET)).toBe(
       'aw1.eyJzdWIiOiJndWVzdEBleGFtcGxlLmNvbSIsIndzIjoiZGVtby0xIiwicm9sZSI6Im93bmVyIiwidmlhIjoiZW1haWxfbGluayIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ.BF4A7flFChMisewON2pJpAL2FHzs0hS1FbJDqUemKeg',
     );
-    const verified = await verifySessionToken(
-      await mintSessionToken(claims, SECRET),
+    const verified = await verifySignInSessionToken(
+      await mintSignInSessionToken(claims, SECRET),
       SECRET,
       NOW_MS,
     );
@@ -121,7 +127,7 @@ describe('session token and cookies, pinned', () => {
       'via null is not a value this build accepts',
     ],
   ])('refuses the mark in %s as malformed', async (payload, reason) => {
-    expect(await verifySessionToken(await signed(payload), SECRET, 0)).toEqual({
+    expect(await verifySignInSessionToken(await signed(payload), SECRET, 0)).toEqual({
       ok: false,
       code: 'malformed_session',
       reason,
@@ -129,10 +135,13 @@ describe('session token and cookies, pinned', () => {
   });
 
   it('verifies until the second it expires, and not after', async () => {
-    const token = await mintSessionToken(newSessionClaims('a@b.test', 'default', NOW_MS), SECRET);
-    const last = (NOW_S + SESSION_TTL_SECONDS) * 1000 - 1;
-    expect((await verifySessionToken(token, SECRET, last)).ok).toBe(true);
-    expect(await verifySessionToken(token, SECRET, last + 1)).toEqual({
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('a@b.test', 'default', NOW_MS),
+      SECRET,
+    );
+    const last = (NOW_S + SIGN_IN_SESSION_TTL_SECONDS) * 1000 - 1;
+    expect((await verifySignInSessionToken(token, SECRET, last)).ok).toBe(true);
+    expect(await verifySignInSessionToken(token, SECRET, last + 1)).toEqual({
       ok: false,
       code: 'expired_session',
       reason: 'session expired',
@@ -161,7 +170,7 @@ describe('session token and cookies, pinned', () => {
     ['[1]', 'payload is not a JSON object'],
     ['not json', 'payload is not JSON'],
   ])('refuses the payload %s as malformed, naming why', async (payload, reason) => {
-    expect(await verifySessionToken(await signed(payload), SECRET, 0)).toEqual({
+    expect(await verifySignInSessionToken(await signed(payload), SECRET, 0)).toEqual({
       ok: false,
       code: 'malformed_session',
       reason,
@@ -169,21 +178,25 @@ describe('session token and cookies, pinned', () => {
   });
 
   it('refuses a lifetime longer than it issues, and checks expiry first', async () => {
-    const long = `{"sub":"a","ws":"d","role":"owner","iat":${String(NOW_S)},"exp":${String(NOW_S + SESSION_TTL_SECONDS + 1)}}`;
-    expect(await verifySessionToken(await signed(long), SECRET, NOW_MS)).toEqual({
+    const long = `{"sub":"a","ws":"d","role":"owner","iat":${String(NOW_S)},"exp":${String(NOW_S + SIGN_IN_SESSION_TTL_SECONDS + 1)}}`;
+    expect(await verifySignInSessionToken(await signed(long), SECRET, NOW_MS)).toEqual({
       ok: false,
       code: 'malformed_session',
       reason: 'session lifetime exceeds the maximum this build issues',
     });
-    const expiredAndLong = `{"sub":"a","ws":"d","role":"owner","iat":1,"exp":${String(SESSION_TTL_SECONDS + 2)}}`;
-    expect((await verifySessionToken(await signed(expiredAndLong), SECRET, NOW_MS)).ok).toBe(false);
-    expect(await verifySessionToken(await signed(expiredAndLong), SECRET, NOW_MS)).toMatchObject({
+    const expiredAndLong = `{"sub":"a","ws":"d","role":"owner","iat":1,"exp":${String(SIGN_IN_SESSION_TTL_SECONDS + 2)}}`;
+    expect((await verifySignInSessionToken(await signed(expiredAndLong), SECRET, NOW_MS)).ok).toBe(
+      false,
+    );
+    expect(
+      await verifySignInSessionToken(await signed(expiredAndLong), SECRET, NOW_MS),
+    ).toMatchObject({
       code: 'expired_session',
     });
   });
 
   it('sets and clears the cookie with the same attributes', () => {
-    expect(sessionCookie('tok', '__Host-aw_session')).toEqual({
+    expect(signInSessionCookie('tok', '__Host-aw_session')).toEqual({
       name: '__Host-aw_session',
       value: 'tok',
       httpOnly: true,
@@ -192,8 +205,8 @@ describe('session token and cookies, pinned', () => {
       path: '/',
       maxAge: 43_200,
     });
-    expect(sessionCookie('tok', '__Host-aw_session_acme', 60)).toMatchObject({ maxAge: 60 });
-    expect(clearedSessionCookie('__Host-aw_session')).toEqual({
+    expect(signInSessionCookie('tok', '__Host-aw_session_acme', 60)).toMatchObject({ maxAge: 60 });
+    expect(clearedSignInSessionCookie('__Host-aw_session')).toEqual({
       name: '__Host-aw_session',
       value: '',
       httpOnly: true,

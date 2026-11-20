@@ -80,7 +80,7 @@
     "drizzle-orm": "0.45.4",
     "embedded-postgres": "18.4.0-beta.17",
     "google-auth-library": "11.3.2",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -98,7 +98,7 @@
   "nx": {
     "targets": {
       "build": {
-        "//": "The webpack build of apps/web writes apps/web/.next-embedded and briefly rewrites apps/web/tsconfig.json and next-env.d.ts (restored in a finally). It runs after web:build so `next build` never reads the rewritten files, and web:typecheck and web:lint depend on this target (apps/web/package.json) so CI's `nx run-many -t build typecheck lint` never lints the half-written build. The edge points that way, not from here to web:lint, so a build-only run (`nx run-many -t build`, every journey and docs-claims job) does not have to run web's lint and typecheck first (~3 min on a cache miss). Ordering through Nx is what keeps ESLint and jscpd from needing a `.next-*` ignore (.gitignore ignores .next-embedded/). The repository's migrations/ is copied into dist/, so it is an input.",
+        "//": "The webpack build of apps/web writes apps/web/.next-embedded and briefly rewrites apps/web/tsconfig.json and next-env.d.ts (restored in a finally). It runs after web:build so `next build` never reads the rewritten files, and web:typecheck and web:lint depend on this target (apps/web/package.json) so CI's `nx run-many -t build typecheck lint` never lints the half-written build. The edge points that way, not from here to web:lint, so a build-only run (`nx run-many -t build`, every journey and docs-claims job) does not have to run web's lint and typecheck first (~3 min on a cache miss). Ordering through Nx is what keeps ESLint and jscpd from needing a `.next-*` ignore (.gitignore ignores .next-embedded/). The repository's migrations/ is copied into dist/, so it is an input. Its own files stay `default` (publish/ copies its README.md and CHANGELOG.md); its dependencies count as `^production` (nx.json): their tests, snapshots and README files are neither bundled nor traced into dist/.",
         "dependsOn": [
           "^build",
           {
@@ -110,7 +110,7 @@
         ],
         "inputs": [
           "default",
-          "^default",
+          "^production",
           "{workspaceRoot}/migrations/**/*"
         ],
         "outputs": [
@@ -130,7 +130,7 @@
         ],
         "inputs": [
           "default",
-          "^default"
+          "^production"
         ],
         "outputs": [
           "{projectRoot}/dist/contributor"

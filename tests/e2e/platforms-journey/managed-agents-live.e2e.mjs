@@ -129,30 +129,17 @@ function activeNamed(pages, name) {
     .filter((agent) => agent.name === name && !agent.archived);
 }
 
-async function main() {
-  const key = (process.env['ANTHROPIC_API_KEY'] ?? '').trim();
-  if (key === '') {
-    console.error(
-      'ANTHROPIC_API_KEY is not set: the live Managed Agents lane did not run, and skipped is not a pass',
-    );
-    process.exitCode = 1;
-    return;
-  }
-  SECRETS.add(key);
-  const name = liveAgentName(process.env['PJ_LIVE_RUN_ID']);
+/** @param {unknown} error */
+function messageOf(error) {
+  return error instanceof Error ? error.message : '';
+}
 
-  const work = path.resolve(
-    process.env['PJ_WORK_DIR'] ?? mkdtempSync(path.join(tmpdir(), 'platforms-live-')),
-  );
-  const npmPort = positiveIntegerVariable('PJ_NPM_PORT', 4874, { max: 65_535 });
-  const deadline = Date.now() + positiveIntegerVariable('PJ_PREPARE_TIMEOUT_MS', PREPARE_BUDGET_MS);
-  const { npmUrl, evidence, userEnv } = journeyShell({ work, npmPort });
-  const liveEnv = { ...userEnv, ANTHROPIC_API_KEY: key };
-  const out = path.join(work, 'out');
-  const publishDir = path.join(work, 'publish');
-
-  /** @param {readonly string[]} args */
-  const ant = (args) => {
+/**
+ * @param {{ liveEnv: NodeJS.ProcessEnv, evidence: string }} lane
+ * @returns {(args: readonly string[]) => { ok: boolean, text: string }} runs `ant`, logging scrubbed
+ */
+function makeAnt({ liveEnv, evidence }) {
+  return (args) => {
     const result = spawnSync('ant', [...args], {
       env: liveEnv,
       encoding: 'utf8',
@@ -166,67 +153,105 @@ async function main() {
     );
     return { ok: result.status === 0, text };
   };
+}
 
+/**
+ * @param {string} publishDir
+ * @param {string[]} problems
+ * @returns {import('./verdicts.d.mts').LockResources}
+ */
+function readRecordedResources(publishDir, problems) {
+  const lock = path.join(publishDir, LOCK_FILE);
+  if (!existsSync(lock)) return { agents: [], skills: [], environments: [], other: [] };
+  try {
+    return lockResources(readFileSync(lock, 'utf8'));
+  } catch (error) {
+    problems.push(`unreadable ${LOCK_FILE}: ${messageOf(error)}`);
+    return { agents: [], skills: [], environments: [], other: [] };
+  }
+}
+
+/**
+ * @param {{ key: string, name: string }} lane
+ * @param {string[]} problems
+ * @returns {Promise<string[]>} the ids of the active agents named like this run
+ */
+async function activeAgentIds({ key, name }, problems) {
+  try {
+    return activeNamed(await listPages(key, 'agents'), name).map((agent) => agent.id);
+  } catch (error) {
+    problems.push(`listing agents failed: ${messageOf(error)}`);
+    return [];
+  }
+}
+
+/**
+ * @param {{ key: string, name: string }} lane
+ * @param {string[]} problems
+ */
+async function reportAgentsLeft(lane, problems) {
+  const left = await activeAgentIds(lane, problems);
+  if (left.length > 0) problems.push(`left behind: ${left.join(', ')}`);
+}
+
+/**
+ * @param {string} key
+ * @param {readonly string[]} environmentIds
+ * @param {string[]} problems
+ */
+async function reportEnvironmentsLeft(key, environmentIds, problems) {
+  if (environmentIds.length === 0) return;
+  try {
+    const recordedIds = new Set(environmentIds);
+    const left = (await listPages(key, 'environments'))
+      .flatMap((page) => agentsPage(page, 'environments').agents)
+      .filter((environment) => recordedIds.has(environment.id) && !environment.archived);
+    if (left.length > 0)
+      problems.push(
+        `left behind environment: ${left.map((environment) => environment.id).join(', ')}`,
+      );
+  } catch (error) {
+    problems.push(`listing environments failed: ${messageOf(error)}`);
+  }
+}
+
+/**
+ * @param {{ key: string, name: string, publishDir: string, ant: ReturnType<typeof makeAnt> }} lane
+ * @returns {Promise<string[]>} the problems cleanup found
+ */
+async function removeEverything(lane) {
+  /** @type {string[]} */
+  const problems = [];
+  const recorded = readRecordedResources(lane.publishDir, problems);
+  const agents = new Set([...recorded.agents, ...(await activeAgentIds(lane, problems))]);
+  const plan = cleanupPlan({ ...recorded, agents: [...agents] });
+  problems.push(...plan.problems);
+  for (const command of plan.commands) {
+    if (!lane.ant(command).ok)
+      problems.push(`${command[1] ?? 'remove'} ${command.at(-1) ?? ''} failed`);
+  }
+  await reportAgentsLeft(lane, problems);
+  await reportEnvironmentsLeft(lane.key, recorded.environments, problems);
+  return problems;
+}
+
+/**
+ * Runs cleanup once, however often it is asked for.
+ *
+ * @param {() => Promise<string[]>} remove
+ */
+function onceCleanup(remove) {
   /** @type {Promise<string[]> | undefined} */
   let cleaned;
-  /** The problems cleanup found; empty when the account holds nothing of this run. */
-  const cleanup = () => {
-    cleaned ??= removeEverything();
+  return () => {
+    cleaned ??= remove();
     return cleaned;
   };
+}
 
-  async function removeEverything() {
-    /** @type {string[]} */
-    const problems = [];
-    /** @type {import('./verdicts.d.mts').LockResources} */
-    let recorded = { agents: [], skills: [], environments: [], other: [] };
-    const lock = path.join(publishDir, LOCK_FILE);
-    if (existsSync(lock)) {
-      try {
-        recorded = lockResources(readFileSync(lock, 'utf8'));
-      } catch (error) {
-        problems.push(`unreadable ${LOCK_FILE}: ${error instanceof Error ? error.message : ''}`);
-      }
-    }
-    const agents = new Set(recorded.agents);
-    try {
-      for (const agent of activeNamed(await listPages(key, 'agents'), name)) agents.add(agent.id);
-    } catch (error) {
-      problems.push(`listing agents failed: ${error instanceof Error ? error.message : ''}`);
-    }
-    const plan = cleanupPlan({ ...recorded, agents: [...agents] });
-    problems.push(...plan.problems);
-    for (const command of plan.commands) {
-      if (!ant(command).ok)
-        problems.push(`${command[1] ?? 'remove'} ${command.at(-1) ?? ''} failed`);
-    }
-    try {
-      const left = activeNamed(await listPages(key, 'agents'), name);
-      if (left.length > 0)
-        problems.push(`left behind: ${left.map((agent) => agent.id).join(', ')}`);
-    } catch (error) {
-      problems.push(`listing agents failed: ${error instanceof Error ? error.message : ''}`);
-    }
-    if (recorded.environments.length > 0) {
-      try {
-        const recordedIds = new Set(recorded.environments);
-        const left = (await listPages(key, 'environments'))
-          .flatMap((page) => agentsPage(page, 'environments').agents)
-          .filter((environment) => recordedIds.has(environment.id) && !environment.archived);
-        if (left.length > 0)
-          problems.push(
-            `left behind environment: ${left.map((environment) => environment.id).join(', ')}`,
-          );
-      } catch (error) {
-        problems.push(
-          `listing environments failed: ${error instanceof Error ? error.message : ''}`,
-        );
-      }
-    }
-    return problems;
-  }
-
-  // ponytail: spawnSync holds the event loop, so a signal is handled once the running child ends.
+// ponytail: spawnSync holds the event loop, so a signal is handled once the running child ends.
+/** @param {() => Promise<string[]>} cleanup */
+function cleanupOnSignals(cleanup) {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
       void cleanup().then((problems) => {
@@ -236,107 +261,154 @@ async function main() {
       });
     });
   }
+}
 
-  let current = 'start';
-  /** @param {string} title */
-  const step = (title) => {
-    current = title;
-    say(`== ${title}`);
+/** @typedef {{ key: string, name: string, work: string, npmPort: number, npmUrl: string, deadline: number, evidence: string, userEnv: NodeJS.ProcessEnv, liveEnv: NodeJS.ProcessEnv, publishDir: string, step: (title: string) => void }} Lane */
+
+/** @param {Lane} lane the journey's support project with the agent file pinned to the export model */
+async function prepareSupportProject(lane) {
+  const { work, npmPort, npmUrl, deadline, userEnv, evidence } = lane;
+  lane.step('prepare packages and the support project');
+  await preparePackages({ work, npmPort, npmUrl, deadline });
+  const created = createSupportProject({
+    work,
+    name: 'demo',
+    userEnv,
+    extraArgs: ['--platform', CMA],
+  });
+  const { project, agentPath, rendered, agentName } = created;
+
+  // The code tool is left out on purpose: nothing may be dropped on the way to the platform.
+  const anchor = /^ {2}model: 'default',$/mu;
+  if (!anchor.test(rendered)) throw new JourneyFailure(`the agent file has no ${String(anchor)}`);
+  writeFileSync(agentPath, rendered.replace(anchor, `  model: ${EXPORT_MODEL},`));
+  const yamlPath = path.join(project, 'agent-workspace.yaml');
+  writeFileSync(yamlPath, withPlatforms(readFileSync(yamlPath, 'utf8'), [CMA]));
+  return { project, agentName, aw: awOf({ project, userEnv, evidence }) };
+}
+
+/**
+ * @param {Lane} lane
+ * @param {{ project: string, agentName: string, aw: ReturnType<typeof awOf> }} support
+ */
+function exportRenameImport(lane, { project, agentName, aw }) {
+  const { work, name } = lane;
+  lane.step('export, rename to the run agent, import as .agent.md');
+  const exported = path.join(work, 'out', CMA);
+  const importDir = path.join(work, 'cma-import');
+  const exportRun = aw(['platforms', 'export', '--platform', CMA, '--out', exported]);
+  check(exportRun.status === 0, `aw platforms export --platform ${CMA} exits 0`);
+  renameExportedAgent({ exported, importDir, from: agentName, to: name });
+  const imported = aw(['platforms', 'import', '--from', CMA, importDir, '--yes']);
+  check(imported.status === 0, `aw platforms import --from ${CMA} exits 0`);
+  check(
+    existsSync(path.join(project, 'agents', `${name}.agent.md`)),
+    `aw platforms import wrote agents/${name}.agent.md`,
+  );
+}
+
+/**
+ * @param {Lane} lane
+ * @param {ReturnType<typeof awOf>} aw
+ */
+async function publishAndReadBack(lane, aw) {
+  const { key, name, publishDir, liveEnv, step } = lane;
+  step('publish without --yes: a plan, nothing created');
+  const publish = ['platforms', 'publish', '--platform', CMA, '--agent', name, '--out', publishDir];
+  const plan = aw(publish, liveEnv);
+  check(plan.status === 3, 'publish without --yes exits 3 (changes are pending)');
+  check(`${plan.stdout}\n${plan.stderr}`.includes(name), `the plan names ${name}`);
+  step(`list agents after the plan: none named ${name}`);
+  check(
+    findAgentByNameOnAllPages(await listPages(key, 'agents'), name) === undefined,
+    `no active agent ${name} exists after the plan`,
+  );
+
+  step('publish with --yes');
+  const applied = aw([...publish, '--yes'], liveEnv);
+  check(applied.status === 0, 'publish --yes exits 0');
+  const lock = path.join(publishDir, LOCK_FILE);
+  check(existsSync(lock), `${LOCK_FILE} was written`);
+
+  step('read back from the Managed Agents list');
+  const listed = findAgentByNameOnAllPages(await listPages(key, 'agents'), name);
+  check(listed !== undefined, `the Managed Agents list shows ${name}`);
+  check(
+    lockResources(readFileSync(lock, 'utf8')).agents.includes(listed?.id ?? ''),
+    `the id of ${name} in the list is the one in ${LOCK_FILE}`,
+  );
+}
+
+/** @param {string} key */
+function createLane(key) {
+  const name = liveAgentName(process.env['PJ_LIVE_RUN_ID']);
+  const work = path.resolve(
+    process.env['PJ_WORK_DIR'] ?? mkdtempSync(path.join(tmpdir(), 'platforms-live-')),
+  );
+  const npmPort = positiveIntegerVariable('PJ_NPM_PORT', 4874, { max: 65_535 });
+  const deadline = Date.now() + positiveIntegerVariable('PJ_PREPARE_TIMEOUT_MS', PREPARE_BUDGET_MS);
+  const { npmUrl, evidence, userEnv } = journeyShell({ work, npmPort });
+  const liveEnv = { ...userEnv, ANTHROPIC_API_KEY: key };
+  /** @type {Lane} */
+  const lane = {
+    key,
+    name,
+    work,
+    npmPort,
+    npmUrl,
+    deadline,
+    evidence,
+    userEnv,
+    liveEnv,
+    publishDir: path.join(work, 'publish'),
+    step: (title) => {
+      current = title;
+      say(`== ${title}`);
+    },
   };
+  let current = 'start';
+  return { lane, currentStep: () => current };
+}
+
+async function main() {
+  const key = (process.env['ANTHROPIC_API_KEY'] ?? '').trim();
+  if (key === '') {
+    console.error(
+      'ANTHROPIC_API_KEY is not set: the live Managed Agents lane did not run, and skipped is not a pass',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  SECRETS.add(key);
+  const { lane, currentStep } = createLane(key);
+  const ant = makeAnt(lane);
+  const cleanup = onceCleanup(() => removeEverything({ ...lane, ant }));
+  cleanupOnSignals(cleanup);
 
   /** @type {unknown} */
   let failure;
   try {
-    step('prepare packages and the support project');
-    await preparePackages({ work, npmPort, npmUrl, deadline });
-    const created = createSupportProject({
-      work,
-      name: 'demo',
-      userEnv,
-      extraArgs: ['--platform', CMA],
-    });
-    const { project, agentPath, rendered, agentName } = created;
-    const aw = awOf({ project, userEnv, evidence });
-
-    // The code tool is left out on purpose: nothing may be dropped on the way to the platform.
-    const anchor = /^ {2}model: 'default',$/mu;
-    if (!anchor.test(rendered)) throw new JourneyFailure(`the agent file has no ${String(anchor)}`);
-    writeFileSync(agentPath, rendered.replace(anchor, `  model: ${EXPORT_MODEL},`));
-    const yamlPath = path.join(project, 'agent-workspace.yaml');
-    writeFileSync(yamlPath, withPlatforms(readFileSync(yamlPath, 'utf8'), [CMA]));
-
-    step('export, rename to the run agent, import as .agent.md');
-    const exported = path.join(out, CMA);
-    const exportRun = aw(['platforms', 'export', '--platform', CMA, '--out', exported]);
-    check(exportRun.status === 0, `aw platforms export --platform ${CMA} exits 0`);
-    renameExportedAgent({
-      exported,
-      importDir: path.join(work, 'cma-import'),
-      from: agentName,
-      to: name,
-    });
-    const imported = aw([
-      'platforms',
-      'import',
-      '--from',
-      CMA,
-      path.join(work, 'cma-import'),
-      '--yes',
-    ]);
-    check(imported.status === 0, `aw platforms import --from ${CMA} exits 0`);
-    check(
-      existsSync(path.join(project, 'agents', `${name}.agent.md`)),
-      `aw platforms import wrote agents/${name}.agent.md`,
-    );
-
-    step('publish without --yes: a plan, nothing created');
-    const publish = [
-      'platforms',
-      'publish',
-      '--platform',
-      CMA,
-      '--agent',
-      name,
-      '--out',
-      publishDir,
-    ];
-    const plan = aw(publish, liveEnv);
-    check(plan.status === 3, 'publish without --yes exits 3 (changes are pending)');
-    check(`${plan.stdout}\n${plan.stderr}`.includes(name), `the plan names ${name}`);
-    step(`list agents after the plan: none named ${name}`);
-    check(
-      findAgentByNameOnAllPages(await listPages(key, 'agents'), name) === undefined,
-      `no active agent ${name} exists after the plan`,
-    );
-
-    step('publish with --yes');
-    const applied = aw([...publish, '--yes'], liveEnv);
-    check(applied.status === 0, 'publish --yes exits 0');
-    const lock = path.join(publishDir, LOCK_FILE);
-    check(existsSync(lock), `${LOCK_FILE} was written`);
-
-    step('read back from the Managed Agents list');
-    const listed = findAgentByNameOnAllPages(await listPages(key, 'agents'), name);
-    check(listed !== undefined, `the Managed Agents list shows ${name}`);
-    check(
-      lockResources(readFileSync(lock, 'utf8')).agents.includes(listed?.id ?? ''),
-      `the id of ${name} in the list is the one in ${LOCK_FILE}`,
-    );
+    const support = await prepareSupportProject(lane);
+    exportRenameImport(lane, support);
+    await publishAndReadBack(lane, support.aw);
   } catch (error) {
     failure = error;
-    say(`FAILED at step "${current}": ${error instanceof Error ? error.message : String(error)}`);
+    say(
+      `FAILED at step "${currentStep()}": ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
-  step('cleanup');
+  lane.step('cleanup');
   const problems = await cleanup();
   stopPackages();
-  if (existsSync(out)) cpSync(out, path.join(evidence, 'out'), { recursive: true });
+  const out = path.join(lane.work, 'out');
+  if (existsSync(out)) cpSync(out, path.join(lane.evidence, 'out'), { recursive: true });
   if (problems.length > 0) {
     console.error(scrub(`cleanup problems:\n${problems.join('\n')}`));
     process.exitCode = 1;
   }
   if (failure !== undefined) throw failure;
-  say(`ok: ${name} was published, read back and removed`);
+  say(`ok: ${lane.name} was published, read back and removed`);
 }
 
 /** @param {unknown[]} pages @param {string} name */

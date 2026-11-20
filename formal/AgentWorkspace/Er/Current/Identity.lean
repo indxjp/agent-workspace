@@ -42,8 +42,8 @@ codes and tokens issued to it for a member (`oauth_tokens`, part 3). The last,
 Agent Store's global run-cap, site-wide cost and lead-retention tables (migration 0107), and
 `demo_entry_states` the daily production test's verdict on each live entry (migration 0109); like
 `login_tokens`, they belong to no workspace and outlive the demo workspace. -/
-@[aw_spec (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def tables : List TableName :=
   [.workspaces, .users, .userIdentities, .memberships, .workspacePrincipals, .apiKeys,
     .invitations, .loginTokens, .demoRunAdmissions, .demoDailyCosts, .demoEntryStates, .storeLeads, .browserTokens, .cliSessions, .endpointClients, .endpointClientAgents,
@@ -249,7 +249,7 @@ def CheckExpr.render (table : String) : CheckExpr → String
   (ts := "packages/core/src/db/schema/invitations.ts#invitations")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browserTokens")
   (ts := "packages/core/src/db/schema/cli-sessions.ts#cliSessions")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def checks : List (TableName × String × CheckExpr) :=
   [(.workspaces, "workspaces_slug_format", .matches "slug" .slug),
    (.workspaces, "workspaces_name_not_blank", .notBlank "name"),
@@ -559,7 +559,7 @@ def tableChecksHold (st : State) (t : TableName) : Bool :=
 (`Er.Core.consistent`), and on the eighteen identity tables every refined check holds and every
 cell is well typed. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def consistent (st : State) : Bool :=
   Er.Core.consistent catalogue st && tables.all (tableChecksHold st)
 
@@ -604,7 +604,7 @@ structure Relationship where
   deriving Repr
 
 /-- Every foreign key the eighteen identity tables declare. -/
-@[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def relationships : List Relationship :=
   tables.flatMap fun t => (catalogue t).foreignKeys.map fun fk => ⟨t, fk⟩
 
@@ -630,7 +630,7 @@ def findRef (st : State) (t : TableName) (fk : ForeignKey) : Option (Row × Row)
 
 /-- RF-101's target: every membership and every API key of a state has a principal
 ("one human principal per Membership and one machine principal per APIKey"). -/
-@[aw_spec (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")]
+@[aw_spec (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")]
 def everySourceHasPrincipal (st : State) : Bool :=
   (st .memberships).all (fun m => (st .workspacePrincipals).any fun p =>
       p.get "workspace_id" == m.get "workspace_id" && p.get "membership_id" == m.get "id") &&

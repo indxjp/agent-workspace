@@ -6,7 +6,7 @@
  * `POST /api/connectors` itself — a `"dryRun": true` field on the same body runs the probe instead
  * of persisting a row — rather than a route of its own: `/api/connectors/test-connection` is a
  * literal second path segment with no id before it, which
- * `tests/route-inventory.test.ts`'s shape rule (ADR-0026 decision 3) refuses as "a second resource
+ * `tests/route-inventory.policy-check.ts`'s shape rule (ADR-0026 decision 3) refuses as "a second resource
  * that has not been named" the moment it carries a `mandate`, and declaring a genuinely new
  * top-level resource means writing four roles' grants into `apps/web/server/rbac/core/permissions.ts`
  * — W2-CP-06's file, not this task's to add a resource to. See `apps/web/server/connectors/handlers.ts`'s

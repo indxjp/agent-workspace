@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe } from 'vitest';
 import { API_ROUTES } from '@indx-workspace/contracts/routes';
 import { pathPattern } from '../apps/web/server/auth/api-key-routes.js';
-import { mintSessionToken, newSessionClaims } from '../apps/web/server/auth/session.js';
+import { mintSignInSessionToken, newSignInSessionClaims } from '../apps/web/server/auth/session.js';
 import {
   repoRoot,
   webDir,
@@ -109,7 +109,10 @@ describe('the running server refuses every /api/** request without a session', (
       }
     }
 
-    token = await mintSessionToken(newSessionClaims('admin@example.com', 'default'), SECRET);
+    token = await mintSignInSessionToken(
+      newSignInSessionClaims('admin@example.com', 'default'),
+      SECRET,
+    );
   }, STARTUP_TIMEOUT_MS + 30_000);
 
   afterAll(async () => {

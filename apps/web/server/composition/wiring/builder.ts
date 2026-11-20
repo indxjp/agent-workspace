@@ -1,9 +1,9 @@
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 
-import type { AgentVersionsRuntime } from '../../agent-versions/runtime';
+import type { AgentVersionsRuntime } from '../../agent-versions/wiring';
 import { storageConnectionLookup } from '../../agent-versions/storage-grants';
-import type { AgentsRuntime } from '../../agents/runtime';
+import type { AgentsRuntime } from '../../agents/wiring';
 import type { AgentStoreProvider } from '../../agents/store';
 import type { AuditDeps } from '../../builder/adapters/audit/store';
 import {
@@ -13,15 +13,15 @@ import {
 } from '../../builder/transport/composition';
 import { createAllowedOwnerWarning } from '../../builder/transport/allowed-owner-warning';
 import { createBuilderCallerVerifier, type BuilderDoor } from '../../builder/transport/mcp';
-import type { Connectors } from '../../connectors/runtime';
-import type { Models } from '../../models/runtime';
+import type { Connectors } from '../../connectors/wiring';
+import type { Models } from '../../models/wiring';
 import type { RunTokenDatabase } from '../../gateway/run-token-verifier';
 import type { DirectoryRoot } from '../../rbac/directory';
 import { getRunApi } from '../../runs/environment';
-import type { Runtimes } from '../../runtimes/runtime';
+import type { Runtimes } from '../../runtimes/wiring';
 import { catalogNotConfigured, listSkillsWithIds } from '../../skills/service';
-import type { Skills } from '../../skills/runtime';
-import type { StorageConnections } from '../../storage-connections/runtime';
+import type { Skills } from '../../skills/wiring';
+import type { StorageConnections } from '../../storage-connections/wiring';
 import { log } from '../../telemetry/logger';
 import { openToolBundleLookup } from '../../tool-bundles/http';
 

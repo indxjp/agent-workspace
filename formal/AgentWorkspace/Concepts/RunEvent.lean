@@ -27,7 +27,7 @@ open AgentWorkspace
 
 /-- One stored event. `data` is the JSON text of the `jsonb` column. -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure RunEvent where
   key : RunEventKey
   workspace : WorkspaceId

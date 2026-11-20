@@ -3,8 +3,8 @@ import { expect, it } from 'vitest';
 import { POST as ACCEPT } from '../../app/api/invitations/[id]/accept/route';
 import { POST as CREATE } from '../../app/api/invitations/route';
 import { installTestDomains } from '../application-context-fixtures';
-import { sessionCookieName } from '../auth';
-import { mintSessionToken, newSessionClaims } from '../auth/session';
+import { signInSessionCookieName } from '../auth';
+import { mintSignInSessionToken, newSignInSessionClaims } from '../auth/session';
 import { conferredBy } from '../rbac/core/conferral';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
@@ -15,7 +15,7 @@ import {
   sessionPrincipal,
   TEST_SESSION_SECRET,
 } from './invitation-routes.test-support';
-import type { InvitationAuditEvent } from './runtime';
+import type { InvitationAuditEvent } from './wiring';
 import { createManualLinkInvitationSender } from './send-invitation';
 
 export function registerIdentityTests(env: NodeJS.ProcessEnv) {
@@ -45,8 +45,8 @@ async function requiresApplicationOriginDedicatedIdentityCookieBeforeReading(
   });
   const harness = installInvitationHarness();
   try {
-    const tenantSession = await mintSessionToken(
-      newSessionClaims('viewer@example.test', 'workspace-b'),
+    const tenantSession = await mintSignInSessionToken(
+      newSignInSessionClaims('viewer@example.test', 'workspace-b'),
       TEST_SESSION_SECRET,
     );
     const contextId = crypto.randomUUID();
@@ -83,7 +83,7 @@ async function requiresApplicationOriginDedicatedIdentityCookieBeforeReading(
       id: contextId,
       body: { token: 'not-a-token' },
       origin: 'https://control-plane.test',
-      cookies: { [sessionCookieName()]: tenantSession },
+      cookies: { [signInSessionCookieName()]: tenantSession },
     });
     expect(tenantSessionOnly).toMatchObject({
       status: 404,

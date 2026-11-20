@@ -6,7 +6,7 @@
 import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../features/wiring';
 import { authorise, toResponse, type AuthorisedRequest } from './http';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
 

@@ -1,5 +1,5 @@
 import { applicationContext } from '../../../../server/application-context';
-import { getSession } from '../../../../server/auth';
+import { getSignInSession } from '../../../../server/auth';
 import { decide } from '../../../../server/rbac/decide';
 import { parseRole } from '../../../../server/rbac/core/roles';
 import { resolveTeamViewer } from '../../../../server/team/team-viewer';
@@ -31,7 +31,7 @@ export function roleManagesStorage(role: unknown): boolean {
 export async function callerManagesStorage(): Promise<boolean> {
   const rbac = applicationContext()?.rbac ?? null;
   if (rbac === null) return false;
-  const session = await getSession();
+  const session = await getSignInSession();
   if (session === null) return false;
   const viewer = await resolveTeamViewer(rbac.directory, session);
   return viewer !== null && roleManagesStorage(viewer.role);

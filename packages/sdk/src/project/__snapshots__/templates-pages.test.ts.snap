@@ -1,0 +1,163 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the generator templates: agent and recipe > recipe: writes exactly the recipe and its test, for each trigger (#1514) 1`] = `
+"import { defineRecipe, resourceEvent } from '@indx-workspace/app';
+
+/** The agent the example step asks: set AW_ENRICH_CONTACT_AGENT_ID to its Agent Workspace id. */
+export const AGENT = process.env['AW_ENRICH_CONTACT_AGENT_ID'] ?? 'enrich-contact-agent';
+
+/**
+ * Enrich contact: the app runs it when a contact is created.
+ *
+ * Each step runs once: its key is the idempotency key of the one Agent Workspace run it may
+ * start, so after a restart the recipe resumes rather than repeats. Keep each step safe to run
+ * again until it completes.
+ */
+export default defineRecipe({
+  name: 'enrich-contact',
+  on: resourceEvent('contact', 'created'),
+  async run({ aw, step }) {
+    await step('first-step', async () => {
+      const prompt = 'Do the first step of enrich-contact.';
+      const { result } = await aw.runs.start(AGENT, { prompt });
+      return (await result).text;
+    });
+  },
+});
+"
+`;
+
+exports[`the generator templates: agent and recipe > recipe: writes exactly the recipe and its test, for each trigger (#1514) 2`] = `
+"import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { completed, recipeHarness } from '@indx-workspace/app/testing';
+
+import recipe, { AGENT } from '../../recipes/enrich-contact.ts';
+
+void test('enrich-contact completes, starting one run for its step', async () => {
+  const harness = recipeHarness(recipe, { agents: { [AGENT]: [completed('done')] } });
+
+  const run = await harness.start({
+    resource: 'contact',
+    event: 'created',
+    record: { id: '00000000-0000-4000-8000-000000000001' },
+  });
+
+  assert.equal(run.status, 'completed');
+  assert.equal(harness.runsStarted().length, 1);
+});
+"
+`;
+
+exports[`the generator templates: agent and recipe > recipe: writes exactly the recipe and its test, for each trigger (#1514) 3`] = `
+"import { defineRecipe, schedule } from '@indx-workspace/app';
+
+/** The agent the example step asks: set AW_SLA_SWEEP_AGENT_ID to its Agent Workspace id. */
+export const AGENT = process.env['AW_SLA_SWEEP_AGENT_ID'] ?? 'sla-sweep-agent';
+
+/**
+ * Sla sweep: the app runs it on each slot of its schedule, in UTC.
+ *
+ * Each step runs once: its key is the idempotency key of the one Agent Workspace run it may
+ * start, so after a restart the recipe resumes rather than repeats. Keep each step safe to run
+ * again until it completes.
+ */
+export default defineRecipe({
+  name: 'sla-sweep',
+  on: schedule('*/5 * * * *', 'UTC'),
+  async run({ aw, step }) {
+    await step('first-step', async () => {
+      const prompt = 'Do the first step of sla-sweep.';
+      const { result } = await aw.runs.start(AGENT, { prompt });
+      return (await result).text;
+    });
+  },
+});
+"
+`;
+
+exports[`the generator templates: agent and recipe > recipe: writes exactly the recipe and its test, for each trigger (#1514) 4`] = `
+"import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { completed, recipeHarness } from '@indx-workspace/app/testing';
+
+import recipe, { AGENT } from '../../recipes/sla-sweep.ts';
+
+void test('sla-sweep completes, starting one run for its step', async () => {
+  const harness = recipeHarness(recipe, { agents: { [AGENT]: [completed('done')] } });
+
+  const run = await harness.start({ slot: '2026-01-01T00:05:00.000Z' });
+
+  assert.equal(run.status, 'completed');
+  assert.equal(harness.runsStarted().length, 1);
+});
+"
+`;
+
+exports[`the generator templates: agent and recipe > wires the agent to the app connector 1`] = `
+"import { defineAgent, mcp } from '@indx-workspace/sdk/define';
+
+export default defineAgent({
+  name: 'triage',
+  description: 'Works with tickets in the service-desk app.',
+  instructions: [
+    'You work in the service-desk app for the person who asked, through its tools:',
+    'tickets: ticket_list and ticket_get read them, ticket_search finds them when the resource is searchable, and ticket_update changes the fields agents may write.',
+    'Each tool acts as that person, so it refuses what they may not do; say so instead of retrying.',
+  ].join('\\n'),
+  tools: [mcp('service-desk')],
+});
+"
+`;
+
+exports[`the generator templates: channel > channel: edits each of the resource's route files by one line, from the line it generated 1`] = `
+[
+  {
+    "added": "export const { GET, POST } = resourceRoutes(message, { publish: messageChannel });",
+    "import": "import messageChannel from '@/channels/message';",
+    "path": "app/api/messages/route.ts",
+    "replaced": "export const { GET, POST } = resourceRoutes(message);",
+  },
+  {
+    "added": "export const { GET, PATCH, DELETE } = resourceItemRoutes(message, { publish: messageChannel });",
+    "import": "import messageChannel from '@/channels/message';",
+    "path": "app/api/messages/[id]/route.ts",
+    "replaced": "export const { GET, PATCH, DELETE } = resourceItemRoutes(message);",
+  },
+]
+`;
+
+exports[`the generator templates: channel > channel: writes the channel, its events route and its page, keyed on the first ref() to another resource (#1519) 1`] = `
+"import roomResource from '@/resources/room';
+import { channel } from '@indx-workspace/app/server';
+
+// Every write of a message, through its routes or an agent tool, is published to the room
+// its \`room\` field names. Whoever may read that room follows it at
+// /api/channels/message/events?key=<the room's id>.
+export default channel('message', { resource: roomResource, key: 'room' });
+"
+`;
+
+exports[`the generator templates: channel > channel: writes the channel, its events route and its page, keyed on the first ref() to another resource (#1519) 2`] = `
+"import messageChannel from '@/channels/message';
+
+export const { GET } = messageChannel.routes();
+"
+`;
+
+exports[`the generator templates: channel > channel: writes the channel, its events route and its page, keyed on the first ref() to another resource (#1519) 3`] = `
+"'use client';
+import message from '@/resources/message';
+import { ChannelView } from '@indx-workspace/app/react';
+import { use } from 'react';
+
+export default function MessageChannelPage(props: {
+  readonly params: Promise<{ key: string }>;
+}) {
+  const { key } = use(props.params);
+  return <ChannelView channel="message" resource={message} keyValue={key} />;
+}
+"
+`;

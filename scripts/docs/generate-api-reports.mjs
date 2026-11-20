@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generates `docs/sdk/api/<package>/<subpath>.api.md`, the API Extractor report of every
+ * Generates `docs/10-product/sdk/api/<package>/<subpath>.api.md`, the API Extractor report of every
  * `exports` subpath of the published consumer packages (contracts, sdk, react, app, aw). A report
  * is the full public declaration (signatures, members, generics), so a breaking change reads as a
  * normal diff before the package is published. `--write` regenerates the reports
@@ -10,30 +10,25 @@
  * No build is needed (the ADR-0054 rule): the declarations are emitted from each package's own
  * `tsconfig.build.json` into a scratch directory, and API Extractor reads those.
  */
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { Extractor, ExtractorConfig, ExtractorLogLevel } from '@microsoft/api-extractor';
+import {
+  CompilerState,
+  Extractor,
+  ExtractorConfig,
+  ExtractorLogLevel,
+} from '@microsoft/api-extractor';
 import ts from 'typescript';
 
-/** Repo-relative directory of the committed reports. */
-export const API_DIR = 'docs/sdk/api';
-export const API_PACKAGES = ['contracts', 'sdk', 'react', 'app', 'aw'];
+import { listFiles, staleReports } from './lib/api-reports-compare.mjs';
 
-/** @param {string} directory @returns {Promise<string[]>} every file under it, relative, sorted */
-async function listFiles(directory) {
-  const entries = await readdir(directory, { recursive: true, withFileTypes: true }).catch(
-    () => [],
-  );
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.relative(directory, path.join(entry.parentPath, entry.name)))
-    .map((file) => file.split(path.sep).join('/'))
-    .sort();
-}
+/** Repo-relative directory of the committed reports. */
+export const API_DIR = 'docs/10-product/sdk/api';
+export const API_PACKAGES = ['contracts', 'sdk', 'react', 'app', 'aw'];
 
 /** `./define` becomes `define`, `./tools/host` becomes `tools-host`, `.` becomes `index`. */
 const reportName = (/** @type {string} */ subpath) =>
@@ -100,8 +95,8 @@ async function renderPackage(repoRoot, name, scratch, out) {
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const declarations = path.join(scratch, name, 'declarations');
   emitDeclarations(directory, declarations);
-  /** @type {string[]} */
-  const failures = [];
+  /** @type {{ subpath: string, config: ExtractorConfig }[]} */
+  const entries = [];
   for (const [subpath, target] of Object.entries(manifest.exports)) {
     const types = typeof target === 'object' && target !== null ? target.types : undefined;
     // `styles.css` and its `.d.css.ts` are a stylesheet, not a code surface.
@@ -149,7 +144,23 @@ async function renderPackage(repoRoot, name, scratch, out) {
       configObjectFullPath: path.join(directory, 'api-extractor.json'),
       packageJsonFullPath: manifestPath,
     });
+    entries.push({ subpath, config });
+  }
+  /** @type {string[]} */
+  const failures = [];
+  const [first] = entries;
+  if (first === undefined) return failures;
+  // One TypeScript program per package, shared by every entry point's report. Each
+  // Extractor.invoke otherwise builds its own program over the same declarations: contracts has
+  // 49 entry points, and those programs were most of `docs:check`'s time. Each report is still
+  // analysed from its own entry point, so the reports are byte-identical (`--check` holds that).
+  const compilerState = CompilerState.create(first.config, {
+    additionalEntryPoints: entries.map((entry) => entry.config.mainEntryPointFilePath),
+  });
+  for (const { subpath, config } of entries) {
+    const before = failures.length;
     const result = Extractor.invoke(config, {
+      compilerState,
       localBuild: true,
       showVerboseMessages: false,
       messageCallback: (message) => {
@@ -158,7 +169,8 @@ async function renderPackage(repoRoot, name, scratch, out) {
         message.handled = true;
       },
     });
-    if (!result.succeeded && failures.length === 0) failures.push(`${name} ${subpath}: failed`);
+    if (!result.succeeded && failures.length === before)
+      failures.push(`${name} ${subpath}: failed`);
   }
   return failures;
 }
@@ -166,8 +178,6 @@ async function renderPackage(repoRoot, name, scratch, out) {
 /** @param {readonly string[]} argv @param {string} repoRoot */
 async function main(argv, repoRoot) {
   const write = argv.includes('--write');
-  // ponytail: test seam, lets the tamper test compare against a copy instead of docs/sdk/api.
-  const reportsAt = argv.find((arg) => arg.startsWith('--reports='))?.slice('--reports='.length);
   if (!write && !argv.includes('--check')) {
     process.stderr.write('usage: generate-api-reports.mjs --write | --check\n');
     return 2;
@@ -184,9 +194,9 @@ async function main(argv, repoRoot) {
       process.stderr.write(`API Extractor failed:\n${failures.join('\n')}\n`);
       return 1;
     }
-    const committedDir = reportsAt === undefined ? path.join(repoRoot, API_DIR) : reportsAt;
-    const files = await listFiles(rendered);
+    const committedDir = path.join(repoRoot, API_DIR);
     if (write) {
+      const files = await listFiles(rendered);
       await rm(committedDir, { recursive: true, force: true });
       for (const file of files) {
         const target = path.join(committedDir, file);
@@ -199,17 +209,12 @@ async function main(argv, repoRoot) {
       process.stdout.write(`wrote ${files.length} API reports under ${API_DIR}\n`);
       return 0;
     }
-    const committed = await listFiles(committedDir);
-    const stale = [];
-    for (const file of new Set([...files, ...committed])) {
-      const want = files.includes(file)
-        ? normalise(await readFile(path.join(rendered, file), 'utf8'), scratch)
-        : undefined;
-      const have = committed.includes(file)
-        ? await readFile(path.join(committedDir, file), 'utf8')
-        : undefined;
-      if (want !== have) stale.push(`${API_DIR}/${file}`);
-    }
+    const stale = await staleReports({
+      rendered,
+      committed: committedDir,
+      normalise: (text) => normalise(text, scratch),
+      label: API_DIR,
+    });
     if (stale.length === 0) {
       process.stdout.write(`${API_DIR} is current with source\n`);
       return 0;

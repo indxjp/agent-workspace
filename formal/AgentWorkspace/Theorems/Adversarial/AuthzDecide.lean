@@ -56,7 +56,7 @@ private theorem allow_cases (q : Query) (f : Option RouteFacts) (h : decideOrdin
 
 /-- A run-scoped browser token is allowed only reads of its run, including equivalent UUID
 spellings of its id (the row or a sub-resource read with `GET`/`HEAD`). -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_scoped_token_reaches_only_reads_of_its_run (q : Query) (run : RunId)
     (f : Option RouteFacts) (hq : q.scope = some (.run run)) (h : decideOrdinary q = .allow f) :
@@ -88,7 +88,7 @@ outside the public surface, the `download-urls` sub-resource of `files` (a read;
 `attachments` on `sessions` (handing one file to the visitor's own session, a write; issue #1308).
 No other `runs` sub-resource reaches the `run` verb: `interrupt` stays out; no other `files` route
 is reachable: the relay routes stay out, and so does `upload-urls` (issue #1574). -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem session_scoped_token_reaches_only_run_reads_and_agent_runs (q : Query) (session : SessionId)
     (f : Option RouteFacts) (hq : q.scope = some (.session session)) (h : decideOrdinary q = .allow f) :
@@ -143,7 +143,7 @@ example : classifyPath "/api/agents/a/runs" = .«public» ∨
 /-- The feedback cell is keyed by its sub-resource and belongs to the session scope alone: a run
 scope never reaches `POST /api/runs/:id/feedback`, and the session scope's `run` verb on `runs`
 does not extend to `interrupt` (or any other sub-resource but `feedback`). -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem feedback_cell_is_session_only_and_sub_keyed (run : RunId) (session : SessionId)
     (id : Option String) :
@@ -179,7 +179,7 @@ private theorem parsed_sub_names_a_row (path : String) (res : Resource) (s : Str
 /-- No browser token of either kind is ever allowed to mint a token, and when it is allowed a read
 of `runs`, its path names a row: `tokens` is in no grammar, and a scope reads one run, never the
 collection. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")]
 theorem scoped_token_never_mints_or_lists (q : Query) (s : Scope) (hq : q.scope = some s)
     (fact : RouteFacts) (h : decideOrdinary q = .allow (some fact)) :

@@ -34,7 +34,7 @@ open AgentWorkspace.Behaviour.EngineToolPolicy AgentWorkspace.Behaviour.RunCompo
 
 /-- **The refinement.** For every input the platform can compose, the Claude adapter's compiled
 tool policy is the policy compose produced before ENG-04b — the same lists, in the same order. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/units/run-compose.md#theorems-and-vectors")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/units/run-compose.md#theorems-and-vectors")
   (ts := "packages/engine-claude-agent-sdk/src/tools.ts#compileClaudeToolPolicy")
   (ts := "apps/web/server/compose/run-request.ts#portableAgentConfigFor")]
 theorem adapter_matches_compose_on_every_case :

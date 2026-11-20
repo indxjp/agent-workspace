@@ -1,131 +1,28 @@
-import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 import { BUILDER_TOOL_NAMES } from '@indx-workspace/contracts/builder';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { RunTokenDatabase } from '../../gateway/run-token-verifier';
-import type { DirectoryRoot } from '../../rbac/directory';
 import { log } from '../../telemetry/logger';
-import { callContextOf } from '../testing/context';
 import { counterIds } from '../../ids';
 import { makeMemoryPorts } from '../testing/ports';
-import type { CallContext } from '../ports';
-import type { BuilderPorts } from '../tools/types';
-import type { BuilderRunReader } from './call-context';
+import { serveBuilderMcp } from './mcp';
 import {
-  createBuilderCallerVerifier,
-  MISSING_TOOL_USE_ID,
-  serveBuilderMcp,
-  type BuilderCallerVerifier,
-  type BuilderDoor,
-} from './mcp';
-import { BUILDER_DOOR_RATE_LIMITS, resetBuilderDoorLimits } from './limits';
-
-const RUN_IDENTITY = {
-  kind: 'run',
-  workspaceId: 'ws-secret-id',
-  runId: 'run-secret-id',
-  sessionId: 'session-1',
-  agentId: 'agent-1',
-} as const;
-
-const CALLER = {
-  ok: true,
-  caller: {
-    ...RUN_IDENTITY,
-    kind: 'run-caller',
-    principalId: 'principal-secret-sub',
-    userId: 'user-1',
-    role: 'builder',
-  },
-} as const;
-
-const allow: BuilderCallerVerifier = () => Promise.resolve(CALLER);
-const readOnly: BuilderCallerVerifier = () =>
-  Promise.resolve({ ok: false, code: 'no_caller', reads: true, run: RUN_IDENTITY });
-const refuse: BuilderCallerVerifier = () =>
-  Promise.resolve({ ok: false, code: 'not_permitted', reads: false });
-
-function rpc(body: unknown, headers: Record<string, string> = {}): Request {
-  return new Request('http://localhost/api/builder/mcp', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer token', ...headers },
-    body: JSON.stringify(body),
-  });
-}
-
-const call = (method: string, params?: unknown): unknown => ({
-  jsonrpc: '2.0',
-  id: 7,
-  method,
-  ...(params === undefined ? {} : { params }),
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.clearAllMocks();
-  resetBuilderDoorLimits();
-});
-
-const readRun = vi.fn<BuilderRunReader>(() =>
-  Promise.resolve({
-    modelId: 'model-1',
-    agentVersion: { id: 'version-1', number: 1, summary: 'v1' },
-  }),
-);
-
-/** The door with no ports (every call `builder_disabled`) unless a test gives some. */
-const door = (
-  verifyCaller: BuilderCallerVerifier,
-  more: Partial<BuilderDoor> = {},
-): BuilderDoor => ({
-  verifyCaller,
-  ports: null,
+  CALLER,
+  RUN_IDENTITY,
+  allow,
+  call,
+  ctxOf,
+  door,
+  readOnly,
   readRun,
-  ...more,
-});
+  refuse,
+  resetDoorAfterEach,
+  rpc,
+  spyOnConsole,
+  spyPorts,
+  toolAnswer,
+} from './mcp.test-support';
 
-/** Memory ports, switched on, whose every method call is recorded in `reached` as (port, method, ...args). */
-function spyPorts() {
-  const inner = makeMemoryPorts();
-  const reached = vi.fn<(port: string, method: string, ...args: unknown[]) => void>();
-  const wrap = (name: string, port: object) =>
-    new Proxy(port, {
-      get(target, key) {
-        const value: unknown = Reflect.get(target, key);
-        if (typeof value !== 'function') return value;
-        return (...args: unknown[]) => {
-          reached(name, String(key), ...args);
-          const result: unknown = Reflect.apply(value, target, args);
-          return result;
-        };
-      },
-    });
-  const ports = Object.fromEntries(
-    Object.entries(inner).map(([name, port]) => [name, wrap(name, port)]),
-  ) as unknown as BuilderPorts;
-  // The journal of the run the test tokens name.
-  const ctx = { ...callContextOf(RUN_IDENTITY.workspaceId, 'builder'), runId: RUN_IDENTITY.runId };
-  const journalled = async () => (await inner.audit.runCounts(ctx)).toolCalls;
-  return { ports, reached, journalled };
-}
-
-/** The ctx the shell handed the ports, read off the first port call. */
-function ctxOf(reached: ReturnType<typeof spyPorts>['reached']): CallContext {
-  return reached.mock.calls[0]?.[2] as CallContext;
-}
-
-async function toolAnswer(response: Response) {
-  const text = await response.text();
-  const body = JSON.parse(text) as {
-    result: { isError: boolean; content: Array<{ type: string; text: string }> };
-  };
-  const [content] = body.result.content;
-  return {
-    text,
-    isError: body.result.isError,
-    result: JSON.parse(content?.text ?? 'null') as unknown,
-  };
-}
+resetDoorAfterEach();
 
 describe('POST /api/builder/mcp (#1846)', () => {
   it('answers initialize', async () => {
@@ -168,9 +65,7 @@ describe('POST /api/builder/mcp (#1846)', () => {
   it.each(['draft_save', 'evals_run', 'trial_run'])(
     'refuses %s with no_caller when the token has no person, and logs nothing',
     async (tool) => {
-      const logged = (['log', 'error', 'warn', 'info'] as const).map((level) =>
-        vi.spyOn(console, level),
-      );
+      const logged = spyOnConsole();
       const { ports, reached, journalled } = spyPorts();
       const response = await serveBuilderMcp(
         rpc(call('tools/call', { name: tool, arguments: {} }), {
@@ -309,140 +204,6 @@ describe('POST /api/builder/mcp (#1846)', () => {
     expect(reached).not.toHaveBeenCalled();
   });
 
-  const recordedIds = (reached: ReturnType<typeof spyPorts>['reached']) =>
-    reached.mock.calls
-      .filter(([port, method]) => port === 'audit' && method === 'record')
-      .map((args) => (args[3] as { callId: string }).callId);
-
-  it("journals the engine's tool-use id as the call id, so a retry is the same call", async () => {
-    const { ports, reached } = spyPorts();
-    const params = {
-      name: 'catalog_list',
-      arguments: {},
-      _meta: { 'claudecode/toolUseId': 'toolu_01' },
-    };
-    for (let i = 0; i < 2; i += 1) {
-      await serveBuilderMcp(rpc(call('tools/call', params)), door(allow, { ports }));
-    }
-    // The repeat is not stored under the taken id, so it is journaled again under a derived one.
-    const ids = recordedIds(reached);
-    expect(ids.slice(0, 2)).toEqual(['toolu_01', 'toolu_01']);
-    expect(ids).toHaveLength(3);
-    expect(ids[2]).toMatch(/^toolu_01:[0-9a-f-]{36}$/);
-  });
-
-  it.each([
-    ['another _meta key', { _meta: { callId: 'client-id' } }],
-    ['an empty id', { _meta: { 'claudecode/toolUseId': '' } }],
-    ['an id over 128 characters', { _meta: { 'claudecode/toolUseId': 'x'.repeat(129) } }],
-    ['an id that is not a string', { _meta: { 'claudecode/toolUseId': 7 } }],
-  ])('mints a fresh call id per call when the request carries %s', async (_label, meta) => {
-    const { ports, reached, journalled } = spyPorts();
-    const params = { name: 'catalog_list', arguments: {}, ...meta };
-    for (let i = 0; i < 2; i += 1) {
-      await serveBuilderMcp(rpc(call('tools/call', params)), door(allow, { ports }));
-    }
-    const ids = recordedIds(reached);
-    expect(ids).toHaveLength(2);
-    expect(new Set(ids).size).toBe(2);
-    for (const id of ids) expect(id).not.toMatch(/^(client-id|7)$/);
-    expect(await journalled()).toBe(2);
-  });
-
-  it.each([
-    ['no _meta', {}],
-    ['another _meta key', { _meta: { callId: 'client-id' } }],
-    ['an empty id', { _meta: { 'claudecode/toolUseId': '' } }],
-    ['an id over 128 characters', { _meta: { 'claudecode/toolUseId': 'x'.repeat(129) } }],
-    ['an id that is not a string', { _meta: { 'claudecode/toolUseId': 7 } }],
-  ])(
-    'refuses a write or spend tool when the request carries %s, before any port (AUD-07)',
-    async (_label, meta) => {
-      const { ports, reached, journalled } = spyPorts();
-      for (const name of ['draft_save', 'evals_run', 'trial_run']) {
-        const params = { name, arguments: {}, ...meta };
-        const response = await serveBuilderMcp(
-          rpc(call('tools/call', params)),
-          door(allow, { ports }),
-        );
-        const answer = await toolAnswer(response);
-        expect(answer.isError, name).toBe(true);
-        expect(answer.result, name).toMatchObject({
-          ok: false,
-          code: 'invalid_arguments',
-          details: [MISSING_TOOL_USE_ID],
-        });
-      }
-      expect(reached).not.toHaveBeenCalled();
-      expect(await journalled()).toBe(0);
-    },
-  );
-
-  it('lets a write that carries a tool-use id through to the core', async () => {
-    const { ports, reached } = spyPorts();
-    const params = {
-      name: 'draft_save',
-      arguments: {},
-      _meta: { 'claudecode/toolUseId': 'toolu_02' },
-    };
-    const answer = await toolAnswer(
-      await serveBuilderMcp(rpc(call('tools/call', params)), door(allow, { ports })),
-    );
-    expect(answer.result).toMatchObject({ ok: false, code: 'invalid_arguments' });
-    expect(answer.result).not.toMatchObject({ details: [MISSING_TOOL_USE_ID] });
-    expect(recordedIds(reached)).toEqual(['toolu_02']);
-  });
-
-  describe('rate limit per run (SEC-14)', () => {
-    const { callsPerMinutePerRun } = BUILDER_DOOR_RATE_LIMITS;
-    const listing = (verifyCaller: BuilderCallerVerifier) =>
-      serveBuilderMcp(rpc(call('tools/list')), door(verifyCaller));
-    const otherRun: BuilderCallerVerifier = () =>
-      Promise.resolve({ ...CALLER, caller: { ...CALLER.caller, runId: 'run-other' } });
-
-    it('pins the limit at 120 requests a minute', () => {
-      expect(BUILDER_DOOR_RATE_LIMITS).toEqual({ callsPerMinutePerRun: 120 });
-    });
-
-    it('answers 429 builder_rate_limited with Retry-After once a run passes the limit, whoever its caller is', async () => {
-      for (let sent = 0; sent < callsPerMinutePerRun; sent += 1) {
-        expect((await listing(allow)).status).toBe(200);
-      }
-      const limited = await listing(allow);
-      expect(limited.status).toBe(429);
-      expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
-      expect(await limited.json()).toMatchObject({ error: { code: 'builder_rate_limited' } });
-      // A reads-only run is counted under the same run id as the person's.
-      expect((await listing(readOnly)).status).toBe(429);
-    });
-
-    it('admits a run again once a minute has passed on the clock', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      try {
-        vi.setSystemTime(new Date('2026-03-01T00:00:00.000Z'));
-        for (let sent = 0; sent <= callsPerMinutePerRun; sent += 1) await listing(allow);
-        expect((await listing(allow)).status).toBe(429);
-        vi.setSystemTime(Date.now() + 61_000);
-        expect((await listing(allow)).status).toBe(200);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('counts per run: another run is still admitted', async () => {
-      for (let sent = 0; sent <= callsPerMinutePerRun; sent += 1) await listing(allow);
-      expect((await listing(allow)).status).toBe(429);
-      expect((await listing(otherRun)).status).toBe(200);
-    });
-
-    it('counts nothing for a token that does not verify, and refuses it first', async () => {
-      for (let sent = 0; sent <= callsPerMinutePerRun; sent += 1) {
-        expect((await listing(refuse)).status).toBe(403);
-      }
-      expect((await listing(allow)).status).toBe(200);
-    });
-  });
-
   it('answers any other method with -32601', async () => {
     const response = await serveBuilderMcp(rpc(call('resources/list')), door(allow));
     const body = (await response.json()) as { error: { code: number } };
@@ -473,12 +234,7 @@ describe('POST /api/builder/mcp (#1846)', () => {
   });
 
   it('refuses with 403 not_permitted and reveals nothing about the token or the person', async () => {
-    const logged = [
-      vi.spyOn(console, 'log'),
-      vi.spyOn(console, 'error'),
-      vi.spyOn(console, 'warn'),
-      vi.spyOn(console, 'info'),
-    ];
+    const logged = spyOnConsole();
     const response = await serveBuilderMcp(
       rpc(call('tools/list'), { authorization: 'Bearer very-secret-token' }),
       door(refuse),
@@ -490,79 +246,5 @@ describe('POST /api/builder/mcp (#1846)', () => {
       expect(text).not.toContain(secret);
     }
     for (const spy of logged) expect(spy).not.toHaveBeenCalled();
-  });
-});
-
-describe('the real verifier behind the door', () => {
-  const database = new Proxy({} as RunTokenDatabase, {
-    get() {
-      throw new Error('the database must not be read for a token that does not verify');
-    },
-  });
-  const directory = {
-    forWorkspace() {
-      throw new Error('the directory must not be read for a token that does not verify');
-    },
-  } as unknown as DirectoryRoot;
-  const tokens = createRunTokenCodec({ secret: 'mcp-door-test-secret-at-least-thirty-two-bytes' });
-  const verifyCaller = createBuilderCallerVerifier({
-    tokens,
-    database,
-    directory,
-    agents: {
-      forWorkspace() {
-        throw new Error('the agents must not be read for a token that does not verify');
-      },
-    },
-    ceiling: null,
-  });
-
-  for (const [label, headers] of [
-    ['a request with only a session cookie', { authorization: '', cookie: 'aw_session=abc' }],
-    ['an API key', { authorization: 'Bearer ak_live_0123456789' }],
-    ['an unsigned bearer', { authorization: 'Bearer not-a-run-token' }],
-  ] as const) {
-    it(`refuses ${label} with 403 not_permitted`, async () => {
-      const request = rpc(call('tools/list'), headers);
-      if (headers.authorization === '') request.headers.delete('authorization');
-      const response = await serveBuilderMcp(request, door(verifyCaller));
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ error: { code: 'not_permitted' } });
-    });
-  }
-
-  it.each([
-    ['no credential', { authorization: '' }],
-    ['a session cookie', { authorization: '', cookie: 'aw_session=abc' }],
-    ['an API key', { authorization: 'Bearer ak_live_0123456789' }],
-    ['an unsigned bearer', { authorization: 'Bearer not-a-run-token' }],
-  ])(
-    'refuses a draft_save with %s before any port, and writes nothing',
-    async (_label, headers) => {
-      const { ports, reached, journalled } = spyPorts();
-      const request = rpc(
-        call('tools/call', {
-          name: 'draft_save',
-          arguments: { body: {} },
-          _meta: { 'claudecode/toolUseId': 'toolu_01' },
-        }),
-        headers,
-      );
-      if (headers.authorization === '') request.headers.delete('authorization');
-
-      const response = await serveBuilderMcp(request, door(verifyCaller, { ports }));
-
-      expect(response.status).toBe(403);
-      expect(reached).not.toHaveBeenCalled();
-      expect(await journalled()).toBe(0);
-    },
-  );
-
-  it('refuses every call when no token secret is configured', async () => {
-    const response = await serveBuilderMcp(
-      rpc(call('tools/list')),
-      door(createBuilderCallerVerifier(null)),
-    );
-    expect(response.status).toBe(403);
   });
 });

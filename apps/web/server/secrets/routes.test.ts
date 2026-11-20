@@ -12,7 +12,7 @@ import { installSecretsApi } from '../composition/services';
 import { captureLog } from '../telemetry/capture-log';
 import { installWorkspaceHeaderRbac, TEST_ROLE_HEADER } from '../rbac/testing';
 import { createInMemorySecretsStoreProvider } from './memory-store';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 import type { SecretResource } from './contract';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';

@@ -158,7 +158,7 @@ The acceptance criterion asks for *"an authorisation matrix test covering four r
 registered at the time it runs, derived from the route declarations rather than transcribed"*.
 
 `apps/web/server/rbac/authorisation-matrix.test.ts` reads the union of
-`tests/route-declarations/**` — the same union `tests/route-inventory.test.ts` asserts **equals** the
+`tests/route-declarations/**` — the same union `tests/route-inventory.policy-check.ts` asserts **equals** the
 route handlers the tracked tree serves (ADR-0025) — and crosses it with the four roles and all four
 ownership answers. A cell `decide()` cannot classify comes back `refuse`, and the test reports every
 refusal as a failure. Nothing in that file lists a route or counts one; the products are computed

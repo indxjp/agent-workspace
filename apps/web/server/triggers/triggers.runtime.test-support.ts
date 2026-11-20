@@ -6,7 +6,7 @@ import { Principal } from '../rbac/principal';
 import { TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
 import type { AgentRef, LaunchContext, RunApiEnvironment } from '../runs/environment';
 import { InMemoryRunStore } from '../runs/memory-store';
-import type { TriggerRecord, TriggersRuntime } from './runtime';
+import type { TriggerRecord, TriggersRuntime } from './wiring';
 import { triggerRepository } from './triggers.repository.test-support';
 
 export interface TriggerTestState {

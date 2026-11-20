@@ -291,7 +291,9 @@ describe('storage size limits are defined once', () => {
     // Bounded by the scope: parsing every apps/packages source took the scan to 4 s of vitest's 5.
     const { inScope, exporters } = scanFootprint(files);
     expect(exporters, `exporters parsed for ${inScope} files in scope`).toBeLessThan(inScope);
-  });
+    // The assertion above bounds the work, not Vitest's 5 s default: with this project's files
+    // running in parallel (tests/projects.mjs) the same scan measured 5.8 s on a loaded host.
+  }, 30_000);
 
   it('parses only the exporters of the units a fold imports', () => {
     const unrelated = Array.from({ length: 5 }, (_, index) => ({

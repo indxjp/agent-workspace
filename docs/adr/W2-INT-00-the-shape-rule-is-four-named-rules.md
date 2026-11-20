@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-04
 Decided by: W2-INT-00 (implementer)
-Scope: `tests/route-inventory.test.ts` (`routeShape`, `mandateFaults`); every Wave 2 route declaration
+Scope: `tests/route-inventory.policy-check.ts` (`routeShape`, `mandateFaults`); every Wave 2 route declaration
 
 ## Context
 

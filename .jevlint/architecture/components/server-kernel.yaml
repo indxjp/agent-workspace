@@ -1,0 +1,24 @@
+id: server-kernel
+title: Server shared kernel
+summary: >
+  What every server context may use: the route wrapper and error envelope, JSON logs and traces, audit, feature switches, pagination, versioning, Clock, IdGenerator, settings and defineSlot. It should import no context; five imports still do.
+layer: kernel
+paths:
+  - "apps/web/server/audit/**"
+  - "apps/web/server/features/**"
+  - "apps/web/server/http/**"
+  - "apps/web/server/openapi/**"
+  - "apps/web/server/pagination/**"
+  - "apps/web/server/telemetry/**"
+  - "apps/web/server/versioning/**"
+  - "apps/web/server/*.ts"
+key_files:
+  - { path: apps/web/server/http/route.ts, role: "route(): renders every error envelope" }
+  - { path: apps/web/server/http/result.ts, role: "the { error: { code, message } } envelope and its deliberate variants" }
+  - { path: apps/web/server/telemetry/logger.ts, role: "the web process's JSON-line logger" }
+interface: [route, problem, log, systemClock, defineSlot, DomainError]
+depends_on: [web-ui, persistence, contracts]
+uses: [opentelemetry, nextjs]
+rules: []
+checklist: []
+status: current

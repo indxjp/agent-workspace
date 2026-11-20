@@ -5,7 +5,7 @@ import AgentWorkspace.Concepts.ApiKey
 
 A **browser token** is a short-lived bearer a customer's backend mints for its own frontend. It
 is **attenuation, not a fourth identity**: it resolves to the principal that minted it, narrowed
-to exactly one run or one session (`docs/sdk/04-api-specification.md` §3.1.1). The database knows
+to exactly one run or one session (`docs/10-product/sdk/04-api-specification.md` §3.1.1). The database knows
 it as a row of `browser_tokens` (`packages/core/src/db/schema/browser-tokens.ts`): the minting
 principal, one scope (`browser_tokens_scope_xor`), a SHA-256 of the secret half, an expiry and a
 revocation stamp. It carries no role: the minter's role is re-read on every request.
@@ -26,7 +26,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts.Workspace
 @[aw_spec (ts := "packages/contracts/src/tokens.ts#TOKEN_SCOPE_KINDS")
   (ts := "apps/web/server/rbac/core/token-scope.ts#TOKEN_SCOPE_KINDS")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browserTokenScopeKinds")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 inductive ScopeKind where
   | run
   | session
@@ -78,12 +78,12 @@ def defaultTtlSeconds : Nat := 300
 
 /-- A requested TTL the mint request admits: an integer within the bounds. -/
 @[aw_spec (ts := "packages/contracts/src/tokens.ts#MintTokenRequestSchema")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def ttlAccepted (ttl : Nat) : Bool := minTtlSeconds ≤ ttl && ttl ≤ maxTtlSeconds
 
 /-- `BROWSER_TOKEN_PREFIX`. -/
 @[aw_spec (ts := "packages/contracts/src/tokens.ts#BROWSER_TOKEN_PREFIX")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def prefix_ : String := "awt_live_"
 
 /-- `BROWSER_TOKEN_ID_LENGTH`: base64url characters of the public half. -/
@@ -98,13 +98,13 @@ def secretLength : Nat := 43
 `awt_live_<22>_<43>`. -/
 @[aw_spec (ts := "packages/contracts/src/tokens.ts#BROWSER_TOKEN_PATTERN")
   (ts := "apps/web/server/rbac/browser-token.ts#parsePresentedBrowserToken")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def presentedShaped (s : String) : Bool :=
   Concepts.ApiKey.bearerShaped prefix_ idLength secretLength s
 
 /-- A browser token, with every column of `browser_tokens`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/browser-tokens.ts#browserTokens")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 structure BrowserToken where
   id : BrowserTokenId
   workspace : WorkspaceId
@@ -123,7 +123,7 @@ def BrowserToken.valid (t : BrowserToken) : Bool :=
   t.createdAt < t.expiresAt && t.revokedAt.all (t.createdAt ≤ ·)
 
 /-- The states of a token at an instant. -/
-@[aw_spec (doc := "docs/formal/inventory.md#2-state-machines")]
+@[aw_spec (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 inductive TokenState where
   | active
   | revoked

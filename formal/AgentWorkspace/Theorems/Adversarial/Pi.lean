@@ -61,7 +61,7 @@ private theorem allowed_write_resolves (c : Compiled) (candidate : String)
 spelled — relative, or absolute under the sandbox root: the grants it enforces are the request's
 own, normalised; the root it resolves against is the request's `cwd`; an allowed `write` or `edit`
 resolved to a workspace-relative path, and that path normalises outside every read-only grant. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-pi.md#path-grants")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-pi.md#path-grants")
   (ts := "packages/engine-pi/src/workspace.ts#piToolCallVerdict")
   (ts := "packages/engine-pi/src/workspace.ts#resolveWorkspacePath")
   (ts := "packages/engine-pi/src/guard.ts#resolvedPathVerdict")]
@@ -115,7 +115,7 @@ example :
 /-- Every model request an accepted configuration can issue targets the gateway's base URL plus
 `/v1/messages`, carries the run token as `Authorization: Bearer`, and there is exactly one such
 endpoint; the key the provider is given is the public placeholder, never the token. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-pi.md#egress")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-pi.md#egress")
   (ts := "packages/engine-pi/src/compile.ts#piModelConnection")
   (ts := "packages/engine-pi/src/boundary.ts#startPiRun")]
 theorem every_model_request_goes_to_the_gateway_with_the_run_token {r : Request} {c : Compiled}
@@ -142,7 +142,7 @@ example :
 from the compiled configuration alone: a placed skill the run grants, or the agent's instructions —
 and never anything under `~/.pi`, under `~/.agents` or from project discovery, whatever is present
 on the host. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-pi.md#loader")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-pi.md#loader")
   (ts := "packages/engine-pi/src/boundary.ts#startPiRun")]
 theorem the_pinned_loader_admits_only_platform_resources (c : Compiled)
     (present : List Resource) :

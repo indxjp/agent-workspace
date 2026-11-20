@@ -325,7 +325,7 @@ describe('there is no second chat implementation', () => {
     'apps/web/components/agents/schedules.tsx',
     'apps/web/components/projects/project-form.tsx',
     'apps/web/components/resources/skills-screens.tsx',
-    'apps/web/components/storage/edit-connection-screen.tsx',
+    'apps/web/components/storage/edit-connection-sections.tsx',
     'apps/web/components/storage/new-connection-form.tsx',
     // The approval prompt's optional comment (issue #1490), sent with a decision, not a message.
     'packages/react/src/approval-prompt.tsx',
@@ -373,7 +373,10 @@ describe('there is no second chat implementation', () => {
 
     // Send opens the run in the state hook; the screen chooses the one shared transcript.
     const chat = readFileSync(join(WEB, 'components', 'composer', 'home-chat.tsx'), 'utf8');
-    const state = readFileSync(join(WEB, 'components', 'composer', 'use-home-chat.ts'), 'utf8');
+    const state = readFileSync(
+      join(WEB, 'components', 'composer', 'use-home-chat-send.ts'),
+      'utf8',
+    );
     expect(chat).toContain("from '../run/run-view'");
     expect(chat).toContain('useHomeChatState(props)');
     expect(state).toContain('beginRun(');

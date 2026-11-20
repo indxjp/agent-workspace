@@ -8,7 +8,7 @@ import {
 
 import { PUT } from './route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import { MAX_POINTER_BODY_BYTES } from '../../../../../server/agent-versions/contract';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';

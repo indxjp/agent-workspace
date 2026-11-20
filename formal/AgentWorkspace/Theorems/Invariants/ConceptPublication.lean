@@ -234,7 +234,7 @@ theorem well_published_share_passes_the_checks (s : Share) (h : s.wellPublished 
 /-- A share and the principal that published it always belong to the same workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem share_and_publisher_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shares sharesPublisherKey r r') :
     tenantOf catalogue .shares r = tenantOf catalogue .workspacePrincipals r' :=
@@ -242,7 +242,7 @@ theorem share_and_publisher_share_a_workspace (st : State) {r r' : Row}
 
 /-- A share and the membership of the user who created it always belong to the same workspace. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares_creator_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem share_and_creator_membership_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shares sharesCreatorKey r r') :
     tenantOf catalogue .shares r = tenantOf catalogue .memberships r' :=
@@ -251,7 +251,7 @@ theorem share_and_creator_membership_share_a_workspace (st : State) {r r' : Row}
 /-- A share view and the share it records always belong to the same workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/share-views.ts#share_views_share_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem view_and_share_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shareViews viewsShareKey r r') :
     tenantOf catalogue .shareViews r = tenantOf catalogue .shares r' :=
@@ -260,7 +260,7 @@ theorem view_and_share_share_a_workspace (st : State) {r r' : Row}
 /-- A run charge and the share whose budget it draws on always belong to the same workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/share-run-charges.ts#share_run_charges_share_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem charge_and_share_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shareRunCharges chargesShareKey r r') :
     tenantOf catalogue .shareRunCharges r = tenantOf catalogue .shares r' :=
@@ -269,7 +269,7 @@ theorem charge_and_share_share_a_workspace (st : State) {r r' : Row}
 /-- A run charge and the run it funds always belong to the same workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/share-run-charges.ts#share_run_charges_run_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem charge_and_run_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shareRunCharges chargesRunKey r r') :
     tenantOf catalogue .shareRunCharges r = tenantOf catalogue .runs r' :=
@@ -291,7 +291,7 @@ theorem charge_funds_runs_of_its_share's_workspace (st : State) {c s u : Row}
 /-- In a consistent state every share lies in exactly one existing workspace: the row its
 `workspace_id` names. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem share_has_exactly_one_workspace (st : State)
     (hc : Er.Core.consistent catalogue st = true) {r : Row} (hr : r ∈ st .shares) :
     ∃ w ∈ st .workspaces, w.get "id" = r.get "workspace_id" ∧
@@ -309,7 +309,7 @@ theorem share_has_exactly_one_workspace (st : State)
 workspace, and no other principal row carries that id. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem share_has_exactly_one_publisher (st : State)
     (hc : Er.Core.consistent catalogue st = true) {r : Row} (hr : r ∈ st .shares) :
     ∃ p ∈ st .workspacePrincipals, p.get "workspace_id" = r.get "workspace_id" ∧
@@ -328,7 +328,7 @@ theorem share_has_exactly_one_publisher (st : State)
 /-- In a consistent state every share view records exactly one share, of its own workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/share-views.ts#share_views_share_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem view_has_exactly_one_share (st : State) (hc : Er.Core.consistent catalogue st = true)
     {v : Row} (hv : v ∈ st .shareViews) :
     ∃ s ∈ st .shares, s.get "id" = v.get "share_id" ∧ s.get "workspace_id" = v.get "workspace_id" ∧
@@ -346,7 +346,7 @@ theorem view_has_exactly_one_share (st : State) (hc : Er.Core.consistent catalog
 /-- In a consistent state every run charge draws on exactly one share, of its own workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/share-run-charges.ts#share_run_charges_share_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem charge_has_exactly_one_share (st : State) (hc : Er.Core.consistent catalogue st = true)
     {c : Row} (hcm : c ∈ st .shareRunCharges) :
     ∃ s ∈ st .shares, s.get "id" = c.get "share_id" ∧ s.get "workspace_id" = c.get "workspace_id" ∧
@@ -364,7 +364,7 @@ theorem charge_has_exactly_one_share (st : State) (hc : Er.Core.consistent catal
 /-- In a consistent state every run charge funds exactly one run, of its own workspace. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/share-run-charges.ts#share_run_charges_run_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem charge_has_exactly_one_run (st : State) (hc : Er.Core.consistent catalogue st = true)
     {c : Row} (hcm : c ∈ st .shareRunCharges) :
     ∃ u ∈ st .runs, u.get "id" = c.get "run_id" ∧ u.get "workspace_id" = c.get "workspace_id" ∧
@@ -409,7 +409,7 @@ theorem token_names_at_most_one_share (st : State)
 /-- In a consistent state, when a share records the user who created it, that user is a member
 of the share's workspace. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares_creator_workspace_fk")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 theorem share_creator_is_a_member (st : State) (hc : Er.Core.consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .shares) {u : String} (hu : r.get "created_by" = some u) :
     ∃ m ∈ st .memberships, m.get "workspace_id" = r.get "workspace_id" ∧
@@ -505,7 +505,7 @@ theorem share_with_mode_is_an_agent_share (st : State) (hc : Publication.consist
 /-- In a consistent state every share's spend is a non-negative amount, and its budget cap is
 absent or a non-negative amount. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 theorem share_amounts_are_non_negative (st : State) (hc : Publication.consistent st = true)
     {r : Row} (hr : r ∈ st .shares) :
     (r.get "spent_usd").all nonNegativeAmount = true ∧
@@ -572,7 +572,7 @@ theorem closed_link_stays_closed (s : Share) {t1 t2 : Nat} (hle : t1 ≤ t2)
 /-- A share's derived state never returns to `live` once it has expired: expiry is permanent as
 time passes. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 theorem expired_state_is_permanent (s : Share) {t1 t2 : Nat} (hle : t1 ≤ t2)
     (h : s.stateAt t1 = .expired) : s.stateAt t2 = .expired := by
   unfold Share.stateAt Share.expiredAt at *
@@ -617,7 +617,7 @@ theorem published_mode_and_budget_fit (r : PublishRequest) (role : Membership.Ro
 
 /-- While the release gate is closed (today), no admitted publish writes a runnable share. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/shares/runnable/feature.ts#runnablePublicLinksEnabled")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 theorem no_runnable_share_is_published_today (r : PublishRequest) (role : Membership.Role)
     (pse : Bool) (now : Nat) (p : Published)
     (h : publishDecision r role pse runnableReleased now = .published p) :

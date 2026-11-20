@@ -324,13 +324,13 @@ describe('GET /api/demo/allowance', () => {
     userId: string,
     role: 'guest' | 'owner' = 'guest',
   ): Promise<Principal> {
-    const { mintSessionToken, newEmailLinkSessionClaims, verifySessionToken } =
+    const { mintSignInSessionToken, newEmailLinkSignInSessionClaims, verifySignInSessionToken } =
       await import('../../../auth/session');
-    const token = await mintSessionToken(
-      newEmailLinkSessionClaims('guest@example.test', 'slug'),
+    const token = await mintSignInSessionToken(
+      newEmailLinkSignInSessionClaims('guest@example.test', 'slug'),
       SECRET,
     );
-    const verified = await verifySessionToken(token, SECRET);
+    const verified = await verifySignInSessionToken(token, SECRET);
     if (!verified.ok) throw new Error('fixture token did not verify');
     const built = Principal.fromSession(verified.claims, { id: workspaceId, slug: 'slug' }, role, {
       principalId: '5730530e-4f41-4d62-88c7-0696f4995dca',

@@ -1,0 +1,22 @@
+id: composition
+title: Composition root and application context
+summary: >
+  Reads the environment once, opens the database, calls each wire<Domain> function and installs one ApplicationContext per process. Routes and domain handlers read it with applicationContext() and answer a named 503 when a domain is off.
+layer: application
+paths:
+  - "apps/web/server/composition/**"
+  - "apps/web/server/application-context.ts"
+  - "apps/web/server/readiness.ts"
+  - "apps/web/server/start.ts"
+  - "apps/web/server/auth-settings.ts"
+key_files:
+  - { path: apps/web/server/composition/register.ts, role: "register() and registerOpenedDatabase: the composition root" }
+  - { path: apps/web/server/application-context.ts, role: "the ApplicationContext type and its one slot; installApplicationContext, applicationContext" }
+  - { path: apps/web/server/composition/session-rbac.ts, role: "resolves each credential family into a Principal" }
+interface: [register, installApplicationContext, applicationContext, ApplicationContext]
+depends_on: [identity, storage-sharing, execution, integrations, agent-authoring, store-demo, server-kernel, web-ui, persistence, gateway, runtime-drivers, run-contract, sdk, contracts]
+uses: [nextjs]
+rules: []
+checklist:
+  - { id: one-context-install, text: "installApplicationContext is called once, after every domain is built; a failure installs nothing and closes the pools opened so far." }
+status: current

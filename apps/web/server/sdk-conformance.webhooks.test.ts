@@ -29,7 +29,7 @@ import type {
   WebhookDeliveryOutbox,
   WebhookRecord,
   WebhooksRuntime,
-} from './webhooks/runtime';
+} from './webhooks/wiring';
 import { finishedRun } from './webhooks/testing';
 
 const HOOK_WORKSPACE = '12121212-1212-4212-8212-121212121212';

@@ -41,6 +41,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+import { FILE_TEXT_MAX_CHARS } from '../limits.js';
 import { createdAt, primaryKeyId } from './columns.js';
 import { files } from './files.js';
 import { workspaces } from './workspaces.js';
@@ -52,8 +53,7 @@ const tsvector = customType<{ data: string; driverData: string }>({
   },
 });
 
-/** The most characters one passage may hold; longer text is split into several passages. */
-export const FILE_TEXT_MAX_CHARS = 20_000;
+export { FILE_TEXT_MAX_CHARS };
 
 export const fileTexts = pgTable(
   'file_texts',

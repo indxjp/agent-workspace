@@ -23,6 +23,7 @@ import type {
   A12PathTarget,
   RuntimeHandle,
 } from '../types.js';
+import { FIXTURE_TIMERS, type A12Timer, type A12Timers } from '../timers.js';
 
 export type FixtureEvent =
   | {
@@ -205,12 +206,18 @@ export function createFixtureStarter(
      * scenario will honestly report `fail`, not a manufactured `pass`.
      */
     readonly maxSessionSeconds?: number;
+    /**
+     * The clock the ceiling above is enforced on — the fixture's compressed clock unless a caller
+     * passes another; the scenario observing it must use the same one (timers.ts).
+     */
+    readonly timers?: A12Timers;
   } = {},
 ): AgentStarter<FixtureRequest, FixtureEvent> {
   const network = options.network ?? OPEN_NETWORK;
   const fileAccess = options.fileAccess ?? OPEN_FILE_ACCESS;
   const fileWrite = options.fileWrite ?? OPEN_FILE_WRITE;
   const maxSessionSeconds = options.maxSessionSeconds;
+  const timers = options.timers ?? FIXTURE_TIMERS;
 
   return (runtime, request) => {
     const { action } = request;
@@ -279,14 +286,14 @@ export function createFixtureStarter(
       // ceiling was configured above — until this fixture's own enforcement of it fires first.
       // Nothing here is driven by the scenario: the scenario only *observes* whether the turn
       // stopped inside its declared budget.
-      let limitTimer: ReturnType<typeof setTimeout> | undefined;
+      let limitTimer: A12Timer | undefined;
       const limitReached$: Promise<void> =
         maxSessionSeconds === undefined
           ? new Promise<void>(() => {
               /* never resolves — no ceiling declared, matching an honest `maxSessionSeconds: null` */
             })
           : new Promise<void>((resolve) => {
-              limitTimer = setTimeout(resolve, maxSessionSeconds * 1000);
+              limitTimer = timers.setTimeout(resolve, maxSessionSeconds * 1000);
             });
 
       let tick = 0;
@@ -305,7 +312,7 @@ export function createFixtureStarter(
         if (winner === 'interrupt' || winner === 'limit') break;
       }
       if (limitTimer !== undefined) {
-        clearTimeout(limitTimer);
+        timers.clearTimeout(limitTimer);
       }
       yield { type: 'interrupted' };
     }

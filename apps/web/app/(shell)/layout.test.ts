@@ -11,7 +11,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { Sidebar } from '../../components/shell/sidebar';
 
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../../server/auth';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from '../../server/auth';
 import { conferredBy } from '../../server/rbac/core/conferral';
 import { createMemoryDirectory } from '../../server/rbac/memory-directory';
 
@@ -22,8 +26,8 @@ import { installTestDomains } from '../../server/application-context-fixtures';
 const SECRET = 'a'.repeat(32);
 
 async function verifiedSessionFor(email: string, workspaceSlug: string) {
-  const token = await mintSessionToken(newSessionClaims(email, workspaceSlug), SECRET);
-  const result = await verifySessionToken(token, SECRET);
+  const token = await mintSignInSessionToken(newSignInSessionClaims(email, workspaceSlug), SECRET);
+  const result = await verifySignInSessionToken(token, SECRET);
   if (!result.ok) throw new Error('unreachable: mint then verify with the same secret');
   return result.claims;
 }

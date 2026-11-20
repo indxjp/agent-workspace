@@ -11,7 +11,7 @@ import type { Ownership } from '../../../server/rbac/decide';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
 import type { Role } from '../../../server/rbac/core/roles';
-import type { WorkspaceSharing } from '../../../server/shares/runtime';
+import type { WorkspaceSharing } from '../../../server/shares/wiring';
 import type { SharedRun } from '../../../server/shares/session-snapshot/snapshot';
 import { POST } from './route';
 

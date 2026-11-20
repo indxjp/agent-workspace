@@ -160,7 +160,7 @@ tradeoffs. They do not narrate syntax.
 - Every corrected defect gets a regression test that would have failed before the fix.
 - Repository-wide `it.fails`/`test.fails` is reserved for RF characterizations: each title names
   exactly one `RF-###` owner that appears in the `Expires in` column of the
-  [RF-001 characterization register](docs/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md#rf-001-characterization-register).
+  [RF-001 characterization register](docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md#rf-001-characterization-register).
 - Boundary schemas need valid, invalid, unknown-key, missing-field, and numeric-bound cases as
   applicable. Wire mappers must prove that real persistence-shaped values satisfy the shared schema.
 - Every in-memory store passes the same conformance suite as its PostgreSQL adapter (see
@@ -175,7 +175,7 @@ tradeoffs. They do not narrate syntax.
   and fails on a malformed tag; #1618 blocks new gaps, and `--require-complete` (run in CI) fails on any gap of a
   storage story.
 - Coverage is a locator for untested risk, not a reason to add assertion-free tests.
-- Where a test goes, what CI enforces and how to run each lane: [docs/testing-strategy.md](docs/testing-strategy.md).
+- Where a test goes, what CI enforces and how to run each lane: [docs/30-reference/policies/testing-strategy.md](docs/30-reference/policies/testing-strategy.md).
 
 ## Quality commands
 

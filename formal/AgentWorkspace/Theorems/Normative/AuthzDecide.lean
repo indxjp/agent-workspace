@@ -5,7 +5,7 @@ T1 — the documented authorisation rules, one theorem per rule:
 
 - one theorem per cell of the role table (5 roles × 32 resources; the guest is silent in §3.3, which prints the four conferrable roles), each pinning the grant
   `permissions.ts` computes against this file's own transcription **and** against the independent
-  transcription of `docs/sdk/04-api-specification.md` §3.3 (`documentedGrants`): the cell agrees on
+  transcription of `docs/10-product/sdk/04-api-specification.md` §3.3 (`documentedGrants`): the cell agrees on
   every reachable operation, disagrees, or the document is silent;
 - the path grammar (ADR-0026), the method mapping (§21's `run` verb, SDK-03-RUN-235), the refusals
   of ADR-0015/0031, the evaluation order, the browser-token scope rules of §3.1.1, `applyGrant`'s
@@ -46,7 +46,7 @@ half: an engine is installed by deploying an adapter, and no route writes one. O
 `Everything.` fallback and is therefore deliberately absent from the write half. -/
 @[aw_spec (tier := T1) (ts := "apps/web/app/api/engines/route.ts#GET")
   (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")
-  (doc := "docs/sdk/04-api-specification.md#33-roles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")]
 theorem engine_catalogue_is_read_by_the_conferrable_roles :
     ∀ o : Ownership,
       (decideAuth ⟨"owner", "GET", "/api/engines", o, none⟩).effect = .allow ∧
@@ -87,7 +87,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
       §3.3 prints the same grants on every operation a path can reach."
     elabCommand (← `(command|
       $doc:docComment
-      @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
+      @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")
         (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧
           (documentedGrants $roleE $resE).map (agreeOnReachable $resE ⟨$a, $b, $c⟩) = some true :=
@@ -97,7 +97,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
       §3.3 prints a different grant on a reachable operation (a documentation finding)."
     elabCommand (← `(command|
       $doc:docComment
-      @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
+      @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")
         (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧
           (documentedGrants $roleE $resE).map (agreeOnReachable $resE ⟨$a, $b, $c⟩) = some false :=
@@ -107,7 +107,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
       §3.3 has no row for this resource."
     elabCommand (← `(command|
       $doc:docComment
-      @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
+      @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")
         (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧ documentedGrants $roleE $resE = none :=
         by decide +kernel))
@@ -446,7 +446,7 @@ example : decideOrdinary ⟨"viewer", "GET", "/agents", .own, none⟩ = .refuse 
 earlier step's result: role before surface, surface before path and method, resource before depth,
 path before method, method before scope, and scope before §21's grant. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/rbac/decide.ts#decide")
-  (doc := "docs/formal/domains/d1-runs.md#authorisation")]
+  (doc := "docs/20-design/formal/domains/d1-runs.md#authorisation")]
 theorem decide_evaluation_order :
     decideOrdinary ⟨"root", "GET", "/agents", .own, none⟩ = .refuse .unknownRole ∧
       decideOrdinary ⟨"owner", "OPTIONS", "/agents", .own, none⟩ = .refuse .pageSurface ∧
@@ -467,7 +467,7 @@ with `TOKEN_SCOPE_GRAMMAR` in both directions for each kind: every documented ro
 of its kind's grammar (`inGrammar`), and every cell is witnessed by a documented route of that kind
 — same resource and operation, and, for a sub-keyed cell such as `(runs, run, "feedback")`, the
 same sub-resource. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")]
 theorem scope_grammar_is_the_documented_route_table :
     ∀ k : ScopeKind,
@@ -489,7 +489,7 @@ theorem scope_grammar_is_the_documented_route_table :
 `403 token_out_of_scope`": a classified query whose `(resource, operation)` is outside the scope's
 grammar (`inGrammar`, sub-resource included) is denied with the scope code, whatever the role's
 grant. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem out_of_grammar_is_token_out_of_scope (q : Query) (role : Role) (s : Scope) (r : Resource)
     (sub id : Option String) (op : Operation) (hr : parseRoleInput q.role = some role)
@@ -512,7 +512,7 @@ example : decideOrdinary ⟨"owner", "POST", "/api/files/x/upload-urls", .own, s
 /-- "Problem codes: `token_out_of_scope` (403, the scope gate itself)": on a classified query the
 decision carries the code `token_out_of_scope` exactly when the scope check objected (and is then a
 deny), and otherwise no code, so every other deny renders the default `forbidden`. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#Decision")]
 theorem deny_code_is_token_out_of_scope_exactly_on_a_scope_objection (q : Query) {role : Role}
     {r : Resource} {sub id : Option String} {op : Operation} (hr : parseRoleInput q.role = some role)
@@ -545,7 +545,7 @@ example : (decideOrdinary ⟨"owner", "GET", "/api/runs/other", .own, some (.run
 
 /-- "A scope reads one row, never a collection": a scoped `runs` read that names no `:id` is
 denied with `token_out_of_scope`, for both kinds. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem scoped_collection_read_is_out_of_scope (s : Scope) (sub : Option String) :
     checkTokenScope s .runs .read sub none = some .collectionRead := by
@@ -555,7 +555,7 @@ example : checkTokenScope (.session ⟨"s"⟩) .runs .read none none = some .col
   scoped_collection_read_is_out_of_scope _ _
 
 /-- A run scope admits the same row by exact spelling or equivalent valid UUID spelling. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_scope_needs_the_exact_run_id (run : RunId) (id : String) (sub : Option String) :
     checkTokenScope (.run run) .runs .read sub (some id) =
@@ -566,7 +566,7 @@ theorem run_scope_needs_the_exact_run_id (run : RunId) (id : String) (sub : Opti
 /-- A session scope reaching `POST /api/sessions/:id/attachments` (issue #1308) is admitted only for
 its own session — the one shape whose path `:id` is the scope's session — by exact spelling or
 equivalent valid UUID spelling, and otherwise denied as a different row. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem session_scope_needs_its_own_session_id (session : SessionId) (id : String) :
     checkTokenScope (.session session) .sessions .write (some "attachments") (some id) =
@@ -577,7 +577,7 @@ theorem session_scope_needs_its_own_session_id (session : SessionId) (id : Strin
 /-- "A session scope's row identity … is checked where the row is read": the scope check admits a
 session scope's run read, agent run and run feedback for any path id, leaving the row check to the
 handler. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem session_scope_defers_row_identity (session : SessionId) (id : String) (agentId : Option String)
     (sub : Option String) :
@@ -616,7 +616,7 @@ theorem permitted_grant_admits_own_and_permitted (o : Ownership) :
 events — Owner and Admin any, Builder, Viewer and Guest own; interrupting and rating (feedback, S2-05c) —
 Owner and Admin any, Builder, Viewer and Guest own (the guest reaches only its own runs); for each role,
 `[own, other, unknown, not-applicable, permitted]`. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (doc := "docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md#decision")
   (ts := "apps/web/server/rbac/decide.ts#decide")]
 theorem run_routes_read_and_interrupt_by_role :

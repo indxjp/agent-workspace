@@ -48,8 +48,13 @@ for (const file of modules) {
 const insideDatabaseLayer = (from: string): boolean => insideLayer(from);
 /** An importer inside the owning package is on the same side of the module boundary. */
 const insideOwningPackage = (from: string): boolean => from.startsWith(OWNING_PACKAGE);
-/** The shape rule for an escape's admitted importer: a Vitest suite, by filename. */
-const isSuite = (from: string): boolean => /\.test(?:-support)?\.tsx?$/u.test(from);
+/**
+ * The shape rule for an escape's admitted importer: a Vitest suite, by filename. The static-check
+ * lanes (`*.docs-check.ts`, `*.policy-check.ts`; tests/static-checks/vitest.config.ts) are Vitest
+ * suites too, run by `pnpm docs:check` and `pnpm policy:check` (ADR-0053 Amendment 2026-11-19f).
+ */
+const isSuite = (from: string): boolean =>
+  /\.(?:test(?:-support)?|docs-check|policy-check)\.tsx?$/u.test(from);
 
 interface Verdict {
   readonly edge: Edge;

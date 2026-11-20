@@ -382,7 +382,10 @@ console.log(JSON.stringify(missing));
       expect(uploaded.filter((entry) => /(^|\/)(node_modules|\.git)\//u.test(entry))).toEqual([]);
       expect(uploaded).toContain(`${directory}/package.json`);
       expect(uploaded).toContain('pnpm-lock.yaml');
-      expect(uploaded.length).toBeLessThan(2500);
+      // A tripwire well under Vercel's 5000-file cap, not the cap itself: splitting large modules into
+      // cohesive siblings (the jevlint cleanup rounds) grows the source count, while a
+      // node_modules or build-output leak would jump by thousands. 3000 leaves 40% headroom.
+      expect(uploaded.length).toBeLessThan(3000);
     }
   }, 60_000);
 });

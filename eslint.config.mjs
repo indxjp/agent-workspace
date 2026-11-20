@@ -317,7 +317,7 @@ export default tseslint.config(
   },
   {
     // The landing page's one script runs in the browser, not in Node.
-    files: ['sites/lp/assets/site.js'],
+    files: ['sites/lp/assets/*.js'],
     languageOptions: {
       sourceType: 'script',
       globals: Object.fromEntries(

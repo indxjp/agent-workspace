@@ -14,7 +14,7 @@ theorem er_run_projection (s : State) :
 
 /-- A created run names the authenticated workspace, leaving every foreign projected row alone. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/api.ts#startRun")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 theorem start_preserves_foreign (s : State) (p : Principal) (r : Request) :
     (startState s p r).foreignRuns p.workspaceId = s.foreignRuns p.workspaceId := by
   simp [startState, State.foreignRuns]
@@ -22,7 +22,7 @@ theorem start_preserves_foreign (s : State) (p : Principal) (r : Request) :
 /-- The inserted row is attributed to the authenticated principal and to the session returned
 by the session-resolution seam, not to an arbitrary owner or the raw agent id. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/api.ts#startRun")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem start_records_owner_and_session (s : State) (p : Principal) (r : Request) :
     ((startState s p r).runs.head?.map (fun row => (row.ownerId, row.sessionId))) =
       some (p.id, r.newSessionId) := by
@@ -45,7 +45,7 @@ private theorem map_interrupt_preserves_foreign (xs : List RunRow) (id ws : Stri
 
 /-- Interrupt changes only a run in the caller's workspace, including when abstract rows reuse an id. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/api.ts#interruptRun")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 theorem interrupt_preserves_foreign (s : State) (p : Principal) (row : RunRow)
     (hrow : row.workspaceId = p.workspaceId) :
     (interruptState s p row).foreignRuns p.workspaceId = s.foreignRuns p.workspaceId := by
@@ -79,7 +79,7 @@ theorem every_route_preserves_foreign (s : State) (p : Principal) (r : Request) 
 /-- Current-schema transactions either pass every constraint or leave a consistent pre-state
 unchanged. The repository applies this check at write/commit, not after a read or stream. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem committed_run_write_preserves_er (s : State)
     (tx : List AgentWorkspace.Er.Current.Stmt)
     (h : AgentWorkspace.Er.Current.consistent s.er = true) :
@@ -90,7 +90,7 @@ theorem committed_run_write_preserves_er (s : State)
 
 /-- The HTTP envelope does not contain gateway or browser credential keys. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/api.ts#renderRun")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem response_excludes_credential_keys (reply : Reply) :
     "tokenSecret" ∉ reply.allKeys ∧ "tokenHash" ∉ reply.allKeys := by
   simp [Reply.allKeys, Reply.publicKeys, runResourceKeys]

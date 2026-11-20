@@ -8,7 +8,7 @@
  *
  * This file deliberately asserts nothing about routes it does not own.
  * [ADR-0019](../../../../docs/adr/0019-repo-wide-gates-belong-to-the-integration-level.md): a
- * closed-world assertion over `apps/web/app/api` belongs to `tests/route-inventory.test.ts`,
+ * closed-world assertion over `apps/web/app/api` belongs to `tests/route-inventory.policy-check.ts`,
  * where the whole surface is visible. Narrowing such a gate to its author's subtree is the
  * fail-open shape ADR-0015 exists to stop.
  */

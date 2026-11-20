@@ -1,0 +1,23 @@
+id: web-routes
+title: Web routes and pages
+summary: >
+  The Next.js App Router tree: every /api/** route handler, the signed-in shell's pages, public share and surface pages, and the edge proxy that checks a credential's shape. A route parses, calls one domain function and answers through the route wrapper.
+layer: delivery
+paths:
+  - "apps/web/app/**"
+  - "apps/web/app/.well-known/**"
+  - "apps/web/app/api/a2a/agents/*/.well-known/**"
+  - "apps/web/*.ts"
+  - "apps/web/*.mjs"
+  - "apps/web/formal/**"
+key_files:
+  - { path: "apps/web/app/api/agents/[id]/runs/route.ts", role: "POST starts a run: route wrapper around runs/api startRun" }
+  - { path: apps/web/proxy.ts, role: "edge check of credential shape and session-cookie signature, per path" }
+  - { path: apps/web/instrumentation.ts, role: "Next.js register() hook that loads the composition root once per process" }
+interface: []
+depends_on: [web-ui, composition, identity, storage-sharing, execution, integrations, agent-authoring, store-demo, server-kernel, react-chat, contracts]
+uses: [nextjs, react]
+rules:
+  - { id: routes-do-not-import-persistence, kind: forbid, components: [persistence] }
+checklist: []
+status: current

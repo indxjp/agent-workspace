@@ -55,3 +55,52 @@ describe('renewing a lapsed Test Runtime pass (BH061-002)', () => {
     log.mockRestore();
   });
 });
+
+describe("providing a pass to a workspace the deployment made (a visitor's demo copy)", () => {
+  const OTHER = { workspaceId: '33333333-3333-4333-8333-333333333333' };
+
+  it("carries this instance's pass and runs no Test Runtime when it can", async () => {
+    const carry = vi.fn(() => Promise.resolve(true));
+    const { registry, test } = registryWith({ carry });
+    expect(await registry.provide?.('docker', SCOPE)).toBe(true);
+    expect(carry).toHaveBeenCalledWith('docker', SCOPE.workspaceId);
+    expect(test).not.toHaveBeenCalled();
+  });
+
+  it('runs one Test Runtime for workspaces made together, and the others carry its pass', async () => {
+    let passed = false;
+    const carry = vi.fn(() => Promise.resolve(passed));
+    const { registry, test } = registryWith({ carry });
+    test.mockImplementation(() => {
+      passed = true;
+      return Promise.resolve({
+        driverId: 'docker',
+        handle: { id: 'probe' },
+        transcript: [],
+        destroyed: true as const,
+      });
+    });
+    expect(
+      await Promise.all([registry.provide?.('docker', SCOPE), registry.provide?.('docker', OTHER)]),
+    ).toEqual([true, true]);
+    expect(test).toHaveBeenCalledTimes(1);
+    expect(test.mock.calls[0]?.[1]).toMatchObject(SCOPE);
+    expect(carry).toHaveBeenLastCalledWith('docker', OTHER.workspaceId);
+  });
+
+  it('answers false, and logs why once, when the Test Runtime fails', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const { registry } = registryWith({
+      carry: () => Promise.resolve(false),
+      test: () => Promise.reject(new Error('readiness timed out')),
+    });
+    expect(
+      await Promise.all([registry.provide?.('docker', SCOPE), registry.provide?.('docker', OTHER)]),
+    ).toEqual([false, false]);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('verifying docker'), {
+      error: new Error('readiness timed out'),
+    });
+    log.mockRestore();
+  });
+});

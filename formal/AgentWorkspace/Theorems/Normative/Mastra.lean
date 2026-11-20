@@ -15,7 +15,7 @@ And for every unsupported portable requirement it reaches, `compile` refuses wit
 name of the capability — never a narrower run, with one documented exception: under a read-only
 grant the command tools are withheld rather than the run refused, as on the `openai-agents` and
 `pi` arms, because a subprocess's writes never pass the filesystem wrapper
-(`docs/formal/units/engine-mastra.md#tools`).
+(`docs/20-design/formal/units/engine-mastra.md#tools`).
 -/
 
 namespace AgentWorkspace.Theorems.Normative.Mastra
@@ -27,7 +27,7 @@ open AgentWorkspace AgentWorkspace.Authz.PathGrant AgentWorkspace.Behaviour.Engi
 /-- An accepted agent offers exactly the workspace tools the four permission switches allow, with
 the command tools withheld while a read-only grant exists, and is given network egress exactly when
 `unrestrictedNetwork` allows it. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#tools")
   (ts := "packages/engine-mastra/src/tools.ts#mastraToolPlan")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem accepted_agent_offers_exactly_the_permitted_tools {r : Request} {c : Compiled}
@@ -58,7 +58,7 @@ theorem accepted_agent_offers_exactly_the_permitted_tools {r : Request} {c : Com
 
 /-- An accepted agent is offered the skill tools exactly when it is granted a skill, and hands
 `MCPClient` exactly the connectors the request carries. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#tools")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem skills_and_connectors_are_honoured {r : Request} {c : Compiled} (h : compile r = .ok c) :
     c.skillTools = !(skillSet r.skills).isEmpty ∧
@@ -91,7 +91,7 @@ example :
 
 /-- Every accepted agent runs with semantic recall, working memory and title generation off, on
 the platform's own thread and the tenant's namespace. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#memory")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#memory")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
 theorem semantic_recall_and_working_memory_are_off {r : Request} {c : Compiled}
@@ -124,7 +124,7 @@ private theorem compile_reaches_connectors {r : Request} {grants : List Grant} {
 
 /-- A fork is refused `engine_capability_unsupported` naming `fork`: a Mastra thread is continued,
 never branched, and a fork is not run as a fresh thread in its place. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#compile")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem a_fork_is_refused_by_name {r : Request} {grants : List Grant} {b t w : String}
     {p : Behaviour.Engines.OpenAiAgents.Protocol} {names : List String} {parent : String}
@@ -141,14 +141,14 @@ theorem a_fork_is_refused_by_name {r : Request} {grants : List Grant} {b t w : S
 /-- A per-run budget cap never changes the compile: it is neither refused, whatever the model,
 nor carried into the configuration, because the gateway enforces it from the deployment's
 catalogue (ADR-0162, #342). The adapter-side provisional cap (ADR-0074 D7) is retired. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#compile")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem a_budget_cap_never_changes_the_compile (r : Request) (cap : Bool) :
     compile { r with budgetCap := cap } = compile r := rfl
 
 /-- A connection served over a dialect the adapter does not speak is refused naming
 `wireProtocols`. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#compile")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Grant}
     {b t w : String}
@@ -162,7 +162,7 @@ theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Gra
 
 /-- A connector tool whose policy asks for a human approval is refused naming `approvals`: the
 engine runs no approvals (ADR-0065 D9), so the tool is never offered on other terms. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-mastra.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-mastra.md#compile")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem an_approval_is_refused_by_name (c : Connector) (rest : List Connector)
     (hr : c.readable = true) (ha : c.asksApproval = true) :

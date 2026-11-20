@@ -32,7 +32,7 @@
 # ## What is published, and what is not
 #
 # `web`, on 127.0.0.1:3000 (put a reverse proxy in front to serve other hosts, as
-# docs/deploy/single-vm.md does), and `seaweedfs`'s signed S3 gateway, on 127.0.0.1:8333: a browser
+# docs/40-operate/deploy/single-vm.md does), and `seaweedfs`'s signed S3 gateway, on 127.0.0.1:8333: a browser
 # sends a file above 64 MiB straight to the store through a signed link, so the store must be
 # reachable from the host. `web` signs those links for the `publicEndpoint` in `AW_STORAGE_URL`,
 # because SigV4 signs the Host header and `seaweedfs` is not a name the host resolves. `runner`, `postgres`

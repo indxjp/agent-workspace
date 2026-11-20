@@ -1,0 +1,28 @@
+id: agent-authoring
+title: Agents, versions and the Builder
+summary: >
+  Defines what runs: agents, versions and pointers, teams, skills, tool bundles, projects, policy ceilings, the run-request composer, platform export, the Builder and version evaluations.
+layer: application
+paths:
+  - "apps/web/server/agent-teams/**"
+  - "apps/web/server/agent-versions/**"
+  - "apps/web/server/agents/**"
+  - "apps/web/server/builder/**"
+  - "apps/web/server/compose/**"
+  - "apps/web/server/platforms/**"
+  - "apps/web/server/policy-ceiling/**"
+  - "apps/web/server/projects/**"
+  - "apps/web/server/resources/**"
+  - "apps/web/server/skills/**"
+  - "apps/web/server/tool-bundles/**"
+  - "apps/web/server/evaluations/**"
+key_files:
+  - { path: apps/web/server/agents/store.ts, role: "the agent store and its conformance-tested provider" }
+  - { path: apps/web/server/agent-versions/wiring.ts, role: "agent versions and pointers per environment" }
+  - { path: apps/web/server/builder/ports.ts, role: "the Builder's eight ports, each with a production and a memory adapter" }
+interface: [AgentRecord, CallContext]
+depends_on: [identity, storage-sharing, execution, integrations, composition, server-kernel, web-ui, persistence, gateway, runtime-drivers, run-contract, platforms, sdk, contracts]
+uses: []
+rules: []
+checklist: []
+status: current

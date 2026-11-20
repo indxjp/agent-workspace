@@ -75,6 +75,9 @@ export function createCacheHandler({
       repository: claims.repository,
       ref: claims.ref,
       event: claims.event_name,
+      // A pull request's base branch: with same-repository PRs writing
+      // (ADR-0110 Amendment 2026-11-19) every grant must be traceable.
+      baseRef: claims.base_ref || undefined,
       run: claims.run_id,
       role,
     });

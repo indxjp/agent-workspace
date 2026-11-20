@@ -6,7 +6,7 @@
  * a real serializer renders must satisfy the schema the SDK validates against, and every
  * vocabulary the server restates (run statuses, providers, accounting states, reserved event
  * names) must equal the one the contracts publish. It fails when either side drifts, which is the
- * point — `docs/sdk/03-sdk-design.md` makes this test the condition for consuming a domain
+ * point — `docs/10-product/sdk/03-sdk-design.md` makes this test the condition for consuming a domain
  * through the SDK rather than through the application's own parsers.
  *
  * It lives in the application rather than in a package because it is the application's promise:

@@ -3,7 +3,7 @@ import AgentWorkspace.Er.Current.Identity
 /-!
 T5 — properties of the identity specification itself: where two of its sources disagree, or
 where a definition admits what its documentation says it should not. Each theorem pins one
-finding of `docs/formal/units/concept-identity.md`.
+finding of `docs/20-design/formal/units/concept-identity.md`.
 -/
 
 namespace AgentWorkspace.Theorems.Meta.ConceptIdentity

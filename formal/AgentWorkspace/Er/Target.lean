@@ -101,8 +101,8 @@ def grantPrincipalKey : ForeignKey :=
   principalKey "agent_grants_principal_workspace_fk" "principal_id" .cascade
 
 /-- The target schema. Each edit of today's `catalogue` is one proposed cleanup. -/
-@[aw_spec (doc := "docs/formal/concepts.md#the-target-er-model")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#the-target-er-model")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def schema : Schema :=
   let s := catalogue
   -- FORMAL-P1-grants-name-principals
@@ -178,7 +178,7 @@ def nonReferenceIdColumns : List (TableName × String × SqlType) :=
 /-! ## Names -/
 
 /-- The SQL name of each table in the target: the connector tables take the concept's one name. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 def tableName : TableName → String
   | .mcpServers => "connectors"
@@ -188,7 +188,7 @@ def tableName : TableName → String
 
 /-- The column of a row that names its owner principal, in the target: `owner_principal_id` on
 every owned resource, including shares. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 def ownerColumn? : TableName → Option String
   | .agents | .skills | .files | .mcpServers | .projects | .sessions | .shares =>
     some "owner_principal_id"
@@ -207,7 +207,7 @@ def subjectMatchesType (r : Row) : Bool :=
 /-- The meaning of each check the target adds, by name; `none` for a check it inherits. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")
   (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def targetCheck? (n : String) (r : Row) : Option Bool :=
   if n == "workspace_principals_source_matches_kind" then
     some ((Current.Identity.CheckExpr.xor "kind" "membership" "membership_id" "api-key"
@@ -243,13 +243,13 @@ def typed (st : State) : Bool :=
 
 /-- The invariants of the target that are not row checks: every membership and API key has its
 principal (RF-101), and every runtime connection a profile names is one (RF-204). -/
-@[aw_spec (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-204--make-credential-ownership-typed-and-transactional")]
+@[aw_spec (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-204--make-credential-ownership-typed-and-transactional")]
 def stateInvariants (st : State) : Bool :=
   Current.Identity.everySourceHasPrincipal st && Current.Configuration.runtimeConnectionsTyped st
 
 /-- The states the target database can hold. -/
-@[aw_spec (doc := "docs/formal/concepts.md#the-target-er-model")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#the-target-er-model")]
 def consistent (st : State) : Bool :=
   Er.Core.consistent schema st && checksHold st && typed st && stateInvariants st
 
@@ -307,8 +307,8 @@ def label (S : Schema) (t : TableName) (fk : ForeignKey) : String :=
   | cs => ", ".intercalate cs
 
 /-- The target ER as a mermaid `erDiagram`, one relationship per line, generated from `schema`:
-`docs/formal/concepts.md` carries this text verbatim and the conformance suite compares them. -/
-@[aw_spec (doc := "docs/formal/concepts.md#the-target-er-model")]
+`docs/20-design/formal/concepts.md` carries this text verbatim and the conformance suite compares them. -/
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#the-target-er-model")]
 def erDiagram : String :=
   "erDiagram\n" ++ String.join ((drawn schema).map fun (t, fk) =>
     "  " ++ tableName fk.refTable ++ " " ++ cardinality schema t fk ++ " " ++ tableName t ++
@@ -320,7 +320,7 @@ namespace Resolution
 
 /-- Today's browser-session claims: the subject is the user's **email**, the workspace is a slug,
 and a role claim is carried that verification pins to `owner`. -/
-@[aw_spec (ts := "apps/web/server/auth/session.ts#SessionClaims")]
+@[aw_spec (ts := "apps/web/server/auth/session.ts#SignInSessionClaims")]
 structure ClaimsCurrent where
   sub : String
   ws : String
@@ -334,7 +334,7 @@ structure ClaimsTarget where
   deriving DecidableEq, Repr
 
 /-- Verification of today's claims: any role other than `owner` is refused. -/
-@[aw_spec (ts := "apps/web/server/auth/session.ts#SessionClaims")]
+@[aw_spec (ts := "apps/web/server/auth/session.ts#SignInSessionClaims")]
 def verifyCurrent (c : ClaimsCurrent) : Bool := c.role == "owner"
 
 /-- The principal `resolveMembership` accepts for membership row `m` of workspace `wid`: one of
@@ -396,9 +396,9 @@ structure Term where
   tables : List TableName
   deriving Repr
 
-/-- The concept glossary: every term with one meaning. `docs/formal/concepts.md` is its prose
+/-- The concept glossary: every term with one meaning. `docs/20-design/formal/concepts.md` is its prose
 form. -/
-@[aw_spec (doc := "docs/formal/concepts.md#glossary")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#glossary")]
 def glossary : List Term :=
   [⟨"workspace", "the tenant; every tenant-owned row belongs to exactly one", ["tenant"],
      [.workspaces]⟩,
@@ -545,7 +545,7 @@ def glossary : List Term :=
      ["repository scope", "workspace selection"], []⟩]
 
 /-- Words that today denote more than one glossary term, with the terms they denote. -/
-@[aw_spec (doc := "docs/formal/concepts.md#conflations-today")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#conflations-today")]
 def conflations : List (String × List String) :=
   [("principal", ["principal", "authenticated principal"]),
    ("session", ["session", "sign-in session"]),

@@ -1,0 +1,8 @@
+id: aw-command
+title: Run an aw command
+trigger: "aw <resource> <verb> in a terminal or CI job"
+steps:
+  - { from: aw-cli, to: sdk, verb: "creates the client", returns: "output and an exit code" }
+  - { from: sdk, to: contracts, verb: "validates the response" }
+  - { from: aw-cli, to: contracts, verb: "checks the contracts version" }
+  - { from: aw-cli, to: project-cli, verb: "loads deploy or publish", optional: true }

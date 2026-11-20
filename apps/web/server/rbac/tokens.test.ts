@@ -19,7 +19,7 @@ import { BROWSER_TOKEN_PATTERN } from '@indx-workspace/contracts/tokens';
 
 import { mintBrowserToken } from './browser-token';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
-import type { TokensRuntime } from '../tokens/runtime';
+import type { TokensRuntime } from '../tokens/wiring';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 

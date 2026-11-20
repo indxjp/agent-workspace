@@ -1,8 +1,8 @@
-import {
-  UnknownWorkspaceError,
-  type BuilderToolCallRepositoryProvider,
-  type WorkspaceScopeResolver,
+import type {
+  BuilderToolCallRepositoryProvider,
+  WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { UnknownWorkspaceError } from '@agent-workspace/core/db-model';
 import { replayOf, tallyRun } from '../../core/facts';
 import type { AuditPort } from '../../ports';
 import { bounded, inputDigest } from './bounded';

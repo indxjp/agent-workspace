@@ -20,7 +20,7 @@ import {
 import { POST as TOKEN_EXCHANGE } from '../../app/api/auth/token-exchange/route';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
-import type { ExchangedToken, ExchangeMember, OAuthClient } from '../oauth/runtime';
+import type { ExchangedToken, ExchangeMember, OAuthClient } from '../oauth/wiring';
 import { resetOAuthLimits } from '../oauth/limits';
 import { authSettingsFromEnvironment, installAuthSettings } from '../auth-settings';
 import { clearClientIdentity, installClientIdentity } from '../client-identity';

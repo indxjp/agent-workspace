@@ -52,7 +52,7 @@ export function render(m) {
   const overdue = m.osvReviews.filter((r) => r.date <= m.date);
   return `<!-- debt-review:${quarterOf(m.date)} -->
 Quarterly debt review for ${quarterOf(m.date)} (measured ${m.date}). Every list below may only
-shrink. Procedure: docs/operations/debt-review.md.
+shrink. Procedure: docs/40-operate/operations/debt-review.md.
 Compare each number with the previous review issue, then tick the boxes.
 
 | Baseline | Now |

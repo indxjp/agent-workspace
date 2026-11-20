@@ -1,0 +1,34 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "tests-eject-typecheck",
+  "implicitDependencies": [
+    "!agent-workspace",
+    "!tests",
+    "@indx-workspace/contracts",
+    "@indx-workspace/platforms",
+    "@indx-workspace/sdk",
+    "@agent-workspace/engine-claude-agent-sdk",
+    "@agent-workspace/engine-openai-agents",
+    "@agent-workspace/engine-mastra"
+  ],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --project tests-eject-typecheck --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+        "env": {
+          "NODE_OPTIONS": "--unhandled-rejections=strict",
+          "VITEST_MAX_WORKERS": "4"
+        }
+      },
+      "inputs": [
+        "default",
+        "^default",
+        "vitestConfig",
+        "{workspaceRoot}/tests/projects.mjs",
+        "{workspaceRoot}/tests/vitest.shared.ts",
+        "{workspaceRoot}/tests/platforms/eject-typecheck.test.ts"
+      ]
+    }
+  }
+}

@@ -11,10 +11,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
-  type VerifiedSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+  type VerifiedSignInSessionClaims,
 } from '../auth/session';
 
 import { decide } from './decide';
@@ -22,10 +22,10 @@ import { Principal } from './principal';
 
 const SECRET = 'a-test-session-secret-that-is-long-enough-32';
 
-/** Mint and verify, which is the only way to obtain `VerifiedSessionClaims`. */
-async function claimsFor(email: string, slug: string): Promise<VerifiedSessionClaims> {
-  const token = await mintSessionToken(newSessionClaims(email, slug), SECRET);
-  const verified = await verifySessionToken(token, SECRET);
+/** Mint and verify, which is the only way to obtain `VerifiedSignInSessionClaims`. */
+async function claimsFor(email: string, slug: string): Promise<VerifiedSignInSessionClaims> {
+  const token = await mintSignInSessionToken(newSignInSessionClaims(email, slug), SECRET);
+  const verified = await verifySignInSessionToken(token, SECRET);
   if (!verified.ok)
     throw new Error(`the fixture could not verify its own token: ${verified.reason}`);
   return verified.claims;

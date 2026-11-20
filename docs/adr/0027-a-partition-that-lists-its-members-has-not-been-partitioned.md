@@ -9,10 +9,10 @@ Scope: every repository-wide gate that reads a set of contributing files
 
 [ADR-0025](0025-the-route-inventory-is-partitioned-by-owner.md) split the route inventory into
 per-task declaration files so that six parallel tracks could each ship routes. W2-INT-00 implemented
-it, and its verifier found this, at `tests/route-inventory.test.ts`:
+it, and its verifier found this, at `tests/route-inventory.policy-check.ts`:
 
 > The gate hard-codes the exact list of tracked route-declaration files, so any Wave-2b track that
-> adds `tests/route-declarations/<TASK-ID>.ts` turns `tests/route-inventory.test.ts` red. That file
+> adds `tests/route-declarations/<TASK-ID>.ts` turns `tests/route-inventory.policy-check.ts` red. That file
 > is outside every 2b track's `Owns` globs, so **no track can turn it green.**
 
 That is precisely the alternative ADR-0025 rejected in writing, reintroduced by the task built to

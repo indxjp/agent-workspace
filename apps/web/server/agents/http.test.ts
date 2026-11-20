@@ -27,7 +27,7 @@ import {
 import { AGENT_LIST_PROBLEM_CODES } from '@indx-workspace/contracts/agents';
 import { apiResultResponse } from '../http/json-transport';
 import { createInMemoryAgentStoreProvider } from './memory-store';
-import { type WorkspaceResolution } from './runtime';
+import { type WorkspaceResolution } from './wiring';
 import type { WorkspaceAgentStore } from './store';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';

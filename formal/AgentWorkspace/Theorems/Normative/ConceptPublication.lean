@@ -4,7 +4,7 @@ import AgentWorkspace.Er.Current.Publication
 T1 — the documented sentences about shares, each stated as a theorem and cited.
 
 Sources: `docs/spec.md` §20.6 (sharing and publishing) and §27 (the `shares` table),
-`docs/sdk/04-api-specification.md` §2 and §5.13, `docs/sdk/07-structure-map.md` §3 (the ER
+`docs/10-product/sdk/04-api-specification.md` §2 and §5.13, `docs/10-product/sdk/07-structure-map.md` §3 (the ER
 diagram), `docs/sdk/site/concepts/ownership-and-sharing.mdx`, and the contract comments of
 `packages/contracts/src/shares.ts`.
 -/
@@ -133,7 +133,7 @@ theorem include_and_transcript_are_session_only (t : SubjectType) (m : Option Mo
 /-- A command with no options fits every subject type, and each option passes the request schema
 on the subject that takes it (the service then refuses `runnable`; see
 `runnable_is_refused_in_this_release`). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "apps/web/server/shares/core/input.ts#PublishShareRequestSchema")]
 theorem every_option_fits_its_subject (t : SubjectType) :
     optionsFit t none false false false false = true ∧
@@ -238,7 +238,7 @@ example := budget_is_exhausted_at_the_cap
 
 /-- "`url` (`/p/<token>`) only when public": a share carries a URL exactly when it is public, and
 that URL is `/p/` followed by its token. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "packages/contracts/src/shares.ts#PUBLIC_URL_INVARIANT")
   (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem url_exactly_when_public (s : Share) :
@@ -249,7 +249,7 @@ theorem url_exactly_when_public (s : Share) :
 
 /-- "The token of a private or workspace share never crosses the wire": no rendered key is the
 token or another persistence-only column, and a non-public share renders no `url`. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "packages/contracts/src/shares.ts#ShareResourceSchema")
   (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem token_never_crosses_the_wire_as_a_field (v : Visibility) (withViewCount : Bool) :
@@ -259,7 +259,7 @@ theorem token_never_crosses_the_wire_as_a_field (v : Visibility) (withViewCount 
 
 /-- "a list item never carries it": `GET /api/shares` renders no `url`, for any visibility; a
 public link is shown once, in the publish response (part 06 step 3 phase 2). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "packages/contracts/src/shares.ts#ShareListItemSchema")
   (ts := "apps/web/server/shares/core/resource.ts#toShareListItem")]
 theorem list_item_never_carries_url (v : Visibility) :
@@ -268,7 +268,7 @@ theorem list_item_never_carries_url (v : Visibility) :
 
 /-- "`viewCount` is present on list items only": the key is rendered exactly when a count is
 given. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "packages/contracts/src/shares.ts#ShareListItemSchema")]
 theorem view_count_only_on_list_items (v : Visibility) (withViewCount : Bool) :
     (resourceKeys v withViewCount).contains "viewCount" = withViewCount := by
@@ -285,7 +285,7 @@ theorem state_fields_are_always_rendered (v : Visibility) (withViewCount : Bool)
 
 /-- "List (mine, or all as Admin/Owner)": an Owner or Admin lists every share of the workspace,
 and a Builder or Viewer lists a share exactly when it published it. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "apps/web/app/api/shares/route.ts#GET")]
 theorem list_is_mine_or_all_for_admins (role : Membership.Role) (viewer : PrincipalId) (s : Share) :
     (ownerOrAdmin role = true → listedFor role viewer s = true) ∧
@@ -297,7 +297,7 @@ theorem list_is_mine_or_all_for_admins (role : Membership.Role) (viewer : Princi
 /-- "`400 invalid_share` (… public sharing disabled …)" and "it must be enforced server-side":
 a `public` request while public sharing is off is refused with `invalid_share`, whatever the
 subject, mode, role and release gate. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (doc := "docs/spec.md#2064-administration")
   (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem public_share_refused_while_public_sharing_is_off (r : PublishRequest)
@@ -309,7 +309,7 @@ theorem public_share_refused_while_public_sharing_is_off (r : PublishRequest)
 /-- "Runnable public links remain compiled off; … a typed request the server refuses (`400
 invalid_share`)": with the release gate as it is today, an agent request for `runnable` mode that
 public sharing does not already refuse is refused as unreleased, for every role. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "apps/web/server/shares/runnable/feature.ts#runnablePublicLinksEnabled")
   (ts := "packages/contracts/src/shares.ts#SHARE_MODES")]
 theorem runnable_is_refused_in_this_release (r : PublishRequest) (role : Membership.Role)
@@ -437,7 +437,7 @@ example := list_is_mine_or_all_for_admins .builder ⟨"p"⟩ default
 
 /-- The ER diagram's `workspace_principals ||--o{ shares : "publisher_principal_id"`: every share
 has a non-null publisher, and the key to its principal is tenant-paired. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")]
 theorem every_share_has_a_publisher_principal :
     (catalogue .shares).isNotNull "publisher_principal_id" = true ∧
@@ -446,7 +446,7 @@ theorem every_share_has_a_publisher_principal :
 
 /-- The ER diagram's `shares.created_by FK`: the legacy creator column is nullable (an API-key
 principal has no user) and references `users`, paired with a membership of the same workspace. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/shares.ts#shares_creator_workspace_fk")]
 theorem creator_is_legacy_nullable_attribution :
     (catalogue .shares).isNotNull "created_by" = false ∧
@@ -459,7 +459,7 @@ theorem creator_is_legacy_nullable_attribution :
 /-- "`run_id` is the primary key because a run may be funded by at most one share": the charge
 table is keyed by the run alone. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/share-run-charges.ts#shareRunCharges")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem charge_is_keyed_by_the_run :
     (catalogue .shareRunCharges).primaryKey = ["run_id"] ∧
       TableName.idKind? .shareRunCharges = none := by decide +kernel
@@ -468,7 +468,7 @@ theorem charge_is_keyed_by_the_run :
 deletes its charge; deleting the workspace deletes all three tables' rows. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/share-views.ts#share_views_share_workspace_fk")
   (ts := "packages/core/src/db/schema/share-run-charges.ts#shareRunCharges")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem share_children_cascade :
     ((catalogue .shareViews).foreignKey? "share_views_share_workspace_fk").map (·.onDelete) =
         some .cascade ∧
@@ -481,7 +481,7 @@ theorem share_children_cascade :
 
 /-- "The share view and run charge tables are public share-page accounting, out of scope for the
 SDK": neither carries an owner or publisher column. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/07-structure-map.md#tables-the-sdk-does-not-reach")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/07-structure-map.md#tables-the-sdk-does-not-reach")
   (ts := "packages/core/src/db/schema/share-views.ts#shareViews")]
 theorem share_children_carry_no_principal :
     (["owner_principal_id", "publisher_principal_id"].all fun c =>

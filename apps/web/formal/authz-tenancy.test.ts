@@ -15,7 +15,11 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../server/auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from '../server/auth/session';
 import type { ApiKeyIdentity } from '../server/rbac/directory';
 import { createMemoryDirectory } from '../server/rbac/memory-directory';
 import { Principal } from '../server/rbac/principal';
@@ -164,8 +168,8 @@ async function claimsFor(
   sub: string,
   ws: string,
 ): Promise<Parameters<typeof Principal.fromSession>[0]> {
-  const token = await mintSessionToken(newSessionClaims(sub, ws), SESSION_SECRET);
-  const verified = await verifySessionToken(token, SESSION_SECRET);
+  const token = await mintSignInSessionToken(newSignInSessionClaims(sub, ws), SESSION_SECRET);
+  const verified = await verifySignInSessionToken(token, SESSION_SECRET);
   if (!verified.ok) throw new Error(`could not verify a minted session: ${verified.reason}`);
   return verified.claims;
 }

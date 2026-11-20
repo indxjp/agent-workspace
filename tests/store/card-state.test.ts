@@ -142,11 +142,28 @@ describe('the maintenance list the store reads', () => {
         init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
       });
     vi.useFakeTimers();
+    // Node arms `AbortSignal.timeout` on its own internal timer, which fake timers do not replace,
+    // so it is rebuilt here on the faked `setTimeout`: the abort then fires when the fake clock
+    // passes the timeout instead of after three real seconds. The production call is unchanged.
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => {
+        controller.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+      }, ms);
+      return controller.signal;
+    });
     try {
-      const pending = answering(hanging as () => Promise<Response>);
-      await vi.advanceTimersByTimeAsync(MAINTENANCE_FETCH_TIMEOUT_MS + 1);
+      let settled = false;
+      const pending = answering(hanging as () => Promise<Response>).finally(() => {
+        settled = true;
+      });
+      expect(timeout).toHaveBeenCalledWith(MAINTENANCE_FETCH_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(MAINTENANCE_FETCH_TIMEOUT_MS - 1);
+      expect(settled, 'the request gave up before its timeout').toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
       expect(await pending).toEqual([]);
     } finally {
+      timeout.mockRestore();
       vi.useRealTimers();
     }
   });

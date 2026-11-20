@@ -6,8 +6,8 @@
  * a short-lived, signed, HTTP-only cookie naming the user and nothing else — and
  * `POST /api/auth/workspace` re-reads the membership before it ever mints a real session.
  *
- * This is deliberately not `session.ts`'s `SessionClaims`: a selection is not a tenant session (it
- * names no workspace and confers no access), and `verifySessionToken` would in any case reject it
+ * This is deliberately not `session.ts`'s `SignInSessionClaims`: a selection is not a tenant session (it
+ * names no workspace and confers no access), and `verifySignInSessionToken` would in any case reject it
  * — its token-version tag differs on purpose, so a selection token can never be replayed where a
  * tenant session is expected, or the reverse.
  *

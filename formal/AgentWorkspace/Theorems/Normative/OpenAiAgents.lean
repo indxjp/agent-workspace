@@ -25,7 +25,7 @@ open AgentWorkspace AgentWorkspace.Authz.PathGrant AgentWorkspace.Behaviour.Engi
 
 /-- An accepted agent offers exactly the tools the four permission switches allow, with `shell`
 withheld while a read-only grant exists. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#tools")
   (ts := "packages/engine-openai-agents/src/tools.ts#openAiAgentsToolPlan")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem accepted_agent_offers_exactly_the_permitted_tools {r : Request} {c : Compiled}
@@ -72,7 +72,7 @@ example :
 
 /-- No compiled tool is vendor-hosted: every one is sent as a function tool, which the gateway's
 closed hosted-tool allowlist relays. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#tools")
   (ts := "packages/engine-openai-agents/src/boundary.ts#startOpenAiAgentsRun")
   (ts := "packages/gateway/src/providers/passthrough.ts#unrelayableToolType")]
 theorem no_vendor_hosted_tool_is_compiled {r : Request} {c : Compiled} (_h : compile r = .ok c) :
@@ -82,7 +82,7 @@ theorem no_vendor_hosted_tool_is_compiled {r : Request} {c : Compiled} (_h : com
 
 /-- Why the tools are function tools: the SDK's own `shell` tool type is one the gateway refuses
 as hosted, so an adapter that compiled it could not reach its model through the gateway. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#tools")
   (ts := "packages/contracts/src/agents.ts#OPENAI_AGENTS_TOOL_NAMES")]
 theorem the_sdk_shell_tool_type_is_not_relayed :
     Behaviour.GatewayIngress.ToolType.shell.isRelayable = false := by decide +kernel
@@ -92,7 +92,7 @@ theorem the_sdk_shell_tool_type_is_not_relayed :
 /-- Compose resolves an OpenAI-family connection to the Responses dialect and an Anthropic-family
 one to Messages for this engine, and the compiled client follows the protocol: `OpenAIProvider`
 for the two OpenAI dialects, `aisdk()` for Messages. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "apps/web/server/engines/protocol.ts#resolveWireProtocol")
   (ts := "packages/engine-openai-agents/src/compile.ts#openAiAgentsModelConnection")]
 theorem the_protocol_follows_the_connection :
@@ -107,7 +107,7 @@ theorem the_protocol_follows_the_connection :
 
 /-- An accepted compile speaks exactly the protocol the gateway connection names, through the
 client that protocol selects. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem compiled_protocol_is_the_gateway_protocol {r : Request} {c : Compiled}
     (h : compile r = .ok c) :
@@ -127,7 +127,7 @@ theorem compiled_protocol_is_the_gateway_protocol {r : Request} {c : Compiled}
 
 /-- A granted skill is refused `engine_capability_unsupported` naming `skills` (the engine
 declares `skills: false`), never dropped. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem a_granted_skill_is_refused_by_name {r : Request} {grants : List Grant}
     (hp : r.policyReadable = true)
@@ -138,7 +138,7 @@ theorem a_granted_skill_is_refused_by_name {r : Request} {grants : List Grant}
   simp [hp, hg, hs]
 
 /-- A fork is refused naming `fork`. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem a_fork_is_refused_by_name {r : Request} {grants : List Grant}
     (hp : r.policyReadable = true)
@@ -151,13 +151,13 @@ theorem a_fork_is_refused_by_name {r : Request} {grants : List Grant}
 /-- A per-run budget cap never changes the compile: it is neither refused, whatever the model,
 nor carried into the configuration, because the gateway enforces it from the deployment's
 catalogue (ADR-0162, #342). The adapter-side provisional cap (ADR-0074 D7) is retired. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem a_budget_cap_never_changes_the_compile (r : Request) (cap : Bool) :
     compile { r with budgetCap := cap } = compile r := rfl
 
 /-- A protocol the engine does not speak is refused naming `wireProtocols`. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Grant}
     {b t w : String}
@@ -171,7 +171,7 @@ theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Gra
 
 /-- An Anthropic-family connection with no model named is refused naming `model`: the AI SDK
 adapter has no default model, and the adapter does not invent one. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem anthropic_without_a_model_is_refused_by_name {r : Request} {grants : List Grant}
     {b t : String}
@@ -186,7 +186,7 @@ theorem anthropic_without_a_model_is_refused_by_name {r : Request} {grants : Lis
 
 /-- A connector whose tool asks for a human approval is refused naming `approvals`; it is not
 silently left out. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem an_unhonourable_connector_is_refused_by_name (c : Connector) (rest : List Connector)
     (ha : c.asksApproval = true) :
@@ -196,7 +196,7 @@ theorem an_unhonourable_connector_is_refused_by_name (c : Connector) (rest : Lis
 /-- Remote MCP parity with the Claude engine (Owner decision on #308, ADR-0074 D2): a connector
 that asks for no approval is compiled whether it is remote or stdio, so `unrestrictedNetwork` off
 never removes an assigned remote connector. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-openai-agents.md#compile")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")]
 theorem a_remote_connector_needs_no_network_switch (c : Connector) (rest : List Connector)
     (ha : c.asksApproval = false) :

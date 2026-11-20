@@ -20,7 +20,7 @@
  * (`tests/screen-declarations/W2-UI-08.ts` and its siblings) so that flipping one to `shipped` is an
  * edit inside that task's own `Owns` glob. The wave that dispatches W3, W4, W5 or W7 repartitions
  * its rows out of here, exactly as W2-INT-00 repartitioned Wave 1's route entries out of
- * `tests/route-inventory.test.ts`.
+ * `tests/route-inventory.policy-check.ts`.
  *
  * See `docs/adr/W2-INT-00-the-screen-inventory-declares-mockups-by-owner.md`.
  */

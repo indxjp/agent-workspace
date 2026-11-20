@@ -1,17 +1,41 @@
+# Dependency updates arrive once a week, grouped, so they cost a few CI runs instead of a burst
+# (ADR-0053, Amendment 2026-11-19e). Every update of an ecosystem in one week lands in at most one pull
+# request per group: npm production, npm development, npm security fixes and the GitHub Actions
+# pins. Dependabot does not rebase an open pull request when main moves (`rebase-strategy:
+# disabled`): each rebase was a force-push that started a full CI run and cancelled the one before
+# it, and the merge queue tests the merged commit anyway. Comment `@dependabot rebase` to ask for one.
+# A GitHub Actions bump also needs its new SHA and version in scripts/check-workflows/workflow-rules.mjs
+# (approvedActions), or `pnpm workflows:check` refuses it.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Tokyo
     open-pull-requests-limit: 5
+    rebase-strategy: disabled
     groups:
       production-dependencies:
         dependency-type: production
       development-dependencies:
         dependency-type: development
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - '*'
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Tokyo
     open-pull-requests-limit: 5
+    rebase-strategy: disabled
+    groups:
+      github-actions:
+        patterns:
+          - '*'

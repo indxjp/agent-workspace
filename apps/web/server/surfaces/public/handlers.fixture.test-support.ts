@@ -4,7 +4,7 @@ import { type SurfaceSessionRequest } from '@indx-workspace/contracts/surfaces';
 import { toResponse } from '../../rbac/http';
 import { createSurfaceSession } from './handlers';
 import { resetSurfaceLimits } from './limits';
-import { type ResolvedSurface, type SurfaceSessionOpening } from './runtime';
+import { type ResolvedSurface, type SurfaceSessionOpening } from './wiring';
 import { installTestDomains } from '../../application-context-fixtures';
 import { clearApplicationContext } from '../../application-context';
 

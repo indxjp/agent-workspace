@@ -13,6 +13,9 @@ import { refuseReservedFileBindings } from './project-files.js';
 import { refuseToolConnectorBindings } from './project-mcp-servers.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
 
+// Defined in a database-free module so `@agent-workspace/core/db-model` can carry it.
+export { isProjectArchived } from './project-archive.js';
+
 export type ProjectRecord = Project;
 export type CreateProjectInput = Omit<
   NewProject,
@@ -103,11 +106,6 @@ export interface ProjectRepository {
    * still returned). `null` if `id` names no project in this workspace.
    */
   restore(id: string): Promise<ProjectRecord | null>;
-}
-
-/** The lifecycle predicate for one project row, expressed once (`isWorkspaceArchived`'s shape). */
-export function isProjectArchived(project: Pick<ProjectRecord, 'archivedAt'>): boolean {
-  return project.archivedAt !== null;
 }
 
 /** The `archivedAt` predicate each {@link ProjectListFilter} adds on top of the tenant scope. */

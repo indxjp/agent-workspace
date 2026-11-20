@@ -61,7 +61,7 @@ code contradicts, so the contract and storage unit (U4.2b) and the runner unit (
 further design. The one-trace model is written in Lean first, as the amendment above requires:
 `formal/AgentWorkspace/Concepts/RunTree.lean`, with its theorems in
 `formal/AgentWorkspace/Theorems/Normative/RunTree.lean`. The API is amended in
-[the API specification](../sdk/04-api-specification.md), §5.18 and §5.12.
+[the API specification](../10-product/sdk/04-api-specification.md), §5.18 and §5.12.
 
 1. **Names: the resource is an _agent team_.** "Team" already means the people of a workspace:
    the contracts entry `./team` (`MEMBERSHIP_ROLES`, `MeResponse`), the SDK's `aw.team`, the CLI's

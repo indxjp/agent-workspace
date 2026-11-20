@@ -3,7 +3,7 @@ import AgentWorkspace.Theorems.WellFormed.ConceptConfiguration
 /-!
 T4 — today's configuration schema against the documented target.
 
-The target (`docs/sdk/04-api-specification.md` §5.5, RF-204) replaces the naming convention with
+The target (`docs/10-product/sdk/04-api-specification.md` §5.5, RF-204) replaces the naming convention with
 typed references: every secret a runtime profile names is a runtime connection
 (`runtimeConnectionsTyped`). Today's schema diverges exactly there: its foreign key accepts any
 secret of the workspace. It refines the target on every state whose referenced secrets were all
@@ -28,7 +28,7 @@ private def untyped : State := fun t =>
 /-- Today's schema diverges from the typed target at runtime connections: a state PostgreSQL
 accepts, with every cluster check holding, has a runtime profile naming a secret that is not a
 runtime connection, while the target is satisfiable by the witness state. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtime_profiles_runtime_connection_workspace_fk")]
 theorem current_diverges_from_typed_runtime_connections :
     consistentConfig untyped = true ∧ runtimeConnectionsTyped untyped = false ∧
@@ -37,7 +37,7 @@ theorem current_diverges_from_typed_runtime_connections :
 
 /-- Today's schema refines the typed target on every state whose secrets named by a runtime
 profile carry a name `encodeSecretName` produced (as `POST /api/runtime-connections` stores them). -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "apps/web/server/runtimes/connections.ts#encodeSecretName")]
 theorem encoded_connections_refine_the_typed_target (st : State)
     (h : ∀ p ∈ st .runtimeProfiles, ∀ s ∈ st .secrets,
@@ -70,7 +70,7 @@ example : runtimeConnectionsTyped Witness.state = true :=
 
 /-- Every runtime-profile `PATCH` body accepted today is accepted by the S-19 target. -/
 @[aw_spec (tier := T4)
-  (doc := "docs/sdk/04-api-specification.md#8-server-changes-this-specification-requires")
+  (doc := "docs/10-product/sdk/04-api-specification.md#8-server-changes-this-specification-requires")
   (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 theorem patch_current_refines_target (b : List (String × RuntimeProfile.PatchValue))
     (h : RuntimeProfile.patchAcceptsCurrent b = true) :
@@ -91,8 +91,8 @@ example : RuntimeProfile.patchAcceptsTarget [("cpu", .value)] = true :=
 is refused today and accepted by the target, while clearing a required field such as `driver` or
 `name` stays refused. -/
 @[aw_spec (tier := T4)
-  (doc := "docs/sdk/04-api-specification.md#8-server-changes-this-specification-requires")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")
+  (doc := "docs/10-product/sdk/04-api-specification.md#8-server-changes-this-specification-requires")
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")
   (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 theorem s19_target_clears_sizing_but_not_required_fields :
     RuntimeProfile.patchAcceptsCurrent [("memoryMb", .null)] = false ∧

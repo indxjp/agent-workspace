@@ -15,7 +15,7 @@ open AgentWorkspace AgentWorkspace.Concepts.Membership AgentWorkspace.Concepts.B
 
 /-- `RESOURCES` is exactly these 33 path segments, in this order. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/resources.ts#RESOURCES")
-  (doc := "docs/formal/domains/d1-runs.md#authorisation")]
+  (doc := "docs/20-design/formal/domains/d1-runs.md#authorisation")]
 theorem resource_wires_are_the_thirty_resources :
     WireEnum.wires Resource =
       ["agents", "api-keys", "audit-events", "connectors", "demo", "endpoint-clients", "engines", "files",

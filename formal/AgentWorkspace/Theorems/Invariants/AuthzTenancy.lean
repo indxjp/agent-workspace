@@ -145,7 +145,7 @@ principal's role comes from a membership of `ws` (and its label from that member
 API-key principal's role and label from a key of `ws` that is neither revoked nor expired at
 `now`. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/directory.ts#principalById")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem principal_by_id_reads_only_its_workspace (st : State) (ws pid : String) (now : Nat)
     (rec : DirectoryRecord) (h : principalById st ws pid now = some rec) :
     rec.workspaceId = ws ∧

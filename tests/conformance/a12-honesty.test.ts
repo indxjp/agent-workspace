@@ -33,6 +33,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { runA12ConformanceSuite } from './harness.js';
+import { FIXTURE_TIMERS } from './timers.js';
 import {
   createLocalFixtureDriver,
   LOCAL_RUNTIME_CAPABILITIES,
@@ -55,7 +56,9 @@ describe('A.12 honesty rule: a capability claim the driver cannot honour is a ha
     expect(LOCAL_RUNTIME_CAPABILITIES.networkPolicies).not.toContain('none');
 
     const driver = createLocalFixtureDriver();
-    const report = await runA12ConformanceSuite(driver, dishonestCapabilities, localFixtureProbe);
+    const report = await runA12ConformanceSuite(driver, dishonestCapabilities, localFixtureProbe, {
+      timers: FIXTURE_TIMERS,
+    });
 
     console.log(
       `A.12 honesty-rule probe (networkPolicies flipped to claim "none" on the real local driver):\n${report.results
@@ -123,6 +126,7 @@ describe('A.12 honesty rule: a capability claim the driver cannot honour is a ha
       honestDriver,
       CONTAINER_FIXTURE_CAPABILITIES,
       containerFixtureProbe,
+      { timers: FIXTURE_TIMERS },
     );
     expect(() => {
       assertHonestReport(honestReport);
@@ -137,6 +141,7 @@ describe('A.12 honesty rule: a capability claim the driver cannot honour is a ha
       dishonestDriver,
       dishonestCapabilities,
       localFixtureProbe,
+      { timers: FIXTURE_TIMERS },
     );
     expect(() => {
       assertHonestReport(dishonestReport);

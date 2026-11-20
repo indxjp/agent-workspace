@@ -9,7 +9,7 @@
  *
  * A sibling of `…/transcript` rather than a child of it, because the shape rule W2-INT-00 derives
  * from §34 stops at `/api/<resource>/:id/<sub>` — *"a fourth level is a resource that has not been
- * named"*. `tests/route-inventory.test.ts` rejected the deeper spelling before this one landed.
+ * named"*. `tests/route-inventory.policy-check.ts` rejected the deeper spelling before this one landed.
  */
 import type { NextRequest } from 'next/server';
 

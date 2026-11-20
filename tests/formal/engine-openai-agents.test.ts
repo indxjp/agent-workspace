@@ -12,7 +12,7 @@
  * The model is SDK-free, like the code it mirrors, so nothing here reaches the SDK. What happens
  * inside it — model requests only through the compiled client, `setTracingDisabled(true)` before
  * `run`, native `maxTurns` — is the family's declared hypothesis, enforced by the package's own
- * boundary suite (docs/formal/units/engine-openai-agents.md, "Declared gaps").
+ * boundary suite (docs/20-design/formal/units/engine-openai-agents.md, "Declared gaps").
  *
  * Under D-012 this file is in `tests/formal/`: every subject is a package export.
  */

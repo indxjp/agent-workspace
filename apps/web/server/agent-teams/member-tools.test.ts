@@ -15,7 +15,7 @@ import {
   serveMemberTools,
   type MemberToolsEnvironment,
 } from './member-tools';
-import type { AgentTeamVersionRecord, LeadRunCaller } from './runtime';
+import type { AgentTeamVersionRecord, LeadRunCaller } from './wiring';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const LEAD_RUN = '11111111-1111-4111-8111-111111111111';

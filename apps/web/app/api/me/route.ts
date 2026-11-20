@@ -21,7 +21,7 @@
 import { readMe } from '../../../server/rbac/me';
 import { authorise, toResponse } from '../../../server/rbac/http';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`): every route runs on the
 // Node runtime and none is prerendered. Correct here independently of the gate — this handler
 // reads the session cookie or the bearer key through `authorise`.
 export const dynamic = 'force-dynamic';

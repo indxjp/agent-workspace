@@ -4,7 +4,7 @@ import AgentWorkspace.Er.Core
 # The workspace concept
 
 A **workspace** is the tenant: "Every resource below belongs to exactly one"
-(`docs/sdk/04-api-specification.md` §1.1). The database knows it as a row of `workspaces`
+(`docs/10-product/sdk/04-api-specification.md` §1.1). The database knows it as a row of `workspaces`
 (`packages/core/src/db/schema/workspaces.ts`), the one table whose tenant column is its own `id`;
 the wire knows it as `WorkspaceResourceSchema` (`packages/contracts/src/workspaces.ts`).
 
@@ -89,7 +89,7 @@ structure DefaultModel where
 /-- A workspace, with every column of `workspaces` that carries meaning. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspaces.ts#workspaces")
   (ts := "packages/contracts/src/workspaces.ts#WorkspaceResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Workspace where
   id : WorkspaceId
   slug : String
@@ -103,7 +103,7 @@ structure Workspace where
 
 /-- The two states a workspace moves between after creation. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspaces.ts#archivedAt")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 inductive WorkspaceState where
   | active
   | archived

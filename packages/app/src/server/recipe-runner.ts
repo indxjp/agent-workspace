@@ -20,17 +20,27 @@
  *   person's agent, a write carrying its step's run id (ADR-0164).
  */
 import { WebhookEventSchema, type WebhookEvent } from '@indx-workspace/contracts/webhooks';
-import { createClient, type AgentWorkspaceClient } from '@indx-workspace/sdk';
-import { Cron } from 'croner';
+import type { createClient, AgentWorkspaceClient } from '@indx-workspace/sdk';
 
 import type { ResourceStore } from '../db/port.js';
 import type { RecipeRunRecord, RecipeStore } from '../db/recipe-port.js';
-import type { DefinedRecipe, Json, ResourceEventName } from '../recipe.js';
+import type { DefinedRecipe, ResourceEventName } from '../recipe.js';
 import type { DefinedResource, FieldMap } from '../resource.js';
 import type { MemberDirectory } from './mcp-person.js';
 import { recipeApprovals } from './recipe-runner-approvals.js';
 import { recipeRunExecutor } from './recipe-runner-execution.js';
 import { RecipeError } from './recipe-errors.js';
+import {
+  backgroundTimer,
+  fireSchedules,
+  flightTracker,
+  idempotencyGate,
+  initialScheduleFrom,
+  jsonOf,
+  recipeLookup,
+  resourceEventStarter,
+  runnerSettings,
+} from './recipe-runner-support.js';
 import { interruptibleStore } from './recipe-runner-steps.js';
 
 /** What the runner needs of the app: its recipes. A `defineApp()` value is one. */
@@ -131,67 +141,8 @@ export interface RecipeRunner {
   /** Waits for every execution started in the background so far. */
   drain(): Promise<void>;
 }
-
 const RESUME_BATCH = 100;
-
-/**
- * Whether `create` builds a client whose `runs.start` sends `Idempotency-Key` (S-6, ADR-0151): the
- * runner asks it to start a run against a `fetch` that records the request and answers 404.
- */
-async function sendsIdempotencyKey(create: typeof createClient): Promise<boolean> {
-  let sent = false;
-  const client = create({
-    baseUrl: 'http://recipe-runner.invalid',
-    auth: { kind: 'api-key', apiKey: 'probe' },
-    fetch: (_input, init) => {
-      sent = new Headers(init?.headers).get('idempotency-key') === 'probe';
-      return Promise.resolve(
-        new Response(JSON.stringify({ error: { code: 'not_found', message: 'probe' } }), {
-          status: 404,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
-    },
-  });
-  await client.runs
-    .start('probe', { prompt: 'probe', idempotencyKey: 'probe' })
-    .catch(() => undefined);
-  return sent;
-}
-
-function jsonOf(value: unknown): Json {
-  return JSON.parse(JSON.stringify(value ?? null)) as Json;
-}
-
-/** Start the first missed slot of each schedule, preserving replica deduplication. */
-async function fireSchedules({
-  now,
-  recipes,
-  scheduleFrom,
-  recordSlot,
-  execute,
-}: {
-  readonly now: () => Date;
-  readonly recipes: ReadonlyMap<string, DefinedRecipe>;
-  readonly scheduleFrom: Map<string, Date>;
-  readonly recordSlot: (recipe: DefinedRecipe, slot: Date) => Promise<RecipeRunRecord>;
-  readonly execute: (id: string) => Promise<void>;
-}): Promise<void> {
-  const at = now();
-  for (const recipe of recipes.values()) {
-    if (recipe.on.kind !== 'schedule') continue;
-    const from = scheduleFrom.get(recipe.name) ?? at;
-    const slot = new Cron(recipe.on.cron, { timezone: recipe.on.timezone, paused: true }).nextRun(
-      from,
-    );
-    if (slot === null || slot.getTime() > at.getTime()) continue;
-    // A runner that missed several slots owes one run (the first it missed), as platform triggers
-    // do; each slot is its own dedupe key, so replicas that looked at other times never repeat one.
-    scheduleFrom.set(recipe.name, at);
-    const run = await recordSlot(recipe, slot);
-    if (run.status === 'running') await execute(run.id);
-  }
-}
+const DEFAULT_BACKGROUND_INTERVAL_MS = 30_000;
 
 /**
  * The runner of `app`'s recipes. Nothing runs until a method is called: `resume` at app start (the
@@ -202,48 +153,18 @@ async function fireSchedules({
  */
 export function recipeRunner(app: RecipeApp, options: RecipeRunnerOptions): RecipeRunner {
   const store = interruptibleStore(options.store);
-  const { clock } = options;
-  const now = clock === undefined ? (options.now ?? (() => new Date())) : () => clock.now();
-  const leaseMs = options.leaseMs ?? 60_000;
-  const owner = options.owner ?? `recipe-runner:${crypto.randomUUID()}`;
-  const workspaceId = options.workspaceId;
-  const log =
-    options.log ??
-    ((message: string, fields: Readonly<Record<string, string>>) => {
-      console.error(`[recipes] ${message}`, fields);
-    });
+  const { now, leaseMs, owner, log } = runnerSettings(options);
+  const { workspaceId } = options;
   const recipes = new Map(app.recipes.map((recipe) => [recipe.name, recipe]));
   const stopping = new AbortController();
-  const inFlight = new Set<Promise<unknown>>();
-  const scheduleFrom = new Map<string, Date>(
-    app.recipes
-      .filter((recipe) => recipe.on.kind === 'schedule')
-      .map((recipe) => [recipe.name, now()]),
-  );
-  let timer: ReturnType<typeof setInterval> | undefined;
-  let probe: Promise<void> | undefined;
+  const scheduleFrom = initialScheduleFrom(app.recipes, now);
   const records =
     options.stores === undefined || options.members === undefined
       ? undefined
       : { storeOf: options.stores, members: options.members, workspaceId };
-
-  const ready = (): Promise<void> => {
-    probe ??= sendsIdempotencyKey(options.sdk?.createClient ?? createClient).then((sends) => {
-      if (!sends) {
-        throw new RecipeError(
-          'platform_lacks_idempotent_start',
-          'the SDK does not send Idempotency-Key on run start, so a recipe step could run twice',
-        );
-      }
-    });
-    return probe;
-  };
-
-  const track = <T>(promise: Promise<T>): Promise<T> => {
-    inFlight.add(promise);
-    void promise.finally(() => inFlight.delete(promise)).catch(() => undefined);
-    return promise;
-  };
+  const ready = idempotencyGate(options);
+  const { track, drain } = flightTracker();
+  const recipeOf = recipeLookup(recipes);
 
   const execute = recipeRunExecutor({
     store,
@@ -257,15 +178,6 @@ export function recipeRunner(app: RecipeApp, options: RecipeRunnerOptions): Reci
     client: options.client,
     ...(records === undefined ? {} : { records }),
   });
-
-  const recipeOf = (recipe: DefinedRecipe | string): DefinedRecipe => {
-    const name = typeof recipe === 'string' ? recipe : recipe.name;
-    const found = recipes.get(name);
-    if (found === undefined || (typeof recipe !== 'string' && found !== recipe)) {
-      throw new RecipeError('recipe_not_found', `the app has no recipe named "${name}"`);
-    }
-    return found;
-  };
 
   /** Records a recipe run (or finds the one holding its dedupe key) without executing it. */
   const record = async (
@@ -308,7 +220,19 @@ export function recipeRunner(app: RecipeApp, options: RecipeRunnerOptions): Reci
     );
   };
 
-  const runner: RecipeRunner = {
+  const resume = async (): Promise<void> => {
+    await ready();
+    await fireSchedules({ now, recipes, scheduleFrom, recordSlot, execute });
+    const resumable = await store.listResumable(workspaceId, now(), RESUME_BATCH);
+    await Promise.all(resumable.map((run) => track(execute(run.id))));
+    for (const run of await store.listWaiting(workspaceId, RESUME_BATCH)) {
+      await recheckWaiting(run);
+    }
+  };
+
+  const background = backgroundTimer({ resume, track, log });
+
+  return {
     async start(recipe, input, start = {}) {
       await ready();
       const run = await record(recipeOf(recipe), input, start);
@@ -316,15 +240,7 @@ export function recipeRunner(app: RecipeApp, options: RecipeRunnerOptions): Reci
       return current(run.id);
     },
 
-    async resume() {
-      await ready();
-      await fireSchedules({ now, recipes, scheduleFrom, recordSlot, execute });
-      const resumable = await store.listResumable(workspaceId, now(), RESUME_BATCH);
-      await Promise.all(resumable.map((run) => track(execute(run.id))));
-      for (const run of await store.listWaiting(workspaceId, RESUME_BATCH)) {
-        await recheckWaiting(run);
-      }
-    },
+    resume,
 
     async fireSlot(name, at) {
       const recipe = recipeOf(name);
@@ -340,40 +256,7 @@ export function recipeRunner(app: RecipeApp, options: RecipeRunnerOptions): Reci
 
     decide,
 
-    async onResourceEvent(resource, event, row, person) {
-      const id = row['id'];
-      if (typeof id !== 'string') return [];
-      const matching = [...recipes.values()].filter(
-        (recipe) =>
-          recipe.on.kind === 'resourceEvent' &&
-          recipe.on.resource === resource &&
-          recipe.on.event === event,
-      );
-      if (matching.length === 0) return [];
-      // An update is its own event each time: its stamp tells two updates of one row apart.
-      const stamp =
-        event === 'updated' && typeof row['updated_at'] === 'string' ? `:${row['updated_at']}` : '';
-      const started: string[] = [];
-      try {
-        await ready();
-        for (const recipe of matching) {
-          const run = await record(
-            recipe,
-            { resource, event, record: jsonOf(row) },
-            { dedupeKey: `resource:${resource}:${id}:${event}${stamp}`, person: person ?? null },
-          );
-          started.push(run.id);
-          if (run.status === 'running') void track(execute(run.id));
-        }
-      } catch (error) {
-        log('a resource event could not start its recipes', {
-          resource,
-          event,
-          code: error instanceof RecipeError ? error.code : 'internal_error',
-        });
-      }
-      return started;
-    },
+    onResourceEvent: resourceEventStarter({ recipes, ready, record, track, execute, log }),
 
     async onRunOutcome(event) {
       await ready();
@@ -388,30 +271,16 @@ export function recipeRunner(app: RecipeApp, options: RecipeRunnerOptions): Reci
       }
     },
 
-    startBackground(intervalMs = 30_000) {
-      if (timer !== undefined) return;
-      timer = setInterval(() => {
-        void track(runner.resume()).catch((error: unknown) => {
-          log('resume() failed', {
-            code: error instanceof RecipeError ? error.code : 'internal_error',
-          });
-        });
-      }, intervalMs);
-      timer.unref();
+    startBackground(intervalMs = DEFAULT_BACKGROUND_INTERVAL_MS) {
+      background.start(intervalMs);
     },
 
     async stop() {
-      if (timer !== undefined) clearInterval(timer);
-      timer = undefined;
+      background.clear();
       stopping.abort();
-      await runner.drain();
+      await drain();
     },
 
-    async drain() {
-      while (inFlight.size > 0) {
-        await Promise.allSettled([...inFlight]);
-      }
-    },
+    drain,
   };
-  return runner;
 }

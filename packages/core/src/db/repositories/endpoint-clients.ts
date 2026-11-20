@@ -1,42 +1,26 @@
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { ENDPOINT_CLIENT_AGENTS_MAX } from '@indx-workspace/contracts/endpoint-clients';
 
 import type { Database } from '../client.js';
 import { apiKeys } from '../schema/api-keys.js';
 import { endpointClientAgents } from '../schema/endpoint-client-agents.js';
 import { endpointClientApiKeys } from '../schema/endpoint-client-api-keys.js';
-import {
-  endpointClients,
-  type EndpointClient,
-  type EndpointClientKind,
-} from '../schema/endpoint-clients.js';
+import { endpointClients, type EndpointClientKind } from '../schema/endpoint-clients.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
+import {
+  hydrate,
+  type EndpointClientExecutor,
+  type EndpointClientRecord,
+} from './endpoint-client-records.js';
+import {
+  checkedAgentIds,
+  checkedOidcAudience,
+  checkedRedirectUris,
+  checkedToolNames,
+} from './endpoint-client-validation.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
 import { postgresViolations } from './violations.js';
 
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
-
-export interface EndpointClientRecord {
-  readonly id: string;
-  readonly workspaceId: string;
-  readonly name: string;
-  readonly kind: EndpointClientKind;
-  readonly agentIds: readonly string[];
-  readonly toolNames: readonly string[] | null;
-  /** OAuth redirect URIs (ADR-0134 part 3), exact strings. */
-  readonly redirectUris: readonly string[];
-  /** Whether a confidential OAuth secret is set. The hash itself never leaves the repository. */
-  readonly hasClientSecret: boolean;
-  /** The ID token audience of an `app-backend` client (ADR-0161 D4); `null` for every other kind. */
-  readonly oidcAudience: string | null;
-  readonly actsForPrincipalId: string;
-  readonly createdByPrincipalId: string;
-  /** Every key bound to the client, revoked ones included. Ids only; never a secret. */
-  readonly apiKeyIds: readonly string[];
-  readonly revokedAt: Date | null;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
+export type { EndpointClientRecord } from './endpoint-client-records.js';
 
 export interface NewEndpointClientInput {
   readonly name: string;
@@ -107,101 +91,258 @@ export interface EndpointClientRepositoryProvider {
   forScope(scope: WorkspaceScope): EndpointClientRepository;
 }
 
-const REDIRECT_URIS_MAX = 10;
-
-/**
- * Dedupe and check the agent-count invariant: one for `a2a-agent`, 1-64 for `mcp-project` and
- * `app-backend`, none for `builder`.
- */
-function checkedAgentIds(kind: EndpointClientKind, agentIds: readonly string[]): string[] {
-  const unique = [...new Set(agentIds)];
-  const invalid =
-    kind === 'builder'
-      ? unique.length !== 0
-      : kind === 'a2a-agent'
-        ? unique.length !== 1
-        : unique.length < 1;
-  if (invalid) {
-    throw new Error(`The ${kind} endpoint client has an invalid number of agents.`);
-  }
-  if (unique.length > ENDPOINT_CLIENT_AGENTS_MAX) {
-    throw new Error(
-      `An endpoint client lists at most ${String(ENDPOINT_CLIENT_AGENTS_MAX)} agents.`,
-    );
-  }
-  return unique;
+interface ClientContext {
+  readonly db: Database;
+  readonly workspaceId: string;
 }
 
-/** `endpoint_clients_oidc_audience_app_backend`, checked before the insert names the kind wrongly. */
-function checkedOidcAudience(
+const VANISHED = 'endpoint client vanished inside its transaction';
+
+function clientWhere(ctx: ClientContext, id: string) {
+  return and(eq(endpointClients.workspaceId, ctx.workspaceId), eq(endpointClients.id, id));
+}
+
+async function readOne(
+  executor: EndpointClientExecutor,
+  ctx: ClientContext,
+  id: string,
+): Promise<EndpointClientRecord | null> {
+  const rows = await executor.select().from(endpointClients).where(clientWhere(ctx, id)).limit(1);
+  return (await hydrate(executor, ctx.workspaceId, rows))[0] ?? null;
+}
+
+async function readRequired(
+  executor: EndpointClientExecutor,
+  ctx: ClientContext,
+  id: string,
+): Promise<EndpointClientRecord> {
+  const client = await readOne(executor, ctx, id);
+  if (client === null) throw new Error(VANISHED);
+  return client;
+}
+
+async function listClients(ctx: ClientContext): Promise<EndpointClientRecord[]> {
+  const rows = await ctx.db
+    .select()
+    .from(endpointClients)
+    .where(eq(endpointClients.workspaceId, ctx.workspaceId))
+    .orderBy(asc(endpointClients.name), asc(endpointClients.kind));
+  return hydrate(ctx.db, ctx.workspaceId, rows);
+}
+
+async function findClientByName(
+  ctx: ClientContext,
   kind: EndpointClientKind,
-  oidcAudience: string | null | undefined,
-): string | null {
-  const audience = oidcAudience ?? null;
-  if ((kind === 'app-backend') !== (audience !== null)) {
-    throw new Error('oidcAudience is required for, and only for, an app-backend endpoint client.');
-  }
-  return audience;
-}
-
-function checkedToolNames(
-  kind: EndpointClientKind,
-  toolNames: readonly string[] | null | undefined,
-): string[] | null {
-  if (toolNames === undefined || toolNames === null) return null;
-  if (kind !== 'mcp-project') {
-    throw new Error('toolNames applies to mcp-project endpoint clients only.');
-  }
-  return [...toolNames];
-}
-
-async function hydrate(
-  executor: Database | Transaction,
-  workspaceId: string,
-  rows: readonly EndpointClient[],
-): Promise<EndpointClientRecord[]> {
-  if (rows.length === 0) return [];
-  const ids = rows.map((row) => row.id);
-  const agentRows = await executor
-    .select({ clientId: endpointClientAgents.clientId, agentId: endpointClientAgents.agentId })
-    .from(endpointClientAgents)
+  name: string,
+): Promise<EndpointClientRecord | null> {
+  const rows = await ctx.db
+    .select()
+    .from(endpointClients)
     .where(
       and(
-        eq(endpointClientAgents.workspaceId, workspaceId),
-        inArray(endpointClientAgents.clientId, ids),
+        eq(endpointClients.workspaceId, ctx.workspaceId),
+        eq(endpointClients.kind, kind),
+        eq(endpointClients.name, name),
       ),
     )
-    .orderBy(asc(endpointClientAgents.agentId));
-  const keyRows = await executor
-    .select({
-      clientId: endpointClientApiKeys.clientId,
-      apiKeyId: endpointClientApiKeys.apiKeyId,
-    })
+    .limit(1);
+  return (await hydrate(ctx.db, ctx.workspaceId, rows))[0] ?? null;
+}
+
+async function createClient(
+  ctx: ClientContext,
+  input: NewEndpointClientInput,
+): ReturnType<EndpointClientRepository['create']> {
+  const { db, workspaceId } = ctx;
+  const agentIds = checkedAgentIds(input.kind, input.agentIds);
+  const toolNames = checkedToolNames(input.kind, input.toolNames);
+  const oidcAudience = checkedOidcAudience(input.kind, input.oidcAudience);
+  try {
+    return await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(endpointClients)
+        .values({
+          workspaceId,
+          name: input.name,
+          kind: input.kind,
+          toolNames,
+          oidcAudience,
+          actsForPrincipalId: input.actsForPrincipalId,
+          createdByPrincipalId: input.createdByPrincipalId,
+        })
+        .returning();
+      const row = inserted[0];
+      if (row === undefined) throw new Error('endpoint client insert returned no row');
+      await insertAgents(tx, ctx, row.id, agentIds);
+      return { kind: 'created' as const, client: await readRequired(tx, ctx, row.id) };
+    });
+  } catch (error) {
+    for (const violation of postgresViolations(error)) {
+      if (violation.constraint === 'endpoint_clients_workspace_kind_name_key') {
+        return { kind: 'name-taken' as const };
+      }
+    }
+    throw error;
+  }
+}
+
+async function insertAgents(
+  tx: EndpointClientExecutor,
+  ctx: ClientContext,
+  clientId: string,
+  agentIds: readonly string[],
+): Promise<void> {
+  // A `builder` client binds no agent, and drizzle refuses an empty insert.
+  if (agentIds.length === 0) return;
+  await tx
+    .insert(endpointClientAgents)
+    .values(agentIds.map((agentId) => ({ clientId, workspaceId: ctx.workspaceId, agentId })));
+}
+
+async function replaceAgents(
+  tx: EndpointClientExecutor,
+  ctx: ClientContext,
+  clientId: string,
+  agentIds: readonly string[],
+): Promise<void> {
+  await tx
+    .delete(endpointClientAgents)
+    .where(
+      and(
+        eq(endpointClientAgents.workspaceId, ctx.workspaceId),
+        eq(endpointClientAgents.clientId, clientId),
+      ),
+    );
+  await insertAgents(tx, ctx, clientId, agentIds);
+}
+
+function lockClient(tx: EndpointClientExecutor, ctx: ClientContext, id: string) {
+  return tx.select().from(endpointClients).where(clientWhere(ctx, id)).for('update');
+}
+
+async function updateClient(
+  ctx: ClientContext,
+  id: string,
+  patch: EndpointClientPatch,
+): ReturnType<EndpointClientRepository['update']> {
+  return ctx.db.transaction(async (tx) => {
+    const current = (await lockClient(tx, ctx, id))[0];
+    if (current === undefined) return { kind: 'not-found' as const };
+    if (current.revokedAt !== null) return { kind: 'revoked' as const };
+    const agentIds =
+      patch.agentIds === undefined ? null : checkedAgentIds(current.kind, patch.agentIds);
+    const toolNames =
+      patch.toolNames === undefined ? undefined : checkedToolNames(current.kind, patch.toolNames);
+    const oidcAudience =
+      patch.oidcAudience === undefined
+        ? undefined
+        : checkedOidcAudience(current.kind, patch.oidcAudience);
+    const redirectUris =
+      patch.redirectUris === undefined ? undefined : checkedRedirectUris(patch.redirectUris);
+    if (agentIds !== null) await replaceAgents(tx, ctx, id, agentIds);
+    await tx
+      .update(endpointClients)
+      .set({
+        updatedAt: sql`now()`,
+        ...(toolNames === undefined ? {} : { toolNames }),
+        ...(oidcAudience === undefined ? {} : { oidcAudience }),
+        ...(redirectUris === undefined ? {} : { redirectUris }),
+      })
+      .where(clientWhere(ctx, id));
+    return { kind: 'updated' as const, client: await readRequired(tx, ctx, id) };
+  });
+}
+
+async function setClientSecretHash(
+  ctx: ClientContext,
+  id: string,
+  secretHash: string,
+  at: Date,
+): ReturnType<EndpointClientRepository['setSecretHash']> {
+  return ctx.db.transaction(async (tx) => {
+    const current = (await lockClient(tx, ctx, id))[0];
+    if (current === undefined) return { kind: 'not-found' as const };
+    if (current.revokedAt !== null) return { kind: 'revoked' as const };
+    await tx
+      .update(endpointClients)
+      .set({
+        clientSecretHash: secretHash,
+        clientSecretRotatedAt: sql`greatest(now(), ${at}::timestamptz)`,
+      })
+      .where(clientWhere(ctx, id));
+    return { kind: 'set' as const, client: await readRequired(tx, ctx, id) };
+  });
+}
+
+/** Revoke every not-yet-revoked key bound to the client, and the principals of those keys. */
+async function revokeBoundKeys(
+  tx: EndpointClientExecutor,
+  ctx: ClientContext,
+  clientId: string,
+  revokedAt: Date,
+): Promise<EndpointClientRevocation['revokedKeys']> {
+  const { workspaceId } = ctx;
+  const bound = tx
+    .select({ id: endpointClientApiKeys.apiKeyId })
     .from(endpointClientApiKeys)
     .where(
       and(
         eq(endpointClientApiKeys.workspaceId, workspaceId),
-        inArray(endpointClientApiKeys.clientId, ids),
+        eq(endpointClientApiKeys.clientId, clientId),
+      ),
+    );
+  const revokedKeys = await tx
+    .update(apiKeys)
+    .set({ revokedAt })
+    .where(
+      and(
+        eq(apiKeys.workspaceId, workspaceId),
+        inArray(apiKeys.id, bound),
+        isNull(apiKeys.revokedAt),
       ),
     )
-    .orderBy(asc(endpointClientApiKeys.apiKeyId));
-  return rows.map((row) => ({
-    id: row.id,
-    workspaceId: row.workspaceId,
-    name: row.name,
-    kind: row.kind,
-    agentIds: agentRows.filter((agent) => agent.clientId === row.id).map((agent) => agent.agentId),
-    toolNames: row.toolNames,
-    redirectUris: row.redirectUris,
-    hasClientSecret: row.clientSecretHash !== null,
-    oidcAudience: row.oidcAudience,
-    actsForPrincipalId: row.actsForPrincipalId,
-    createdByPrincipalId: row.createdByPrincipalId,
-    apiKeyIds: keyRows.filter((key) => key.clientId === row.id).map((key) => key.apiKeyId),
-    revokedAt: row.revokedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  }));
+    .returning({ id: apiKeys.id, name: apiKeys.name });
+  if (revokedKeys.length > 0) {
+    await tx
+      .update(workspacePrincipals)
+      .set({ revokedAt })
+      .where(
+        and(
+          eq(workspacePrincipals.workspaceId, workspaceId),
+          inArray(
+            workspacePrincipals.apiKeyId,
+            revokedKeys.map((key) => key.id),
+          ),
+          isNull(workspacePrincipals.revokedAt),
+        ),
+      );
+  }
+  return revokedKeys;
+}
+
+async function revokeClient(
+  ctx: ClientContext,
+  id: string,
+  at: Date,
+): Promise<EndpointClientRevocation | null> {
+  return ctx.db.transaction(async (tx) => {
+    const current = (await lockClient(tx, ctx, id))[0];
+    if (current === undefined) return null;
+    if (current.revokedAt !== null) {
+      return { client: await readRequired(tx, ctx, id), revokedKeys: [] };
+    }
+    const updated = await tx
+      .update(endpointClients)
+      .set({ revokedAt: sql`greatest(now(), ${at}::timestamptz)` })
+      .where(clientWhere(ctx, id))
+      .returning({ revokedAt: endpointClients.revokedAt });
+    const revokedAt = updated[0]?.revokedAt;
+    if (revokedAt === undefined || revokedAt === null) {
+      throw new Error('endpoint client revocation returned no timestamp');
+    }
+    const revokedKeys = await revokeBoundKeys(tx, ctx, id, revokedAt);
+    return { client: await readRequired(tx, ctx, id), revokedKeys };
+  });
 }
 
 export function createDatabaseEndpointClientRepositoryProvider(
@@ -210,227 +351,15 @@ export function createDatabaseEndpointClientRepositoryProvider(
   return {
     forScope(scope) {
       const { workspaceId } = requireWorkspaceScope(scope, 'EndpointClientRepositoryProvider');
-
-      const readOne = async (
-        executor: Database | Transaction,
-        id: string,
-      ): Promise<EndpointClientRecord | null> => {
-        const rows = await executor
-          .select()
-          .from(endpointClients)
-          .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)))
-          .limit(1);
-        return (await hydrate(executor, workspaceId, rows))[0] ?? null;
-      };
-
+      const ctx: ClientContext = { db, workspaceId };
       return {
-        async list() {
-          const rows = await db
-            .select()
-            .from(endpointClients)
-            .where(eq(endpointClients.workspaceId, workspaceId))
-            .orderBy(asc(endpointClients.name), asc(endpointClients.kind));
-          return hydrate(db, workspaceId, rows);
-        },
-        get: (id) => readOne(db, id),
-        async findByName(kind, name) {
-          const rows = await db
-            .select()
-            .from(endpointClients)
-            .where(
-              and(
-                eq(endpointClients.workspaceId, workspaceId),
-                eq(endpointClients.kind, kind),
-                eq(endpointClients.name, name),
-              ),
-            )
-            .limit(1);
-          return (await hydrate(db, workspaceId, rows))[0] ?? null;
-        },
-        async create(input) {
-          const agentIds = checkedAgentIds(input.kind, input.agentIds);
-          const toolNames = checkedToolNames(input.kind, input.toolNames);
-          const oidcAudience = checkedOidcAudience(input.kind, input.oidcAudience);
-          try {
-            return await db.transaction(async (tx) => {
-              const inserted = await tx
-                .insert(endpointClients)
-                .values({
-                  workspaceId,
-                  name: input.name,
-                  kind: input.kind,
-                  toolNames,
-                  oidcAudience,
-                  actsForPrincipalId: input.actsForPrincipalId,
-                  createdByPrincipalId: input.createdByPrincipalId,
-                })
-                .returning();
-              const row = inserted[0];
-              if (row === undefined) throw new Error('endpoint client insert returned no row');
-              // A `builder` client binds no agent, and drizzle refuses an empty insert.
-              if (agentIds.length > 0) {
-                await tx
-                  .insert(endpointClientAgents)
-                  .values(agentIds.map((agentId) => ({ clientId: row.id, workspaceId, agentId })));
-              }
-              const client = await readOne(tx, row.id);
-              if (client === null)
-                throw new Error('endpoint client vanished inside its transaction');
-              return { kind: 'created' as const, client };
-            });
-          } catch (error) {
-            for (const violation of postgresViolations(error)) {
-              if (violation.constraint === 'endpoint_clients_workspace_kind_name_key') {
-                return { kind: 'name-taken' as const };
-              }
-            }
-            throw error;
-          }
-        },
-        async update(id, patch) {
-          return db.transaction(async (tx) => {
-            const locked = await tx
-              .select()
-              .from(endpointClients)
-              .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)))
-              .for('update');
-            const current = locked[0];
-            if (current === undefined) return { kind: 'not-found' as const };
-            if (current.revokedAt !== null) return { kind: 'revoked' as const };
-            const agentIds =
-              patch.agentIds === undefined ? null : checkedAgentIds(current.kind, patch.agentIds);
-            const toolNames =
-              patch.toolNames === undefined
-                ? undefined
-                : checkedToolNames(current.kind, patch.toolNames);
-            const oidcAudience =
-              patch.oidcAudience === undefined
-                ? undefined
-                : checkedOidcAudience(current.kind, patch.oidcAudience);
-            if (patch.redirectUris !== undefined && patch.redirectUris.length > REDIRECT_URIS_MAX) {
-              throw new Error(
-                `An endpoint client lists at most ${String(REDIRECT_URIS_MAX)} redirect URIs.`,
-              );
-            }
-            if (agentIds !== null) {
-              await tx
-                .delete(endpointClientAgents)
-                .where(
-                  and(
-                    eq(endpointClientAgents.workspaceId, workspaceId),
-                    eq(endpointClientAgents.clientId, id),
-                  ),
-                );
-              if (agentIds.length > 0) {
-                await tx
-                  .insert(endpointClientAgents)
-                  .values(agentIds.map((agentId) => ({ clientId: id, workspaceId, agentId })));
-              }
-            }
-            await tx
-              .update(endpointClients)
-              .set({
-                updatedAt: sql`now()`,
-                ...(toolNames === undefined ? {} : { toolNames }),
-                ...(oidcAudience === undefined ? {} : { oidcAudience }),
-                ...(patch.redirectUris === undefined
-                  ? {}
-                  : { redirectUris: [...new Set(patch.redirectUris)] }),
-              })
-              .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)));
-            const client = await readOne(tx, id);
-            if (client === null) throw new Error('endpoint client vanished inside its transaction');
-            return { kind: 'updated' as const, client };
-          });
-        },
-        async setSecretHash(id, secretHash, at) {
-          return db.transaction(async (tx) => {
-            const locked = await tx
-              .select({ revokedAt: endpointClients.revokedAt })
-              .from(endpointClients)
-              .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)))
-              .for('update');
-            const current = locked[0];
-            if (current === undefined) return { kind: 'not-found' as const };
-            if (current.revokedAt !== null) return { kind: 'revoked' as const };
-            await tx
-              .update(endpointClients)
-              .set({
-                clientSecretHash: secretHash,
-                clientSecretRotatedAt: sql`greatest(now(), ${at}::timestamptz)`,
-              })
-              .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)));
-            const client = await readOne(tx, id);
-            if (client === null) throw new Error('endpoint client vanished inside its transaction');
-            return { kind: 'set' as const, client };
-          });
-        },
-        async revoke(id, at) {
-          return db.transaction(async (tx) => {
-            const locked = await tx
-              .select()
-              .from(endpointClients)
-              .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)))
-              .for('update');
-            const current = locked[0];
-            if (current === undefined) return null;
-            const revocation = async (
-              revokedKeys: EndpointClientRevocation['revokedKeys'],
-            ): Promise<EndpointClientRevocation> => {
-              const client = await readOne(tx, id);
-              if (client === null) {
-                throw new Error('endpoint client vanished inside its transaction');
-              }
-              return { client, revokedKeys };
-            };
-            if (current.revokedAt !== null) return revocation([]);
-            const updated = await tx
-              .update(endpointClients)
-              .set({ revokedAt: sql`greatest(now(), ${at}::timestamptz)` })
-              .where(and(eq(endpointClients.workspaceId, workspaceId), eq(endpointClients.id, id)))
-              .returning({ revokedAt: endpointClients.revokedAt });
-            const revokedAt = updated[0]?.revokedAt;
-            if (revokedAt === undefined || revokedAt === null) {
-              throw new Error('endpoint client revocation returned no timestamp');
-            }
-            const bound = tx
-              .select({ id: endpointClientApiKeys.apiKeyId })
-              .from(endpointClientApiKeys)
-              .where(
-                and(
-                  eq(endpointClientApiKeys.workspaceId, workspaceId),
-                  eq(endpointClientApiKeys.clientId, id),
-                ),
-              );
-            const revokedKeys = await tx
-              .update(apiKeys)
-              .set({ revokedAt })
-              .where(
-                and(
-                  eq(apiKeys.workspaceId, workspaceId),
-                  inArray(apiKeys.id, bound),
-                  isNull(apiKeys.revokedAt),
-                ),
-              )
-              .returning({ id: apiKeys.id, name: apiKeys.name });
-            if (revokedKeys.length > 0) {
-              await tx
-                .update(workspacePrincipals)
-                .set({ revokedAt })
-                .where(
-                  and(
-                    eq(workspacePrincipals.workspaceId, workspaceId),
-                    inArray(
-                      workspacePrincipals.apiKeyId,
-                      revokedKeys.map((key) => key.id),
-                    ),
-                    isNull(workspacePrincipals.revokedAt),
-                  ),
-                );
-            }
-            return revocation(revokedKeys);
-          });
-        },
+        list: () => listClients(ctx),
+        get: (id) => readOne(db, ctx, id),
+        findByName: (kind, name) => findClientByName(ctx, kind, name),
+        create: (input) => createClient(ctx, input),
+        update: (id, patch) => updateClient(ctx, id, patch),
+        setSecretHash: (id, secretHash, at) => setClientSecretHash(ctx, id, secretHash, at),
+        revoke: (id, at) => revokeClient(ctx, id, at),
       };
     },
   };

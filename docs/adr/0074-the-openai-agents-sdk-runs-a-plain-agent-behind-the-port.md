@@ -288,7 +288,7 @@ switches into whatever policy is written.
   `openai-agents` row is not supported by the previous release's parsers; roll back before any such
   run, or restore the backup.
 - A deployment offers the engine by configuring `AGENT_WORKSPACE_RUNTIME_IMAGE_OPENAI_AGENTS`
-  (`docs/deploy/engine-images.md`); until then `GET /api/engines` reports it `installed: false` and a
+  (`docs/40-operate/deploy/engine-images.md`); until then `GET /api/engines` reports it `installed: false` and a
   run answers `422 engine_not_installed`.
 - The conformance kit accepts a `skills: false` engine that refuses by name, and the runner compiles
   before it writes anything into the sandbox.

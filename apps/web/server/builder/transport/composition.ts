@@ -5,13 +5,13 @@
  */
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
-import type { AgentVersionsRuntime } from '../../agent-versions/runtime';
+import type { AgentVersionsRuntime } from '../../agent-versions/wiring';
 import type { StorageConnectionLookup } from '../../agent-versions/storage-grants';
 import type { AgentStoreProvider } from '../../agents/store';
 import type { ConnectorsStoreProvider, ModelsStoreProvider } from '../../integrations';
 import type { RuntimeProfileStoreProvider } from '../../execution';
 import { systemClock } from '../../clock';
-import { enabledFeaturesFor } from '../../features/runtime';
+import { enabledFeaturesFor } from '../../features/wiring';
 import { randomIds } from '../../ids';
 import type { DirectoryRoot } from '../../identity';
 import type { ToolBundleLookup } from '../../tool-bundles/handlers';

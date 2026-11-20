@@ -16,7 +16,7 @@
  *
  * ## Why the wizard's PRE-save Test Connection is a flag on `POST /api/connectors`, not its own route
  *
- * `tests/route-inventory.test.ts`'s shape rule (ADR-0026 decision 3) admits only
+ * `tests/route-inventory.policy-check.ts`'s shape rule (ADR-0026 decision 3) admits only
  * `/api/<resource>`, `/api/<resource>/:id` and `/api/<resource>/:id/<sub>` — a literal second
  * segment with no id first (`/api/connectors/test-connection`, this file's first draft) is refused
  * as "a second resource... not named" the moment it carries a mandate rather than being printed by

@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import { configDefaults, defineConfig } from 'vitest/config';
 
+import { testsProjects } from './tests/projects.mjs';
+
 export default defineConfig({
   resolve: {
     alias: [
@@ -179,7 +181,14 @@ export default defineConfig({
     // reports a green run over a gate it never loaded, which is the same bug as a gate that
     // passes because it could not run. Added by W1-CORE-01; see
     // docs/adr/W1-CORE-01-surface-test-reads-the-dts.md.
-    projects: ['apps/*', 'packages/*', 'tests'],
+    //
+    // The root `tests/` tree is split into several projects (tests/projects.mjs, which says why);
+    // each has its own `vitest.config.ts`, and `tests` itself is the remainder.
+    projects: [
+      'apps/*',
+      'packages/*',
+      ...testsProjects().map((project) => `${project.projectRoot}/vitest.config.ts`),
+    ],
     // Playwright specs use a different runner and must never be imported as Vitest suites.
     exclude: [...configDefaults.exclude, 'tests/browser/**'],
   },

@@ -37,7 +37,6 @@ import {
   parseProjectFilter,
   type CatalogOption,
   type ProjectDraft,
-  type ProjectFilter,
   type RequestProblem,
 } from './model';
 import {
@@ -51,6 +50,8 @@ import {
   useProjectCatalogs,
 } from './project-form';
 import { createProject, loadAgentOptions, loadProjects } from './project-requests-model';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { projectsStrings, type ProjectsStrings } from './projects-messages';
 
 const EMPTY_DRAFT: ProjectDraft = {
   name: '',
@@ -62,16 +63,15 @@ const EMPTY_DRAFT: ProjectDraft = {
   mcpServerIds: [],
 };
 
-const VISIBILITY_LABEL: Readonly<Record<ProjectResource['visibility'], string>> = {
-  private: 'Private',
-  workspace: 'Workspace',
-  public: 'Public',
-};
-
 function ProjectRow({
   project,
   agents,
-}: Readonly<{ project: ProjectResource; agents: readonly CatalogOption[] }>) {
+  strings,
+}: Readonly<{
+  project: ProjectResource;
+  agents: readonly CatalogOption[];
+  strings: ProjectsStrings;
+}>) {
   const defaultAgent =
     project.defaultAgentId === null
       ? null
@@ -84,32 +84,33 @@ function ProjectRow({
       <div className="flex items-center gap-2">
         <span className="font-semibold text-text">{project.name}</span>
         <span className="inline-flex items-center rounded-[999px] bg-surface-3 px-2 py-0.5 text-[11px] text-text-2">
-          {VISIBILITY_LABEL[project.visibility]}
+          {strings.visibility[project.visibility]}
         </span>
         {isProjectArchived(project) ? (
           <span className="inline-flex items-center rounded-[999px] border border-border-strong px-2 py-0.5 text-[11px] text-muted">
-            Archived
+            {strings.archived}
           </span>
         ) : null}
       </div>
       <div className="mt-1 text-[12px] text-muted">
         {project.defaultAgentId === null
-          ? 'No default agent'
-          : `Default agent: ${defaultAgent?.label ?? 'deleted agent'}`}{' '}
-        · {project.fileIds.length} files · {project.mcpServerIds.length} connectors ·{' '}
-        {project.instructions ? 'Project instructions' : 'No extra instructions'}
+          ? strings.noDefaultAgent
+          : strings.defaultAgent(defaultAgent?.label ?? strings.deletedAgent)}{' '}
+        · {strings.files(project.fileIds.length)} ·{' '}
+        {strings.connectors(project.mcpServerIds.length)} ·{' '}
+        {project.instructions ? strings.projectInstructions : strings.noExtraInstructions}
       </div>
     </Link>
   );
 }
 
-const FILTER_LABEL: Readonly<Record<ProjectFilter, string>> = {
-  active: 'Active',
-  archived: 'Archived',
-  all: 'All',
-};
-
-export function ProjectsScreen() {
+export function ProjectsScreen({
+  locale = 'en',
+}: Readonly<{
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
+}>) {
+  const strings = projectsStrings(locale);
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -134,17 +135,15 @@ export function ProjectsScreen() {
   }, []);
 
   return (
-    <main className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[21px]">Projects</h1>
-          <p className="text-[13px] text-muted">
-            Reusable instructions, files, connectors and a default agent.
-          </p>
+          <h1 className="text-[21px]">{strings.title}</h1>
+          <p className="text-[13px] text-muted">{strings.intro}</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-[12px] text-muted" htmlFor="projects-archived-filter">
-            Show
+            {strings.show}
           </label>
           <select
             id="projects-archived-filter"
@@ -158,7 +157,7 @@ export function ProjectsScreen() {
           >
             {PROJECT_FILTERS.map((option) => (
               <option key={option} value={option}>
-                {FILTER_LABEL[option]}
+                {strings.filter[option]}
               </option>
             ))}
           </select>
@@ -168,7 +167,7 @@ export function ProjectsScreen() {
               className={`${BTN} ${BTN_PRIMARY}`}
               onClick={() => setCreating(true)}
             >
-              New project
+              {strings.newProject}
             </button>
           )}
         </div>
@@ -176,6 +175,7 @@ export function ProjectsScreen() {
 
       {creating ? (
         <ProjectCreateForm
+          strings={strings}
           onCancel={() => setCreating(false)}
           onCreated={() => {
             setCreating(false);
@@ -189,15 +189,15 @@ export function ProjectsScreen() {
           {problem}
         </p>
       ) : projects === null ? (
-        <p>Loading…</p>
+        <p>{strings.loading}</p>
       ) : (
         <div className="mt-5 grid gap-3">
           {projects.map((project) => (
-            <ProjectRow key={project.id} project={project} agents={agents} />
+            <ProjectRow key={project.id} project={project} agents={agents} strings={strings} />
           ))}
           {projects.length === 0 && !creating ? (
             <div className="rounded border border-border p-5 text-muted">
-              {describeEmptyProjectList(filter)}
+              {describeEmptyProjectList(filter, strings)}
             </div>
           ) : null}
         </div>
@@ -207,9 +207,10 @@ export function ProjectsScreen() {
 }
 
 function ProjectCreateForm({
+  strings,
   onCancel,
   onCreated,
-}: Readonly<{ onCancel: () => void; onCreated: () => void }>) {
+}: Readonly<{ strings: ProjectsStrings; onCancel: () => void; onCreated: () => void }>) {
   const catalogsState = useProjectCatalogs();
   const [draft, setDraft] = useState<ProjectDraft>(EMPTY_DRAFT);
   const [submitting, setSubmitting] = useState(false);
@@ -230,7 +231,7 @@ function ProjectCreateForm({
   }
 
   return (
-    <form className="mb-5" onSubmit={onSubmit} aria-label="New project">
+    <form className="mb-5" onSubmit={onSubmit} aria-label={strings.newProject}>
       {catalogsState.kind === 'failed' ? (
         <p className="mb-4 text-[13px] text-danger" role="alert">
           {catalogsState.reason}
@@ -256,14 +257,14 @@ function ProjectCreateForm({
             if (confirmDiscard(dirty)) onCancel();
           }}
         >
-          Cancel
+          {strings.cancel}
         </button>
         <button
           type="submit"
           disabled={!canSubmit}
           className={`${BTN} ${BTN_PRIMARY} ${canSubmit ? '' : BTN_DISABLED}`}
         >
-          {submitting ? 'Creating…' : 'Create project'}
+          {submitting ? strings.creating : strings.createProject}
         </button>
       </div>
     </form>

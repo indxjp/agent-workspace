@@ -85,7 +85,7 @@ private theorem fk_parent {S : Schema} {st : State} (hc : Er.Core.consistent S s
 
 /-- In a consistent state, a row whose foreign key is set names exactly one parent row, provided
 the key targets an exact key of the parent. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reference_names_one_parent (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) {t : TableName} {fk : ForeignKey}
@@ -98,7 +98,7 @@ theorem reference_names_one_parent (S : Schema) (st : State)
   exact exact_key_unique hc hk hr'' hr' (present_of_project_eq he'' hp) (he''.trans he.symm)
 
 /-- In a consistent state, a foreign key over `NOT NULL` columns is set on every row. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem mandatory_reference_is_set (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) (t : TableName) (fk : ForeignKey)
@@ -118,7 +118,7 @@ theorem mandatory_reference_is_set (S : Schema) (st : State)
 
 /-- In a consistent state, two rows of a table that agree on the columns of a total unique key
 (set on the first) are the same row. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem unique_key_identifies_row (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) {t : TableName} {u : UniqueKey}
@@ -132,7 +132,7 @@ theorem unique_key_identifies_row (S : Schema) (st : State)
   exact key_rows_equal hkey h1 h2 hp he
 
 /-- In a consistent state, two rows of a table that agree on its primary key are the same row. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem primary_key_identifies_row (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) {t : TableName} {r1 r2 : Row}
@@ -160,7 +160,7 @@ private def ctorName (sql : String) : Name :=
   | [] => .anonymous
   | w :: ws => Name.mkSimple (w ++ String.join (ws.map String.capitalize))
 
-private def erDoc : String := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
+private def erDoc : String := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
 
 /-- The consequence a natural key has, and the document that states it when one does (`none`:
 the key is cited by its schema definition only). -/
@@ -177,13 +177,13 @@ private def uniqueSentence : String → Option (String × Option String)
       some "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
   | "skills_workspace_name_key" =>
     some ("a skill is addressed by its name in the workspace",
-      some "docs/sdk/04-api-specification.md#57-skills--awskills")
+      some "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")
   | "files_workspace_path_key" =>
     some ("a file is addressed by its path in the workspace",
-      some "docs/sdk/04-api-specification.md#56-files--awfiles")
+      some "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")
   | "mcp_servers_workspace_name_key" =>
     some ("a second connector of the same name is `409 connector_name_conflict`",
-      some "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+      some "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   | "agents_workspace_name_key" =>
     some ("two agents of one workspace never share a name", none)
   | _ => none
@@ -820,7 +820,7 @@ private theorem lookup_spec {ps : List Grant.PrincipalView} {r : PrincipalId}
 membership per user and one principal per membership), reading the grants back after replacing
 them with a set of principal ids yields exactly that set, although the table stores users. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/repositories/agent-grants.ts#createDatabaseAgentGrantRepositoryProvider")]
 theorem grants_round_trip (ps : List Grant.PrincipalView) (req : List PrincipalId)
     (users : List UserId)
@@ -945,7 +945,7 @@ theorem put_skill_never_transfers_owner (ws : WorkspaceId) (fresh : SkillId)
 creator, and with them every assignment and project link that names it. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/repositories/resource-catalogs.ts#ResourceCatalogRepository")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 theorem rename_by_prefix_keeps_every_identity (old new : String) (fs : List File.File) :
     (File.renameByPrefix old new fs).map (fun f => (f.id, f.workspace, f.owner, f.createdBy)) =
       fs.map (fun f => (f.id, f.workspace, f.owner, f.createdBy)) := by
@@ -1131,7 +1131,7 @@ end Parser
 (command xor URL by transport, arguments only for `stdio`, a non-blank command, an absolute
 `http(s)` URL, and a credential secret exactly when the authentication type needs one). -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 theorem created_connector_meets_the_shape_checks (b : Connector.Body) (p : Connector.Parsed)
     (h : Connector.parseBody (some b) = .ok p) (id : ConnectorId) (ws : WorkspaceId)
     (sid : SecretId) (createdBy : Option UserId) (owner : PrincipalId) :
@@ -1432,7 +1432,7 @@ closed-set access on every file entry, and non-empty skill and connector ids, an
 assignment keeps every id in order, repeats included (the schema does not refuse duplicates;
 `replace` does, for files). -/
 @[aw_spec (tier := T2) (ts := "packages/contracts/src/agents.ts#AgentResourceAssignmentsSchema")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 theorem accepted_assignment_body_keeps_every_id (b : Grant.RawAssignments)
     (a : Grant.Assignments) (h : Grant.assignmentsBody b = some a) :
     b.extra = [] ∧ (∀ e ∈ b.files, e.fileId ≠ "" ∧ (e.access = "read" ∨ e.access = "read-write")) ∧

@@ -16,7 +16,7 @@ import {
 import { clearApplicationContext } from '../../../server/application-context';
 import { installTestDomains } from '../../../server/application-context-fixtures';
 import { installSetupApi } from '../../../server/composition/setup';
-import type { SetupInput, SetupRuntime } from '../../../server/setup/runtime';
+import type { SetupInput, SetupRuntime } from '../../../server/setup/wiring';
 
 import { POST } from './route';
 

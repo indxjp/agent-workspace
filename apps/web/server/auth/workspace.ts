@@ -13,12 +13,12 @@
  * three lines all compiled under `--strict`:
  *
  * ```ts
- * workspaceScopeFrom({ sub: body.email, ws: body.workspace, role: 'owner', iat: 0, exp: 9e9 });
- * const scope: WorkspaceScope = { workspaceSlug: q.ws, actorEmail: q.who, role: 'owner' };
+ * callerWorkspaceFrom({ sub: body.email, ws: body.workspace, role: 'owner', iat: 0, exp: 9e9 });
+ * const scope: CallerWorkspace = { workspaceSlug: q.ws, actorEmail: q.who, role: 'owner' };
  * const wrong = { ...realScope, workspaceSlug: q.ws };
  * ```
  *
- * They are now three compile errors, because `WorkspaceScope` is a class carrying `#private`
+ * They are now three compile errors, because `CallerWorkspace` is a class carrying `#private`
  * fields: it cannot be written as an object literal, it cannot be constructed from outside this
  * module, and — unlike a phantom `unique symbol` brand, which was the first attempt — the fields
  * are dropped by an object spread, so a real scope cannot be *copied* with its tenant replaced.
@@ -29,7 +29,7 @@
  *
  * Verification round 2 found the hole the paragraph above walks straight past. `readonly` is
  * erased before anything runs, so this line compiled with no diagnostic at all — no cast, no
- * `any` — and at runtime replaced a genuine scope's tenant in place while `isWorkspaceScope`
+ * `any` — and at runtime replaced a genuine scope's tenant in place while `isCallerWorkspace`
  * went on answering `true`:
  *
  * ```ts
@@ -48,17 +48,17 @@
  *
  * The guard was widened to match: it no longer asks "does this object have the private field",
  * which is a question about shape, but "is this object still the one this class froze", which is
- * the invariant. See `isWorkspaceScope` below.
+ * the invariant. See `isCallerWorkspace` below.
  *
  * ## What is honestly not enforced here
  *
- * A deliberate `as WorkspaceScope` cast, or `Object.create(WorkspaceScope.prototype)`, still
+ * A deliberate `as CallerWorkspace` cast, or `Object.create(CallerWorkspace.prototype)`, still
  * produces a value the compiler accepts — the first because casts defeat every type in the
- * program, the second because it produces an object with no `#` field. `isWorkspaceScope`
+ * program, the second because it produces an object with no `#` field. `isCallerWorkspace`
  * rejects both at runtime; the compiler rejects neither.
  *
  * Neither does anything stop a caller who mints a token with a secret of their own choosing and
- * then verifies it with the same secret: that yields genuine `VerifiedSessionClaims` naming
+ * then verifies it with the same secret: that yields genuine `VerifiedSignInSessionClaims` naming
  * whatever tenant the caller asked for, and it compiles clean. Both escapes are carried in the
  * `tests/auth.test.ts` fixture as `DECLARED` lines, asserted to produce *no* diagnostic, so each
  * declared gap is checked by the compiler rather than described in prose — and so that closing
@@ -76,7 +76,7 @@
  * docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md rules out. The live-server test
  * compiles this whole module graph through Turbopack and proves it.
  */
-import type { VerifiedSessionClaims } from './session.js';
+import type { VerifiedSignInSessionClaims } from './session.js';
 
 /**
  * The tenant a request may read and write, plus who is asking.
@@ -96,7 +96,7 @@ import type { VerifiedSessionClaims } from './session.js';
  * private fields are neither enumerable nor reachable from another module; they make the type
  * nominal and give the runtime guard something to compare against.
  */
-export class WorkspaceScope {
+export class CallerWorkspace {
   /** The tenant. `workspaces.slug`, not `workspaces.id`. Frozen at construction. */
   public readonly workspaceSlug: string;
 
@@ -106,7 +106,7 @@ export class WorkspaceScope {
   /**
    * The two values as the verified session gave them, kept where no other module can name them
    * and no `Object.assign` can reach them. Unnameable outside this file and dropped by an object
-   * spread — which is what makes the type nominal — and they exist so that `isWorkspaceScope`
+   * spread — which is what makes the type nominal — and they exist so that `isCallerWorkspace`
    * can check an invariant rather than a shape.
    */
   readonly #tenantFromVerifiedSession: string;
@@ -114,7 +114,7 @@ export class WorkspaceScope {
 
   /**
    * Private, so the only way in is the static factory below, whose argument cannot be
-   * fabricated. `new WorkspaceScope(…)` from another module is a compile error.
+   * fabricated. `new CallerWorkspace(…)` from another module is a compile error.
    *
    * The `Object.freeze` on the last line is the whole of the runtime half of this module's
    * promise, so it is worth being precise about what it buys. Freezing makes every own property
@@ -126,7 +126,7 @@ export class WorkspaceScope {
    * live in internal slots rather than in properties, so freezing does not cover them — nothing
    * outside this file can name them, and nothing inside it writes them after this line.
    */
-  private constructor(claims: VerifiedSessionClaims) {
+  private constructor(claims: VerifiedSignInSessionClaims) {
     this.workspaceSlug = claims.ws;
     this.actorEmail = claims.sub;
     this.#tenantFromVerifiedSession = claims.ws;
@@ -135,14 +135,14 @@ export class WorkspaceScope {
   }
 
   /**
-   * The only constructor there is. Its argument is what `verifySessionToken` returned — claims
-   * assembled by hand, including those from `newSessionClaims`, do not type-check here — so this
+   * The only constructor there is. Its argument is what `verifySignInSessionToken` returned — claims
+   * assembled by hand, including those from `newSignInSessionClaims`, do not type-check here — so this
    * being public costs nothing: there is no way to reach it with a tenant the caller chose that
    * does not go through minting and verifying a token, which is a declared escape rather than an
    * accident.
    */
-  public static fromVerifiedSession(claims: VerifiedSessionClaims): WorkspaceScope {
-    return new WorkspaceScope(claims);
+  public static fromVerifiedSession(claims: VerifiedSignInSessionClaims): CallerWorkspace {
+    return new CallerWorkspace(claims);
   }
 
   /**
@@ -155,7 +155,7 @@ export class WorkspaceScope {
    * is exactly the hole verification round 2 found. So the guard also requires the object to be
    * frozen and requires each public field to still equal the value the constructor took from the
    * verified session. A cast, an object literal, a spread copy, a JSON round-trip and
-   * `Object.create(WorkspaceScope.prototype)` all fail the first question; a tampered instance
+   * `Object.create(CallerWorkspace.prototype)` all fail the first question; a tampered instance
    * fails one of the other two.
    *
    * Honestly: with the freeze in place, the last two questions are defence in depth and **no
@@ -168,7 +168,7 @@ export class WorkspaceScope {
    * that a future edit can drop, and a guard that would then still answer `true` is worse than
    * one that would not.
    */
-  public static isWorkspaceScope(value: unknown): value is WorkspaceScope {
+  public static isCallerWorkspace(value: unknown): value is CallerWorkspace {
     if (typeof value !== 'object' || value === null) return false;
     if (!(#tenantFromVerifiedSession in value)) return false;
     return (
@@ -181,9 +181,9 @@ export class WorkspaceScope {
 
 /**
  * Derive the scope from verified claims. Kept as a function because that is the name the route
- * handlers in W1-CP-04 and W1-CP-05 are being handed; it is `WorkspaceScope.fromVerifiedSession`
+ * handlers in W1-CP-04 and W1-CP-05 are being handed; it is `CallerWorkspace.fromVerifiedSession`
  * and nothing else.
  */
-export function workspaceScopeFrom(claims: VerifiedSessionClaims): WorkspaceScope {
-  return WorkspaceScope.fromVerifiedSession(claims);
+export function callerWorkspaceFrom(claims: VerifiedSignInSessionClaims): CallerWorkspace {
+  return CallerWorkspace.fromVerifiedSession(claims);
 }

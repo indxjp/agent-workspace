@@ -12,8 +12,8 @@ import { sessionCookieValue } from '../composition/identity';
 import {
   clearedInvitationIdentityCookie,
   clearedSelectionCookie,
-  clearedSessionCookie,
-  sessionCookie,
+  clearedSignInSessionCookie,
+  signInSessionCookie,
   invitationIdentityCookie,
   invitationIdentityCookieName,
   oidcTransactionCookieName,
@@ -22,12 +22,12 @@ import {
 } from '.';
 import {
   cookieInstanceId,
-  DEFAULT_SESSION_COOKIE_NAME,
+  DEFAULT_SIGN_IN_SESSION_COOKIE_NAME,
   MIN_SESSION_SECRET_LENGTH,
-  mintSessionToken,
-  newSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
   scopedCookieName,
-  sessionCookieName,
+  signInSessionCookieName,
 } from './session';
 
 const SECRET = 'k'.repeat(MIN_SESSION_SECRET_LENGTH);
@@ -38,31 +38,35 @@ afterEach(() => {
 
 describe('the session cookie name', () => {
   it('keeps the existing name when no instance id is configured, so sessions survive an upgrade', () => {
-    expect(sessionCookieName({})).toBe('__Host-aw_session');
-    expect(sessionCookieName({ AW_INSTANCE_ID: '  ' })).toBe(DEFAULT_SESSION_COOKIE_NAME);
+    expect(signInSessionCookieName({})).toBe('__Host-aw_session');
+    expect(signInSessionCookieName({ AW_INSTANCE_ID: '  ' })).toBe(
+      DEFAULT_SIGN_IN_SESSION_COOKIE_NAME,
+    );
   });
 
   it('is scoped per deployment, and two projects never share a name', () => {
-    expect(sessionCookieName({ AW_INSTANCE_ID: 'acme-ai' })).toBe('__Host-aw_session_acme-ai');
-    expect(sessionCookieName({ AW_INSTANCE_ID: 'acme-ai' })).not.toBe(
-      sessionCookieName({ AW_INSTANCE_ID: 'other_project' }),
+    expect(signInSessionCookieName({ AW_INSTANCE_ID: 'acme-ai' })).toBe(
+      '__Host-aw_session_acme-ai',
+    );
+    expect(signInSessionCookieName({ AW_INSTANCE_ID: 'acme-ai' })).not.toBe(
+      signInSessionCookieName({ AW_INSTANCE_ID: 'other_project' }),
     );
   });
 
   it.each(['Acme', '-acme', 'acme ai', 'acme;x=1', 'acme=1', 'a'.repeat(64), 'b'.repeat(200)])(
     'derives a safe, distinct name from %j instead of failing every request',
     (instanceId) => {
-      const name = sessionCookieName({ AW_INSTANCE_ID: instanceId });
-      const suffix = name.slice(`${DEFAULT_SESSION_COOKIE_NAME}_`.length);
-      expect(name.startsWith(`${DEFAULT_SESSION_COOKIE_NAME}_`)).toBe(true);
+      const name = signInSessionCookieName({ AW_INSTANCE_ID: instanceId });
+      const suffix = name.slice(`${DEFAULT_SIGN_IN_SESSION_COOKIE_NAME}_`.length);
+      expect(name.startsWith(`${DEFAULT_SIGN_IN_SESSION_COOKIE_NAME}_`)).toBe(true);
       expect(suffix).toMatch(/^[a-z0-9][a-z0-9_-]{0,62}$/u);
       expect(suffix).toMatch(/[0-9a-f]{8}$/u);
     },
   );
 
   it('keeps two over-long ids that share a prefix apart', () => {
-    const one = sessionCookieName({ AW_INSTANCE_ID: `${'a'.repeat(70)}one` });
-    const two = sessionCookieName({ AW_INSTANCE_ID: `${'a'.repeat(70)}two` });
+    const one = signInSessionCookieName({ AW_INSTANCE_ID: `${'a'.repeat(70)}one` });
+    const two = signInSessionCookieName({ AW_INSTANCE_ID: `${'a'.repeat(70)}two` });
     expect(one).not.toBe(two);
   });
 
@@ -94,7 +98,7 @@ describe('the session cookie name', () => {
 
   it('sets and clears the scoped cookie under every __Host- rule', () => {
     vi.stubEnv('AW_INSTANCE_ID', 'acme-ai');
-    for (const cookie of [sessionCookie('token'), clearedSessionCookie()]) {
+    for (const cookie of [signInSessionCookie('token'), clearedSignInSessionCookie()]) {
       expect(cookie.name).toBe('__Host-aw_session_acme-ai');
       expect(cookie.name.startsWith('__Host-')).toBe(true);
       expect(cookie.secure).toBe(true);
@@ -114,7 +118,10 @@ describe('the session cookie name', () => {
   it("admits a request on this deployment's cookie, and refuses one carrying only another's", async () => {
     vi.stubEnv('SESSION_SECRET', SECRET);
     vi.stubEnv('AW_INSTANCE_ID', 'acme-ai');
-    const token = await mintSessionToken(newSessionClaims('owner@example.test', 'default'), SECRET);
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('owner@example.test', 'default'),
+      SECRET,
+    );
     const request = (cookie: string) =>
       new NextRequest(new URL('/api/me', 'http://localhost:3000'), { headers: { cookie } });
 
@@ -128,7 +135,10 @@ describe('the session cookie name', () => {
   it("lets a page through on this deployment's cookie, and sends another's to sign-in", async () => {
     vi.stubEnv('SESSION_SECRET', SECRET);
     vi.stubEnv('AW_INSTANCE_ID', 'acme-ai');
-    const token = await mintSessionToken(newSessionClaims('owner@example.test', 'default'), SECRET);
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('owner@example.test', 'default'),
+      SECRET,
+    );
     const page = (cookie: string) =>
       new NextRequest(new URL('/agents', 'http://localhost:3000'), { headers: { cookie } });
 

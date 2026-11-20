@@ -5,18 +5,18 @@
  * (`../composition/wiring/projects.ts`) hands the tenant-scoped repositories in, which satisfy them
  * structurally. Copies the shape of `../sessions/store.ts`.
  */
-import {
-  isProjectArchived,
-  type AgentRepository,
-  type AgentVersionRepository,
-  type AuditEventRepository,
-  type ProjectFileRepository,
-  type ProjectListFilter,
-  type ProjectMcpServerRepository,
-  type ProjectRecord,
-  type ProjectRepository,
-  type SessionRepository,
+import type {
+  AgentRepository,
+  AgentVersionRepository,
+  AuditEventRepository,
+  ProjectFileRepository,
+  ProjectListFilter,
+  ProjectMcpServerRepository,
+  ProjectRecord,
+  ProjectRepository,
+  SessionRepository,
 } from '@agent-workspace/core/db';
+import { isProjectArchived } from '@agent-workspace/core/db-model';
 
 /** The project row the routes render, and the `?archived=` list filter. */
 export type { ProjectListFilter, ProjectRecord };

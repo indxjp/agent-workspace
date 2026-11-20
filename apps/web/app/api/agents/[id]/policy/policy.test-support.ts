@@ -11,7 +11,7 @@ import {
 } from '../../../../../server/agent-versions/memory-store';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import type { AgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import { clearApplicationContext } from '../../../../../server/application-context';
 import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { registerEngineForTests } from '../../../../../server/engines/registry';

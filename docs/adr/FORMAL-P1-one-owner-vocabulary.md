@@ -7,7 +7,7 @@ Scope: `packages/core/src/db/schema/shares.ts`, `packages/core/src/db/schema/inv
 
 ## Context
 
-`docs/sdk/04-api-specification.md` §2: "_every row that can be "own" or "other" (…, shares) carries
+`docs/10-product/sdk/04-api-specification.md` §2: "_every row that can be "own" or "other" (…, shares) carries
 `ownerPrincipalId`_". Every owned table names its owner `owner_principal_id` except `shares`, which
 says `publisher_principal_id`, and `ShareResource` carries neither (publication finding 2). The
 legacy human attribution (`created_by`, `invited_by`: user ids) sits beside the owner on most

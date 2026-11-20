@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { TEST_WORKSPACE_ID } from '../rbac/testing';
-import type { TriggerRecord, TriggersRuntime } from './runtime';
+import type { TriggerRecord, TriggersRuntime } from './wiring';
 import type { TriggerTestState } from './triggers.runtime.test-support';
 
 type TriggerRepository = Awaited<ReturnType<TriggersRuntime['repository']>>;

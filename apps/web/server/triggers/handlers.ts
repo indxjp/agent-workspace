@@ -22,7 +22,7 @@ import { problemWithDetail as problem, readJsonBody, type ApiResult } from '../h
 import { decide, mintClientSecret, type Principal } from '../identity';
 import { authorise, type OwnershipResolver } from '../rbac/http';
 import { applicationContext } from '../application-context';
-import type { TriggerRecord, TriggersRuntime, ZoomSecretTokens } from './runtime';
+import type { TriggerRecord, TriggersRuntime, ZoomSecretTokens } from './wiring';
 import { findScheduleError } from './schedule';
 
 /** The installed trigger routes, or `null` while they are not serving (their 503). */

@@ -3,7 +3,7 @@
 Status: accepted — amends [ADR-0062](0062-the-specification-is-a-lean-4-model-and-typescript-is-tested-against-it.md) (decision 8)
 Date: 2026-09-23
 Decided by: the Owner (direction given after Phase 1 of the formal specification programme)
-Scope: the formal specification programme (`docs/formal/`), its Workflow scripts
+Scope: the formal specification programme (`docs/20-design/formal/`), its Workflow scripts
 (`.claude/workflows/formal-*.mjs`), and product code wherever the programme proves a defect
 
 ## Context
@@ -11,7 +11,7 @@ Scope: the formal specification programme (`docs/formal/`), its Workflow scripts
 ADR-0062 made Lean 4 the machine-checked specification and the TypeScript the thing tested against
 it. Its decision 8 kept the programme away from product code: a disagreement between the model and
 the code became a finding, and the only permitted product edits were behaviour-preserving
-extractions. The charter (`docs/formal/00-orchestrator-prompt.md` §7) then planned the work as
+extractions. The charter (`docs/20-design/formal/00-orchestrator-prompt.md` §7) then planned the work as
 horizontal phases across every domain: all concepts, then all contracts, then all authorisation,
 and so on, run as one Workflow script (decision D-010).
 

@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
-import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../features/wiring';
 import { resolvePublicShare, withPublicShare } from './http';
-import type { SharesRuntime, WorkspaceSharing } from './runtime';
+import type { SharesRuntime, WorkspaceSharing } from './wiring';
 
 const WORKSPACE = '00000000-0000-4000-8000-000000000002';
 const TOKEN = 'a-public-link-token';

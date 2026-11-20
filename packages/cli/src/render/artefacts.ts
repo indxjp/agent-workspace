@@ -28,7 +28,7 @@ export interface RenderedArtefact {
  * The generated project's `.gitignore`, for every `--cloud` value.
  *
  * `.env` is the one artefact that holds a live credential, and every cloud renders it with the
- * same generated secrets the Compose project gets; `docs/deploy/kubernetes.md` then tells the
+ * same generated secrets the Compose project gets; `docs/40-operate/deploy/kubernetes.md` then tells the
  * operator to keep that directory next to `deploy/`, which is exactly what they will commit. It
  * is rendered rather than shipped in `templates/` for two reasons: `templates/` is copied for
  * `local` alone, and npm's packlist never publishes a file named `.gitignore`, so a template copy

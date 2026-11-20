@@ -1,0 +1,18 @@
+id: aw-cli
+title: aw command line
+summary: >
+  The aw command line: one command per SDK method with JSON output and stable exit codes, project push, aw dev, and the tool-host contract. Deploy and publish load the project CLI lazily.
+layer: delivery
+paths:
+  - "packages/aw/**"
+key_files:
+  - { path: packages/aw/src/index.ts, role: "bin entry: signals, terminal and main()" }
+  - { path: packages/aw/src/io.ts, role: "CliIo: every effect a command may have, injected" }
+  - { path: packages/aw/src/cli-bridge.ts, role: "the one dynamic import of the project CLI's deploy and publish" }
+interface: [main, CliIo]
+depends_on: [sdk, platforms, project-cli, contracts]
+uses: [mcp, zod]
+rules: []
+checklist:
+  - { id: aw-reaches-cli-through-the-bridge, text: "Only packages/aw/src/cli-bridge.ts imports @indx-workspace/cli, and only by dynamic import()." }
+status: current

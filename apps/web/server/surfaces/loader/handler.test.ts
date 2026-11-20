@@ -2,7 +2,7 @@ import { ApiProblemSchema } from '@indx-workspace/contracts';
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { type ResolvedSurface } from '../public/runtime';
+import { type ResolvedSurface } from '../public/wiring';
 import { serveWidgetLoader, type WidgetLookOf } from './handler';
 import type { WidgetLook } from './render';
 import { installTestDomains } from '../../application-context-fixtures';

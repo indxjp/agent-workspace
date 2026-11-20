@@ -5,7 +5,7 @@ import { POST as CREATE, GET as LIST } from '../../app/api/invitations/route';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { installInvitationHarness, invitationCreation } from './invitation-routes.test-support';
-import type { InvitationAuditEvent } from './runtime';
+import type { InvitationAuditEvent } from './wiring';
 import { createManualLinkInvitationSender } from './send-invitation';
 
 export function registerManagementTests() {

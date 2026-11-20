@@ -48,21 +48,21 @@
  * workspace is reported as absent, not as forbidden — a 403 would confirm that the id exists,
  * which is an existence oracle across a tenant boundary and is the same leak in a quieter form.
  */
-import {
-  UnknownWorkspaceError,
-  type AgentGrantRepositoryProvider as CoreAgentGrantRepositoryProvider,
-  type AgentResourceRepository as CoreAgentResourceRepository,
-  type AgentResourceRepositoryProvider as CoreAgentResourceRepositoryProvider,
-  type AgentResourceAssignments,
-  type AgentResourceAssignmentsInput,
-  type ReplaceAgentResourcesOutcome,
-  type AgentRepository as CoreAgentRepository,
-  type AgentRestoreActor,
-  type RestoreAgentOutcome,
-  type AgentRepositoryProvider as CoreAgentRepositoryProvider,
-  type AgentStoredPolicy as CoreAgentStoredPolicy,
-  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import type {
+  AgentGrantRepositoryProvider as CoreAgentGrantRepositoryProvider,
+  AgentResourceRepository as CoreAgentResourceRepository,
+  AgentResourceRepositoryProvider as CoreAgentResourceRepositoryProvider,
+  AgentResourceAssignments,
+  AgentResourceAssignmentsInput,
+  ReplaceAgentResourcesOutcome,
+  AgentRepository as CoreAgentRepository,
+  AgentRestoreActor,
+  RestoreAgentOutcome,
+  AgentRepositoryProvider as CoreAgentRepositoryProvider,
+  AgentStoredPolicy as CoreAgentStoredPolicy,
+  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { UnknownWorkspaceError } from '@agent-workspace/core/db-model';
 
 import type { AgentPolicy, CreateAgentInput, UpdateAgentPatch } from '../../contracts/agents';
 import type { AgentGrantStoreProvider, WorkspaceAgentGrantStore } from './agent-grants-store';

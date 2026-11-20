@@ -25,7 +25,7 @@ open AgentWorkspace
 /-- Spec §17 Step 4, "What can this agent do?", in the specification's order. -/
 @[aw_spec (ts := "packages/contracts/src/agents.ts#AgentPermissionsSchema")
   (ts := "packages/core/src/db/schema/agents.ts#AgentPermissions")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 structure Permissions where
   readFiles : Bool
   writeFiles : Bool
@@ -112,8 +112,8 @@ def parseModel : RawField → Except String (Option String)
 /-- One `agents` row, typed. `policyStored` says whether `policy` is non-`NULL` (a `PUT` has
 replaced the policy); the policy's content is a Phase-2/3 concern. -/
 @[aw_spec (ts := "packages/core/src/db/schema/agents.ts#agents")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Agent where
   id : AgentId
   workspace : WorkspaceId
@@ -139,13 +139,13 @@ end Agent
 
 /-- Today's lifecycle: an agent row exists (and is deleted outright). -/
 @[aw_spec (ts := "packages/core/src/db/schema/agents.ts#agents")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 inductive StateCurrent where
   | active
   deriving DecidableEq, Repr, Inhabited
 
 /-- The documented target lifecycle: an agent can also be archived instead of deleted (RF-201). -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 inductive StateTarget where
   | active
   | archived
@@ -165,7 +165,7 @@ def dbColumns : List String :=
 /-- The keys of `AgentResourceSchema`, in declaration order. The policy and the assignments are
 separate resources (`/policy`, `/resources`), and so are the grants (`/grants`). -/
 @[aw_spec (ts := "packages/contracts/src/agents.ts#AgentResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 def wireFields : List String :=
   ["id", "workspaceId", "name", "instructions", "modelConnectionId", "model", "runtimeProfileId",
     "permissions", "createdBy", "ownerPrincipalId", "builtin", "createdByAgent", "archivedAt",

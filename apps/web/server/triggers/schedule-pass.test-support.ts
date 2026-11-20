@@ -11,7 +11,7 @@ import { Principal } from '../rbac/principal';
 import { TEST_WORKSPACE_ID } from '../rbac/testing';
 import type { LaunchContext, RunApiEnvironment } from '../runs/environment';
 import { InMemoryRunStore } from '../runs/memory-store';
-import type { TriggerRecord, TriggersRuntime } from './runtime';
+import type { TriggerRecord, TriggersRuntime } from './wiring';
 import { runSchedulePass, type ScheduleRoot } from './schedule-pass';
 
 const AGENT = randomUUID();

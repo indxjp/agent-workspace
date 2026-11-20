@@ -22,23 +22,26 @@ import {
   useJson,
 } from './resource-screen-state';
 import { BUTTON, CARD, INPUT } from './resource-styles';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { connectorsStrings, type ConnectorsStrings } from './connectors-messages';
 
-export function ConnectorsScreen() {
+export function ConnectorsScreen({ locale = 'en' }: { readonly locale?: VersionsLocale }) {
+  const strings = connectorsStrings(locale);
   const state = useJson(loadConnectors);
   const [probe, setProbe] = useState<string | null>(null);
   return (
-    <>
+    <div lang={locale}>
       {title(
-        'Connectors',
-        'MCP servers available to workspace agents.',
+        strings.title,
+        strings.intro,
         <Link className={BUTTON} href="/connectors/new">
-          Add connector
+          {strings.addConnector}
         </Link>,
       )}
       <Status problem={state.problem} />
       {state.loading ? (
         <p className="mb-4 text-sm text-muted" role="status">
-          Loading connectors…
+          {strings.loading}
         </p>
       ) : null}
       {probe ? (
@@ -59,37 +62,43 @@ export function ConnectorsScreen() {
             <button
               className={BUTTON}
               onClick={() =>
-                void testConnector(browserClient(), String(connector.id), String(connector.name))
+                void testConnector(
+                  browserClient(),
+                  String(connector.id),
+                  String(connector.name),
+                  strings,
+                )
                   .then(setProbe)
                   .catch((error: unknown) => state.setProblem(errorText(error)))
               }
               type="button"
             >
-              Test
+              {strings.test}
             </button>
             <button
               className={BUTTON}
               onClick={() => {
-                if (window.confirm(`Delete connector ${String(connector.name)}?`))
+                if (window.confirm(strings.confirmDelete(String(connector.name))))
                   deleteThenReload(state, (client) =>
                     deleteConnector(client, String(connector.id)),
                   );
               }}
               type="button"
             >
-              Delete
+              {strings.delete}
             </button>
           </div>
         ))}
         {state.value !== null && rows(state.value, 'connectors').length === 0 ? (
-          <p className="text-sm text-muted">No connectors yet.</p>
+          <p className="text-sm text-muted">{strings.empty}</p>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
-export function ConnectorNewScreen() {
+export function ConnectorNewScreen({ locale = 'en' }: { readonly locale?: VersionsLocale }) {
+  const strings = connectorsStrings(locale);
   const [message, setMessage] = useState<string | null>(null);
   const [authType, setAuthType] = useState<ConnectorAuthType>('none');
   const submit = async (element: HTMLFormElement, dryRun: boolean) => {
@@ -105,17 +114,18 @@ export function ConnectorNewScreen() {
         credential: formString(form, 'credential'),
       },
       dryRun,
+      strings,
     );
     if (result === null) window.location.assign('/connectors');
     else setMessage(result);
   };
   return (
-    <>
+    <div lang={locale}>
       {title(
-        'Add connector',
-        'Test the connection before saving it.',
+        strings.addConnector,
+        strings.newIntro,
         <Link className={BUTTON} href="/connectors">
-          Cancel
+          {strings.cancel}
         </Link>,
       )}
       <Status problem={message} />
@@ -128,8 +138,8 @@ export function ConnectorNewScreen() {
           );
         }}
       >
-        <ConnectorConnectionFields />
-        <ConnectorAuthFields authType={authType} onChange={setAuthType} />
+        <ConnectorConnectionFields strings={strings} />
+        <ConnectorAuthFields authType={authType} onChange={setAuthType} strings={strings} />
         <div className="flex gap-3">
           <button
             className={BUTTON}
@@ -142,45 +152,45 @@ export function ConnectorNewScreen() {
             }}
             type="button"
           >
-            Test connection
+            {strings.testConnection}
           </button>
           <button className={BUTTON} type="submit">
-            Save
+            {strings.save}
           </button>
         </div>
       </form>
-    </>
+    </div>
   );
 }
 
-function ConnectorConnectionFields() {
+function ConnectorConnectionFields({ strings }: { readonly strings: ConnectorsStrings }) {
   return (
     <>
       {' '}
       <input
-        aria-label="Connector name"
+        aria-label={strings.connectorName}
         className={INPUT}
         name="name"
-        placeholder="Connector name"
+        placeholder={strings.connectorName}
         required
       />
-      <select aria-label="Transport" className={INPUT} name="transport">
+      <select aria-label={strings.transport} className={INPUT} name="transport">
         <option value="http">HTTP</option>
         <option value="sse">SSE</option>
         <option value="stdio">stdio</option>
       </select>
       <input
-        aria-label="Endpoint"
+        aria-label={strings.endpoint}
         className={INPUT}
         name="endpoint"
-        placeholder="URL or command"
+        placeholder={strings.endpointPlaceholder}
         required
       />
       <input
-        aria-label="stdio arguments"
+        aria-label={strings.stdioArguments}
         className={INPUT}
         name="args"
-        placeholder="stdio arguments (optional)"
+        placeholder={strings.stdioArgumentsPlaceholder}
       />
     </>
   );
@@ -188,32 +198,34 @@ function ConnectorConnectionFields() {
 function ConnectorAuthFields({
   authType,
   onChange,
+  strings,
 }: {
   readonly authType: ConnectorAuthType;
   readonly onChange: (value: ConnectorAuthType) => void;
+  readonly strings: ConnectorsStrings;
 }) {
   return (
     <>
       {' '}
       <select
-        aria-label="Authentication"
+        aria-label={strings.authentication}
         className={INPUT}
         name="authType"
         value={authType}
         onChange={(event) => onChange(event.target.value as ConnectorAuthType)}
       >
-        <option value="none">No authentication</option>
-        <option value="api-key">API key</option>
-        <option value="bearer">Bearer token</option>
-        <option value="oauth">OAuth token</option>
+        <option value="none">{strings.authType.none}</option>
+        <option value="api-key">{strings.authType['api-key']}</option>
+        <option value="bearer">{strings.authType.bearer}</option>
+        <option value="oauth">{strings.authType.oauth}</option>
       </select>
       {authType === 'none' ? null : (
         <input
           {...CREDENTIAL_INPUT_PROPS}
           className={INPUT}
-          aria-label="Credential"
+          aria-label={strings.credential}
           name="credential"
-          placeholder="Credential (stored encrypted)"
+          placeholder={strings.credentialPlaceholder}
           required
           type="password"
         />

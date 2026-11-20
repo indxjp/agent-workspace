@@ -29,7 +29,7 @@ def pathSignificant : List Char :=
 
 /-- No path-significant or control character appears in an id that `isUuid` accepts, whatever
 JSON value the attacker sends. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/identifiers.ts#isUuid")
   (ts := "packages/contracts/src/identifiers.ts#UUID_PATTERN")]
 theorem accepted_id_has_no_path_character (j : JValue) (s : String) (hj : j = .str s)
@@ -47,7 +47,7 @@ example : ∀ c ∈ "123e4567-e89b-12d3-a456-426614174000".toList, c ∉ pathSig
 
 /-- Every body `readProblem` accepts, over all JSON an attacker can send, yields a code of at
 least one UTF-16 unit. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/sdk/site/guides/errors.mdx#apiproblemerror-the-server-answered-and-refused")
   (ts := "packages/sdk/src/http.ts#readProblem")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")]
@@ -82,7 +82,7 @@ example : 1 ≤ utf16Length "forbidden" :=
 /-- An accepted standard envelope, whatever the attacker sent, has `error` as its only top-level
 key and only `code`, `message`, `details` and the deprecated `detail` inside it: no extra field
 reaches the client. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")]
 theorem accepted_standard_envelope_has_no_extra_key (j : JValue) (p : ApiProblem)
     (h : apiProblemCodec.decode j = some p) :

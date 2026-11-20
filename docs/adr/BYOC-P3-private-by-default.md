@@ -5,7 +5,7 @@ Date: 2026-11-05
 Decided by: BYOC Google Cloud phase P3
 Scope: `infra/terraform/gcp-cloudrun/**`, `packages/cli/modules/gcp-cloudrun/**`,
 `packages/cli/src/deploy/**`, `packages/contracts/src/project-file.ts`,
-`docs/deploy/gcp-cloudrun.md`, `docs/sdk/site/features/self-host-securely.mdx`
+`docs/40-operate/deploy/gcp-cloudrun.md`, `docs/sdk/site/features/self-host-securely.mdx`
 
 ## Context
 

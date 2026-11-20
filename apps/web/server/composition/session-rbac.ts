@@ -5,21 +5,21 @@ import { mayAccessSession } from '../rbac/core/owner-principal';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 
-import { verifySessionToken } from '../auth/session';
-import type { CliAuthRuntime } from '../cli-auth/runtime';
-import type { InvitationsRuntime } from '../invitations/runtime';
+import { verifySignInSessionToken } from '../auth/session';
+import type { CliAuthRuntime } from '../cli-auth/wiring';
+import type { InvitationsRuntime } from '../invitations/wiring';
 import { isCliTokenRoutePath } from '../cli-auth/token-routes';
 import type { SessionApiEnvironment, SessionApiPrincipal } from '../sessions/environment';
 import type { SessionRetentionResult } from '../sessions/retention';
 import type { StorageService } from '../storage/service';
-import type { WorkspacesRuntime } from '../workspaces/runtime';
+import type { WorkspacesRuntime } from '../workspaces/wiring';
 import { configuredPath } from './config';
 import { isAgentEndpointRoute } from '../auth/agent-endpoint-routes';
 import { isAppBackendRoute } from '../auth/app-backend-routes';
 import { readBearerOAuthAccessAttempt } from '../oauth/tokens';
 import { sessionCookieValue } from './identity';
 import type { Principal } from '../rbac/principal';
-import type { RbacRuntime } from '../rbac/runtime';
+import type { RbacRuntime } from '../rbac/wiring';
 
 export type PrincipalResolution =
   | { readonly kind: 'workspace'; readonly principal: Principal }
@@ -249,7 +249,7 @@ async function resolveSessionActor(
   context: RbacActorDependencies,
 ): Promise<PrincipalResolution> {
   const { root, sessionSecret, principalModule } = context;
-  const verified = await verifySessionToken(
+  const verified = await verifySignInSessionToken(
     sessionCookieValue(request.headers.get('cookie')),
     sessionSecret,
   );
@@ -379,7 +379,7 @@ export async function installRbacApi(
     invitations: await installInvitationsApi(root),
     // Issue #119: `/api/workspaces/**` needs a repository that reaches ANY workspace by id, not the
     // `.forWorkspace(principal.workspaceId)` slice `RbacRuntime.directory` hands the routes above —
-    // see `apps/web/server/workspaces/runtime.ts`'s header for why this is a domain of its own.
+    // see `apps/web/server/workspaces/wiring.ts`'s header for why this is a domain of its own.
     workspaces: { repository: root.workspaces },
   };
 }

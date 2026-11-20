@@ -98,11 +98,14 @@ describe('workflow validator', () => {
     ],
   ];
 
+  // formal's scope is scripts/ci/formal-scope.mjs (no grep), held by its own case below.
+  const SCRIPTED_SCOPE: ReadonlySet<string> = new Set(['formal']);
+
   it.each(
     scopedJobs.flatMap(([jobId, command]) =>
-      neutralisations.map(
-        ([label, mutate, message]) => [jobId, label, command, mutate, message] as const,
-      ),
+      neutralisations
+        .filter(([label]) => !(SCRIPTED_SCOPE.has(jobId) && label.includes('grep -q')))
+        .map(([label, mutate, message]) => [jobId, label, command, mutate, message] as const),
     ),
   )('rejects a %s job neutralised by %s', async (jobId, _label, command, mutate, message) => {
     const workflows = await repositoryWorkflowDocuments();
@@ -119,6 +122,31 @@ describe('workflow validator', () => {
 
     expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
       expect.stringContaining(message(jobId, command)),
+    );
+  });
+
+  it('rejects a formal scope step that answers false when its script fails', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+    workflows.set(
+      '.github/workflows/ci.yml',
+      mutateJob(ci, 'formal', (job) =>
+        job.replace(
+          'answer="$(node scripts/ci/formal-scope.mjs "$DIFF_BASE")"\n',
+          'answer="$(node scripts/ci/formal-scope.mjs "$DIFF_BASE" || echo applies=false)"\n',
+        ),
+      ),
+    );
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining(
+        'formal must include           answer="$(node scripts/ci/formal-scope.mjs',
+      ),
     );
   });
 

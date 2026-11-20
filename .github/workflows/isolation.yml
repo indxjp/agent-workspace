@@ -6,6 +6,10 @@ name: Isolation
 # The kind-deploy lane installs it with `aw deploy`, runs one agent turn on the kubernetes driver in
 # the cluster, and runs the isolation cases against the Pods the runner manager creates (issue #854).
 # See infra/tests/isolation/README.md. No secrets are used.
+# A pull request runs the docker lane only. The two kind lanes (about 20 Blacksmith minutes a run)
+# run on the push to main that merges such a change, weekly and on a dispatch; a red run on main
+# opens or updates the "Isolation on main failed" issue (nightly-alarm.yml; ADR-0053, Amendment
+# 2026-11-19e).
 on:
   pull_request:
     paths:
@@ -100,9 +104,10 @@ jobs:
 
   kind:
     name: kind lane
-    # COST: the pull request already ran this lane on the change; the push to main does not
-    # repeat it on Blacksmith. The weekly schedule still runs it on main.
-    if: github.event_name != 'push'
+    # COST (ADR-0053, Amendment 2026-11-19e): not on a pull request. The push to main that merges a
+    # change under the paths above runs it once, the weekly schedule runs it on main, and a dispatch
+    # runs it on any ref; a red run on main opens or updates an issue (nightly-alarm.yml).
+    if: github.event_name != 'pull_request'
     # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): a kind cluster per lane for ~10 min.
     runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 50
@@ -229,9 +234,10 @@ jobs:
 
   kind-deploy:
     name: kind-deploy lane
-    # COST: the pull request already ran this lane on the change; the push to main does not
-    # repeat it on Blacksmith. The weekly schedule still runs it on main.
-    if: github.event_name != 'push'
+    # COST (ADR-0053, Amendment 2026-11-19e): not on a pull request. The push to main that merges a
+    # change under the paths above runs it once, the weekly schedule runs it on main, and a dispatch
+    # runs it on any ref; a red run on main opens or updates an issue (nightly-alarm.yml).
+    if: github.event_name != 'pull_request'
     # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): a kind cluster per lane for ~10 min.
     runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 90
@@ -389,14 +395,14 @@ jobs:
           merge-multiple: true
 
       - name: Summary logic
-        run: node --test infra/tests/isolation/summary.test.mjs infra/tests/isolation/cloud-run-lane.test.mjs infra/tests/isolation/log-result.test.mjs
+        run: node --test infra/tests/isolation/summary.test.mjs infra/tests/isolation/cloud-run-lane.test.mjs infra/tests/isolation/cloud-run-proxy.test.mjs infra/tests/isolation/cloud-run-tool-sandbox.test.mjs infra/tests/isolation/log-result.test.mjs
 
       - name: Table
         run: |
           set +e
           lanes=(docker=results/results-docker.json)
-          # A push to main runs the docker lane only (the kind lanes ran on the pull request).
-          if [ "$GITHUB_EVENT_NAME" != push ]; then
+          # A pull request runs the docker lane only (the kind lanes run on main, Amendment 2026-11-19e).
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
             lanes+=(kind=results/results-kind.json kind-chart=results/results-kind-chart.json)
           fi
           node infra/tests/isolation/summary.mjs "${lanes[@]}" > summary.md

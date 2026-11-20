@@ -75,7 +75,7 @@ theorem interrupt_refuses_terminal :
 
 /-- Normal terminal finish does not revoke browser-token rows; they are a separate table. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem finish_leaves_browser_token_row :
     (runAction ({} : RunState) (.finish .completed 1)).browserTokenRevoked = false := by

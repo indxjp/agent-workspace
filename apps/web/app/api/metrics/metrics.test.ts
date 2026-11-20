@@ -1,17 +1,17 @@
 /**
  * `GET /api/metrics` — workspace isolation.
  *
- * Named `metrics.test.ts`, not `route.test.ts`: `tests/route-inventory.test.ts`'s
+ * Named `metrics.test.ts`, not `route.test.ts`: `tests/route-inventory.policy-check.ts`'s
  * `classifyAppFile` treats any `apps/web/app/**` file named `route.<anything>` as a claim that
  * Next.js serves it, and throws when the suffix is not one of `next.config.ts`'s
  * `pageExtensions` — exactly what a colocated `route.test.ts` would trigger.
  *
  * Issue #116: a member of workspace A received telemetry for every workspace a web process had
- * observed, because the route checked only `getSession() !== null` and never scoped the
+ * observed, because the route checked only `getSignInSession() !== null` and never scoped the
  * projection. This file drives the real route module — the one Next.js calls — with a real
  * `authorise`/`decide` gate installed, the same way `apps/web/server/rbac/routes.test.ts` drives
  * its routes, so what is proved is the wiring and not just the projection filter in isolation
- * (that filter has its own tests in `../../../server/telemetry/runtime.test.ts`).
+ * (that filter has its own tests in `../../../server/telemetry/wiring.test.ts`).
  *
  * A minimal `RbacRuntime` is installed here rather than reusing
  * `apps/web/server/rbac/testing.ts`'s `installRbacHarness`: that harness resolves every caller
@@ -25,8 +25,8 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
 import { ROLES, isConferrable, type Role } from '../../../server/rbac/core/roles';
-import { type RbacRuntime } from '../../../server/rbac/runtime';
-import { recordRunTelemetry } from '../../../server/telemetry/runtime';
+import { type RbacRuntime } from '../../../server/rbac/wiring';
+import { recordRunTelemetry } from '../../../server/telemetry/wiring';
 
 import { GET } from './route';
 import { clearApplicationContext } from '../../../server/application-context';

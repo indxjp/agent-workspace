@@ -58,10 +58,13 @@ const asVisitor = (request: Request): Visitor | undefined =>
   [...visitors, ENDED].find((v) => v.header === request.headers.get('x-visitor'));
 
 async function sessionPrincipal(v: Visitor): Promise<Principal> {
-  const { mintSessionToken, newEmailLinkSessionClaims, verifySessionToken } =
+  const { mintSignInSessionToken, newEmailLinkSignInSessionClaims, verifySignInSessionToken } =
     await import('../auth/session');
-  const token = await mintSessionToken(newEmailLinkSessionClaims('v@example.test', 'slug'), SECRET);
-  const verified = await verifySessionToken(token, SECRET);
+  const token = await mintSignInSessionToken(
+    newEmailLinkSignInSessionClaims('v@example.test', 'slug'),
+    SECRET,
+  );
+  const verified = await verifySignInSessionToken(token, SECRET);
   if (!verified.ok) throw new Error('fixture token did not verify');
   const built = Principal.fromSession(
     verified.claims,

@@ -167,7 +167,7 @@ remove the need for a classification at all. This task takes the second, because
 real: `export` becomes `?export=true` on the identical `GET /api/skills/:name` path §21 already
 classifies as `skills` — the same choice `W2-CP-03` already made for its own read-a-location verb
 (`GET /api/files?path=…`, never a path segment). No sub-resource, no declaration file, no import
-this task cannot add, and one fewer route for `tests/route-inventory.test.ts`'s declared-surface
+this task cannot add, and one fewer route for `tests/route-inventory.policy-check.ts`'s declared-surface
 count to carry (see the Consequences note on that gate, below).
 
 The response shape is unchanged — `{"skill": {"name", "files": [{"path", "contentBase64"}]}}` —
@@ -177,14 +177,14 @@ is, not only here.
 
 ## Consequences
 
-* `tests/route-inventory.test.ts`'s "reads spec §34 and finds the routes it prints" assertion
+* `tests/route-inventory.policy-check.ts`'s "reads spec §34 and finds the routes it prints" assertion
   checks `specRoutes().size >= EXPECTED_ROUTES.length` as a sanity bound on its own parser. §34's
   own printed block is fixed at 31 routes (it is specification text, not derived), while
   `EXPECTED_ROUTES` is the union of every task's declared surface and grows as ADR-0026-mandated
   routes accumulate across waves — 30 before this task, 34 with this task's four. **This assertion
   fails once total declared routes exceed 31, regardless of which task's addition is the one that
   crosses the line**, and this task's four are legitimate, §7-mandated, individually justified
-  routes rather than a padding count. `tests/route-inventory.test.ts` is a repo-wide gate outside
+  routes rather than a padding count. `tests/route-inventory.policy-check.ts` is a repo-wide gate outside
   this task's `Owns` globs (ADR-0019); the fix is a change to that assertion's own bound, which
   belongs to whoever owns it next, not to a resource track. Declared here rather than worked
   around: this task did not reduce its route count to duck under a threshold, because the

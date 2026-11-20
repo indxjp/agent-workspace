@@ -10,7 +10,7 @@
  * re-reading `membershipsForUser` fresh — but it returns `null` for two different reasons that
  * must not be treated alike: the caller's membership in the session's own workspace is genuinely
  * gone (a removal, or the session naming a workspace that no longer exists), or the RBAC runtime
- * itself is not wired at all — `apps/web/server/rbac/runtime.ts`'s own declared gap, belonging to a
+ * itself is not wired at all — `apps/web/server/rbac/wiring.ts`'s own declared gap, belonging to a
  * different task. Redirecting for the second reason would turn an unrelated, already-declared gap
  * into every shell page redirecting in a loop; this function is the positive check (ADR-0015) that
  * tells the two apart before recommending either.
@@ -18,7 +18,7 @@
 import type { WorkspacesProblem } from './workspaces-directory';
 
 export function shouldRecoverSession(input: {
-  /** Whether `getSession()` verified a session token at all. */
+  /** Whether `getSignInSession()` verified a session token at all. */
   readonly hasSession: boolean;
   /** Whether `resolveIdentity(session)` resolved the caller's name, workspace and role. */
   readonly identityResolved: boolean;

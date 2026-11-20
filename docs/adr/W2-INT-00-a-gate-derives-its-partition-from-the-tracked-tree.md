@@ -3,13 +3,13 @@
 Status: accepted
 Date: 2026-09-04
 Decided by: W2-INT-00 (repairer, verification rounds 1–3)
-Scope: `tests/route-inventory.test.ts`, `tests/screen-inventory.test.ts`, `tests/inventory-support.ts`
+Scope: `tests/route-inventory.policy-check.ts`, `tests/screen-inventory.policy-check.ts`, `tests/inventory-support.ts`
 
 ## Context
 
 [ADR-0025](0025-the-route-inventory-is-partitioned-by-owner.md) split `EXPECTED_ROUTES` into one
 declaration file per owning task so that Wave 2's parallel tracks would not collide on one array. Its
-stated consequence is that *"`tests/route-inventory.test.ts` becomes an integration-owned file that
+stated consequence is that *"`tests/route-inventory.policy-check.ts` becomes an integration-owned file that
 no wave task edits again — the partition means it no longer needs to be edited to add a route"*, and
 it rejected the alternative in writing: *"each track's CI would be red until the very last branch —
 so no track would ever be green on its own, which is the property the stack is for."*
@@ -18,11 +18,11 @@ The first implementation of that split falsified its own consequence in the same
 assertions in the route gate, and two more in the screen gate, enumerated the gate's own inputs as
 literal lists of member paths:
 
-* `tests/route-inventory.test.ts` listed the two `tests/route-declarations/*.ts` files that existed,
+* `tests/route-inventory.policy-check.ts` listed the two `tests/route-declarations/*.ts` files that existed,
   and the five route files that existed. Five of Wave 2b's six tracks add a declaration file and a
-  route file; both are inside that track's `Owns` globs, and `tests/route-inventory.test.ts` is
+  route file; both are inside that track's `Owns` globs, and `tests/route-inventory.policy-check.ts` is
   inside none of them, so every one of those branches was red on a file it could not edit.
-* `tests/screen-inventory.test.ts` listed the nine `tests/screen-declarations/*.ts` files, which
+* `tests/screen-inventory.policy-check.ts` listed the nine `tests/screen-declarations/*.ts` files, which
   blocked the migration that
   [W2-INT-00-the-screen-inventory-declares-mockups-by-owner.md](W2-INT-00-the-screen-inventory-declares-mockups-by-owner.md)
   decision 5 and `tests/screen-declarations/W2-INT-00.ts`'s own header both instruct a later wave to
@@ -60,7 +60,7 @@ repository's `docs/adr/` holds one file per decision that was taken here.
 
    This decision does not quantify over the rules in a file, and the sentence that used to stand
    here did: *"Every such rule is a classifier that ends in rejection, never a filter."* It was
-   false in the commit that wrote it — `planSources()` in `tests/screen-inventory.test.ts` selected
+   false in the commit that wrote it — `planSources()` in `tests/screen-inventory.policy-check.ts` selected
    its corpus with a regex used as a filter, in the same file — and a sentence of that shape is a
    measured claim about code, which [ADR-0016](0016-measured-numbers-do-not-live-in-prose.md) keeps
    out of prose. Where a listing is narrowed and not converted, it is declared by path and line in
@@ -109,7 +109,7 @@ repository's `docs/adr/` holds one file per decision that was taken here.
    `git ls-files docs | xargs grep -lo 'ui/[A-Za-z0-9._-]*\.html'` lists more. The sentence that
    stood here named `docs/spec.md` as a third; that command does not list it and
    `grep -c 'ui/[A-Za-z0-9._-]*\.html' docs/spec.md` answers 0. Commit 4045291 corrected this claim
-   in `tests/screen-inventory.test.ts` and left the copy of it here standing.
+   in `tests/screen-inventory.policy-check.ts` and left the copy of it here standing.
 
    The same repair closes the fail-open half of the section rule: `planSchedules` throws when a
    `sectioned` document contains no line matching `### <n> Wave <N>`, because a heading shape this
@@ -134,7 +134,7 @@ repository's `docs/adr/` holds one file per decision that was taken here.
    relative literal — an expression, not a statement, and matched by neither anchored pattern — put
    the module it named outside the scan: the same planted `tests/inventory-extra.ts`, reached that
    way, kept both gates green again. The reader now also decides the resolver-call form and reads
-   either quoting, and the forms it follows are a table in `tests/route-inventory.test.ts` rather
+   either quoting, and the forms it follows are a table in `tests/route-inventory.policy-check.ts` rather
    than a claim in a comment. What is still outside it is declared as a gap on PR #40 — a traversal
    enumerates the shapes somebody thought of, which is why the enumeration is executable.
 
@@ -159,7 +159,7 @@ repository's `docs/adr/` holds one file per decision that was taken here.
 
 ## Alternatives considered
 
-* **Add `tests/route-inventory.test.ts` to every 2b track's `Owns` globs.** Rejected: it makes the
+* **Add `tests/route-inventory.policy-check.ts` to every 2b track's `Owns` globs.** Rejected: it makes the
   gate a shared mutable resource again, which is the thing ADR-0025 removed, and six branches editing
   one assertion is ADR-0019's union failure in a new costume.
 * **Keep the literal and update it in the integration branch after each track lands.** Rejected: it
@@ -184,7 +184,7 @@ repository's `docs/adr/` holds one file per decision that was taken here.
   `Owns` globs. A track that adds the route file and forgets the declaration is still red, with the
   route named — that half is unchanged.
 * A later wave can repartition its rows out of `tests/screen-declarations/W2-INT-00.ts` into its own
-  declaration file without touching `tests/screen-inventory.test.ts`, which is what decision 5 of the
+  declaration file without touching `tests/screen-inventory.policy-check.ts`, which is what decision 5 of the
   screen-inventory ADR promises.
 * An `.html` added under `ui/` with a name outside the mockup shape now fails the screen gate by
   name, where before it passed unnoticed. That is a stricter rule than the repository had, and it is

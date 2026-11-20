@@ -15,12 +15,25 @@ function checkFastChecks(failures, fastChecks) {
     'No new type or lint suppressions in the diff',
     'Generated blocks are current',
     'pnpm dedupe --check',
+    'node --test scripts/ci/nx-affected.test.mjs',
+    'scripts/ci/ci-plan.test.mjs',
+    'scripts/ci/ci-success.test.mjs',
     'pnpm format:check',
     'pnpm stories:check --base',
     'node scripts/check-licenses.mjs --dev',
     'Secret scan (gitleaks)',
     'Dependency vulnerability scan (osv-scanner)',
   ]);
+  // docs:check runs in the background beside the other gates (ADR-0053, Amendment 2026-11-19d).
+  // The job must start it, and a later step must wait for it and exit with its status: started
+  // and never awaited, a red docs:check would end with the job still green.
+  const docsStart = fastChecks.indexOf('pnpm docs:check > "$RUNNER_TEMP/docs-check.log"');
+  const docsWait = fastChecks.indexOf('exit "$(cat "$RUNNER_TEMP/docs-check.status")"');
+  if (docsStart === -1 || docsWait === -1 || docsWait < docsStart) {
+    failures.push(
+      `${CI_WORKFLOW}: fast-checks must start pnpm docs:check and later wait for it, exiting with its status`,
+    );
+  }
   if (fastChecks.includes('package-exports:check:artifacts')) {
     failures.push(`${CI_WORKFLOW}: built-artifact validation belongs in heavy-checks`);
   }
@@ -69,27 +82,31 @@ function checkPackingJobsRestoreEmbedded(failures, ciSource) {
 }
 
 /**
- * The test shards: `rest` runs every project NAMED_PROJECTS does not list, so the list must be
- * exactly the projects the named shards run — a project in a shard but missing from the list would
- * run twice, one in the list but in no shard would never run.
+ * The test shards come from the plan (scripts/ci/ci-plan.mjs TEST_SHARDS; its tests hold that every
+ * test project lands in exactly one shard): the matrix is the plan's output, each leg tests exactly
+ * the projects the plan gave it, and the no-skip gate runs on every leg.
  * @param {string[]} failures @param {string} heavyChecks
  */
 function checkHeavyCheckShards(failures, heavyChecks) {
-  const shardProjects = [...heavyChecks.matchAll(/^ {12}projects: '?([^'\n]*)'?$/gmu)]
-    .flatMap((match) => (match[1] ?? '').split(/\s+/u))
-    .filter((project) => project !== '')
-    .sort();
-  const namedProjects = (heavyChecks.match(/^ {10}NAMED_PROJECTS: '([^']*)'$/mu)?.[1] ?? '')
-    .split(/\s+/u)
-    .filter((project) => project !== '')
-    .sort();
+  if (!heavyChecks.includes('        include: ${{ fromJSON(needs.plan.outputs.test-shards) }}\n')) {
+    failures.push(
+      `${CI_WORKFLOW}: heavy-checks must take its matrix from the plan (include: fromJSON(needs.plan.outputs.test-shards))`,
+    );
+  }
+  const noSkip = heavyChecks.match(
+    /\n {6}- name: No test in the run was skipped\n((?: {8}.*\n)*)/u,
+  )?.[1];
+  if (noSkip === undefined || /^ {8}if:/mu.test(noSkip)) {
+    failures.push(`${CI_WORKFLOW}: heavy-checks must run its no-skip gate on every leg, unguarded`);
+  }
+  // No shard restores embedded's build, so none waits for build-embedded.
   if (
-    !/^ {10}- shard: rest\n {12}projects: ''$/mu.test(heavyChecks) ||
-    shardProjects.length === 0 ||
-    shardProjects.join(' ') !== namedProjects.join(' ')
+    !/uses: \.\/\.github\/actions\/workspace-build\n {8}with:\n {10}embedded: 'false'\n/u.test(
+      heavyChecks,
+    )
   ) {
     failures.push(
-      `${CI_WORKFLOW}: heavy-checks NAMED_PROJECTS must list exactly the projects of its named shards, beside a \`rest\` shard with no projects`,
+      `${CI_WORKFLOW}: heavy-checks must restore the workspace build with embedded: 'false'`,
     );
   }
 }
@@ -118,14 +135,16 @@ function checkHeavyChecks(failures, heavyChecks) {
     'uses: ./.github/actions/workspace-build',
     'PostgreSQL service is a real PostgreSQL 18',
     'Start the S3 test server for the object-store contract suite',
-    // Same pair as typecheck-lint: the affected projects for pull requests, all for main.
-    'nx show projects --json=false --with-target test --affected',
-    'nx show projects --json=false --with-target test)',
-    'scripts/ci/nx.sh run-many -t test',
+    // The projects the plan gave this leg: the affected ones for a pull request or a queue group,
+    // all of them in the heavy tier, never embedded (tested in build-embedded).
+    'SHARD_PROJECTS: ${{ matrix.projects }}',
+    'scripts/ci/nx.sh run-many -t test --projects="$SHARD_PROJECTS" ',
     'No test in the run was skipped',
     'run: node scripts/ci/vitest-no-skip.mjs',
-    // Tested in build-embedded, which is checked to run them.
-    "ELSEWHERE_PROJECTS: '@indx-workspace/embedded'",
+    // The storage load test's scope is scripts/ci/load-scope.mjs (its backend SDK bumps included),
+    // and its answer is used whole, so a failing script fails the step instead of answering false.
+    '          answer="$(node scripts/ci/load-scope.mjs "$DIFF_BASE")"\n',
+    "AW_LOAD_TESTS: '1'",
   ]);
   checkHeavyCheckShards(failures, heavyChecks);
   for (const { label, command } of FAST_ONLY_COMMANDS) {
@@ -144,8 +163,69 @@ function checkHeavyChecks(failures, heavyChecks) {
   }
 }
 
+// A red fast-checks cancels the run only where nothing else depends on the run finishing: a pull
+// request and the merge queue. On a push to main, the nightly, a dispatch and the release gate the
+// build writes the remote cache and the heavy tier runs, so a red fast-checks (most often an outside
+// advisory) must leave them running; `CI success` still fails on it (ADR-0053, Amendment 2026-11-19).
+const CANCEL_ON_FAST_FAILURE_IF =
+  "    if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')";
+
+/** @param {string[]} failures @param {string} job */
+function checkCancelOnFastFailure(failures, job) {
+  if (
+    !/^ {4}needs: fast-checks$/mu.test(job) ||
+    !job.split('\n').includes(CANCEL_ON_FAST_FAILURE_IF)
+  ) {
+    failures.push(
+      `${CI_WORKFLOW}: cancel-on-fast-failure must need fast-checks and run only on a failed pull_request or merge_group run, never cancelling the build of a push or the nightly`,
+    );
+  }
+}
+
+// THE FAST PATH (ADR-0053, Amendment 2026-11-19b): the jobs `plan` may skip. Each runs exactly when
+// the plan's output of its own name is 'true' and needs the plan, and `CI success` accepts its skip
+// only where that output is "false" (scripts/ci/ci-success.test.mjs runs the gate script itself).
+const PLANNED_JOBS = ['build', 'build-embedded', 'typecheck-lint', 'heavy-checks'];
+const PLANNED_SKIP_RULE =
+  'elif (.key | IN("build", "build-embedded", "typecheck-lint", "heavy-checks")) then (($edited or $plan[.key] == "false") | not)';
+
+/** @param {string[]} failures @param {string} ciSource */
+function checkPlan(failures, ciSource) {
+  const plan = jobBlock(ciSource, 'plan');
+  if (plan === null) {
+    failures.push(`${CI_WORKFLOW}: the plan job is missing`);
+    return;
+  }
+  // Nothing may stand between a push and the plan, so the plan never waits for another job.
+  if (/^ {4}needs:/mu.test(plan)) {
+    failures.push(`${CI_WORKFLOW}: plan must not wait for another job`);
+  }
+  requireIncludes(failures, plan, 'plan', [
+    "    if: >-\n      github.event.action != 'edited'\n",
+    'id: plan',
+    'run: node scripts/ci/ci-plan.mjs',
+    ...[...PLANNED_JOBS, 'test-shards'].map(
+      (key) => `      ${key}: \${{ steps.plan.outputs.${key} }}\n`,
+    ),
+  ]);
+  for (const jobId of PLANNED_JOBS) {
+    const job = jobBlock(ciSource, jobId);
+    const ifLines = job?.match(/^ {4}(['"]?)if\1[ \t]*:.*$/gmu) ?? [];
+    if (
+      job === null ||
+      !/^ {4}needs: (plan|\[plan, build\])$/mu.test(job) ||
+      ifLines.length !== 1 ||
+      ifLines[0] !== `    if: needs.plan.outputs.${jobId} == 'true'`
+    ) {
+      failures.push(
+        `${CI_WORKFLOW}: ${jobId} must need plan and run only if: needs.plan.outputs.${jobId} == 'true'`,
+      );
+    }
+  }
+}
+
 const CI_SUCCESS_NEEDS =
-  'fast-checks, build, build-embedded, typecheck-lint, heavy-checks, release-checks, release-images, formal, image-scan, generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser';
+  'fast-checks, plan, build, build-embedded, typecheck-lint, heavy-checks, release-checks, release-images, formal, image-scan, generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser';
 
 /** @param {string[]} failures @param {string} ciSource */
 function checkCiSuccess(failures, ciSource) {
@@ -163,7 +243,12 @@ function checkCiSuccess(failures, ciSource) {
     needs !== CI_SUCCESS_NEEDS
   ) {
     failures.push(
-      `${CI_WORKFLOW}: ci-success must run with if: always() and need fast-checks, build, build-embedded, typecheck-lint, heavy-checks, release-checks, release-images, formal, image-scan, generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage and browser`,
+      `${CI_WORKFLOW}: ci-success must run with if: always() and need fast-checks, plan, build, build-embedded, typecheck-lint, heavy-checks, release-checks, release-images, formal, image-scan, generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage and browser`,
+    );
+  }
+  if (ciSuccess !== null && !ciSuccess.includes(PLANNED_SKIP_RULE)) {
+    failures.push(
+      `${CI_WORKFLOW}: ci-success must accept a skipped build, build-embedded, typecheck-lint or heavy-checks only where the plan said "false" for it`,
     );
   }
 }
@@ -226,5 +311,9 @@ export function validateCiWorkflow(failures, ciSource) {
     ]),
   );
   validateScopedRequiredJobs(failures, ciSource);
+  checkPlan(failures, ciSource);
+  withJob(failures, ciSource, 'cancel-on-fast-failure', (job) =>
+    checkCancelOnFastFailure(failures, job),
+  );
   checkCiSuccess(failures, ciSource);
 }

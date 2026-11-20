@@ -8,7 +8,7 @@ import {
 import { POST as testConnectorRoute } from '../../app/api/connectors/[id]/test-connection/route';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
 import { createInMemoryConnectorsStoreProvider } from './memory-store';
-import type { ConnectorsRuntime } from './runtime';
+import type { ConnectorsRuntime } from './wiring';
 import type { ConnectorsStoreProvider } from './store';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';

@@ -28,7 +28,7 @@ namespace AgentWorkspace
 
 /-- A JSON value: `null`, a boolean, an exact decimal number `mantissa · 10⁻ᵉˣᵖᵒⁿᵉⁿᵗ`, a string, an
 array, or an object as an ordered list of fields. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")]
 inductive JValue where
   | null
   | bool (b : Bool)

@@ -5,7 +5,7 @@ import Lean
 
 `@[aw_spec (tier := T1) (doc := "docs/…#anchor") (ts := "path#symbol")]` records which document
 sentence and which TypeScript symbol a Lean declaration formalises, and — for theorems — which
-tier of the taxonomy (docs/formal/00-orchestrator-prompt.md §6) it belongs to. The catalogue
+tier of the taxonomy (docs/20-design/formal/00-orchestrator-prompt.md §6) it belongs to. The catalogue
 extractor (`lake exe catalogue`) reads these entries; it never infers a citation from a name.
 -/
 

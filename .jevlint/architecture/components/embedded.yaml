@@ -1,0 +1,17 @@
+id: embedded
+title: Local runtime bundle
+summary: >
+  The web control plane, gateway and runner in one Node process over embedded PostgreSQL, published as the bundle aw dev forks (ADR-0109). Nothing imports it.
+layer: bundle
+paths:
+  - "packages/embedded/**"
+key_files:
+  - { path: packages/embedded/src/launch.ts, role: "the ./launch export aw dev forks" }
+  - { path: packages/embedded/src/workspace.ts, role: "starts web, gateway and runner together" }
+  - { path: packages/embedded/src/embedded-db.ts, role: "embedded PostgreSQL lifecycle" }
+interface: []
+depends_on: [composition, identity, server-kernel, runner, gateway, persistence, project-cli, sdk, contracts]
+uses: [postgres]
+rules: []
+checklist: []
+status: current

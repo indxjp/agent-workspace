@@ -41,7 +41,7 @@ open AgentWorkspace AgentWorkspace.Er.Core
 /-! ## The five clusters -/
 
 /-- The concept clusters of phase P1b, each the owner of a disjoint set of tables. -/
-@[aw_spec (doc := "docs/formal/00-orchestrator-prompt.md#7-phases-and-units")]
+@[aw_spec (doc := "docs/20-design/formal/00-orchestrator-prompt.md#7-phases-and-units")]
 inductive Cluster where
   | identity
   | catalog
@@ -68,7 +68,7 @@ instance : WireEnum Cluster where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- The tables each cluster models. -/
-@[aw_spec (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 def Cluster.tables : Cluster → List TableName
   | .identity => Identity.tables
@@ -85,7 +85,7 @@ def clusterOf (t : TableName) : Cluster :=
 
 /-- Every check of today's schema that is not a closed set, as (table, constraint name). -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def otherChecks : List (TableName × String) :=
   allTables.flatMap fun t => (catalogue t).checks.filterMap fun
     | .other n => some (t, n)
@@ -106,7 +106,7 @@ def refinedBy (t : TableName) (n : String) : List Cluster :=
 /-- The meaning of check `n` of table `t` on a row: the semantics of the cluster that owns the
 table. A check nobody refines holds (there is none: `every_other_check_is_refined`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def checkSemantics (t : TableName) (n : String) (r : Row) : Bool :=
   match clusterOf t with
   | .identity => (Identity.semantics? n).all (·.holds r)
@@ -122,8 +122,8 @@ of `catalogue` (`Er.Core.consistent`), the meaning of every one of the 97 checks
 closed sets, and the identity cluster's cell typing (timestamps are instants, booleans are
 `true` or `false`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def consistent (st : State) : Bool :=
   Identity.consistent st && Catalog.consistent st && Configuration.consistentConfig st &&
     Work.workConsistent st && Publication.consistent st
@@ -134,7 +134,7 @@ def consistent (st : State) : Bool :=
 catalogued resources, projects and sessions (`owner_principal_id`), shares
 (`publisher_principal_id`), browser tokens (`minted_by_principal_id`) and audit events
 (`actor_principal_id`, the only nullable one). -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/agents.ts#agents_owner_principal_workspace_fk")
   (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")]
 def ownerColumn? : TableName → Option String
@@ -297,7 +297,7 @@ file and the connector; a session with its transcript and a message; a completed
 event, a usage row, a run token and a browser token; an audit event; an invitation; and a public
 agent share with a view and a charge; and a webhook trigger of the agent, run as its owner, with
 the delivery that started the run. `w2` has `u2` as its owner and an agent of its own. -/
-@[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def state : State
   | .workspaces =>
     [row ([("id", "w1"), ("slug", "one"), ("name", "One"), ("public_sharing_enabled", "true"),

@@ -16,12 +16,12 @@
  * whole tracked tree and reports, as a hard failure, any module reference it cannot resolve to a
  * string literal — *"a resolver call whose argument is not a plain quoted string … could name
  * anything at run time"*. A loop importing a computed path is exactly that construct, and it is the
- * same objection that made `tests/route-inventory.test.ts` stop importing `apps/web/next.config.ts`
+ * same objection that made `tests/route-inventory.policy-check.ts` stop importing `apps/web/next.config.ts`
  * (`docs/adr/W1-INT-02-the-page-extension-knob-is-asserted-unset-not-read.md`). A gate that another
  * gate must be weakened to accept is not a gate.
  *
  * That is not a theory: the first draft of this comment spelled the construct out with its opening
- * parenthesis, and `tests/no-sdk-import.test.ts` reported this file and `route-inventory.test.ts` as
+ * parenthesis, and `tests/no-sdk-import.test.ts` reported this file and `route-inventory.policy-check.ts` as
  * two undecidable module references. It scans its own source and everyone else's, so the construct
  * cannot be named here even in prose — the same reason that gate writes its own tables as joined
  * fragments.
@@ -81,7 +81,7 @@ export const PAGE_EXTENSIONS_KNOB = 'pageExtensions';
  *
  * Every way this can fail to establish the real set throws: no config, more than one config, or a
  * config that mentions the knob at all. It is deliberately *not* an import of the config — see the
- * header of `tests/route-inventory.test.ts` — so the set it returns is the documented default,
+ * header of `tests/route-inventory.policy-check.ts` — so the set it returns is the documented default,
  * guarded by the assertion that the application has not moved off it.
  *
  * It decides both inventories, because Next.js resolves `page.<ext>` from the same setting it
@@ -128,7 +128,7 @@ export function pageExtensions(): ReadonlySet<string> {
  * over one of these lists, and an empty one satisfies them vacuously. A gate that cannot run must
  * fail (ADR-0015). It is `git ls-files` rather than a directory walk for the reason
  * `docs/adr/W0-INF-02-probe-set-derived-from-the-tracked-tree.md` gives, and for the second reason
- * `tests/route-inventory.test.ts`'s header gives: a sibling test writes a real route handler into
+ * `tests/route-inventory.policy-check.ts`'s header gives: a sibling test writes a real route handler into
  * the working tree while this one runs, and a file that is not committed is a file this repository
  * does not ship.
  */
@@ -280,7 +280,7 @@ export function underPrivateFolder(segments: readonly string[]): boolean {
 /**
  * Classify one file sitting in the app directory as a page.
  *
- * The twin of `classifyAppFile` in `tests/route-inventory.test.ts`, and total in the same way: the
+ * The twin of `classifyAppFile` in `tests/route-inventory.policy-check.ts`, and total in the same way: the
  * fall-through rejects. `page` means Next serves it as a screen; `ignore` means the name has
  * nothing to do with pages (`route.ts`, `layout.tsx`, `globals.css`); anything named
  * `page.something-else` throws, because a reader that skipped it would be deciding "this is not a
@@ -826,7 +826,7 @@ export function gateModules(entry: string): string[] {
  * the literal covers every such call this repository accepts at all.
  *
  * All three read either quoting. Prettier rewrites a double-quoted specifier and
- * `tests/sdk-surface.test.ts` fails a `tests/` tree it has not run over, which is why the verifier
+ * `pnpm format:check` fails a `tests/` tree it has not run over, which is why the verifier
  * could not land that variant; this reader is the wrong place to depend on that, and reading both
  * quotes is cheaper than the argument. Both forms were run against a planted
  * `tests/inventory-extra.ts`, and each now fails both gates by name.
@@ -836,7 +836,7 @@ export function relativeSpecifiers(source: string): string[] {
   const fromClause = /^[ \t]*(?:import|export)\b[^;'"]*?\bfrom\s*(['"])(\.\.?\/[^'"\n]+)\1/gm;
   const bareImport = /^[ \t]*import\s*(['"])(\.\.?\/[^'"\n]+)\1/gm;
   // The call keywords are joined at run time for the reason the tables in
-  // `tests/route-inventory.test.ts` and `tests/no-sdk-import.test.ts` are: this module is inside
+  // `tests/route-inventory.policy-check.ts` and `tests/no-sdk-import.test.ts` are: this module is inside
   // both gates' own scans, and a pattern written whole is a call site to the reader in
   // `tests/no-sdk-import.test.ts`, which then reports a module reference it cannot resolve.
   const resolverCall = new RegExp(
@@ -897,7 +897,7 @@ const FS_SPECIFIER = /(['"])(?:node:)?fs(?:\/promises)?\1/g;
 /**
  * Every way a source file reaches `fs` that is not a read.
  *
- * The Wave 1a race was `tests/route-inventory.test.ts` planting a fixture under `apps/web/app`
+ * The Wave 1a race was `tests/route-inventory.policy-check.ts` planting a fixture under `apps/web/app`
  * while a sibling walked it; ADR-0019 §4 made the repair structural, and this is the assertion that
  * keeps it structural across a refactor — including a refactor that moves the offending call into a
  * helper module, which is why both gates run it over every module {@link gateModules} finds.
@@ -906,7 +906,7 @@ const FS_SPECIFIER = /(['"])(?:node:)?fs(?:\/promises)?\1/g;
  * reported by name. A mention of the module in any other position is reported as undecodable,
  * because this reader cannot tell what such a form binds; the four forms that reach it that way —
  * a namespace import, a re-export, a `require`, a dynamic import of the literal — are run as a
- * table in `tests/route-inventory.test.ts`. A reference whose specifier is *computed* is outside
+ * table in `tests/route-inventory.policy-check.ts`. A reference whose specifier is *computed* is outside
  * this scan and inside `tests/no-sdk-import.test.ts`, which refuses any module reference in the
  * tracked tree that it cannot resolve to a string literal. Matching is over raw text, comments
  * included, which is the

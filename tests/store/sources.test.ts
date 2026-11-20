@@ -2,7 +2,7 @@
  * The Under the hood tab's real source (spec "The store app", item 7): for each live entry, a
  * bounded excerpt of its demo agent file and the layout of its source folder, read here from the
  * repository and written to `examples/store/catalog/sources.generated.ts`, because the store may not
- * read outside itself (the No fork cell). `APPS_WRITE=1 pnpm vitest run --project tests tests/store`
+ * read outside itself (the No fork cell). `APPS_WRITE=1 pnpm vitest run --project tests-store tests/store`
  * rewrites the file; without it a stale file fails.
  */
 import { execFileSync } from 'node:child_process';
@@ -85,7 +85,7 @@ function viewOf(entry: LiveEntry): SourceView {
 
 const liveEntries = CATALOG.filter((entry): entry is LiveEntry => entry.status === 'live');
 
-const HEADER = `// Generated from each live entry's source folder by \`APPS_WRITE=1 pnpm vitest run --project tests tests/store\`.
+const HEADER = `// Generated from each live entry's source folder by \`APPS_WRITE=1 pnpm vitest run --project tests-store tests/store\`.
 // Do not edit by hand: tests/store/sources.test.ts fails when it differs from the sources.
 `;
 

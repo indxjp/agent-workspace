@@ -12,7 +12,7 @@ import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import type { AgentResourceStoreProvider } from './resource-store';
-import { type WorkspaceResolution } from './runtime';
+import { type WorkspaceResolution } from './wiring';
 
 export const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 export const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';

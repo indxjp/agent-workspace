@@ -30,7 +30,7 @@ theorem wellFormed_one_root {t : List RunNode} (w : WellFormed t) :
 
 /-- The rolled-up cost of the root is the sum of the costs of every run of the tree. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/0104-a-team-is-a-resource.md#acceptance-u42a-2026-10-31")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "apps/web/server/runs/tree-cost.ts#treeCostOf")]
 theorem treeCost_eq_sum {t : List RunNode} (w : WellFormed t) {r : RunNode} (hr : r ∈ t)
     (hroot : r.parent = none) :

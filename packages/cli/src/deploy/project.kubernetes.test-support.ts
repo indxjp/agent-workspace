@@ -339,10 +339,10 @@ export function defineKubernetesCases(): void {
         );
         expect(overlay).not.toMatch(/SECRET|TOKEN|PASSWORD|DATABASE_URL/u);
         expect(outcome.nextSteps).toContain(
-          'next: create Secret agent-workspace-app-desk (docs/deploy/kubernetes.md#apps)',
+          'next: create Secret agent-workspace-app-desk (docs/40-operate/deploy/kubernetes.md#apps)',
         );
         expect(outcome.nextSteps).toContain(
-          'next: create Secret agent-workspace-app-service-desk (docs/deploy/kubernetes.md#apps)',
+          'next: create Secret agent-workspace-app-service-desk (docs/40-operate/deploy/kubernetes.md#apps)',
         );
       });
 

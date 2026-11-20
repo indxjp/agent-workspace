@@ -26,7 +26,7 @@ def isNameEdge (c : Char) : Bool := ('a' ≤ c && c ≤ 'z') || ('0' ≤ c && c 
 
 /-- `SKILL_NAME_MAX_LENGTH`. -/
 @[aw_spec (ts := "packages/contracts/src/skills.ts#SKILL_NAME_MAX_LENGTH")
-  (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")]
 def maxNameLength : Nat := 64
 
 /-- `SKILL_NAME_PATTERN` = `skills_name_shape` = `^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`: one
@@ -34,7 +34,7 @@ to 64 characters of lower-case letters, digits and hyphens, starting and ending 
 digit. Unlike the `oneOf` value gate, it admits a leading digit and a doubled hyphen. -/
 @[aw_spec (ts := "packages/contracts/src/skills.ts#SKILL_NAME_PATTERN")
   (ts := "packages/core/src/db/schema/skills.ts#skills")
-  (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")]
 def nameShape (n : String) : Bool :=
   match n.toList with
   | [] => false
@@ -45,7 +45,7 @@ def nameShape (n : String) : Bool :=
 /-- One `skills` row, typed. -/
 @[aw_spec (ts := "packages/core/src/db/schema/skills.ts#skills")
   (ts := "packages/core/src/db/repositories/resource-catalogs.ts#CatalogSkill")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 structure Skill where
   id : SkillId
   workspace : WorkspaceId
@@ -60,7 +60,7 @@ namespace Skill
 
 /-- Both `skills` checks hold on the row: `skills_name_shape` and `skills_skill_md_not_blank`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/skills.ts#skills")
-  (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")]
 def valid (s : Skill) : Bool := nameShape s.name && File.notBlank s.skillMd
 
 end Skill
@@ -74,7 +74,7 @@ def dbColumns : List String :=
 `SKILL.md` is `source`, parsed into `description`, `instructions` and `allowedTools`; the
 published revisions are `revisions` (SDK-19). -/
 @[aw_spec (ts := "packages/contracts/src/skills.ts#SkillDetailSchema")
-  (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")]
 def wireFields : List String :=
   ["id", "name", "enabled", "description", "fileCount", "createdAt", "updatedAt", "source",
     "instructions", "allowedTools", "files", "revisions"]

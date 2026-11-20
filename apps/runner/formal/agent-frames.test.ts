@@ -6,7 +6,7 @@
  * `apps/runner/src/server.ts` calls on every event and which ENG-04 moves into
  * `packages/engine-claude-agent-sdk` — and compares it to what `formal/Vectors/AgentFrames.lean`
  * says it must produce. A disagreement is a failing test, and the fix is never to edit a vector
- * (docs/formal/00-orchestrator-prompt.md §10).
+ * (docs/20-design/formal/00-orchestrator-prompt.md §10).
  *
  * The vocabulary is compared against the runner's own copy of it (`packages/core`'s
  * `agentFrameNames`); `apps/web/server/sdk-conformance.*.test.ts` is where that copy is held to

@@ -204,10 +204,10 @@ npx @indx-workspace/aw me
 The [self-hosting guide](https://docs.agentworkspace.indx.jp/building/self-hosting) covers the
 wizard, ports, API keys and teardown. Deploy guides for operators:
 
-- [Single VM with Docker Compose](docs/deploy/single-vm.md)
+- [Single VM with Docker Compose](docs/40-operate/deploy/single-vm.md)
 - [Small GCP deployment with Terraform](infra/terraform/gcp-small/README.md)
-- [Kubernetes with Helm](docs/deploy/kubernetes.md)
-- [Azure Container Apps preview environment](docs/deploy/azure-container-apps.md)
+- [Kubernetes with Helm](docs/40-operate/deploy/kubernetes.md)
+- [Azure Container Apps preview environment](docs/40-operate/deploy/azure-container-apps.md)
 
 ## Packages
 
@@ -227,9 +227,9 @@ wizard, ports, API keys and teardown. Deploy guides for operators:
 - **Using Agent Workspace:** the [documentation site](https://docs.agentworkspace.indx.jp), from
   the quick start to the API reference.
 - **How the code is organised:** [`docs/architecture.md`](docs/architecture.md) and the SDK notes
-  in [`docs/sdk/`](docs/sdk/README.md).
+  in [`docs/sdk/`](docs/10-product/sdk/README.md).
 - **Operating a deployment:** the deploy guides above and the
-  [operations runbook](docs/operations/runbook.md).
+  [operations runbook](docs/40-operate/operations/runbook.md).
 - **Changing the code:** [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Contributing

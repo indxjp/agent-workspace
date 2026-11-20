@@ -7,7 +7,7 @@
  * consumed by everything. `decide()` takes the role and never asks how it was proved, so there is
  * no second framework because there is no second type.
  *
- * ## Nominality, and why it is the same shape as `WorkspaceScope`
+ * ## Nominality, and why it is the same shape as `CallerWorkspace`
  *
  * `apps/web/server/auth/workspace.ts` already establishes the pattern and the reasoning: the
  * property that matters is *provenance* — a role was read from a membership row or from an API-key
@@ -48,14 +48,14 @@
  * (`workspace_principals.acts_for_principal_id`), so what it writes is owned by that admin's
  * membership principal and survives the key being swept, revoked or expiring.
  */
-import type { VerifiedSessionClaims } from '../auth/session';
+import type { VerifiedSignInSessionClaims } from '../auth/session';
 
 import type { ApiKeyIdentity } from './directory';
 import type { Role } from './core/roles';
-import { isEndpointScope, type TokenScope } from './core/token-scope';
+import type { TokenScope } from './core/token-scope';
+import { hasConsistentFields } from './principal-invariants';
 
-export type { TokenScope, TokenScopeKind } from './core/token-scope';
-export { TOKEN_SCOPE_KINDS } from './core/token-scope';
+export { TOKEN_SCOPE_KINDS, type TokenScope, type TokenScopeKind } from './core/token-scope';
 
 /**
  * The tenant, in both the spellings this program uses: `workspaces.id`, which scopes every row
@@ -115,13 +115,24 @@ export interface SessionPrincipalIdentity {
   readonly label: string;
 }
 
-/** ADR-0161 D8: an app-backend scope carries its bound agents, and no other scope carries any. */
-function carriesBoundAgentsCorrectly(scope: TokenScope | null): boolean {
-  if (scope === null) return true;
-  const bound = scope.agentIds;
-  return scope.kind === 'app-backend'
-    ? bound !== undefined && bound.length > 0
-    : bound === undefined;
+function isIncompleteIdentity(identity: SessionPrincipalIdentity): boolean {
+  return [identity.principalId, identity.userId, identity.label].some((v) => v.trim() === '');
+}
+
+/** Everything a `Principal` is built from; `oauth` is absent except for an OAuth token. */
+interface PrincipalFields {
+  readonly principalId: string;
+  readonly ownerPrincipalId: string;
+  readonly kind: PrincipalKind;
+  readonly workspaceId: string;
+  readonly label: string;
+  readonly actor: string;
+  readonly role: Role;
+  readonly via: Via;
+  readonly userId: string | null;
+  readonly apiKeyId: string | null;
+  readonly scope: TokenScope | null;
+  readonly oauth?: OAuthGrant | null;
 }
 
 /**
@@ -177,38 +188,26 @@ export class Principal {
   public readonly oauth: OAuthGrant | null;
 
   /**
-   * Unnameable outside this file, dropped by an object spread, and not a property, so the freeze
-   * below does not cover it and nothing else needs to. It is what makes this type nominal.
+   * Unnameable outside this file, dropped by an object spread, and not covered by the freeze.
+   * It is what makes this type nominal.
    */
   readonly #provenance: Via;
 
-  private constructor(
-    principalId: string,
-    kind: PrincipalKind,
-    workspaceId: string,
-    label: string,
-    actor: string,
-    role: Role,
-    via: Via,
-    userId: string | null,
-    apiKeyId: string | null,
-    scope: TokenScope | null,
-    ownerPrincipalId: string,
-    oauth: OAuthGrant | null = null,
-  ) {
-    this.principalId = principalId;
-    this.ownerPrincipalId = ownerPrincipalId;
-    this.kind = kind;
-    this.workspaceId = workspaceId;
-    this.label = label;
-    this.userId = userId;
-    this.actor = actor;
-    this.role = role;
-    this.via = via;
-    this.apiKeyId = apiKeyId;
-    this.scope = scope;
-    this.oauth = oauth;
-    this.#provenance = via;
+  /** Takes one {@link PrincipalFields} record; `formal/concept-identity.test.ts` hand-builds with it. */
+  private constructor(fields: PrincipalFields) {
+    this.principalId = fields.principalId;
+    this.ownerPrincipalId = fields.ownerPrincipalId;
+    this.kind = fields.kind;
+    this.workspaceId = fields.workspaceId;
+    this.label = fields.label;
+    this.userId = fields.userId;
+    this.actor = fields.actor;
+    this.role = fields.role;
+    this.via = fields.via;
+    this.apiKeyId = fields.apiKeyId;
+    this.scope = fields.scope;
+    this.oauth = fields.oauth ?? null;
+    this.#provenance = fields.via;
     Object.freeze(this);
   }
 
@@ -216,15 +215,15 @@ export class Principal {
    * The caller proved a session cookie, the directory answered with their role, and the workspace
    * that role was read in is the workspace the session names — or no principal at all.
    *
-   * `claims` is what `verifySessionToken` returned — claims assembled by hand do not type-check
+   * `claims` is what `verifySignInSessionToken` returned — claims assembled by hand do not type-check
    * here — and `role` is what a membership row said. Neither argument can be a request body: the
-   * first because of `VerifiedSessionClaims`'s own `#private` field, the second because the only
+   * first because of `VerifiedSignInSessionClaims`'s own `#private` field, the second because the only
    * thing that produces a `Role` from an unknown is `parseRole`, and the only thing this function
    * is ever called with is a directory answer. `workspace` carries both halves of the tenant so
    * that the correspondence between them is checkable here rather than assumed by every caller.
    */
   public static fromSession(
-    claims: VerifiedSessionClaims,
+    claims: VerifiedSignInSessionClaims,
     workspace: SessionWorkspace,
     role: Role,
     identity: SessionPrincipalIdentity,
@@ -243,28 +242,24 @@ export class Principal {
           `different tenants; spec §25 makes the workspace the isolation boundary.`,
       };
     }
-    if (
-      identity.principalId.trim() === '' ||
-      identity.userId.trim() === '' ||
-      identity.label.trim() === ''
-    ) {
+    if (isIncompleteIdentity(identity)) {
       return { ok: false, because: 'the resolved Membership principal is incomplete.' };
     }
     return {
       ok: true,
-      principal: new Principal(
-        identity.principalId,
-        'membership',
-        workspace.id,
-        identity.label,
-        claims.sub,
+      principal: new Principal({
+        principalId: identity.principalId,
+        ownerPrincipalId: identity.principalId,
+        kind: 'membership',
+        workspaceId: workspace.id,
+        label: identity.label,
+        actor: claims.sub,
         role,
-        'session',
-        identity.userId,
-        null,
-        null,
-        identity.principalId,
-      ),
+        via: 'session',
+        userId: identity.userId,
+        apiKeyId: null,
+        scope: null,
+      }),
     };
   }
 
@@ -274,29 +269,28 @@ export class Principal {
    * it writes.
    */
   public static fromApiKey(identity: ApiKeyIdentity): Principal {
-    return new Principal(
-      identity.principalId,
-      'api_key',
-      identity.workspaceId,
-      identity.label,
-      identity.label,
-      identity.role,
-      'api-key',
-      null,
-      identity.apiKeyId,
-      identity.scope ?? null,
-      identity.actsForPrincipalId ?? identity.principalId,
-    );
+    return new Principal({
+      principalId: identity.principalId,
+      ownerPrincipalId: identity.actsForPrincipalId ?? identity.principalId,
+      kind: 'api_key',
+      workspaceId: identity.workspaceId,
+      label: identity.label,
+      actor: identity.label,
+      role: identity.role,
+      via: 'api-key',
+      userId: null,
+      apiKeyId: identity.apiKeyId,
+      scope: identity.scope ?? null,
+    });
   }
 
   /**
-   * Re-read a principal — a membership or an API key — from
+   * Re-read a membership or API-key principal from
    * `@agent-workspace/core/db`'s {@link import('@agent-workspace/core/db').DirectoryPrincipalRecord},
    * with no scope of its own. The one caller is the browser-token verifier
    * (`apps/web/server/composition/session-rbac.ts`), which re-resolves a token's minter on every
-   * request and then hands the result to {@link fromBrowserToken}; `via` is set from `kind` the
-   * same way {@link fromSession} and {@link fromApiKey} would have produced it directly, so this is
-   * indistinguishable from a principal built by either of them, before attenuation.
+   * request and passes the result to {@link fromBrowserToken}; `via` follows from `kind`, so this is
+   * indistinguishable from {@link fromSession} or {@link fromApiKey}, before attenuation.
    */
   public static fromDirectoryRecord(record: {
     readonly principalId: string;
@@ -306,27 +300,25 @@ export class Principal {
     readonly label: string;
     readonly userId: string | null;
     readonly apiKeyId: string | null;
-    /**
-     * As on `DirectoryPrincipalRecord`: `null` for a principal that owns its writes. Required so a
-     * caller that drops it is a compile error, not a local runtime key that owns its writes (#509).
-     */
+    /** `null` for a principal that owns its writes; required so dropping it is a compile error (#509). */
     readonly actsForPrincipalId: string | null;
   }): Principal {
-    return new Principal(
-      record.principalId,
-      record.kind,
-      record.workspaceId,
-      record.label,
-      record.label,
-      record.role,
-      record.kind === 'membership' ? 'session' : 'api-key',
-      record.userId,
-      record.apiKeyId,
-      null,
-      record.kind === 'api_key'
-        ? (record.actsForPrincipalId ?? record.principalId)
-        : record.principalId,
-    );
+    return new Principal({
+      principalId: record.principalId,
+      ownerPrincipalId:
+        record.kind === 'api_key'
+          ? (record.actsForPrincipalId ?? record.principalId)
+          : record.principalId,
+      kind: record.kind,
+      workspaceId: record.workspaceId,
+      label: record.label,
+      actor: record.label,
+      role: record.role,
+      via: record.kind === 'membership' ? 'session' : 'api-key',
+      userId: record.userId,
+      apiKeyId: record.apiKeyId,
+      scope: null,
+    });
   }
 
   /**
@@ -336,23 +328,10 @@ export class Principal {
    * says it was minted for.
    *
    * `minter` must itself be `via: 'session'` or `via: 'api-key'`: a browser token cannot mint
-   * another one, which the scope grammar in `decide()` already makes true (`tokens` is in no
-   * scope's grammar) rather than this constructor re-asserting it.
+   * another one, which the scope grammar in `decide()` already guarantees.
    */
   public static fromBrowserToken(minter: Principal, scope: TokenScope): Principal {
-    return new Principal(
-      minter.principalId,
-      minter.kind,
-      minter.workspaceId,
-      minter.label,
-      minter.actor,
-      minter.role,
-      'browser-token',
-      minter.userId,
-      minter.apiKeyId,
-      scope,
-      minter.ownerPrincipalId,
-    );
+    return new Principal({ ...minter, via: 'browser-token', scope, oauth: null });
   }
 
   /**
@@ -369,19 +348,19 @@ export class Principal {
     role: Role,
     identity: SessionPrincipalIdentity,
   ): Principal {
-    return new Principal(
-      identity.principalId,
-      'membership',
+    return new Principal({
+      principalId: identity.principalId,
+      ownerPrincipalId: identity.principalId,
+      kind: 'membership',
       workspaceId,
-      identity.label,
-      email,
+      label: identity.label,
+      actor: email,
       role,
-      'user-token',
-      identity.userId,
-      null,
-      null,
-      identity.principalId,
-    );
+      via: 'user-token',
+      userId: identity.userId,
+      apiKeyId: null,
+      scope: null,
+    });
   }
 
   /**
@@ -395,66 +374,27 @@ export class Principal {
     scope: TokenScope,
     grant: OAuthGrant,
   ): Principal {
-    return new Principal(
-      subject.principalId,
-      subject.kind,
-      subject.workspaceId,
-      subject.label,
-      subject.actor,
-      subject.role,
-      'oauth-token',
-      subject.userId,
-      null,
+    return new Principal({
+      ...subject,
+      via: 'oauth-token',
+      apiKeyId: null,
       scope,
-      subject.ownerPrincipalId,
-      grant,
-    );
+      oauth: grant,
+    });
   }
 
   /**
    * The runtime half of the same question, for a value that arrived as `unknown`, was rebuilt by a
    * serialiser, or has been through another module's hands.
    *
-   * Four questions, not one, for the reason `WorkspaceScope.isWorkspaceScope` gives: the `#` check
-   * alone answers `true` for an instance whose public fields were overwritten in place. With the
-   * freeze in place nothing outside this file can produce such a value, so the last three are
-   * defence in depth and are declared as such rather than claimed to be tested.
+   * More than the `#` check, for the reason `CallerWorkspace.isCallerWorkspace` gives: it alone
+   * answers `true` for an instance whose public fields were overwritten in place. The field rules
+   * in `principal-invariants.ts` are defence in depth, since the freeze already prevents that.
    */
   public static isPrincipal(value: unknown): value is Principal {
     if (typeof value !== 'object' || value === null) return false;
     if (!(#provenance in value)) return false;
     if (!Object.isFrozen(value) || value.via !== value.#provenance) return false;
-    // A browser-token principal carries a scope and is otherwise the minter's own identity, so its
-    // `via` is checked as an addition to the minter's expected `via`, never a replacement of it.
-    // An API-key principal may carry one too, but only an endpoint scope (ADR-0134); a browser
-    // token never carries an endpoint scope, so a key's scope cannot be passed off as a token's.
-    const scopeInvariant =
-      value.via === 'browser-token'
-        ? value.scope !== null && !isEndpointScope(value.scope.kind)
-        : value.via === 'oauth-token'
-          ? value.scope !== null && isEndpointScope(value.scope.kind)
-          : value.via === 'api-key'
-            ? // A builder or app-backend scope is a person's, so it rides on an OAuth token only.
-              value.scope === null ||
-              (isEndpointScope(value.scope.kind) &&
-                value.scope.kind !== 'builder' &&
-                value.scope.kind !== 'app-backend')
-            : value.scope === null;
-    if (!scopeInvariant || !carriesBoundAgentsCorrectly(value.scope)) return false;
-    // A grant rides on an OAuth token and on nothing else.
-    if ((value.via === 'oauth-token') !== (value.oauth !== null)) return false;
-    // Only an API key may act for someone else; every other principal owns what it writes.
-    if (value.kind !== 'api_key' && value.ownerPrincipalId !== value.principalId) return false;
-    return value.kind === 'membership'
-      ? (value.via === 'session' ||
-          value.via === 'user-token' ||
-          value.via === 'browser-token' ||
-          value.via === 'oauth-token') &&
-          value.userId !== null &&
-          value.apiKeyId === null
-      : value.kind === 'api_key' &&
-          (value.via === 'api-key' || value.via === 'browser-token') &&
-          value.userId === null &&
-          value.apiKeyId !== null;
+    return hasConsistentFields(value);
   }
 }

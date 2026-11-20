@@ -30,8 +30,37 @@ describe('workflow validator', () => {
     expect(failures).toContainEqual(expect.stringContaining('formal must include sha256sum -c'));
   });
 
+  // ADR-0053, Amendment 2026-11-19c (owner decision D2, plan A): the merge queue runs the same set
+  // as a pull request; `formal` and `image-scan` joined the heavy tier, and no job may gate itself
+  // back into the queue.
+  it.each(['  formal:\n', '  image-scan:\n'])(
+    'rejects %s gated back into the merge queue',
+    async (header) => {
+      const workflows = await repositoryWorkflowDocuments();
+      const ci = workflows.get('.github/workflows/ci.yml');
+      expect(ci).toBeDefined();
+      const start = ci!.indexOf(header);
+      const gate = "      github.event_name == 'schedule'";
+      const at = ci!.indexOf(gate, start);
+      expect(start).toBeGreaterThan(0);
+      expect(at).toBeGreaterThan(start);
+      workflows.set(
+        '.github/workflows/ci.yml',
+        `${ci!.slice(0, at)}      github.event_name == 'merge_group' || ${ci!.slice(at + 6)}`,
+      );
+      const template = await readFile(
+        path.join(process.cwd(), '.github/pull_request_template.md'),
+        'utf8',
+      );
+
+      expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+        expect.stringContaining(`${header.trim().slice(0, -1)} must not be skipped at job level`),
+      );
+    },
+  );
+
   // ADR-0053, Amendment 2026-10-24: the heavy tier runs nightly and as the release gate, not in the
-  // merge queue; only `formal` keeps the queue in its gate.
+  // merge queue.
   it('rejects an end-to-end job gated back into the merge queue', async () => {
     const workflows = await repositoryWorkflowDocuments();
     const ci = workflows.get('.github/workflows/ci.yml');

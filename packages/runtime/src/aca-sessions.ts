@@ -104,7 +104,7 @@ export type AcaSessionsDriverOptions<TRequest, TEvent> = Readonly<{
    * the same `engine_not_installed` sentence, at the same point in the lifecycle. A deployment that
    * offers two engines over ACA provisions two pools and two runner managers.
    *
-   * Recorded as a per-driver gap in `docs/runtime-driver-matrix.md` and ADR-0073 D6, which is what
+   * Recorded as a per-driver gap in `docs/30-reference/matrices/runtime-driver-matrix.md` and ADR-0073 D6, which is what
    * the issue's stop condition asks for instead of reworking pooling.
    */
   engine: string;

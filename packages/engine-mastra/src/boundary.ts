@@ -560,16 +560,44 @@ async function release(
   return reasons;
 }
 
-/**
- * Run one compiled agent on Mastra, yielding its chunks and, last, `run_completed`.
- *
- * `max_turns` (the last allowed step still asked for tools) and `cancelled` (the caller's
- * interrupt) each end the run with a terminal event; a spend ceiling is the gateway's (ADR-0162),
- * whose refused call arrives here as a Mastra `error` chunk. A Mastra `error` chunk is forwarded — it is the run's `agent.result
- * { stopReason: 'error' }` — and no second result follows it. A failure to release the workspace
- * or a connector is thrown after the run's own outcome, beside the run's own error if it had one.
- */
+type Delegate = {
+  readonly subagent: MastraSubagent;
+  readonly view: MastraCompiled;
+  readonly workspace: MastraWorkspaceModule.Workspace;
+};
 
+/** One subagent as a Mastra `Agent`, with its own workspace and a memory that is never journalled. */
+function subagentFor(
+  modules: MastraModules,
+  compiled: MastraCompiled,
+  fetch: MastraRunDeps['fetch'],
+  tools: McpTools,
+  { subagent, view, workspace }: Delegate,
+  index: number,
+): MastraAgentModule.Agent {
+  return new modules.agent.Agent({
+    id: `agent-workspace-subagent-${String(index)}`,
+    name: subagent.name,
+    description: subagent.description,
+    instructions: subagent.instructions,
+    model: modelFor(modules, view, fetch),
+    tools,
+    workspace,
+    // Its own memory, never journalled: an inherited one would write the sub-agent's thread
+    // into the session's stream, which a resume then refuses.
+    memory: memoryFor(
+      modules,
+      view,
+      new modules.storage.InMemoryMemory({ db: new modules.storage.InMemoryDB() }),
+    ),
+    // Mastra clamps the `maxSteps` the delegating model asks for to this; none means no cap.
+    ...(compiled.limits.maxSteps === null
+      ? {}
+      : { defaultOptions: { maxSteps: compiled.limits.maxSteps } }),
+  });
+}
+
+/** The run's agent: the connectors' tools, `run_skill_script` when offered, and its subagents. */
 function agentForRun({
   modules,
   compiled,
@@ -583,94 +611,72 @@ function agentForRun({
   readonly modules: MastraModules;
   readonly compiled: MastraCompiled;
   readonly fetch: MastraRunDeps['fetch'];
-  readonly tools: Awaited<ReturnType<typeof connectorTools>>;
-  readonly delegates: readonly {
-    readonly subagent: MastraSubagent;
-    readonly view: MastraCompiled;
-    readonly workspace: ReturnType<typeof workspaceFor>;
-  }[];
-  readonly workspace: ReturnType<typeof workspaceFor>;
-  readonly memory: ReturnType<typeof memoryFor>;
+  readonly tools: McpTools;
+  readonly delegates: readonly Delegate[];
+  readonly workspace: MastraWorkspaceModule.Workspace;
+  readonly memory: MastraMemoryModule.Memory;
   readonly signal: AbortSignal;
-}) {
+}): MastraAgentModule.Agent {
   const agents = Object.fromEntries(
-    delegates.map(({ subagent, view, workspace: delegateWorkspace }, index) => [
-      subagent.toolName.slice(MASTRA_SUBAGENT_TOOL_PREFIX.length),
-      new modules.agent.Agent({
-        id: `agent-workspace-subagent-${String(index)}`,
-        name: subagent.name,
-        description: subagent.description,
-        instructions: subagent.instructions,
-        model: modelFor(modules, view, fetch),
-        tools,
-        workspace: delegateWorkspace,
-        // Its own memory, never journalled: an inherited one would write the sub-agent's thread
-        // into the session's stream, which a resume then refuses.
-        memory: memoryFor(
-          modules,
-          view,
-          new modules.storage.InMemoryMemory({ db: new modules.storage.InMemoryDB() }),
-        ),
-        // Mastra clamps the `maxSteps` the delegating model asks for to this; none means no cap.
-        ...(compiled.limits.maxSteps === null
-          ? {}
-          : { defaultOptions: { maxSteps: compiled.limits.maxSteps } }),
-      }),
+    delegates.map((delegate, index) => [
+      delegate.subagent.toolName.slice(MASTRA_SUBAGENT_TOOL_PREFIX.length),
+      subagentFor(modules, compiled, fetch, tools, delegate, index),
     ]),
   );
+  const agentTools =
+    compiled.skillScript === null
+      ? tools
+      : {
+          ...tools,
+          [RUN_SKILL_SCRIPT_TOOL]: skillScriptTool(modules, compiled.skillScript, signal),
+        };
   return new modules.agent.Agent({
     id: 'agent-workspace',
     name: compiled.agent.name,
     instructions: compiled.agent.instructions,
     model: modelFor(modules, compiled, fetch),
-    tools:
-      compiled.skillScript === null
-        ? tools
-        : {
-            ...tools,
-            [RUN_SKILL_SCRIPT_TOOL]: skillScriptTool(modules, compiled.skillScript, signal),
-          },
+    tools: agentTools,
     ...(delegates.length === 0 ? {} : { agents }),
     workspace,
     memory,
   });
 }
 
-export async function* startMastraRun(
+/** Everything one run holds, built before it starts and released after it ends. */
+type RunParts = {
+  readonly modules: MastraModules;
+  readonly compiled: MastraCompiled;
+  readonly prompt: string;
+  readonly deps: MastraRunDeps;
+  readonly abort: AbortController;
+  readonly workspace: MastraWorkspaceModule.Workspace;
+  readonly delegates: readonly Delegate[];
+  readonly memory: MastraMemoryModule.Memory;
+  readonly client: MastraMcpModule.MCPClient | null;
+  readonly state: RunState;
+};
+
+/** The workspace of the run and of each of its subagents, which is what a run initialises and releases. */
+function workspacesOf(parts: RunParts): readonly MastraWorkspaceModule.Workspace[] {
+  return [parts.workspace, ...parts.delegates.map((delegate) => delegate.workspace)];
+}
+
+/** Only a run with connectors pays for `@mastra/mcp`; the environment is installed by now. */
+async function connectorClient(
   compiled: MastraCompiled,
-  prompt: string,
-  deps: MastraRunDeps,
-): AsyncGenerator<MastraEvent, void, void> {
-  const modules = await loadMastra();
-  const db = new modules.storage.InMemoryDB();
-  await seedResumedThread(modules, compiled, db, deps.journal);
-  const memory = memoryFor(modules, compiled, journalledMemoryDomain(modules, db, deps.journal));
-  const workspace = workspaceFor(modules, compiled);
-  const delegates = compiled.subagents.map((subagent, index) => {
-    const view = subagentView(compiled, subagent);
-    return {
-      subagent,
-      view,
-      workspace: workspaceFor(modules, view, `${workspace.id}-subagent-${String(index)}`),
-    };
+): Promise<MastraMcpModule.MCPClient | null> {
+  if (compiled.mcpServers.length === 0) return null;
+  const { MCPClient } = await import('@mastra/mcp');
+  return new MCPClient({
+    id: `agent-workspace-${randomUUID()}`,
+    servers: Object.fromEntries(
+      compiled.mcpServers.map((server) => [server.name, mcpServerDefinition(server)]),
+    ),
   });
-  // Only a run with connectors pays for `@mastra/mcp`; the environment is installed by now.
-  const client =
-    compiled.mcpServers.length === 0
-      ? null
-      : new (await import('@mastra/mcp')).MCPClient({
-          id: `agent-workspace-${randomUUID()}`,
-          servers: Object.fromEntries(
-            compiled.mcpServers.map((server) => [server.name, mcpServerDefinition(server)]),
-          ),
-        });
-  const abort = new AbortController();
-  const onAbort = (): void => {
-    abort.abort(deps.signal.reason);
-  };
-  if (deps.signal.aborted) onAbort();
-  else deps.signal.addEventListener('abort', onAbort, { once: true });
-  const state: RunState = {
+}
+
+function initialRunState(): RunState {
+  return {
     steps: 0,
     lastStepReason: null,
     usage: null,
@@ -680,90 +686,94 @@ export async function* startMastraRun(
     schemaFailure: false,
     object: null,
   };
+}
 
-  async function* run(): AsyncGenerator<MastraEvent, void, void> {
-    await Promise.all([
-      workspace.init(),
-      ...delegates.map((delegate) => delegate.workspace.init()),
-    ]);
-    const tools = client === null ? {} : await connectorTools(client, compiled.mcpServers);
-    const agent = agentForRun({
-      modules,
-      compiled,
-      fetch: deps.fetch,
-      tools,
-      delegates,
-      workspace,
-      memory,
-      signal: abort.signal,
-    });
-    const streamOptions = {
-      memory: { thread: compiled.memory.threadId, resource: compiled.memory.resourceId },
-      abortSignal: abort.signal,
-      ...(compiled.limits.maxSteps === null ? {} : { maxSteps: compiled.limits.maxSteps }),
-      ...(compiled.agent.toolCallConcurrency === null
-        ? {}
-        : { toolCallConcurrency: compiled.agent.toolCallConcurrency }),
-    };
-    // 'strict': a mismatch is an `error` chunk, not a silently dropped value. No `model`: the
-    // agent's own gateway connection answers.
-    const output =
-      compiled.outputSchema === null
-        ? await agent.stream(prompt, streamOptions)
-        : await agent.stream(prompt, {
-            ...streamOptions,
-            structuredOutput: {
-              schema: compiled.outputSchema as MastraOutputSchema,
-              errorStrategy: 'strict',
-            },
-          });
-    for await (const typed of output.fullStream) {
-      // Read as data from here on: the frame mapper, not Mastra's types, decides what a chunk is.
-      const chunk: unknown = typed;
-      observe(state, chunk);
-      // `finish` is carried by `run_completed` below, which knows why the run ended.
-      if (isRecord(chunk) && chunk['type'] === 'finish') continue;
-      yield { kind: 'mastra', chunk };
-    }
-    if (state.errored) {
-      // No `run_completed` follows an error, so a `finish` Mastra sent after it would otherwise
-      // produce no frame; forwarded, it becomes `agent.native` and nothing is dropped.
-      if (state.finish !== null) yield { kind: 'mastra', chunk: state.finish };
-      // A rejected key fails the run with a message that says so, after its frames.
-      if (state.rejection !== null) throw state.rejection;
-      if (state.schemaFailure) throw outputSchemaUnsatisfied();
-      return;
-    }
-    const stopReason = stopReasonOf(state, compiled, deps.signal.aborted);
-    // Mastra sends no `object-result` for an empty answer and no error either, so a schema asked
-    // for and not delivered is a miss all the same.
-    const unsatisfied = compiled.outputSchema !== null && state.object === null;
-    yield {
-      kind: 'run_completed',
-      stopReason,
-      steps: state.steps,
-      usage: state.usage,
-      finish: state.finish,
-      ...(stopReason === 'end_turn' && !unsatisfied
-        ? { output: { text: await output.text, structured: state.object?.value ?? null } }
-        : {}),
-    };
-    if (unsatisfied && stopReason === 'end_turn') throw outputSchemaUnsatisfied();
-  }
+/** The options `agent.stream` takes for this run, before any structured-output request. */
+function streamOptionsFor(compiled: MastraCompiled, signal: AbortSignal) {
+  return {
+    memory: { thread: compiled.memory.threadId, resource: compiled.memory.resourceId },
+    abortSignal: signal,
+    ...(compiled.limits.maxSteps === null ? {} : { maxSteps: compiled.limits.maxSteps }),
+    ...(compiled.agent.toolCallConcurrency === null
+      ? {}
+      : { toolCallConcurrency: compiled.agent.toolCallConcurrency }),
+  };
+}
 
-  let failure: { readonly error: unknown } | null = null;
-  let unreleased: readonly unknown[];
-  try {
-    yield* run();
-  } catch (error) {
-    failure = { error };
-  } finally {
-    deps.signal.removeEventListener('abort', onAbort);
-    unreleased = await release(
-      [workspace, ...delegates.map((delegate) => delegate.workspace)],
-      client,
-    );
+/** What follows an errored stream: the held `finish`, then the failure the state recorded. */
+function* erroredRunTail(state: RunState): Generator<MastraEvent, void, void> {
+  // No `run_completed` follows an error, so a `finish` Mastra sent after it would otherwise
+  // produce no frame; forwarded, it becomes `agent.native` and nothing is dropped.
+  if (state.finish !== null) yield { kind: 'mastra', chunk: state.finish };
+  // A rejected key fails the run with a message that says so, after its frames.
+  if (state.rejection !== null) throw state.rejection;
+  if (state.schemaFailure) throw outputSchemaUnsatisfied();
+}
+
+/** Drive one agent stream to its end: the chunks as events, then the terminal event. */
+async function* runAgent(parts: RunParts): AsyncGenerator<MastraEvent, void, void> {
+  const { modules, compiled, prompt, deps, abort, workspace, delegates, memory, client, state } =
+    parts;
+  await Promise.all(workspacesOf(parts).map((each) => each.init()));
+  const tools = client === null ? {} : await connectorTools(client, compiled.mcpServers);
+  const agent = agentForRun({
+    modules,
+    compiled,
+    fetch: deps.fetch,
+    tools,
+    delegates,
+    workspace,
+    memory,
+    signal: abort.signal,
+  });
+  const streamOptions = streamOptionsFor(compiled, abort.signal);
+  // 'strict': a mismatch is an `error` chunk, not a silently dropped value. No `model`: the
+  // agent's own gateway connection answers.
+  const output =
+    compiled.outputSchema === null
+      ? await agent.stream(prompt, streamOptions)
+      : await agent.stream(prompt, {
+          ...streamOptions,
+          structuredOutput: {
+            schema: compiled.outputSchema as MastraOutputSchema,
+            errorStrategy: 'strict',
+          },
+        });
+  for await (const typed of output.fullStream) {
+    // Read as data from here on: the frame mapper, not Mastra's types, decides what a chunk is.
+    const chunk: unknown = typed;
+    observe(state, chunk);
+    // `finish` is carried by `run_completed` below, which knows why the run ended.
+    if (isRecord(chunk) && chunk['type'] === 'finish') continue;
+    yield { kind: 'mastra', chunk };
   }
+  if (state.errored) {
+    yield* erroredRunTail(state);
+    return;
+  }
+  const stopReason = stopReasonOf(state, compiled, deps.signal.aborted);
+  // Mastra sends no `object-result` for an empty answer and no error either, so a schema asked
+  // for and not delivered is a miss all the same.
+  const unsatisfied = compiled.outputSchema !== null && state.object === null;
+  const delivered = stopReason === 'end_turn';
+  yield {
+    kind: 'run_completed',
+    stopReason,
+    steps: state.steps,
+    usage: state.usage,
+    finish: state.finish,
+    ...(delivered && !unsatisfied
+      ? { output: { text: await output.text, structured: state.object?.value ?? null } }
+      : {}),
+  };
+  if (unsatisfied && delivered) throw outputSchemaUnsatisfied();
+}
+
+/** Throw what a run ends with: its own error, the release failure, or both together. */
+function throwRunOutcome(
+  failure: { readonly error: unknown } | null,
+  unreleased: readonly unknown[],
+): void {
   const releaseFailure =
     unreleased.length === 0
       ? null
@@ -776,6 +786,71 @@ export async function* startMastraRun(
         });
   }
   if (releaseFailure !== null) throw releaseFailure;
+}
+
+/** The delegating workspaces: one per subagent, named after the run's workspace. */
+function delegatesOf(
+  modules: MastraModules,
+  compiled: MastraCompiled,
+  workspace: MastraWorkspaceModule.Workspace,
+): readonly Delegate[] {
+  return compiled.subagents.map((subagent, index) => {
+    const view = subagentView(compiled, subagent);
+    return {
+      subagent,
+      view,
+      workspace: workspaceFor(modules, view, `${workspace.id}-subagent-${String(index)}`),
+    };
+  });
+}
+
+/**
+ * Run one compiled agent on Mastra, yielding its chunks and, last, `run_completed`.
+ *
+ * `max_turns` (the last allowed step still asked for tools) and `cancelled` (the caller's
+ * interrupt) each end the run with a terminal event; a spend ceiling is the gateway's (ADR-0162),
+ * whose refused call arrives here as a Mastra `error` chunk. A Mastra `error` chunk is forwarded — it is the run's `agent.result
+ * { stopReason: 'error' }` — and no second result follows it. A failure to release the workspace
+ * or a connector is thrown after the run's own outcome, beside the run's own error if it had one.
+ */
+export async function* startMastraRun(
+  compiled: MastraCompiled,
+  prompt: string,
+  deps: MastraRunDeps,
+): AsyncGenerator<MastraEvent, void, void> {
+  const modules = await loadMastra();
+  const db = new modules.storage.InMemoryDB();
+  await seedResumedThread(modules, compiled, db, deps.journal);
+  const workspace = workspaceFor(modules, compiled);
+  const parts: RunParts = {
+    modules,
+    compiled,
+    prompt,
+    deps,
+    abort: new AbortController(),
+    workspace,
+    delegates: delegatesOf(modules, compiled, workspace),
+    memory: memoryFor(modules, compiled, journalledMemoryDomain(modules, db, deps.journal)),
+    client: await connectorClient(compiled),
+    state: initialRunState(),
+  };
+  const onAbort = (): void => {
+    parts.abort.abort(deps.signal.reason);
+  };
+  if (deps.signal.aborted) onAbort();
+  else deps.signal.addEventListener('abort', onAbort, { once: true });
+
+  let failure: { readonly error: unknown } | null = null;
+  let unreleased: readonly unknown[];
+  try {
+    yield* runAgent(parts);
+  } catch (error) {
+    failure = { error };
+  } finally {
+    deps.signal.removeEventListener('abort', onAbort);
+    unreleased = await release(workspacesOf(parts), parts.client);
+  }
+  throwRunOutcome(failure, unreleased);
 }
 
 /** The environment Mastra would see if it loaded now. Exported for the adapter's tests. */

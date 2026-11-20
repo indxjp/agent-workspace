@@ -30,7 +30,7 @@ import { HEX_COLOUR_PATTERN } from '@indx-workspace/contracts/setup';
 import { SURFACE_RADIUS_MAX, SurfaceLayoutSchema } from '@indx-workspace/contracts/surfaces';
 
 import { isSurfaceName, TRY_QUERY } from '../public/handlers';
-import type { SurfaceMode } from '../public/runtime';
+import type { SurfaceMode } from '../public/wiring';
 
 /**
  * What the loader draws with, checked before it reaches the script. Structurally the components'

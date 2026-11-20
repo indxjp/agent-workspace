@@ -6,7 +6,7 @@
  * `apps/web/app/p/[token]/messages/route.ts`; `POST /api/auth/workspace` mints or switches the
  * tenant session after re-reading membership. None of the three is printed in spec §34, so each
  * carries a mandate; the shape exception that lets `/api/auth/*` through `routeShape` at all lives
- * in `tests/route-inventory.test.ts` itself, next to the pre-existing `/api/setup` exception it
+ * in `tests/route-inventory.policy-check.ts` itself, next to the pre-existing `/api/setup` exception it
  * copies.
  */
 import type { RouteDeclaration } from '../inventory-support.js';

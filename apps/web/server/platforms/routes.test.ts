@@ -27,9 +27,9 @@ import { createInMemoryAgentVersionStoreProvider } from '../agent-versions/memor
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
-import { type WorkspaceResolution } from '../agents/runtime';
+import { type WorkspaceResolution } from '../agents/wiring';
 import { createInMemoryConnectorsStoreProvider } from '../connectors/memory-store';
-import type { EndpointClientsRuntime } from '../endpoint-clients/runtime';
+import type { EndpointClientsRuntime } from '../endpoint-clients/wiring';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { skillFileKey } from '../skills/keys';

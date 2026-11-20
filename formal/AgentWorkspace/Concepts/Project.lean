@@ -8,7 +8,7 @@ A **project** groups sessions, carries instructions and defaults (an agent, a mo
 and model), selects files and connectors, and can be archived. The API specification's resource
 model gives it as
 `Project(name, instructions, defaults: Agent?, ModelConnection?+model?, visibility, files,
-connectors, archive state)` (`docs/sdk/04-api-specification.md` §2).
+connectors, archive state)` (`docs/10-product/sdk/04-api-specification.md` §2).
 
 As the database knows it: `projects` (`packages/core/src/db/schema/projects.ts`), plus the two
 join tables `project_files` and `project_mcp_servers` that the wire flattens into `fileIds` and
@@ -53,7 +53,7 @@ end ProjectVisibility
 
 /-- `PROJECT_LIST_FILTERS`: the `?archived=` filter of `GET /api/projects`. -/
 @[aw_spec (ts := "packages/contracts/src/projects.ts#PROJECT_LIST_FILTERS")
-  (doc := "docs/sdk/04-api-specification.md#510-projects--awprojects")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#510-projects--awprojects")]
 inductive ProjectListFilter where
   | active
   | archived
@@ -79,7 +79,7 @@ end ProjectListFilter
 
 /-- The project's lifecycle state. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/projects.ts#isProjectArchived")
-  (doc := "docs/sdk/04-api-specification.md#510-projects--awprojects")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#510-projects--awprojects")]
 inductive ProjectState where
   | active
   | archived
@@ -88,7 +88,7 @@ inductive ProjectState where
 /-- One project, with the fields `projects` stores (timestamps as instants, which are inputs). -/
 @[aw_spec (ts := "packages/core/src/db/schema/projects.ts#projects")
   (ts := "packages/contracts/src/projects.ts#ProjectResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Project where
   id : ProjectId
   workspace : WorkspaceId
@@ -125,7 +125,7 @@ model-resolution ladder may mix a connection from one level with a model from an
 @[aw_spec (ts := "packages/core/src/db/schema/projects.ts#projects_default_model_pair")
   (ts := "packages/core/src/db/schema/projects.ts#defaultModel")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 def defaultModelPair (p : Project) : Bool :=
   p.defaultModelConnection.isNone == p.defaultModel.isNone
 
@@ -138,7 +138,7 @@ def state (p : Project) : ProjectState := if p.archivedAt.isSome then .archived 
 
 /-- Whether a listing with filter `f` includes the project (`archivedPredicate`). -/
 @[aw_spec (ts := "packages/core/src/db/repositories/projects.ts#archivedPredicate")
-  (doc := "docs/sdk/04-api-specification.md#510-projects--awprojects")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#510-projects--awprojects")]
 def listedBy (f : ProjectListFilter) (p : Project) : Bool :=
   match f with
   | .active => p.archivedAt.isNone

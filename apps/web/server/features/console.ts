@@ -13,8 +13,8 @@
 import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 
 import { applicationContext } from '../application-context';
-import { getSession, type VerifiedSessionClaims } from '../auth';
-import { enabledFeaturesFor, installedFeatures } from './runtime';
+import { getSignInSession, type VerifiedSignInSessionClaims } from '../auth';
+import { enabledFeaturesFor, installedFeatures } from './wiring';
 
 /**
  * The database's user name, the workspace's id and name, and the person's role there, read fresh
@@ -35,7 +35,7 @@ export interface ResolvedIdentity {
  * membership removed since the session was minted takes effect on the next request).
  */
 export async function resolveIdentity(
-  session: VerifiedSessionClaims,
+  session: VerifiedSignInSessionClaims,
 ): Promise<ResolvedIdentity | null> {
   const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) return null;
@@ -80,7 +80,7 @@ export type FeatureGate =
 
 /** {@link featureGate} for a session already read. Exported for its test. */
 export async function featureGateFor(
-  session: VerifiedSessionClaims | null,
+  session: VerifiedSignInSessionClaims | null,
   feature: FeatureId,
 ): Promise<FeatureGate> {
   const identity = session === null ? null : await resolveIdentity(session);
@@ -100,5 +100,5 @@ export async function featureGateFor(
  * layout recovers or redirects that case, and the API refuses it on its own.
  */
 export async function featureGate(feature: FeatureId): Promise<FeatureGate> {
-  return featureGateFor(await getSession(), feature);
+  return featureGateFor(await getSignInSession(), feature);
 }

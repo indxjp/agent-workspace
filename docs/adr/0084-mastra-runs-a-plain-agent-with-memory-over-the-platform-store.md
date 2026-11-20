@@ -158,4 +158,4 @@ added until a customer need is recorded.
 - The Lean model's third-party behaviour — requests only to the provider's base URL, no telemetry
   without a `Mastra` instance, writes only through the handed filesystem, `maxSteps` honoured,
   memory only through the handed storage domain — is declared and enforced by the boundary suite
-  (`docs/formal/units/engine-mastra.md`).
+  (`docs/20-design/formal/units/engine-mastra.md`).

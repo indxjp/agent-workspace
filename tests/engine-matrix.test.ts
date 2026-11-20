@@ -1,5 +1,5 @@
 /**
- * `docs/engine-matrix.md` is generated, and this is the gate that says so (ENG-04, #303).
+ * `docs/30-reference/matrices/engine-matrix.md` is generated, and this is the gate that says so (ENG-04, #303).
  *
  * The renderer imports the packages' TypeScript directly, so the comparison runs under vitest
  * rather than under plain node — which is also why the *writer*
@@ -18,10 +18,10 @@ import { ENGINE_MATRIX_COLUMNS, renderEngineMatrix } from './engine-matrix/rende
 
 const OUTPUT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../docs/engine-matrix.md',
+  '../docs/30-reference/matrices/engine-matrix.md',
 );
 
-describe('docs/engine-matrix.md', () => {
+describe('docs/30-reference/matrices/engine-matrix.md', () => {
   it('matches what the adapters declare and the conformance kit observes', async () => {
     const rendered = await renderEngineMatrix();
     if (process.env['ENGINE_MATRIX_WRITE'] === '1') {

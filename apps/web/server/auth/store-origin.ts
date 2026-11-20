@@ -19,7 +19,7 @@
  */
 import { CONTRACTS_VERSION_HEADER } from '@indx-workspace/contracts';
 
-import type { SessionVia } from './core/session-rules';
+import type { SignInSessionVia } from './core/session-rules';
 
 /** Which of the two closed route sets a request is in. */
 export type StoreRouteKind = 'pre-session' | 'guest-session';
@@ -79,7 +79,7 @@ export interface StoreRequestFacts {
   readonly method: string;
   readonly pathname: string;
   /** The session cookie's mark when it verified; `null` for no verified session. */
-  readonly via: SessionVia | null;
+  readonly via: SignInSessionVia | null;
 }
 
 /**

@@ -17,7 +17,7 @@ Three records put off the same feature, each because no run could pause:
   today, and openai-agents refuses approvals (ADR-0065 D9)". `aw dev` warns that MCP write tools run
   without confirmation until then.
 - The refactoring plan
-  ([claude-agent-workspace-refactoring-plan.md](../architecture/refactoring/claude-agent-workspace-refactoring-plan.md),
+  ([claude-agent-workspace-refactoring-plan.md](../20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md),
   the row on an optional `waiting/suspended` run) says not to persist such a state "until a runtime
   feature requires it".
 
@@ -177,7 +177,7 @@ ignored.
 - The refactoring-plan row on `waiting/suspended` is met: a runtime feature now requires the state.
 - An unanswered request expires after 24 hours (D2.4). Because `awaiting_approval` is not
   session-busy (D1), an unanswered request never blocks the session.
-- The formal model (`tests/formal/contracts-runs.test.ts`, `docs/formal/domains/d1-runs.md`) changes
+- The formal model (`tests/formal/contracts-runs.test.ts`, `docs/20-design/formal/domains/d1-runs.md`) changes
   with the code that changes `RUN_STATUSES`, not before it.
 - No TypeScript changes with this record.
 

@@ -3,11 +3,11 @@
 Status: accepted
 Date: 2026-09-04
 Decided by: orchestrator
-Scope: `tests/route-inventory.test.ts`'s specification assertion; every Wave 2 route
+Scope: `tests/route-inventory.policy-check.ts`'s specification assertion; every Wave 2 route
 
 ## Context
 
-`tests/route-inventory.test.ts` asserts three things, the third being that no route ships which
+`tests/route-inventory.policy-check.ts` asserts three things, the third being that no route ships which
 spec §34 does not name. In Wave 1 that assertion was free: every route Wave 1 shipped —
 `/api/agents`, `/api/agents/:id/runs`, `/api/runs/:id`, `/api/runs/:id/events` — is printed in §34
 verbatim.
@@ -30,7 +30,7 @@ unreachable, and it does so on the strength of a word the specification did not 
 
 Reading it as no constraint at all is worse, and is the failure §34 was written against: *"the way
 that instruction is normally lost is one convenience endpoint at a time, each defensible on its
-own"* (`tests/route-inventory.test.ts`). Dropping the assertion would delete the only mechanism
+own"* (`tests/route-inventory.policy-check.ts`). Dropping the assertion would delete the only mechanism
 this repository has for noticing that.
 
 ## Decision

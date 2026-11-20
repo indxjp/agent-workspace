@@ -54,7 +54,7 @@ private theorem allowed_write_resolves (c : Compiled) (candidate : String)
 the path is spelled: the grants it enforces are the request's own, normalised; the root it
 resolves against is the request's `cwd`; an allowed write resolved to a workspace-relative path,
 and that path normalises outside every read-only grant. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-mastra.md#path-grants")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-mastra.md#path-grants")
   (ts := "packages/engine-mastra/src/workspace.ts#mastraWriteVerdict")
   (ts := "packages/engine-mastra/src/workspace.ts#mastraWorkspacePath")
   (ts := "packages/engine-mastra/src/guard.ts#mastraResolvedWriteVerdict")
@@ -96,7 +96,7 @@ example :
 resolved inside the workspace, may itself be written, and its subtree holds no read-only grant of
 the request and not the adapter's own directory. The write rule is about the target; this is the
 subtree rule `deleteFile`, `rmdir` and `moveFile`'s source add to it. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-mastra.md#path-grants")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-mastra.md#path-grants")
   (ts := "packages/engine-mastra/src/workspace.ts#mastraRemoveVerdict")
   (ts := "packages/engine-mastra/src/workspace.ts#mastraRelativeSubtreeVerdict")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
@@ -151,7 +151,7 @@ example :
 `/v1` and the connection's own protocol path, carries the run token as `Authorization: Bearer`,
 and there is exactly one such endpoint. Model requests only: an HTTP connector reaches its own
 host, and is not one. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-mastra.md#egress")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-mastra.md#egress")
   (ts := "packages/engine-mastra/src/compile.ts#mastraModelConnection")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
 theorem every_model_request_goes_to_the_gateway_with_the_run_token {r : Request} {c : Compiled}
@@ -178,7 +178,7 @@ example :
 the gateway's `/v1`: built with `createAnthropic` and the token as its `authToken` exactly for the
 Messages protocol, with `createOpenAI` and the token as its `apiKey` otherwise, through
 `.responses()` exactly for the Responses protocol; and never a `"provider/model"` string. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-mastra.md#egress")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-mastra.md#egress")
   (ts := "packages/engine-mastra/src/compile.ts#mastraProviderSpec")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
 theorem the_model_is_an_explicit_provider_at_the_gateway {r : Request} {c : Compiled}
@@ -202,7 +202,7 @@ runner's process environment held, the switches included with other values — t
 Mastra loads under says `MASTRA_TELEMETRY_DISABLED=1` and `MASTRA_OFFLINE=1`, and keeps every other
 variable but an empty provider base URL. That no `Mastra` instance is constructed is the module
 header's hypothesis, enforced by the boundary suite. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-mastra.md#observability")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-mastra.md#observability")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")
   (ts := "packages/engine-mastra/src/boundary.ts#mastraInstalledEnvironment")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
@@ -234,7 +234,7 @@ through the platform's store, so the platform's own environment holds no databas
 covers only the platform's own environment: a tenant's stdio connector may still carry its own
 database secret in its own `env`, merged in after this check, so a tenant's database-backed MCP
 server keeps working (ADR-0084 D2; Owner decision on #309). -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-mastra.md#memory")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-mastra.md#memory")
   (ts := "packages/engine-mastra/src/compile.ts#databaseEnvName")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem no_accepted_run_carries_a_database_credential {r : Request} {c : Compiled}

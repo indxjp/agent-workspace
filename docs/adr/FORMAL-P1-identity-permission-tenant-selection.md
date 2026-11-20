@@ -29,7 +29,7 @@ proves tenant selection. None substitutes for another._" Three places blur the t
   `target_identity_survives_an_email_change` that the new one never depends on an email.
 - Name the per-request object the **authenticated principal** (the TypeScript `Principal` class,
   with its `actor` field renamed `displayActor` when next touched) and the credential the
-  **sign-in session**, as `docs/formal/concepts.md` does.
+  **sign-in session**, as `docs/20-design/formal/concepts.md` does.
 
 ## Alternatives considered
 

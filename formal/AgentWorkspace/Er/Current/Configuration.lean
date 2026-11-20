@@ -32,7 +32,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts
 /-! ## The cluster and its foreign keys -/
 
 /-- The tables of the configuration cluster. -/
-@[aw_spec (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 def clusterTables : List TableName :=
   [.modelConnections, .runtimeProfiles, .secrets, .storageConnections]
@@ -47,7 +47,7 @@ def inbound (S : Schema) (target : TableName) : List (TableName × ForeignKey) :
 /-- Every foreign key that starts or ends in the cluster, as (declaring table, constraint name,
 target table): the cluster's own references to the root and to `secrets`, and every reference
 from elsewhere into a cluster table. -/
-@[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 def clusterForeignKeys : List (TableName × String × TableName) :=
   [(.modelConnections, "model_connections_workspace_id_workspaces_id_fk", .workspaces),
@@ -149,7 +149,7 @@ def refinedChecksHold (st : State) : Bool :=
 
 /-- The states PostgreSQL can hold, with this cluster's checks given their meaning. -/
 @[aw_spec (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def consistentConfig (st : State) : Bool := consistent catalogue st && refinedChecksHold st
 
 /-! ## Concept rows as `Er.Core` rows -/
@@ -221,10 +221,10 @@ def runtimeProfileRow (p : RuntimeProfile.RuntimeProfile) : Row :=
 
 /-! ## The typed-reference target for runtime connections -/
 
-/-- Target (RF-204, `docs/sdk/04-api-specification.md` §5.5): every secret a runtime profile names
+/-- Target (RF-204, `docs/10-product/sdk/04-api-specification.md` §5.5): every secret a runtime profile names
 is a runtime connection. Today nothing enforces it; the foreign key accepts any secret of the
 workspace. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")]
 def runtimeConnectionsTyped (st : State) : Bool :=
   (st .runtimeProfiles).all fun p =>

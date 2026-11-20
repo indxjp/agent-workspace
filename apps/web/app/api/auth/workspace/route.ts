@@ -6,8 +6,8 @@
  * holds, each a plain HTML form posting back to `POST` on this same route. It is deliberately not
  * a `page.tsx` — no `ui/*.html` mockup names a workspace directory or switcher screen yet (`#120`
  * builds that, on top of `#119`'s directory API, neither of which this task has), and a `route.ts`
- * that returns HTML is not a page `tests/screen-inventory.test.ts` has any claim over: it is
- * `apps/web/app` scanned by `tests/route-inventory.test.ts`'s rules, not `filterPageFiles`'s. `GET`
+ * that returns HTML is not a page `tests/screen-inventory.policy-check.ts` has any claim over: it is
+ * `apps/web/app` scanned by `tests/route-inventory.policy-check.ts`'s rules, not `filterPageFiles`'s. `GET`
  * needs no origin check — it is a safe method and changes nothing.
  *
  * `POST` is reached in two shapes:
@@ -38,7 +38,7 @@
  * or the selection cookie, the re-read membership) is shared code, not a parallel copy of it — and
  * every failure in that branch is the standard `{ error: { code, message } }` envelope, never the
  * form path's bare `{ error: '<code>' }`. The form path is unchanged, byte for byte, for one
- * release (spec §3.2 of `docs/sdk/04-api-specification.md`, playbook §3).
+ * release (spec §3.2 of `docs/10-product/sdk/04-api-specification.md`, playbook §3).
  */
 import { log } from '../../../../server/telemetry/logger';
 import { NextResponse } from 'next/server';
@@ -46,18 +46,18 @@ import { NextResponse } from 'next/server';
 import { WorkspaceSwitchRequestSchema } from '@indx-workspace/contracts/workspaces';
 
 import {
-  sessionCookieName,
+  signInSessionCookieName,
   selectionCookieName,
   checkRequestOrigin,
   clearedSelectionCookie,
-  mintSessionToken,
-  newEmailLinkSessionClaims,
-  newSessionClaims,
+  mintSignInSessionToken,
+  newEmailLinkSignInSessionClaims,
+  newSignInSessionClaims,
   sessionSecret,
   safeNextPath,
-  sessionCookie,
+  signInSessionCookie,
   verifySelectionToken,
-  verifySessionToken,
+  verifySignInSessionToken,
   type SelectionVerifyResult,
 } from '../../../../server/auth';
 import { cookieValue } from '../../../../server/auth/cookies';
@@ -131,7 +131,7 @@ function contentTypeIsJson(request: Request): boolean {
 }
 
 /** The one workspace a session minted by the email-link sign-in may enter; `null` for any other. */
-function boundWorkspaceOf(session: Awaited<ReturnType<typeof verifySessionToken>> | null) {
+function boundWorkspaceOf(session: Awaited<ReturnType<typeof verifySignInSessionToken>> | null) {
   return session?.ok === true && session.claims.via === 'email_link' ? session.claims.ws : null;
 }
 
@@ -154,8 +154,8 @@ function selectMembership<T extends { workspaceId: string; workspaceSlug: string
 /** The claims for the switched session: marked again when it was an email-link session. */
 function switchedClaims(email: string, workspaceSlug: string, fromEmailLink: boolean) {
   return fromEmailLink
-    ? newEmailLinkSessionClaims(email, workspaceSlug)
-    : newSessionClaims(email, workspaceSlug);
+    ? newEmailLinkSignInSessionClaims(email, workspaceSlug)
+    : newSignInSessionClaims(email, workspaceSlug);
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -218,9 +218,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const cookieHeader = request.headers.get('cookie');
-  const sessionToken = cookieValue(cookieHeader, sessionCookieName());
+  const sessionToken = cookieValue(cookieHeader, signInSessionCookieName());
   const verifiedSession =
-    sessionToken === undefined ? null : await verifySessionToken(sessionToken, secret.secret);
+    sessionToken === undefined ? null : await verifySignInSessionToken(sessionToken, secret.secret);
 
   let email: string;
   let userId: string | null = null;
@@ -263,7 +263,7 @@ export async function POST(request: Request): Promise<Response> {
       : redirectTo('/api/auth/workspace', pickerQuery('workspace_not_available', destination));
   }
 
-  const token = await mintSessionToken(
+  const token = await mintSignInSessionToken(
     switchedClaims(email, match.workspaceSlug, boundWorkspaceSlug !== null),
     secret.secret,
   );
@@ -284,7 +284,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     const response = NextResponse.json(result.body, { status: 200 });
-    response.cookies.set(sessionCookie(token));
+    response.cookies.set(signInSessionCookie(token));
     response.cookies.set(clearedSelectionCookie());
     return response;
   }
@@ -292,7 +292,7 @@ export async function POST(request: Request): Promise<Response> {
   const response = redirectTo(destination ?? '/');
   // Two independent cookies, so two `.set()` calls: `NextResponse.cookies.set` appends a
   // `Set-Cookie` header per call rather than overwriting the previous one.
-  response.cookies.set(sessionCookie(token));
+  response.cookies.set(signInSessionCookie(token));
   response.cookies.set(clearedSelectionCookie());
   return response;
 }

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { AgentPermissions, ShareRecord } from '../store';
-import type { WorkspaceSharing } from '../runtime';
+import type { WorkspaceSharing } from '../wiring';
 import { DomainError, type DomainErrorCategory } from '../../errors';
 
 export function publicPermissions(permissions: AgentPermissions): AgentPermissions {

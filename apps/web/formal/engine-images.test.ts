@@ -11,7 +11,7 @@
  *   deployment's configuration, so the assertion is ADR-0073 D2 itself: the catalogue is the map.
  *
  * `tests/formal/engine-images.test.ts` replays the package half. A disagreement is a failing test,
- * and the fix is never to edit a vector (`docs/formal/00-orchestrator-prompt.md` §10).
+ * and the fix is never to edit a vector (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import {
   EngineImageConfigurationError,

@@ -71,7 +71,6 @@ import type { SecretsService } from '@agent-workspace/core/secrets';
 import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
-import { installApplicationContext } from '../application-context';
 import {
   authSettingsFromEnvironment,
   clearAuthSettings,
@@ -79,29 +78,10 @@ import {
 } from '../auth-settings';
 import { clearClientIdentity, installClientIdentity } from '../client-identity';
 import { readDeploymentFeatures } from '../features/deployment';
-import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
-import { createRepositoryRuntimeProfileStoreProvider } from '../runtimes/store';
 import { readWebSettings, SettingsError, type WebSettings } from '../settings';
 import { isWorkspaceUsableForRuns } from '../workspaces/run-gate';
-import {
-  builderProvisioner,
-  provisioningAfterConnectionWrites,
-  provisioningAfterSetup,
-} from './builder-provisioning';
-import { configuredPath, readDeploymentPolicy } from './config';
-import { workspaceFeaturesRuntime, workspaceFeatureSwitches } from './feature-switches';
-import { wireAgents } from './wiring/agents';
-import { wireBuilder } from './wiring/builder';
-import { wireProjects, wireShares } from './wiring/projects';
-import { RUN_DOMAINS_DISABLED, wireRunDomains } from './wiring/run-api';
-import { wireRunResources } from './wiring/run-resources';
-import { wireRunRuntime } from './wiring/run-runtime';
-import { wireSubsystems } from './wiring/subsystems';
-import { wireAgentTeams } from './wiring/agent-teams';
-import { wireDemoOperator } from './wiring/demo-operator';
-import { demoRuntimeDriverOf, demoSkillsOf, wireEmailLink } from './wiring/email-link';
-import { wireStore } from './wiring/store';
-import { wireWebhooks } from './wiring/webhooks';
+import { readDeploymentPolicy } from './config';
+import { registerOpenedDatabase } from './register-opened-database';
 
 export { storageRootsOverlap } from './config';
 export { sessionCookieValue } from './identity';
@@ -309,18 +289,18 @@ export async function register(): Promise<RegisteredComposition | undefined> {
   });
 
   try {
-    return await registerOpenedDatabase(
+    await registerOpenedDatabase({
       root,
-      secret.secret,
+      sessionSecret: secret.secret,
       policyCeiling,
       deploymentFeatures,
       settings,
-      registeredComposition,
-      (service) => {
+      captureSecretsService: (service) => {
         secretsService = service;
       },
-      (stop) => stops.push(stop),
-    );
+      stopOnClose: (stop) => stops.push(stop),
+    });
+    return registeredComposition;
   } catch (error) {
     try {
       await registeredComposition.close();
@@ -333,135 +313,4 @@ export async function register(): Promise<RegisteredComposition | undefined> {
     }
     throw error;
   }
-}
-
-async function registerOpenedDatabase(
-  root: DatabaseRoot,
-  sessionSecret: string,
-  policyCeiling: ProjectPolicy | null,
-  deploymentFeatures: readonly FeatureId[],
-  settings: WebSettings,
-  registeredComposition: RegisteredComposition,
-  captureSecretsService: (service: SecretsService | null) => void,
-  stopOnClose: (stop: () => void) => void,
-): Promise<RegisteredComposition> {
-  const agentWiring = await wireAgents({ root, sessionSecret, policyCeiling });
-  const subsystems = await wireSubsystems({
-    ...agentWiring,
-    root,
-    policyCeiling,
-    captureSecretsService,
-    stopOnClose,
-  });
-  const wired = {
-    ...agentWiring,
-    ...subsystems,
-    ...wireRunResources({ ...agentWiring, ...subsystems, root }),
-    root,
-    policyCeiling,
-    stopOnClose,
-  };
-  const { principalIdentity } = wired;
-  const featureSwitches = workspaceFeatureSwitches(root, deploymentFeatures);
-  const builders = builderProvisioner({
-    root,
-    agents: wired.agents,
-    agentVersions: wired.agentVersions,
-    switches: featureSwitches,
-  });
-  const demoDomains = {
-    agents: wired.agentsRuntime.agents,
-    agentResources: wired.agentsRuntime.agentResources,
-    agentGrants: wired.agentsRuntime.agentGrants,
-    connectors: wired.connectors.kind === 'serving' ? wired.connectors.runtime.connectors : null,
-    files: wired.files.kind === 'serving' ? wired.files.runtime : {},
-    models: wired.modelsApi?.models ?? null,
-    runtimeProfiles: createRepositoryRuntimeProfileStoreProvider({
-      repositories: root.runtimeProfiles,
-      scopes: root.scopes,
-    }),
-    runtimeDriver: demoRuntimeDriverOf({
-      runnerManager: wired.runnerManager !== null,
-      env: process.env,
-    }),
-    skills: demoSkillsOf(wired.skills),
-  };
-  const context = {
-    // ADR-0104 acceptance (issues #1516, #1517): the team routes need the database, and the
-    // member endpoint the lead run's token and the directory its caller is read from.
-    agentTeams: wireAgentTeams(root, {
-      tokenSecret: configuredPath('GATEWAY_TOKEN_SECRET'),
-      directory: principalIdentity.rbac.directory,
-    }),
-    agents: { ...wired.agentsRuntime, runtimeSwitchAudit: wired.runtimeSwitchAudit },
-    agentVersions: wired.agentVersions,
-    audit: wired.audit,
-    builder: wireBuilder({
-      ...wired,
-      tokenSecret: configuredPath('GATEWAY_TOKEN_SECRET'),
-      directory: principalIdentity.rbac.directory,
-    }),
-    cliAuth: principalIdentity.cliAuth,
-    connectors: wired.connectors,
-    emailLink: wireEmailLink({
-      root,
-      directory: principalIdentity.rbac.directory,
-      domains: demoDomains,
-      settings,
-      clientIdentity: { trustedProxyHops: settings.trustedProxyHops, sessionSecret },
-    }),
-    demoOperator: wireDemoOperator({
-      settings,
-      templates: {
-        scopes: root.scopes,
-        directory: principalIdentity.rbac.directory,
-        domains: demoDomains,
-        settings,
-        workspaces: root,
-      },
-      maintenance: { root, settings },
-    }),
-    endpointClients: wired.endpointClients,
-    files: wired.files,
-    invitations: principalIdentity.invitations,
-    models: provisioningAfterConnectionWrites(wired.models, builders),
-    oauth: wired.oauth,
-    projects: wireProjects(wired),
-    rbac: principalIdentity.rbac,
-    runtimes: wired.runtimes,
-    secrets: wired.secrets,
-    sessions: wired.sessions,
-    setup: provisioningAfterSetup(wired.setup, builders),
-    skills: wired.skills,
-    storageConnections: wired.storageConnections,
-    store: wireStore({
-      root,
-      settings,
-      clientIdentity: { trustedProxyHops: settings.trustedProxyHops, sessionSecret },
-    }),
-    workspaceFeatures: workspaceFeaturesRuntime(root, deploymentFeatures, (id) =>
-      builders.provision(id),
-    ),
-    workspaces: principalIdentity.workspaces,
-    shares: wireShares(wired),
-    // N-3 (ADR-SDK-18-N3-250): the registry needs no run runtime; its worker sends what stopped
-    // runs wrote, and stops on close like the stale-run sweep.
-    webhooks: wireWebhooks(root, wired.secretsService, { log, stopOnClose }),
-  };
-  // The run API, the A2A and tool endpoints, `POST /api/tokens`, the triggers and the public
-  // surfaces need the run runtime; with none they are disabled (503). One install, after
-  // everything is built, so no route ever reads a half-composed context.
-  const runRuntime = await wireRunRuntime(wired);
-  configureFeatureSwitches(featureSwitches);
-  stopOnClose(clearFeatureSwitches);
-  installApplicationContext({
-    ...context,
-    ...(runRuntime === null
-      ? RUN_DOMAINS_DISABLED
-      : wireRunDomains({ ...wired, ...runRuntime, demo: settings.demo })),
-  });
-  log.info('[compose] project, session and sharing APIs installed');
-  // After the install, so the Builder's writes see the composed context; a failure only warns.
-  await builders.provisionAll();
-  return registeredComposition;
 }

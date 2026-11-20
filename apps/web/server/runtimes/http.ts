@@ -8,7 +8,7 @@
 import { problem, type ApiResult } from '../http/result';
 import type { WorkspaceRuntimeProfileStore } from './store';
 import type { WorkspaceRuntimeConnectionStore } from './connections';
-import type { RuntimesRuntime } from './runtime';
+import type { RuntimesRuntime } from './wiring';
 import { applicationContext } from '../application-context';
 import { readBoundedJson, readRouteParam } from '../http/json-transport';
 

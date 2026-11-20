@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { checkClientCredentials } from './client-auth';
-import type { OAuthClient } from './runtime';
+import type { OAuthClient } from './wiring';
 import { mintClientSecret } from './tokens';
 
 const CONFIDENTIAL_ID = '0b9f3a52-6f0e-4d7c-9a51-3a7c1e2d4f60';

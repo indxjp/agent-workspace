@@ -5,7 +5,7 @@ Date: 2026-09-27
 Decided by: the Owner (replace MinIO fully, 2026-09-27)
 Scope: `compose.yaml`, `.env.example`, `packages/cli/templates/compose.yaml`, the CLI's generated
 `.env` (`packages/cli/src/render/env.ts`) and its image, validation and answer handling
-(`deployment.ts`, `validate.ts`, `create.ts`, `profile-defaults.ts`), `docs/deploy/single-vm.md`.
+(`deployment.ts`, `validate.ts`, `create.ts`, `profile-defaults.ts`), `docs/40-operate/deploy/single-vm.md`.
 Supersedes [W1-INF-01](W1-INF-01-minio-is-referenced-not-redistributed.md) for the product.
 
 ## Context

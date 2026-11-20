@@ -1,8 +1,8 @@
 import { SIGNED_UPLOAD_HARD_MAX_BYTES } from '@indx-workspace/contracts/files';
 import { log } from '../telemetry/logger';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
-import type { WorkspaceResolution } from '../agents/runtime';
-import type { Files } from '../files/runtime';
+import type { WorkspaceResolution } from '../agents/wiring';
+import type { Files } from '../files/wiring';
 import { readStorageCleanupMode, STORAGE_CLEANUP_ENV } from '../storage/cleanup-cron';
 import type { StorageService } from '../storage/service';
 import type { createResourceCatalogStoreProvider, MigrationRuns } from '../storage/store';

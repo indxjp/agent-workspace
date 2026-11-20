@@ -15,13 +15,13 @@
  * A failure never escapes: start-up and a committed feature switch must not fail because the
  * Builder could not be written, and the next start-up or switch tries again.
  */
-import type { AgentVersionsRuntime } from '../agent-versions/runtime';
+import type { AgentVersionsRuntime } from '../agent-versions/wiring';
 import type { AgentStoreProvider } from '../agents/store';
 import { builderShippedBody } from '../builder/agent/definition';
 import { ensureBuilderAgent } from '../builder/agent/provision';
-import type { FeatureSwitches } from '../features/runtime';
-import type { Models } from '../models/runtime';
-import type { Setup } from '../setup/runtime';
+import type { FeatureSwitches } from '../features/wiring';
+import type { Models } from '../models/wiring';
+import type { Setup } from '../setup/wiring';
 import { log } from '../telemetry/logger';
 
 /** Long enough for another process to finish writing the Builder, short enough not to stall start-up. */

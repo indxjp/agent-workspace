@@ -24,7 +24,7 @@ import {
   type WebhookDeliveryDependencies,
 } from './delivery';
 import { WEBHOOK_MAX_ATTEMPTS } from './retry-policy';
-import type { ClaimedWebhookDelivery, WebhookDeliveryOutbox } from './runtime';
+import type { ClaimedWebhookDelivery, WebhookDeliveryOutbox } from './wiring';
 import { mintWebhookSecret } from './signature';
 import { finishedRun, WEBHOOK_TEST_WORKSPACE_ID } from './testing';
 

@@ -3,8 +3,8 @@
 Status: accepted; D9 amended by ADR-0145
 Date: 2026-09-26
 Decided by: the Owner (agent-engines programme, tracker #299, unit ENG-01 #300)
-Scope: `docs/spec.md` §5, §42 and §53; `docs/sdk/04-api-specification.md` §1.1 and §6;
-`docs/sdk/README.md`; the docs site's concept and building pages; the planned `packages/engine` and
+Scope: `docs/spec.md` §5, §42 and §53; `docs/10-product/sdk/04-api-specification.md` §1.1 and §6;
+`docs/10-product/sdk/README.md`; the docs site's concept and building pages; the planned `packages/engine` and
 `packages/engine-<id>`; `apps/runner`'s engine registry; `formal/AgentWorkspace/Concepts/Engine.lean`
 
 ## Context
@@ -17,11 +17,11 @@ and guarded by `tests/no-sdk-import.test.ts`. Three standing decisions made that
    "the actual agent runtime" and forbade "a generic `Agent` abstraction that replaces Claude Agent
    SDK semantics". §42 named `runner/src/claude.ts` as the single translation site, and §53 listed
    `AgentLoop`, `ToolExecutor` and their relatives as concepts the control plane must never grow.
-2. `docs/sdk/README.md` recorded, under "Decisions taken with the Owner (2026-09-21)", that "no
+2. `docs/10-product/sdk/README.md` recorded, under "Decisions taken with the Owner (2026-09-21)", that "no
    provider-independent policy format is invented until a second provider exists". The same
    sentence is restated on `docs/sdk/site/concepts/runtime-neutrality.mdx` and in
    `target-architecture.mdx` under "What never changes".
-3. `docs/sdk/04-api-specification.md` §1.1 defined a "runtime provider" as the engine and noted
+3. `docs/10-product/sdk/04-api-specification.md` §1.1 defined a "runtime provider" as the engine and noted
    "Today exactly one: `claude-agent-sdk`"; §6.4 gave the four steps a second provider would have
    to follow, as groundwork rather than as a plan.
 
@@ -79,8 +79,8 @@ The platform owns a port and the machinery around it, and nothing more:
 5. **The conformance kit** — one scripted set of scenarios (text turn, tool call, write under a
    grant, denied write, interrupt mid-tool, resume, MCP call or refusal, skill use or refusal,
    max-turns, gateway-metered usage) that every adapter passes. It arrives with ENG-04.
-6. **`docs/engine-matrix.md`** — a generated matrix, the counterpart of
-   `docs/runtime-driver-matrix.md`, where `?` means not verified rather than not supported.
+6. **`docs/30-reference/matrices/engine-matrix.md`** — a generated matrix, the counterpart of
+   `docs/30-reference/matrices/runtime-driver-matrix.md`, where `?` means not verified rather than not supported.
 
 `apps/web` is not on this list. The control plane knows engines only through contracts — ids,
 capabilities and policy arms — and never imports an adapter.
@@ -208,7 +208,7 @@ own record if it is ever wanted:
 - Specification §5 is renamed and reworded, §42 names the per-engine boundary path, and §53 gains
   one sentence saying an adapter is not an `AgentLoop`. §53's list and its two responsibility lists
   are unchanged: D3 is that list restated for a world with more than one engine.
-- `docs/sdk/README.md` no longer carries "no provider-independent policy format is invented until a
+- `docs/10-product/sdk/README.md` no longer carries "no provider-independent policy format is invented until a
   second provider exists". The portable core of D4 *is* that format, and the condition the sentence
   named — a second engine — is being met by units ENG-08 … ENG-11.
 - Specification §39 rule 3 says to avoid abstract factories unless there are at least two real

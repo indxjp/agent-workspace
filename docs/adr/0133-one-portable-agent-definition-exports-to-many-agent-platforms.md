@@ -203,7 +203,7 @@ deployment, which ADR-0134 (units T1a–T1c) specifies. That endpoint arrives as
   Unit U3a makes the edit.
 - `aw` may also import the pure translators in `packages/platforms` (no network, fs or vendor SDK);
   unit U2 adds that edge to the depcruise rule, `docs/architecture.md` and
-  `docs/sdk/07-structure-map.md`.
+  `docs/10-product/sdk/07-structure-map.md`.
 
 ### D12 — Import is pure and best effort
 
@@ -225,9 +225,9 @@ report. Each importer lives in `src/targets/<id>/import.ts`.
   - no verdict contradicts the declared capabilities;
   - emitted paths are relative, unique and never escape;
   - no emitted file contains a secret reference's resolved value (none is ever available).
-- `docs/platform-matrix.md` is generated from each target's `capabilities` by
+- `docs/30-reference/matrices/platform-matrix.md` is generated from each target's `capabilities` by
   `tests/platform-matrix/run.mjs` and gated by `tests/platform-matrix.test.ts`, the counterpart of
-  `docs/engine-matrix.md` (ADR-0065 D2 item 6).
+  `docs/30-reference/matrices/engine-matrix.md` (ADR-0065 D2 item 6).
 
 ### D14 — Subagents are one level deep, and the engines declare whether they can run them
 
@@ -277,7 +277,7 @@ OpenAI Agent Builder is not a platform: it shuts down on 2026-11-30
 ## Consequences
 
 - Contracts gain `portable-agent.ts` and `platforms.ts` subpaths. The version body gains three
-  optional keys, a minor contracts bump per `docs/sdk/03-sdk-design.md:100`. `AgentDefinition` v1
+  optional keys, a minor contracts bump per `docs/10-product/sdk/03-sdk-design.md:100`. `AgentDefinition` v1
   and `AgentPolicy` are unchanged.
 - The engine catalogue response gains `capabilities.subagents`, also an additive minor bump.
 - A new published package, `@indx-workspace/platforms`, joins `PUBLISHED_PACKAGES`

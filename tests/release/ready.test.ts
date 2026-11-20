@@ -35,7 +35,7 @@ function readyStatus() {
         area: 'Managed target',
         status: 'unsupported',
         releaseImpact: 'none',
-        evidence: ['docs/runtime-driver-matrix.md'],
+        evidence: ['docs/30-reference/matrices/runtime-driver-matrix.md'],
       },
     ],
   };
@@ -93,9 +93,12 @@ async function fixture(
   const status = readyStatus();
   const manifest = readyManifest();
   mutate?.(status, manifest);
-  await mkdir(path.join(root, 'docs', 'capabilities'), { recursive: true });
+  await mkdir(path.join(root, 'docs', '30-reference', 'capabilities'), { recursive: true });
   await mkdir(path.join(root, 'docs', 'release'), { recursive: true });
-  await writeFile(path.join(root, 'docs', 'capabilities', 'status.json'), JSON.stringify(status));
+  await writeFile(
+    path.join(root, 'docs', '30-reference', 'capabilities', 'status.json'),
+    JSON.stringify(status),
+  );
   await writeFile(
     path.join(root, 'docs', 'release', 'evidence-manifest.json'),
     JSON.stringify(manifest),

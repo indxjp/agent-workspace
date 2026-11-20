@@ -31,7 +31,7 @@ import type {
   SessionRepository,
 } from '@agent-workspace/core/db';
 
-import type { WorkspaceRepositoryPort } from './runtime';
+import type { WorkspaceRepositoryPort } from './wiring';
 
 /**
  * `null` (the workspace row is gone) is treated the same as archived: a request naming a

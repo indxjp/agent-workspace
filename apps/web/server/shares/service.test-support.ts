@@ -3,7 +3,7 @@ import type { ShareRecord } from '@agent-workspace/core/db';
 import { vi } from 'vitest';
 
 import type { PublishShareInput } from './service';
-import type { WorkspaceSharing } from './runtime';
+import type { WorkspaceSharing } from './wiring';
 
 export const TOKEN = 'pub_secret';
 

@@ -60,7 +60,7 @@ export async function withWorkspaceStore(
       readonly workspaceId: string;
       /** issue #117: `memberships.user_id` of the caller, or `null` — see `ConnectorsRuntime`'s
        *  own comment on `identifyActor` for why a route needs this to stamp `created_by`. */
-      identifyActor(): ReturnType<import('./runtime').ConnectorsRuntime['identifyActor']>;
+      identifyActor(): ReturnType<import('./wiring').ConnectorsRuntime['identifyActor']>;
     },
   ) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,

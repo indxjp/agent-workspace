@@ -4,152 +4,63 @@
  * `apps/web/app/api/metrics/metrics.test.ts` installs one for its own route.
  *
  * Named `workspace.test.ts`, not `route.test.ts`, for the reason `metrics.test.ts`'s header
- * gives: `tests/route-inventory.test.ts`'s `classifyAppFile` would otherwise read a colocated
- * `route.test.ts` as a second route file.
+ * gives: `tests/route-inventory.policy-check.ts`'s `classifyAppFile` would otherwise read a colocated
+ * `route.test.ts` as a second route file. The JSON branch and the email-link marks live in
+ * `workspace.json.test.ts` and `workspace.email-link.test.ts`.
  */
-import { clearApplicationContext } from '../../../../server/application-context';
-import { installTestDomains } from '../../../../server/application-context-fixtures';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   mintSelectionToken,
-  mintSessionToken,
-  newEmailLinkSessionClaims,
-  newSessionClaims,
   selectionCookieName,
-  sessionCookieName,
-  verifySessionToken,
+  signInSessionCookieName,
 } from '../../../../server/auth';
-import { conferredBy } from '../../../../server/rbac/core/conferral';
-import { createMemoryDirectory } from '../../../../server/rbac/memory-directory';
-import { type RbacRuntime } from '../../../../server/rbac/runtime';
-import type { WorkspaceRepositoryPort } from '../../../../server/workspaces/runtime';
 
 import { GET, POST } from './route';
+import {
+  HOST,
+  MULTI_WORKSPACE_SEED,
+  SINGLE_WORKSPACE_SEED,
+  U1_EMAIL,
+  URL_,
+  installDirectory,
+  postAsSession,
+  request,
+  setCookieValue,
+  uninstallDirectory,
+  viewer,
+  SECRET,
+} from './workspace.test-support';
 
-const SECRET = 'a'.repeat(32);
-const HOST = 'app.example.test';
-const URL_ = `https://${HOST}/api/auth/workspace`;
-const viewer = conferredBy('owner', 'viewer', 'test fixture');
+const NOT_AVAILABLE_LOCATION = '/api/auth/workspace?error=workspace_not_available';
+const SESSION_EXPIRED_LOCATION = '/signin?error=session_expired';
+const FOREIGN_ORIGIN = 'https://attacker.example';
+const UNSAFE_NEXT_TARGETS = ['//evil.example', 'https://evil.example', '/\\evil.example'];
 
-function request(options: {
-  method: 'GET' | 'POST';
-  cookies?: Record<string, string>;
-  origin?: string | null;
-  form?: Record<string, string>;
-}): Request {
-  const headers = new Headers();
-  if (options.cookies !== undefined) {
-    headers.set(
-      'cookie',
-      Object.entries(options.cookies)
-        .map(([k, v]) => `${k}=${v}`)
-        .join('; '),
-    );
-  }
-  headers.set('host', HOST);
-  if (options.origin !== undefined && options.origin !== null)
-    headers.set('origin', options.origin);
-  if (options.origin === undefined && options.method === 'POST')
-    headers.set('origin', `https://${HOST}`);
-
-  let body: string | undefined;
-  if (options.form !== undefined) {
-    headers.set('content-type', 'application/x-www-form-urlencoded');
-    body = new URLSearchParams(options.form).toString();
-  }
-  return body === undefined
-    ? new Request(URL_, { method: options.method, headers })
-    : new Request(URL_, { method: options.method, headers, body });
-}
-
-function jsonRequest(options: {
-  method: 'POST';
-  cookies?: Record<string, string>;
-  origin?: string | null;
-  body?: unknown;
-  rawBody?: string;
-}): Request {
-  const headers = new Headers({ 'content-type': 'application/json' });
-  if (options.cookies !== undefined) {
-    headers.set(
-      'cookie',
-      Object.entries(options.cookies)
-        .map(([k, v]) => `${k}=${v}`)
-        .join('; '),
-    );
-  }
-  headers.set('host', HOST);
-  const origin = options.origin === undefined ? `https://${HOST}` : options.origin;
-  if (origin !== null) headers.set('origin', origin);
-  return new Request(URL_, {
-    method: options.method,
-    headers,
-    body: options.rawBody ?? JSON.stringify(options.body ?? {}),
-  });
-}
-
-function setCookieValue(response: Response, name: string): string | undefined {
-  for (const raw of response.headers.getSetCookie()) {
-    if (raw.startsWith(`${name}=`)) return raw.slice(name.length + 1).split(';')[0];
-  }
-  return undefined;
-}
-
-describe('POST /api/auth/workspace', () => {
-  let directory: ReturnType<typeof createMemoryDirectory>;
+describe('POST /api/auth/workspace membership', () => {
+  let directory: ReturnType<typeof installDirectory>;
 
   beforeEach(() => {
-    process.env['SESSION_SECRET'] = SECRET;
-    directory = createMemoryDirectory({
-      workspaces: [
-        { id: 'ws-a', slug: 'acme', name: 'Acme' },
-        { id: 'ws-b', slug: 'beta', name: 'Beta Inc' },
-        { id: 'ws-c', slug: 'gamma', name: 'Gamma LLC' },
-      ],
-      users: [
-        { email: 'u1@example.test', name: 'U1', workspaceId: 'ws-a', role: 'admin' },
-        { email: 'u2@example.test', name: 'U2', workspaceId: 'ws-c', role: 'owner' },
-      ],
-    });
-    const runtime: RbacRuntime = { directory, identify: () => Promise.resolve(null) };
-    installTestDomains({ rbac: runtime });
+    directory = installDirectory(MULTI_WORKSPACE_SEED);
   });
 
-  afterEach(() => {
-    delete process.env['SESSION_SECRET'];
-    clearApplicationContext();
-  });
+  afterEach(uninstallDirectory);
 
   it('refuses a workspace outside the caller’s memberships — identically by id, by slug, and for one that does not exist', async () => {
     // U1 is a member of A (from the seed) and, added here, of B — so this proves a real "not C"
     // refusal rather than merely "not a member of anything".
-    await directory
-      .forWorkspace('ws-b')
-      .createMembership({ email: 'u1@example.test', role: viewer });
+    await directory.forWorkspace('ws-b').createMembership({ email: U1_EMAIL, role: viewer });
 
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const post = (workspace: string) =>
-      POST(
-        request({
-          method: 'POST',
-          cookies: { [sessionCookieName()]: session },
-          form: { workspace },
-        }),
-      );
-
-    const byId = await post('ws-c');
-    const bySlug = await post('gamma');
-    const unknown = await post('no-such-workspace');
+    const byId = await postAsSession({ workspace: 'ws-c' });
+    const bySlug = await postAsSession({ workspace: 'gamma' });
+    const unknown = await postAsSession({ workspace: 'no-such-workspace' });
 
     // All three are the same outcome: no session minted, sent back to the same place — the
     // response must not be an oracle for "exists but not mine" versus "does not exist".
     for (const response of [byId, bySlug, unknown]) {
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe(
-        '/api/auth/workspace?error=workspace_not_available',
-      );
-      expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
+      expect(response.headers.get('location')).toBe(NOT_AVAILABLE_LOCATION);
+      expect(setCookieValue(response, signInSessionCookieName())).toBeUndefined();
     }
     expect(byId.headers.get('location')).toBe(bySlug.headers.get('location'));
     expect(byId.headers.get('location')).toBe(unknown.headers.get('location'));
@@ -162,17 +73,10 @@ describe('POST /api/auth/workspace', () => {
   });
 
   it('mints a session for a workspace the caller really belongs to, by slug', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const response = await POST(
-      request({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        form: { workspace: 'acme' },
-      }),
-    );
+    const response = await postAsSession({ workspace: 'acme' });
     expect(response.status).toBe(303);
     expect(response.headers.get('location')).toBe('/');
-    expect(setCookieValue(response, sessionCookieName())).toBeDefined();
+    expect(setCookieValue(response, signInSessionCookieName())).toBeDefined();
   });
 
   // The `Location` this route answers with carries no origin at all, and that is the whole point:
@@ -181,23 +85,16 @@ describe('POST /api/auth/workspace', () => {
   // a `localhost`/`127.0.0.1` alias is enough. The session cookie was set for the origin the caller
   // used, so it is not sent to the other one, and a switch that succeeded arrives signed out.
   it('answers a relative Location, so the redirect stays on the origin the caller actually used', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const switched = await POST(
-      request({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        form: { workspace: 'acme' },
-      }),
-    );
+    const switched = await postAsSession({ workspace: 'acme' });
     expect(switched.status).toBe(303);
     expect(switched.headers.get('location')).toBe('/');
     // And the cookies still ride on that same response — a relative Location is a header change,
     // not a different response.
-    expect(setCookieValue(switched, sessionCookieName())).toBeDefined();
+    expect(setCookieValue(switched, signInSessionCookieName())).toBeDefined();
 
     const expired = await POST(request({ method: 'POST', form: { workspace: 'acme' } }));
     expect(expired.status).toBe(303);
-    expect(expired.headers.get('location')).toBe('/signin?error=session_expired');
+    expect(expired.headers.get('location')).toBe(SESSION_EXPIRED_LOCATION);
 
     // Asserted as whole strings rather than by `.pathname`, because parsing is exactly what hides
     // the defect: `new URL('https://app.example.test/').pathname` is also `/`.
@@ -208,70 +105,59 @@ describe('POST /api/auth/workspace', () => {
   });
 
   it('re-reads membership: a since-removed membership is refused even with a valid selection cookie, and a surviving one still mints', async () => {
-    const u1 = await directory.findUserByEmail('u1@example.test');
+    const u1 = await directory.findUserByEmail(U1_EMAIL);
     if (u1 === null) throw new Error('seed missing u1@example.test');
-    await directory
-      .forWorkspace('ws-b')
-      .createMembership({ email: 'u1@example.test', role: viewer });
+    await directory.forWorkspace('ws-b').createMembership({ email: U1_EMAIL, role: viewer });
 
     // The selection cookie is minted while B is still a real membership …
-    const selection = await mintSelectionToken(u1.id, 'u1@example.test', SECRET);
+    const selection = await mintSelectionToken(u1.id, U1_EMAIL, SECRET);
 
     // … and then B is removed before the cookie is ever used.
     const bMembership = (await directory.forWorkspace('ws-b').listMemberships()).find(
-      (row) => row.email === 'u1@example.test',
+      (row) => row.email === U1_EMAIL,
     );
     if (bMembership === undefined) throw new Error('membership in B not found');
     await directory.forWorkspace('ws-b').deleteMembership(bMembership.id);
 
-    const refused = await POST(
-      request({
-        method: 'POST',
-        cookies: { [selectionCookieName()]: selection },
-        form: { workspace: 'beta' },
-      }),
-    );
+    const postWithSelection = (workspace: string) =>
+      POST(
+        request({
+          method: 'POST',
+          cookies: { [selectionCookieName()]: selection },
+          form: { workspace },
+        }),
+      );
+
+    const refused = await postWithSelection('beta');
     expect(refused.status).toBe(303);
     expect(refused.headers.get('location')).toContain('error=workspace_not_available');
-    expect(setCookieValue(refused, sessionCookieName())).toBeUndefined();
+    expect(setCookieValue(refused, signInSessionCookieName())).toBeUndefined();
 
     // A still exists: replaying the SAME selection cookie twice, selecting A, mints a session both
     // times. Neither replay is treated as fatal (the cookie carries no single-use nonce — only a
     // short TTL, which the task card's minimum implementation calls for) and in neither case is a
     // session minted for B, which no longer exists.
-    const firstA = await POST(
-      request({
-        method: 'POST',
-        cookies: { [selectionCookieName()]: selection },
-        form: { workspace: 'acme' },
-      }),
-    );
-    const secondA = await POST(
-      request({
-        method: 'POST',
-        cookies: { [selectionCookieName()]: selection },
-        form: { workspace: 'acme' },
-      }),
-    );
+    const firstA = await postWithSelection('acme');
+    const secondA = await postWithSelection('acme');
     for (const response of [firstA, secondA]) {
       expect(response.status).toBe(303);
       expect(response.headers.get('location')).toBe('/');
-      expect(setCookieValue(response, sessionCookieName())).toBeDefined();
+      expect(setCookieValue(response, signInSessionCookieName())).toBeDefined();
     }
   });
+});
+
+describe('POST /api/auth/workspace origin and session', () => {
+  beforeEach(() => {
+    installDirectory(MULTI_WORKSPACE_SEED);
+  });
+
+  afterEach(uninstallDirectory);
 
   it('refuses a cross-origin POST before it ever mints anything', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const response = await POST(
-      request({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        origin: 'https://attacker.example',
-        form: { workspace: 'acme' },
-      }),
-    );
+    const response = await postAsSession({ workspace: 'acme' }, FOREIGN_ORIGIN);
     expect(response.status).toBe(403);
-    expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
+    expect(setCookieValue(response, signInSessionCookieName())).toBeUndefined();
 
     // BREAK-IT CHECK (done by hand, reverted before commit): commenting out the `if (!origin.ok)`
     // early return in route.ts makes this test fail — the mismatched Origin stops mattering and a
@@ -281,111 +167,88 @@ describe('POST /api/auth/workspace', () => {
   it('refuses with neither a valid session nor a valid selection cookie', async () => {
     const response = await POST(request({ method: 'POST', form: { workspace: 'acme' } }));
     expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toBe('/signin?error=session_expired');
-    expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
+    expect(response.headers.get('location')).toBe(SESSION_EXPIRED_LOCATION);
+    expect(setCookieValue(response, signInSessionCookieName())).toBeUndefined();
+  });
+});
+
+describe('POST /api/auth/workspace next', () => {
+  beforeEach(() => {
+    installDirectory(MULTI_WORKSPACE_SEED);
   });
 
+  afterEach(uninstallDirectory);
+
   it('lands on a safe next after the pick, as a relative Location', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const response = await POST(
-      request({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        form: { workspace: 'acme', next: '/oauth/authorize?client_id=x&state=y' },
-      }),
-    );
+    const response = await postAsSession({
+      workspace: 'acme',
+      next: '/oauth/authorize?client_id=x&state=y',
+    });
     expect(response.status).toBe(303);
     expect(response.headers.get('location')).toBe('/oauth/authorize?client_id=x&state=y');
-    expect(setCookieValue(response, sessionCookieName())).toBeDefined();
+    expect(setCookieValue(response, signInSessionCookieName())).toBeDefined();
   });
 
   it.each(['//evil.example', 'https://evil.example', '/\\evil.example', '/.//evil.example'])(
     'lands on / for the unsafe next %s',
     async (next) => {
-      const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-      const response = await POST(
-        request({
-          method: 'POST',
-          cookies: { [sessionCookieName()]: session },
-          form: { workspace: 'acme', next },
-        }),
-      );
+      const response = await postAsSession({ workspace: 'acme', next });
       expect(response.status).toBe(303);
       expect(response.headers.get('location')).toBe('/');
     },
   );
 
   it('keeps a safe next on the refusal redirect and drops an unsafe one', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const post = (next: string) =>
-      POST(
-        request({
-          method: 'POST',
-          cookies: { [sessionCookieName()]: session },
-          form: { workspace: 'no-such-workspace', next },
-        }),
-      );
+    const post = (next: string) => postAsSession({ workspace: 'no-such-workspace', next });
     const safe = await post('/oauth/authorize?client_id=x');
     expect(safe.headers.get('location')).toBe(
-      '/api/auth/workspace?error=workspace_not_available&next=%2Foauth%2Fauthorize%3Fclient_id%3Dx',
+      `${NOT_AVAILABLE_LOCATION}&next=%2Foauth%2Fauthorize%3Fclient_id%3Dx`,
     );
-    expect(setCookieValue(safe, sessionCookieName())).toBeUndefined();
+    expect(setCookieValue(safe, signInSessionCookieName())).toBeUndefined();
     const unsafe = await post('//evil.example');
-    expect(unsafe.headers.get('location')).toBe(
-      '/api/auth/workspace?error=workspace_not_available',
-    );
+    expect(unsafe.headers.get('location')).toBe(NOT_AVAILABLE_LOCATION);
   });
 
   it('refuses a cross-origin POST carrying a next before it mints or redirects anywhere', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const response = await POST(
-      request({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        origin: 'https://attacker.example',
-        form: { workspace: 'acme', next: '/oauth/authorize?client_id=x' },
-      }),
+    const response = await postAsSession(
+      { workspace: 'acme', next: '/oauth/authorize?client_id=x' },
+      FOREIGN_ORIGIN,
     );
     expect(response.status).toBe(403);
     expect(response.headers.get('location')).toBeNull();
-    expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
+    expect(setCookieValue(response, signInSessionCookieName())).toBeUndefined();
   });
 });
 
 describe('GET /api/auth/workspace', () => {
-  let directory: ReturnType<typeof createMemoryDirectory>;
+  let directory: ReturnType<typeof installDirectory>;
 
   beforeEach(() => {
-    process.env['SESSION_SECRET'] = SECRET;
-    directory = createMemoryDirectory({
-      workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme' }],
-      users: [{ email: 'u1@example.test', name: 'U1', workspaceId: 'ws-a', role: 'admin' }],
-    });
-    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
+    directory = installDirectory(SINGLE_WORKSPACE_SEED);
   });
 
-  afterEach(() => {
-    delete process.env['SESSION_SECRET'];
-    clearApplicationContext();
-  });
+  afterEach(uninstallDirectory);
+
+  /** A GET carrying a valid selection cookie for U1. */
+  const selectionRequest = async (): Promise<Request> => {
+    const u1 = await directory.findUserByEmail(U1_EMAIL);
+    if (u1 === null) throw new Error('seed missing u1@example.test');
+    const selection = await mintSelectionToken(u1.id, U1_EMAIL, SECRET);
+    return request({ method: 'GET', cookies: { [selectionCookieName()]: selection } });
+  };
 
   it('renders the caller’s current memberships when the selection cookie is valid', async () => {
-    const u1 = await directory.findUserByEmail('u1@example.test');
-    if (u1 === null) throw new Error('seed missing u1@example.test');
-    const selection = await mintSelectionToken(u1.id, 'u1@example.test', SECRET);
-    const response = await GET(
-      request({ method: 'GET', cookies: { [selectionCookieName()]: selection } }),
-    );
+    const response = await GET(await selectionRequest());
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('u1@example.test');
+    expect(html).toContain(U1_EMAIL);
     expect(html).toContain('Acme');
   });
 
   it('puts a safe next, HTML-escaped, into a hidden field', async () => {
-    const u1 = await directory.findUserByEmail('u1@example.test');
+    const u1 = await directory.findUserByEmail(U1_EMAIL);
     if (u1 === null) throw new Error('seed missing u1@example.test');
-    const selection = await mintSelectionToken(u1.id, 'u1@example.test', SECRET);
+    const selection = await mintSelectionToken(u1.id, U1_EMAIL, SECRET);
     const get = async (next: string) =>
       (
         await GET(
@@ -405,267 +268,19 @@ describe('GET /api/auth/workspace', () => {
     // The guard percent-encodes quotes and angle brackets, so the attribute cannot be broken out of.
     expect(hostile).toContain('name="next" value="/a?%22%3E%3Cscript%3E');
 
-    for (const unsafe of ['//evil.example', 'https://evil.example', '/\\evil.example']) {
+    for (const unsafe of UNSAFE_NEXT_TARGETS) {
       expect(await get(unsafe)).not.toContain('name="next"');
     }
   });
 
   it('renders no next field without a next', async () => {
-    const u1 = await directory.findUserByEmail('u1@example.test');
-    if (u1 === null) throw new Error('seed missing u1@example.test');
-    const selection = await mintSelectionToken(u1.id, 'u1@example.test', SECRET);
-    const response = await GET(
-      request({ method: 'GET', cookies: { [selectionCookieName()]: selection } }),
-    );
+    const response = await GET(await selectionRequest());
     expect(await response.text()).not.toContain('name="next"');
   });
 
   it('sends an expired or missing selection to sign-in, not to an empty list', async () => {
     const response = await GET(request({ method: 'GET' }));
     expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toBe('/signin?error=session_expired');
-  });
-});
-
-/**
- * The JSON branch (issue #236, SDK-04, S-2): same route, same shared logic above, `Content-Type:
- * application/json` in and `200 { workspace }` + `Set-Cookie` out instead of a `303`. Every
- * failure here is the standard `{ error: { code, message } }` envelope (`detail` a deprecated duplicate), which is also the property
- * that would catch a regression toward the form path's bare codes on this branch specifically.
- */
-describe('POST /api/auth/workspace (application/json)', () => {
-  let directory: ReturnType<typeof createMemoryDirectory>;
-  const WS_A_RECORD = {
-    id: 'ws-a',
-    slug: 'acme',
-    name: 'Acme',
-    publicSharingEnabled: false,
-    archivedAt: null,
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-  };
-
-  function fakeWorkspaceRepository(role: Record<string, string>): WorkspaceRepositoryPort {
-    const notImplemented = (): never => {
-      throw new Error('not used by these fixtures');
-    };
-    return {
-      listForUser: notImplemented,
-      ownerPrincipalId: notImplemented,
-      get: (id) => Promise.resolve(id === WS_A_RECORD.id ? { ...WS_A_RECORD } : null),
-      getForMember: (id, userId) => {
-        const memberRole = role[userId];
-        if (id !== WS_A_RECORD.id || memberRole === undefined) return Promise.resolve(null);
-        return Promise.resolve({ ...WS_A_RECORD, role: memberRole as never });
-      },
-      create: notImplemented,
-      update: notImplemented,
-      archive: notImplemented,
-      restore: notImplemented,
-    };
-  }
-
-  beforeEach(() => {
-    process.env['SESSION_SECRET'] = SECRET;
-    directory = createMemoryDirectory({
-      workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme' }],
-      users: [{ email: 'u1@example.test', name: 'U1', workspaceId: 'ws-a', role: 'admin' }],
-    });
-    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
-  });
-
-  afterEach(() => {
-    delete process.env['SESSION_SECRET'];
-    clearApplicationContext();
-  });
-
-  it('answers 200 with the membership view and the new session cookie', async () => {
-    const u1 = await directory.findUserByEmail('u1@example.test');
-    if (u1 === null) throw new Error('seed missing u1@example.test');
-    installTestDomains({
-      workspaces: { repository: fakeWorkspaceRepository({ [u1.id]: 'admin' }) },
-    });
-
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const response = await POST(
-      jsonRequest({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        body: { workspace: 'acme' },
-      }),
-    );
-    expect(response.status, await response.clone().text()).toBe(200);
-    const body = (await response.json()) as {
-      workspace: { id: string; slug: string; role: string };
-    };
-    expect(body.workspace).toMatchObject({ id: 'ws-a', slug: 'acme', role: 'admin' });
-    expect(setCookieValue(response, sessionCookieName())).toBeDefined();
-  });
-
-  it('answers a workspace the caller does not belong to exactly like one that does not exist', async () => {
-    const u1 = await directory.findUserByEmail('u1@example.test');
-    if (u1 === null) throw new Error('seed missing u1@example.test');
-    installTestDomains({
-      workspaces: { repository: fakeWorkspaceRepository({ [u1.id]: 'admin' }) },
-    });
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-
-    const notMine = await POST(
-      jsonRequest({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        body: { workspace: 'no-such-workspace' },
-      }),
-    );
-    expect(notMine.status).toBe(404);
-    const notMineBody = (await notMine.json()) as unknown;
-    expect(notMineBody).toEqual({
-      error: {
-        code: 'workspace_not_available',
-        message: expect.any(String) as unknown,
-        detail: expect.any(String) as unknown,
-      },
-    });
-    expect(setCookieValue(notMine, sessionCookieName())).toBeUndefined();
-  });
-
-  it('rejects a malformed body and an unknown field in the standard envelope', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    for (const request_ of [
-      jsonRequest({ method: 'POST', cookies: { [sessionCookieName()]: session }, rawBody: '{' }),
-      jsonRequest({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        body: { workspace: 'acme', extra: 1 },
-      }),
-      jsonRequest({ method: 'POST', cookies: { [sessionCookieName()]: session }, body: {} }),
-    ]) {
-      const response = await POST(request_);
-      expect(response.status).toBe(400);
-      const body = (await response.json()) as { error: { code: string } };
-      expect(body.error.code).toBe('malformed_request');
-    }
-  });
-
-  it('still refuses cross-origin before anything is minted, in the standard envelope', async () => {
-    const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
-    const response = await POST(
-      jsonRequest({
-        method: 'POST',
-        cookies: { [sessionCookieName()]: session },
-        origin: 'https://attacker.example',
-        body: { workspace: 'acme' },
-      }),
-    );
-    expect(response.status).toBe(403);
-    const crossOriginBody = (await response.json()) as unknown;
-    expect(crossOriginBody).toEqual({
-      error: {
-        code: 'cross_origin',
-        message: expect.any(String) as unknown,
-        detail: expect.any(String) as unknown,
-      },
-    });
-    expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
-  });
-
-  it('sends an expired session to a 401 in the standard envelope, never a redirect', async () => {
-    const response = await POST(jsonRequest({ method: 'POST', body: { workspace: 'acme' } }));
-    expect(response.status).toBe(401);
-    const expiredBody = (await response.json()) as unknown;
-    expect(expiredBody).toEqual({
-      error: {
-        code: 'session_expired',
-        message: expect.any(String) as unknown,
-        detail: expect.any(String) as unknown,
-      },
-    });
-  });
-});
-
-describe('POST /api/auth/workspace for a session the email-link sign-in minted', () => {
-  const GUEST = 'guest@example.test';
-  let directory: ReturnType<typeof createMemoryDirectory>;
-
-  beforeEach(async () => {
-    process.env['SESSION_SECRET'] = SECRET;
-    directory = createMemoryDirectory({
-      workspaces: [
-        { id: 'ws-demo', slug: 'demo-1', name: 'Demo' },
-        { id: 'ws-real', slug: 'acme', name: 'Acme' },
-      ],
-      users: [{ email: GUEST, name: 'Guest', workspaceId: 'ws-demo', role: 'guest' }],
-    });
-    // The same address joins a real workspace through the identity provider after the link was
-    // opened: the case the mark exists for.
-    await directory.forWorkspace('ws-real').createMembership({ email: GUEST, role: viewer });
-    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
-  });
-
-  afterEach(() => {
-    delete process.env['SESSION_SECRET'];
-    clearApplicationContext();
-  });
-
-  const marked = () => mintSessionToken(newEmailLinkSessionClaims(GUEST, 'demo-1'), SECRET);
-  const unmarked = () => mintSessionToken(newSessionClaims(GUEST, 'demo-1'), SECRET);
-  const switchTo = async (session: string, workspace: string, json = false) =>
-    POST(
-      json
-        ? jsonRequest({
-            method: 'POST',
-            cookies: { [sessionCookieName()]: session },
-            body: { workspace },
-          })
-        : request({
-            method: 'POST',
-            cookies: { [sessionCookieName()]: session },
-            form: { workspace },
-          }),
-    );
-
-  it.each(['acme', 'ws-real'])(
-    'refuses a switch to the real workspace %s the address joined, and sets no cookie (form)',
-    async (workspace) => {
-      const response = await switchTo(await marked(), workspace);
-      expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe(
-        '/api/auth/workspace?error=workspace_not_available',
-      );
-      expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
-    },
-  );
-
-  it('refuses the same switch in the JSON branch with 404 workspace_not_available and no cookie', async () => {
-    const response = await switchTo(await marked(), 'acme', true);
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ error: { code: 'workspace_not_available' } });
-    expect(setCookieValue(response, sessionCookieName())).toBeUndefined();
-  });
-
-  it('answers a refused real workspace exactly as it answers one that does not exist', async () => {
-    const real = await switchTo(await marked(), 'acme');
-    const missing = await switchTo(await marked(), 'no-such-workspace');
-    expect(real.status).toBe(missing.status);
-    expect(real.headers.get('location')).toBe(missing.headers.get('location'));
-  });
-
-  it('allows a switch to its own demo workspace and the new session is still marked', async () => {
-    const response = await switchTo(await marked(), 'demo-1');
-    expect(response.status).toBe(303);
-    const token = setCookieValue(response, sessionCookieName());
-    expect(token).toBeDefined();
-    const verified = await verifySessionToken(decodeURIComponent(token ?? ''), SECRET);
-    expect(verified.ok && verified.claims.via).toBe('email_link');
-    expect(verified.ok && verified.claims.ws).toBe('demo-1');
-  });
-
-  it('leaves an unmarked session free to switch to a workspace it belongs to, and mints it unmarked', async () => {
-    const response = await switchTo(await unmarked(), 'acme');
-    expect(response.status).toBe(303);
-    const token = setCookieValue(response, sessionCookieName());
-    const verified = await verifySessionToken(decodeURIComponent(token ?? ''), SECRET);
-    expect(verified.ok && verified.claims.ws).toBe('acme');
-    expect(verified.ok && 'via' in verified.claims).toBe(false);
+    expect(response.headers.get('location')).toBe(SESSION_EXPIRED_LOCATION);
   });
 });

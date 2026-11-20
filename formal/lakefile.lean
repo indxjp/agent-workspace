@@ -3,7 +3,7 @@ open Lake DSL
 
 /-!
 The Agent Workspace formal specification. Dependencies are pinned by commit; the chosen
-revisions and their licences are recorded in docs/adr/0062 and docs/dependency-policy.md.
+revisions and their licences are recorded in docs/adr/0062 and docs/30-reference/policies/dependency-policy.md.
 -/
 
 package AgentWorkspace where

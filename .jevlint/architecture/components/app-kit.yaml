@@ -1,0 +1,17 @@
+id: app-kit
+title: Portal app kit
+summary: >
+  The kit a customer portal app imports: resources, recipes, pages, agent tools, generated Next.js routes and its own Drizzle schema. It reaches the platform only through sdk, contracts and react; examples/ are its consumers.
+layer: delivery
+paths:
+  - "packages/app/**"
+key_files:
+  - { path: packages/app/src/app.ts, role: "defineApp: the app definition" }
+  - { path: packages/app/src/server/index.ts, role: "appRuntime and the generated route handlers" }
+  - { path: packages/app/src/resource.ts, role: "defineResource and field validation" }
+interface: [appRuntime, resourceRoutes, recipeRoutes, currentPerson]
+depends_on: [sdk, react-chat, contracts]
+uses: [drizzle, postgres, react, nextjs, mcp]
+rules: []
+checklist: []
+status: current

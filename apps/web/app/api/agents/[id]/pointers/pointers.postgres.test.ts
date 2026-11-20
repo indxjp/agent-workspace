@@ -48,7 +48,7 @@ import {
   createRepositoryAgentResourceStoreProvider,
   createRepositoryAgentStoreProvider,
 } from '../../../../../server/agents/store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import {
   fixtureSurface,
   versionRequest,

@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: Owner (this session)
-Scope: W0-INF-03, `scripts/check-licenses.mjs`, `docs/dependency-policy.md`
+Scope: W0-INF-03, `scripts/check-licenses.mjs`, `docs/30-reference/policies/dependency-policy.md`
 
 ## Context
 

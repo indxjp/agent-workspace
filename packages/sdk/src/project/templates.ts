@@ -63,7 +63,7 @@ export function appKitPackages(version: string): readonly PinnedPackage[] {
   return Object.freeze([
     { section: 'dependencies', name: '@indx-workspace/app', version },
     { section: 'dependencies', name: 'drizzle-orm', version: '0.45.4' },
-    { section: 'dependencies', name: 'next', version: '16.4.3' },
+    { section: 'dependencies', name: 'next', version: '16.4.6' },
     { section: 'dependencies', name: 'pg', version: '8.23.1' },
     { section: 'dependencies', name: 'react', version: '19.3.1' },
     { section: 'dependencies', name: 'react-dom', version: '19.3.1' },

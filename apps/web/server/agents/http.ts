@@ -21,7 +21,7 @@ import { isUuid } from './contract';
 import { agentNotFound, refuseBuiltinWriteFor } from './handlers';
 import { resolverForRow } from '../resources/item-ownership';
 import type { WorkspaceAgentStore } from './store';
-import type { AgentsRuntime } from './runtime';
+import type { AgentsRuntime } from './wiring';
 import { readBoundedJson, readRouteParam } from '../http/json-transport';
 import { authorise, type OwnershipResolver } from '../rbac/http';
 import type { Ownership, Principal } from '../identity';

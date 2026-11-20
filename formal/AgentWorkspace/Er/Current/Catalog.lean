@@ -35,7 +35,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts
 
 /-- The eighteen tables of the catalog cluster, in barrel order. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def tables : List TableName :=
   [.agentFiles, .agentGrants, .agentMcpServers, .agentSkills, .agentStorageGrants,
     .agentVersionStorageGrants, .agentPointerMoves, .agentVersionEvaluations, .agentVersionPointers,
@@ -184,7 +184,7 @@ the latest snapshot (`Er.Snapshot.file`): the semantics above are the semantics 
 expressions, and the conformance suite fails when a body changes. -/
 @[aw_spec (ts := "packages/core/src/db/schema/files.ts#files")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def checkSql : List (String × String) :=
   [("agent_versions_number_positive", "\"agent_versions\".\"number\" > 0"),
     ("agent_version_evaluations_counts",
@@ -278,7 +278,7 @@ def clusterChecksHold (st : State) : Bool :=
 /-- The states PostgreSQL can hold for this cluster: `Er.Core.consistent` under today's schema,
 and the cluster's own checks. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def consistent (st : State) : Bool := Er.Core.consistent catalogue st && clusterChecksHold st
 
 /-- The target of a foreign key is keyed by exactly its referenced column list (the primary key

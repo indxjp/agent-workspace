@@ -9,7 +9,7 @@ import { systemClock, type Clock } from '../clock';
 import { ownerPrincipalIdOf, type Role } from '../identity';
 import type { CreateShareInput, ShareRecord } from './store';
 import { isPublicSharingEnabled } from './policy/service';
-import type { WorkspaceSharing } from './runtime';
+import type { WorkspaceSharing } from './wiring';
 import { runnablePublicLinksEnabled } from './runnable/feature';
 import type { PublishShareInput } from './core/input';
 import { decidePublish, publicLinkOpen } from './core/rules';

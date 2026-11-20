@@ -15,7 +15,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Authz.Tenancy
 
 /-- Every table of today's schema satisfies both the model's tenancy rule and the test's rule 1
 (including "`workspace_id` leads an index"): on today's catalogue the two rules agree. -/
-@[aw_spec (tier := T5) (doc := "docs/formal/findings.md#f-007--the-models-tenancy-rule-differs-from-tenancytestts-rule-1-and-the-docstring-now-says-so-instead-of-claiming-equivalence")
+@[aw_spec (tier := T5) (doc := "docs/20-design/formal/findings.md#f-007--the-models-tenancy-rule-differs-from-tenancytestts-rule-1-and-the-docstring-now-says-so-instead-of-claiming-equivalence")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem tenancy_rules_agree_on_the_catalogue (t : TableName) :
     tenancyWellFormed catalogue t = true ∧ testRule1 catalogue leadingIndexedColumns t = true := by
@@ -24,7 +24,7 @@ theorem tenancy_rules_agree_on_the_catalogue (t : TableName) :
 /-- The two tenancy rules are different predicates: a `text` `workspace_id` passes the test's rule
 and fails the model's (the model also requires `uuid`), and a `workspace_id` that leads no index
 passes the model's rule and fails the test's. -/
-@[aw_spec (tier := T5) (doc := "docs/formal/findings.md#f-007--the-models-tenancy-rule-differs-from-tenancytestts-rule-1-and-the-docstring-now-says-so-instead-of-claiming-equivalence")
+@[aw_spec (tier := T5) (doc := "docs/20-design/formal/findings.md#f-007--the-models-tenancy-rule-differs-from-tenancytestts-rule-1-and-the-docstring-now-says-so-instead-of-claiming-equivalence")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#leadingIndexedColumns")]
 theorem tenancy_rules_differ_off_the_catalogue :
     (let S := catalogue.update .auditEvents (·.mapColumn "workspace_id" fun c => { c with type := .text })

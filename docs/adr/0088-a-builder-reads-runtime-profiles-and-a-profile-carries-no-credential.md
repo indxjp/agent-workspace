@@ -77,7 +77,7 @@ would reject harmless strings. The check is on the write path in `apps/web`, the
 owns the domain rule, not in the read schema. A profile stored before this change still reads and
 still runs, and the next edit has to remove the key. `packages/contracts` only documents the rule
 on `driverConfig`. It has no write schema for profiles (the inputs are interfaces), and the
-contracts package describes the wire, not domain policy (docs/sdk/07-structure-map.md §5).
+contracts package describes the wire, not domain policy (docs/10-product/sdk/07-structure-map.md §5).
 
 ## Alternatives considered
 

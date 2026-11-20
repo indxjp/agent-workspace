@@ -10,7 +10,7 @@
  * The model is SDK-free, like the code it mirrors, so nothing here reaches pi. What happens inside
  * pi — model requests only to the model's base URL, resources only through the pinned loader,
  * `beforeToolCall` before every tool, `terminate` honoured — is the family's declared hypothesis,
- * enforced by the package's own boundary suite (docs/formal/units/engine-pi.md, "Declared gaps").
+ * enforced by the package's own boundary suite (docs/20-design/formal/units/engine-pi.md, "Declared gaps").
  *
  * Under D-012 this file is in `tests/formal/`: every subject is a package export.
  */

@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-06
 Decided by: W2-CP-05 (implementer)
-Scope: findings only. `tests/no-route-answers-503.test.ts` and `tests/route-inventory.test.ts` are
+Scope: findings only. `tests/no-route-answers-503.test.ts` and `tests/route-inventory.policy-check.ts` are
 not in this task's `Owns:` globs and neither is edited here.
 
 ## Why this record exists
@@ -94,7 +94,7 @@ transcribed).
 
 ### The bound and why ADR-0026 made it false
 
-`EXPECTED_ROUTES` (`tests/route-inventory.test.ts`, pre-ADR-0043) was
+`EXPECTED_ROUTES` (`tests/route-inventory.policy-check.ts`, pre-ADR-0043) was
 `unionRoutes(readDeclarationFiles(ROUTE_DECLARATIONS, 'routes'))` — every route **every task** has
 declared, `mandate`-carrying ones included, and it grows every time a task ships a route spec §34
 does not itself print (which ADR-0026 explicitly permits and expects, provided the route carries a
@@ -143,9 +143,9 @@ The orchestrator resolved this under
 the fixed-vs-growing bound is deleted and replaced by an assertion about the parser, under a
 second and looser reading of §34's fences. A repo-wide gate that refuses every correct
 implementation of a task in flight is a precondition, not an integration item, and the
-orchestrator — not this task, whose `Owns:` globs never included `tests/route-inventory.test.ts`
+orchestrator — not this task, whose `Owns:` globs never included `tests/route-inventory.policy-check.ts`
 — owns it. Round 2 of this task merged `origin/main` (which carries ADR-0043) and re-ran
 `pnpm test`: `route-inventory.test.ts` passes in full (see this task's PR report for the pasted
 run). No further action is needed here, and this task must not edit
-`tests/route-inventory.test.ts` itself (it is not in this task's `Owns:` globs, and the file is
+`tests/route-inventory.policy-check.ts` itself (it is not in this task's `Owns:` globs, and the file is
 listed as off-limits in this round's dispatch).

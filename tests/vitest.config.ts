@@ -1,89 +1,27 @@
 /**
- * The `tests` project runs its files **one at a time**, because two of them start a Next.js server.
+ * The `tests` project: every file under tests/ that no other `tests-*` project collects.
  *
- * `tests/auth.test.ts` spawns `next dev` to prove that a running server refuses every `/api/**`
- * request without a session, and `tests/no-route-answers-503.test.ts` spawns one to prove that
- * every declared route reaches a handler. Vitest runs test *files* in parallel workers, and
- * Next 16 refuses to be the second dev server for a directory — measured, not inferred:
+ * The root `tests/` tree is split into Nx / Vitest projects (tests/projects.mjs lists them and
+ * says why), each with its own `project.json` whose `test` target declares the paths it reads, so
+ * `nx affected` runs a project only when one of them changed. `pnpm test-inputs:check`
+ * (scripts/policy-check-test-inputs.mjs) proves the declarations cover what the files read.
+ *
+ * This project's files run in parallel. They used to run one at a time (`fileParallelism:
+ * false`) because two of them start `next dev` against apps/web, and Next 16 refuses to be the
+ * second dev server for a directory:
  *
  * ```text
  * ⨯ Another next dev server is already running.
- * - Local:        http://127.0.0.1:54502
- * - PID:          25536
- * - Dir:          …/apps/web
  * ```
  *
- * whereupon the second suite waited out its whole start-up timeout and reported a server that
- * "did not answer". Both suites pass alone and one of them fails whenever they are collected
- * together, which is a scheduling accident rather than a fact about the code — exactly the failure
- * `packages/core/src/db/repositories/testing.ts`'s header describes for a shared database, one
- * resource down.
+ * Those two — `tests/auth.test.ts` and `tests/no-route-answers-503.test.ts` — are now the
+ * `tests-next` project (tests/next/), which runs its two files one after the other and which Nx
+ * runs with no other task beside it, so the serialisation is paid by two files rather than by
+ * every file here.
  *
- * `fileParallelism: false` is the narrowest fix available: it serialises **this project's** files
- * and leaves every `apps/*` and `packages/*` project running in parallel as before, so the cost is
- * paid only by the six files that share one Next.js application. The alternative — a lock, a
- * retry, or a longer timeout — would make the second server wait for a resource Next has already
- * refused to give it twice.
- *
- * This file also fixes the project's name, which the root `vitest.config.ts` previously derived
- * from the directory. Adding a config here would otherwise rename the project and change what
- * `--project tests` selects.
+ * The project keeps the name `tests`, so `vitest run --project tests <file>` still selects what
+ * it selected for every file left here.
  */
-import { fileURLToPath } from 'node:url';
+import { testsProjectConfig } from './vitest.shared.js';
 
-import { configDefaults, defineConfig } from 'vitest/config';
-
-import rootConfig from '../vitest.config.js';
-
-const rootAlias = rootConfig.resolve?.alias;
-if (!Array.isArray(rootAlias)) {
-  throw new Error('vitest.config.ts: the root resolve.alias must be an array');
-}
-const rootAliases: readonly { readonly find: string | RegExp; readonly replacement: string }[] =
-  rootAlias;
-
-export default defineConfig({
-  // A project does not inherit the root aliases. These two packages are read from `src`, because
-  // `tests/platform-matrix.test.ts` runs in `pnpm docs:check` before any package is built; the
-  // rest keep resolving through `node_modules`, as they always did here.
-  // `tests/settings-table.test.ts` also runs there. It imports `@agent-workspace/egress-proxy`, and
-  // the sign-in settings it reads import `@agent-workspace/core/posture`, so both come from `src`;
-  // so does `@agent-workspace/gateway/settings`, the gateway's settings module.
-  resolve: {
-    alias: [
-      ...rootAliases.filter(({ find }) =>
-        /@indx-workspace\\?\/(contracts|platforms)/u.test(String(find)),
-      ),
-      // The store's recordings run the reference apps' own agents on their own resources
-      // (`tests/store/recordings/apps.ts`), so the app package comes from `src` as well: the
-      // examples are not installed here, and a bare `@indx-workspace/app` would find nothing.
-      {
-        find: /^@indx-workspace\/app\/(server|db|testing|react)$/u,
-        replacement: fileURLToPath(new URL('../packages/app/src/$1/index.ts', import.meta.url)),
-      },
-      {
-        find: /^@indx-workspace\/app$/u,
-        replacement: fileURLToPath(new URL('../packages/app/src/index.ts', import.meta.url)),
-      },
-      {
-        find: /^@agent-workspace\/egress-proxy$/u,
-        replacement: fileURLToPath(
-          new URL('../packages/egress-proxy/src/index.ts', import.meta.url),
-        ),
-      },
-      {
-        find: /^@agent-workspace\/gateway\/settings$/u,
-        replacement: fileURLToPath(new URL('../packages/gateway/src/settings.ts', import.meta.url)),
-      },
-      {
-        find: /^@agent-workspace\/core\/posture$/u,
-        replacement: fileURLToPath(new URL('../packages/core/src/posture.ts', import.meta.url)),
-      },
-    ],
-  },
-  test: {
-    name: 'tests',
-    fileParallelism: false,
-    exclude: [...configDefaults.exclude, 'browser/**'],
-  },
-});
+export default testsProjectConfig('tests');

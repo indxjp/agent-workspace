@@ -32,7 +32,7 @@ import { problemWithDetail as problem, readJsonBody } from '../http/result';
 import { authorise, type OwnershipResolver } from '../rbac/http';
 import type { ApiResult } from '../http/result';
 import { closeEndpointToolSandbox } from '../tool-endpoint/close';
-import type { EndpointClientsRuntime } from './runtime';
+import type { EndpointClientsRuntime } from './wiring';
 
 const notConfigured = (): ApiResult =>
   problem(

@@ -2,7 +2,7 @@ import AgentWorkspace.Er.Current.Publication
 
 /-!
 T5 — properties of the publication specification itself: where the documents and the code
-disagree about the concept. Each theorem pins one finding of `docs/formal/units/concept-publication.md`.
+disagree about the concept. Each theorem pins one finding of `docs/20-design/formal/units/concept-publication.md`.
 -/
 
 namespace AgentWorkspace.Theorems.Meta.ConceptPublication
@@ -45,7 +45,7 @@ theorem private_and_workspace_shares_never_open (s : Share) (now : Nat)
 /-- `shares` carries a `publisher_principal_id`, not the `owner_principal_id` the API
 specification says every ownable row carries, and neither column reaches the wire resource
 (finding 2). -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/shares.ts#shares")
   (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem shares_carry_a_publisher_not_an_owner (v : Visibility) (withViewCount : Bool) :

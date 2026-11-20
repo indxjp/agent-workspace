@@ -26,8 +26,8 @@ $ TEST_DATABASE_URL=… pnpm test
 | The gate | Owner (PR) | What breaks it | Owner (PR) |
 | --- | --- | --- | --- |
 | `apps/web/server/runs/routes.test.ts` — 3 failures | W1-CP-04 (#18) | `apps/web/app/api/agents/route.ts`, `apps/web/app/api/agents/[id]/route.ts` | W1-CP-05 (#15) |
-| `tests/route-inventory.test.ts` — 2 failures | W1-CP-05 (#15) | `apps/web/app/api/runs/**`, `apps/web/app/api/agents/[id]/runs/route.ts` | W1-CP-04 (#18) |
-| `tests/no-sdk-import.test.ts` — 2 failures | W1-RN-01 (#14) | `apps/web/server/runs/acceptance/{nginx.conf,run-acceptance.mjs}` (W1-CP-04, #18) and `tests/route-inventory.test.ts` (W1-CP-05, #15) | W1-CP-04, W1-CP-05 |
+| `tests/route-inventory.policy-check.ts` — 2 failures | W1-CP-05 (#15) | `apps/web/app/api/runs/**`, `apps/web/app/api/agents/[id]/runs/route.ts` | W1-CP-04 (#18) |
+| `tests/no-sdk-import.test.ts` — 2 failures | W1-RN-01 (#14) | `apps/web/server/runs/acceptance/{nginx.conf,run-acceptance.mjs}` (W1-CP-04, #18) and `tests/route-inventory.policy-check.ts` (W1-CP-05, #15) | W1-CP-04, W1-CP-05 |
 
 Every one of these gates is *correct in isolation* and every one passed CI on its own PR. Each is
 also, by [ADR-0015](0015-gates-decide-on-positive-assertions.md), a **positive** assertion — which
@@ -35,7 +35,7 @@ is precisely why it fails closed here instead of quietly passing. That is the go
 defect is not that they failed; it is that their assertion is scoped to the **whole repository**
 while their author's authority is scoped to one glob set.
 
-`tests/route-inventory.test.ts` is the interesting one, because W1-CP-05 saw this coming and left
+`tests/route-inventory.policy-check.ts` is the interesting one, because W1-CP-05 saw this coming and left
 the handoff in the failure message itself:
 
 ```
@@ -97,7 +97,7 @@ Reasons, in order of weight:
   (classify `.conf`, and decide `createRequire` in a fixture and a non-literal `import()` in a
   sibling's test).
 - **A second, separate cross-task defect was found the same way** and is reported the same way:
-  `tests/route-inventory.test.ts` (W1-CP-05) and `tests/auth.test.ts` (W1-CP-06) are in one Vitest
+  `tests/route-inventory.policy-check.ts` (W1-CP-05) and `tests/auth.test.ts` (W1-CP-06) are in one Vitest
   project and each scans the `apps/web/app/api` directory the other mutates. It is not a
   closed-world assertion — it is a filesystem race — but the reason it is reported rather than
   repaired is identical. See FINDING 5 in the Wave 1a manifest.

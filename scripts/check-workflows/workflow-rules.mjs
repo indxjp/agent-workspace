@@ -107,6 +107,9 @@ const HOSTED_RUNS_ON = 'ubuntu-latest';
 const HOSTED_JOBS = new Set(
   [
     'ci.yml#fast-checks',
+    // The fast path's decision (ADR-0053, Amendment 2026-11-19b): a root-only install and one
+    // `nx affected --explain`, which runs no task.
+    'ci.yml#plan',
     'ci.yml#cancel-on-fast-failure',
     'ci.yml#cancel-on-build-failure',
     'ci.yml#ci-success',
@@ -128,6 +131,7 @@ const HOSTED_JOBS = new Set(
 const INTERNAL_ONLY_WORKFLOWS = new Set(
   [
     'azure-preview.yml',
+    'ci-budget.yml',
     'ci-nx-cache.yml',
     'e2b-template.yml',
     'gcp-small-acceptance.yml',
@@ -266,15 +270,36 @@ function checkEditedRunConcurrency(failures, relativePath, source) {
   }
 }
 
+/** @param {string} source @param {string} check */
+const producesCheck = (source, check) =>
+  source
+    .split(/\r?\n/u)
+    .some((line) => /^ {4}name:/u.test(line) && line.trim() === `name: ${check}`);
+
 /** @param {string[]} failures @param {string} relativePath @param {string} source */
 function checkRequiredChecksRunInQueue(failures, relativePath, source) {
   for (const check of REQUIRED_CHECKS) {
-    const producesCheck = source
-      .split(/\r?\n/u)
-      .some((line) => /^ {4}name:/u.test(line) && line.trim() === `name: ${check}`);
-    if (producesCheck && !MERGE_GROUP_TRIGGER.test(source)) {
+    if (producesCheck(source, check) && !MERGE_GROUP_TRIGGER.test(source)) {
       failures.push(
         `${relativePath}: produces the required check "${check}" and must run on merge_group (types: [checks_requested]) so the merge queue gets it`,
+      );
+    }
+  }
+}
+
+/**
+ * A required check must report on every pull request, queue group and push: a workflow-level path
+ * filter would leave it unreported, and a pull request waits for it forever (ADR-0053, Amendment
+ * 2026-11-19e). A job inside may still decide from the diff and skip itself.
+ * @param {string[]} failures @param {string} relativePath @param {string} source
+ */
+function checkRequiredChecksUnfiltered(failures, relativePath, source) {
+  const triggers = /^on:\s*\r?\n((?:(?: .*)?\r?\n)*)/mu.exec(source)?.[1] ?? '';
+  if (!/^ {4}(?:paths|paths-ignore|branches-ignore):/mu.test(triggers)) return;
+  for (const check of REQUIRED_CHECKS) {
+    if (producesCheck(source, check)) {
+      failures.push(
+        `${relativePath}: produces the required check "${check}" and must not filter its triggers by paths or branches-ignore`,
       );
     }
   }
@@ -395,6 +420,7 @@ export function validateWorkflowFile(failures, relativePath, source, extraAction
   checkPushNeverCancels(failures, relativePath, source);
   checkEditedRunConcurrency(failures, relativePath, source);
   checkRequiredChecksRunInQueue(failures, relativePath, source);
+  checkRequiredChecksUnfiltered(failures, relativePath, source);
   checkNoPullRequestTarget(failures, relativePath, source);
   checkRunnerPolicy(failures, relativePath, source);
   checkPublicReleaseJobs(failures, relativePath, source);

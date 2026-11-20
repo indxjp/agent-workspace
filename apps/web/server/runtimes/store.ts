@@ -6,15 +6,15 @@
  * a store is obtained *for a workspace id* (never a `WorkspaceScope`, which is a sibling package's
  * type). The reasoning is unchanged; only the resource differs.
  */
-import {
-  UnknownWorkspaceError,
-  type CreateRuntimeProfileInput as CoreCreateRuntimeProfileInput,
-  type RuntimeProfileRecord as CoreRuntimeProfileRecord,
-  type RuntimeProfileRepository as CoreRuntimeProfileRepository,
-  type RuntimeProfileRepositoryProvider as CoreRuntimeProfileRepositoryProvider,
-  type UpdateRuntimeProfilePatch as CoreUpdateRuntimeProfilePatch,
-  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import type {
+  CreateRuntimeProfileInput as CoreCreateRuntimeProfileInput,
+  RuntimeProfileRecord as CoreRuntimeProfileRecord,
+  RuntimeProfileRepository as CoreRuntimeProfileRepository,
+  RuntimeProfileRepositoryProvider as CoreRuntimeProfileRepositoryProvider,
+  UpdateRuntimeProfilePatch as CoreUpdateRuntimeProfilePatch,
+  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { UnknownWorkspaceError } from '@agent-workspace/core/db-model';
 
 /** One `runtime_profiles` row, as this layer hands it around. Mirrors the repository's record. */
 export interface RuntimeProfileRecord {

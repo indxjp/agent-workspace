@@ -34,7 +34,7 @@ import {
   MAX_POINTER_BODY_BYTES,
 } from './contract';
 import { applicationContext } from '../application-context';
-import type { AgentVersionsRuntime } from './runtime';
+import type { AgentVersionsRuntime } from './wiring';
 import type { WorkspaceAgentVersionStore } from './store';
 import { saveUiEdit, type UiEdit } from './ui-edit';
 

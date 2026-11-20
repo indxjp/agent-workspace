@@ -35,7 +35,7 @@ open AgentWorkspace.Behaviour.EnginePort AgentWorkspace.Behaviour.SandboxEnv
 
 The assembly is the part that had to survive the move: the request's own entries with the four
 derived ones appended last, so a caller cannot set a derived name for itself. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/units/run-compose.md#theorems-and-vectors")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/units/run-compose.md#theorems-and-vectors")
   (ts := "packages/engine-claude-agent-sdk/src/compile.ts#compileRunRequest")]
 theorem current_compile_yields_the_assembled_environment (request : Request)
     (projectKey configDir : String) (env : List (String × String))
@@ -72,7 +72,7 @@ theorem target_compile_yields_the_assembled_environment (capabilities : Capabili
 
 That is what "extracted without behaviour change" means for this unit, and it is an equality
 rather than a simulation because the computation is the same function at a new address. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/units/run-compose.md#theorems-and-vectors")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/units/run-compose.md#theorems-and-vectors")
   (ts := "packages/engine-claude-agent-sdk/src/compile.ts#compileRunRequest")
   (ts := "packages/engine-claude-agent-sdk/src/engine.ts#createClaudeAgentSdkEngine")]
 theorem target_and_current_agree (capabilities : Capabilities) (request : Request)

@@ -11,10 +11,14 @@ import {
 import { WorkspaceSwitchResponseSchema } from '@indx-workspace/contracts/workspaces';
 import { POST as switchWorkspaceRoute } from '../app/api/auth/workspace/route';
 import { POST as mintTokenRoute } from '../app/api/tokens/route';
-import { mintSessionToken, newSessionClaims, sessionCookieName } from './auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  signInSessionCookieName,
+} from './auth/session';
 import { mintBrowserToken } from './rbac/browser-token';
 import { createMemoryDirectory } from './rbac/memory-directory';
-import type { WorkspaceRepositoryPort } from './workspaces/runtime';
+import type { WorkspaceRepositoryPort } from './workspaces/wiring';
 import { installRbacHarness, TEST_WORKSPACE_ID } from './rbac/testing';
 import { clearApplicationContext } from './application-context';
 import { installTestDomains } from './application-context-fixtures';
@@ -175,8 +179,8 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
     const previousSecret = process.env['SESSION_SECRET'];
     process.env['SESSION_SECRET'] = SWITCH_SECRET;
     try {
-      const session = await mintSessionToken(
-        newSessionClaims(SWITCH_EMAIL, SWITCH_WORKSPACE.slug),
+      const session = await mintSignInSessionToken(
+        newSignInSessionClaims(SWITCH_EMAIL, SWITCH_WORKSPACE.slug),
         SWITCH_SECRET,
       );
       const response = await switchWorkspaceRoute(
@@ -186,7 +190,7 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
             'content-type': 'application/json',
             origin: 'https://control-plane.test',
             host: 'control-plane.test',
-            cookie: `${sessionCookieName(process.env)}=${session}`,
+            cookie: `${signInSessionCookieName(process.env)}=${session}`,
           },
           body: JSON.stringify({ workspace: SWITCH_WORKSPACE.slug }),
         }),
@@ -202,7 +206,7 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
       expect(
         response.headers
           .getSetCookie()
-          .some((c) => c.startsWith(`${sessionCookieName(process.env)}=`)),
+          .some((c) => c.startsWith(`${signInSessionCookieName(process.env)}=`)),
       ).toBe(true);
     } finally {
       if (previousSecret === undefined) delete process.env['SESSION_SECRET'];
@@ -230,8 +234,8 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
     const previousSecret = process.env['SESSION_SECRET'];
     process.env['SESSION_SECRET'] = SWITCH_SECRET;
     try {
-      const session = await mintSessionToken(
-        newSessionClaims(SWITCH_EMAIL, SWITCH_WORKSPACE.slug),
+      const session = await mintSignInSessionToken(
+        newSignInSessionClaims(SWITCH_EMAIL, SWITCH_WORKSPACE.slug),
         SWITCH_SECRET,
       );
       const response = await switchWorkspaceRoute(
@@ -241,7 +245,7 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
             'content-type': 'application/json',
             origin: 'https://control-plane.test',
             host: 'control-plane.test',
-            cookie: `${sessionCookieName(process.env)}=${session}`,
+            cookie: `${signInSessionCookieName(process.env)}=${session}`,
           },
           body: JSON.stringify({ workspace: 'not-a-member-workspace' }),
         }),

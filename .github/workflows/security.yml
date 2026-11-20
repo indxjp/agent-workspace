@@ -13,6 +13,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.sha }}
+  # Only a pull request supersedes its own earlier run; a push to main or the nightly never cancels
+  # (audit F-02).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   dependency-review:
     # Private repositories require GitHub Advanced Security for dependency review. Keep the
@@ -45,7 +51,12 @@ jobs:
 
   # GitHub's runner for all three jobs: none of them is on ci-success's path (see ci.yml's header
   # for the runner rule).
+  # Not on a pull request (ADR-0053, Amendment 2026-11-19e): `pnpm audit` reads the whole lockfile
+  # against today's advisories, so on a pull request it answered for main, not for the change. A pull
+  # request that changes pnpm-lock.yaml gets the strict osv-scanner gate in ci.yml's fast-checks,
+  # which is required; the push to main and the nightly still run this audit and the inventory.
   dependency-audit:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

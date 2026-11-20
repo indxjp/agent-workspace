@@ -1,6 +1,6 @@
 import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 import { workspaceFeatureSwitches } from '../../../composition/feature-switches';
-import { configureFeatureSwitches } from '../../../features/runtime';
+import { configureFeatureSwitches } from '../../../features/wiring';
 import type { WorkspaceFeatureStore } from '../../../identity';
 import type { AuditDeps } from '../../adapters/audit/store';
 

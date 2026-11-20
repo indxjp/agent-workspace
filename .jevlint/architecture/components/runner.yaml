@@ -1,0 +1,18 @@
+id: runner
+title: Runner
+summary: >
+  Two processes from one package: the runtime manager allocates a sandbox per session through one runtime driver and proxies to it; the runtime server inside answers POST /run, verifies files, starts the engine and streams agent.* frames.
+layer: application
+paths:
+  - "apps/runner/**"
+key_files:
+  - { path: apps/runner/src/manager-start.ts, role: "startRunnerManager: composes the manager-driver-* modules and shutdown" }
+  - { path: apps/runner/src/engines.ts, role: "ENGINE_MODULES: the one file that imports an engine adapter" }
+  - { path: apps/runner/src/server.ts, role: "runtime server: POST /run and /invocations" }
+interface: [startRunner, startRunnerManager, createRunnerManagerFunction]
+depends_on: [engine-adapters, run-contract, runtime-drivers, persistence, contracts]
+uses: [zod]
+rules: []
+checklist:
+  - { id: runner-reaches-adapters-through-engines-ts, text: "Only apps/runner/src/engines.ts imports an @agent-workspace/engine-* package." }
+status: current

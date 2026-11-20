@@ -3,16 +3,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../auth';
+import { mintSignInSessionToken, newSignInSessionClaims, verifySignInSessionToken } from '../auth';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { currentWorkspaceFeatures, featureGateFor, resolveIdentity } from './console';
-import { clearFeatureSwitches, configureFeatureSwitches } from './runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from './wiring';
 
 const SECRET = 'b'.repeat(32);
 
 async function sessionFor(email: string, workspaceSlug: string) {
-  const token = await mintSessionToken(newSessionClaims(email, workspaceSlug), SECRET);
-  const result = await verifySessionToken(token, SECRET);
+  const token = await mintSignInSessionToken(newSignInSessionClaims(email, workspaceSlug), SECRET);
+  const result = await verifySignInSessionToken(token, SECRET);
   if (!result.ok) throw new Error('unreachable: mint then verify with the same secret');
   return result.claims;
 }

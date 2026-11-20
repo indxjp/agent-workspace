@@ -8,10 +8,13 @@
  * English reader is shown exactly those. Japanese is a translation of them, one entry per driver,
  * so a driver added to the contract fails `typecheck` here until it is worded.
  *
- * What the server sends — a registered runtime's own disabled reason or refusal, the Test Runtime
- * transcript, and a refusal's message — is shown as it comes.
+ * What the server sends — a registered runtime's refusal, the Test Runtime transcript, and a
+ * refusal's message — is shown as it comes. A registered runtime's disabled reason is the one
+ * exception: the registry words it from the entry's two flags (`runtimeDisabledReason`), so a
+ * reason that is exactly that wording is said here in the reader's language
+ * ({@link registeredRuntimeReason}); any other reason is still shown as it comes.
  */
-import type { RuntimeDriver } from '../../contracts/runtimes';
+import { runtimeDisabledReason, type RuntimeDriver } from '../../contracts/runtimes';
 import type { VersionsLocale } from '../agents/versions-messages';
 
 import { RUNTIME_OPTIONS, SWITCH_COMPARISON, type RuntimeOption } from './model';
@@ -52,6 +55,9 @@ export interface RuntimesStrings {
   readonly disabledNoteAfter: string;
   readonly switchComparisonHeading: string;
   readonly notAllowed: string;
+  /** A registered runtime's disabled reasons, as the registry words them in English. */
+  readonly noRuntimeConnection: string;
+  readonly imageNotReachable: string;
 }
 
 /** English options are the spec's, as `./model.ts` transcribes them. */
@@ -92,6 +98,8 @@ const EN: RuntimesStrings = {
     ', never hidden. The control plane registers and selects runtimes — it does not build images, create session pools or provision clusters.',
   switchComparisonHeading: 'Runtime switch comparison',
   notAllowed: 'Only workspace Owners and Admins can view runtimes.',
+  noRuntimeConnection: 'No runtime connection is configured.',
+  imageNotReachable: 'The runtime image is not reachable.',
 };
 
 const NOT_SET_TO_THIS_DRIVER =
@@ -205,10 +213,32 @@ const JA: RuntimesStrings = {
     'として表示します。コントロールプレーンはランタイムを登録・選択するだけで、イメージのビルド、セッションプールの作成、クラスターのプロビジョニングは行いません。',
   switchComparisonHeading: 'ランタイム変更の比較',
   notAllowed: 'ランタイムを表示できるのは、ワークスペースのオーナーと管理者だけです。',
+  noRuntimeConnection: 'ランタイム接続が設定されていません。',
+  imageNotReachable: 'ランタイムのイメージにアクセスできません。',
 };
 
 const STRINGS: Readonly<Record<VersionsLocale, RuntimesStrings>> = { en: EN, ja: JA };
 
 export function runtimesStrings(locale: VersionsLocale): RuntimesStrings {
   return STRINGS[locale];
+}
+
+/** Sentences are joined by a space in English and run on in Japanese. */
+const SENTENCE_JOIN: Readonly<Record<VersionsLocale, string>> = { en: ' ', ja: '' };
+
+/**
+ * A registered runtime's disabled reason in the reader's language. The registry sends English built
+ * from `connectionExists` and `imageReachable`; when the reason is exactly that, it is worded here
+ * from the same two flags. A reason the registry did not word that way is shown as it came.
+ */
+export function registeredRuntimeReason(
+  entry: Readonly<{ connectionExists: boolean; imageReachable: boolean; reason: string | null }>,
+  locale: VersionsLocale,
+): string | null {
+  if (entry.reason === null || entry.reason !== runtimeDisabledReason(entry)) return entry.reason;
+  const strings = runtimesStrings(locale);
+  return [
+    ...(entry.connectionExists ? [] : [strings.noRuntimeConnection]),
+    ...(entry.imageReachable ? [] : [strings.imageNotReachable]),
+  ].join(SENTENCE_JOIN[locale]);
 }

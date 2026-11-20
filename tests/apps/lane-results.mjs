@@ -165,4 +165,9 @@ export function record(id, outcomes, step, outcome) {
   console.log(
     `== ${id} ${step}: ${outcome.status}${outcome.status === 'ok' ? '' : ` (${outcome.reason.split('\n')[0]})`}`,
   );
+  // A reason's first line often only names the command ("... exited 1:"); its cause follows.
+  const detail = outcome.status === 'ok' ? [] : outcome.reason.split('\n').slice(1);
+  if (detail.some((line) => line.trim() !== '')) {
+    console.log(detail.map((line) => `   ${line}`).join('\n'));
+  }
 }

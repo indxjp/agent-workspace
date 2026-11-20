@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W0-INF-03, Infra agent
-Scope: `scripts/check-licenses.mjs`, `docs/dependency-policy.md`
+Scope: `scripts/check-licenses.mjs`, `docs/30-reference/policies/dependency-policy.md`
 
 ## Context
 
@@ -17,7 +17,7 @@ It asks for three files and one dependency:
 Three facts made that shape impossible or unwise here.
 
 1. **W0-INF-03's file ownership does not include the repository root.** The task owns
-   `scripts/check-licenses.mjs`, `docs/dependency-policy.md`, research note R-16,
+   `scripts/check-licenses.mjs`, `docs/30-reference/policies/dependency-policy.md`, research note R-16,
    `docs/adr/W0-INF-03-*.md`, and the licence step of `.github/workflows/ci.yml`. Creating
    `licence-policy.json` and `licence-exceptions.json` at the root would be an ownership violation
    under plan §2.3, which the CI ownership gate enforces mechanically.
@@ -45,7 +45,7 @@ Ship the gate as a single zero-dependency Node ESM file, exactly as `scripts/che
 already is, with the policy of C.1 and the exception register of C.2 inlined as exported constants and
 a hand-written SPDX expression parser and evaluator in place of `spdx-satisfies`. The prose half of
 the policy — the copyleft position, the reviewer and reason behind each exception, how each residual
-finding was closed — is `docs/dependency-policy.md`. Neither root JSON file is created, and no
+finding was closed — is `docs/30-reference/policies/dependency-policy.md`. Neither root JSON file is created, and no
 devDependency is added.
 
 ## Alternatives considered
@@ -93,7 +93,7 @@ devDependency is added.
   [the unparseable-SPDX ADR](W0-INF-03-unparseable-spdx-expressions.md)).
 * **Editing the policy means editing a script.** That is more intimidating than editing JSON, and a
   contributor may hesitate. Mitigated by putting the policy at the top of the file, above any logic,
-  and by `docs/dependency-policy.md` being the document a reviewer is pointed at. It is also honest:
+  and by `docs/30-reference/policies/dependency-policy.md` being the document a reviewer is pointed at. It is also honest:
   changing the policy *is* changing the gate.
 * **If this is reversed** — a wave that owns the repository root extracts `licence-policy.json` and
   `licence-exceptions.json` — the exported `POLICY` and `EXCEPTIONS` constants are the file contents

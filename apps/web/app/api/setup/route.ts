@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { admitSignInAttempt } from '../../../server/auth/sign-in-limit';
 import { setupSecretsOf, setupStepFailure } from '../../../server/setup/failure';
 import { applicationContext } from '../../../server/application-context';
-import type { SetupInput, SetupResult } from '../../../server/setup/runtime';
+import type { SetupInput, SetupResult } from '../../../server/setup/wiring';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

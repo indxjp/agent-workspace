@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-04
 Decided by: orchestrator
-Scope: `tests/route-inventory.test.ts`, `tests/route-declarations/**`; extends ADR-0019
+Scope: `tests/route-inventory.policy-check.ts`, `tests/route-declarations/**`; extends ADR-0019
 
 ## Context
 
@@ -66,7 +66,7 @@ wave designed around not having any** — the same shape as the ADR filename col
 
 * One more file per route-shipping task, and a reader who wants the whole surface runs the gate
   rather than reading one array. The gate prints the union on failure, so the loss is small.
-* `tests/route-inventory.test.ts` becomes an integration-owned file that no wave task edits again —
+* `tests/route-inventory.policy-check.ts` becomes an integration-owned file that no wave task edits again —
   the partition means it no longer needs to be edited to add a route.
 * The screen-inventory test plan §9.1 requires for Wave 2's UI has the same shape and gets the same
   treatment: `tests/screen-declarations/<TASK-ID>.ts`, built by the same task.

@@ -4,7 +4,7 @@
  */
 import { renderComposeApps } from '@indx-workspace/cli/deploy';
 import { parseProjectFile } from '@indx-workspace/sdk/project';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -31,8 +31,10 @@ import {
   laneFindings,
   parseLaneArgs,
   renderLaneSummary,
+  renderedPlan,
   renderScenarioSummary,
   standInImage,
+  standInPlatformImages,
   STEP_CELLS,
   STEP_NEEDS,
   TEST_RESULTS_REPORTER,
@@ -485,6 +487,62 @@ describe('the self-host step', () => {
   it('gives an app whose image did not build a digest reference that names no real image', () => {
     expect(image).toMatch(/^registry\.apps-lane\.test\/minimal@sha256:[0-9a-f]{64}$/u);
     expect(standInImage('wiki')).not.toBe(image);
+  });
+
+  // The 0.6.13 image release's gate: the plan asked ghcr.io for this version's platform images,
+  // which only that release publishes, so every app's self-host step failed.
+  it("renders the plan with stand-in platform images, not this version's unpublished release", async () => {
+    const work = await mkdtemp(path.join(tmpdir(), 'apps-lane-plan-'));
+    try {
+      const copy = path.join(work, 'copy');
+      const aw = path.join(copy, 'node_modules/@indx-workspace/aw/dist');
+      await mkdir(aw, { recursive: true });
+      await writeFile(
+        path.join(copy, 'agent-workspace.yaml'),
+        await readFile(path.join(EXAMPLES_DIR, 'minimal', 'agent-workspace.yaml'), 'utf8'),
+      );
+      await writeFile(
+        path.join(aw, 'index.js'),
+        [
+          "const { writeFileSync } = require('node:fs');",
+          'const images = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^AW_.*_IMAGE$/u.test(key)));',
+          "writeFileSync(require('node:path').join(process.env.HOME, 'images.json'), JSON.stringify(images));",
+          "process.stderr.write('error: the plan failed for its own reason\\n');",
+          'process.exit(1);',
+        ].join('\n'),
+      );
+
+      const planned = renderedPlan({
+        id: 'minimal',
+        copy,
+        image,
+        env: { PATH: process.env['PATH'] },
+        work,
+        target: 'single-vm',
+      });
+
+      expect(planned).toStrictEqual({
+        problem:
+          'aw deploy production (single-vm) exited 1:\nerror: the plan failed for its own reason',
+      });
+      const images: unknown = JSON.parse(
+        await readFile(path.join(work, 'deploy/minimal-single-vm/images.json'), 'utf8'),
+      );
+      expect(images).toStrictEqual(standInPlatformImages());
+      expect(Object.keys(standInPlatformImages()).sort()).toStrictEqual([
+        'AW_GATEWAY_IMAGE',
+        'AW_RUNNER_IMAGE',
+        'AW_RUNTIME_IMAGE',
+        'AW_WEB_IMAGE',
+      ]);
+      for (const reference of Object.values(standInPlatformImages())) {
+        expect(reference).toMatch(
+          /^registry\.apps-lane\.test\/platform-[a-z]+@sha256:[0-9a-f]{64}$/u,
+        );
+      }
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1,0 +1,17 @@
+id: contracts
+title: API contracts
+summary: >
+  The Zod wire schemas of /api/**, route catalogue, problem codes, closed vocabularies and CONTRACTS_VERSION. Depends on zod alone, so it is consumable outside the repository.
+layer: contracts
+paths:
+  - "packages/contracts/**"
+key_files:
+  - { path: packages/contracts/src/runs.ts, role: "RUN_STATUSES, MODEL_PROVIDERS and run schemas" }
+  - { path: packages/contracts/src/run-events.ts, role: "AgentFrame: the agent.* frames a run streams" }
+  - { path: packages/contracts/src/problem.ts, role: "the problem envelope and codes" }
+interface: [CONTRACTS_VERSION, RUN_STATUSES, AgentFrame, ProjectPolicy, AgentVersionBody, parseStorageUrl]
+depends_on: []
+uses: [zod]
+rules: []
+checklist: []
+status: current

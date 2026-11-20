@@ -13,6 +13,7 @@
  * honest one in the ordinary case.
  */
 import { a12Scenarios } from './scenarios.js';
+import type { A12Timers } from './timers.js';
 import type {
   A12Probe,
   A12Report,
@@ -25,6 +26,7 @@ export async function runA12ConformanceSuite<TRequest, TEvent>(
   driver: RuntimeDriver<TRequest, TEvent>,
   capabilities: RuntimeCapabilities,
   probe: A12Probe<TRequest, TEvent>,
+  options: { readonly timers?: A12Timers } = {},
 ): Promise<A12Report> {
   const results: A12ScenarioResult[] = [];
 
@@ -47,7 +49,7 @@ export async function runA12ConformanceSuite<TRequest, TEvent>(
     }
 
     try {
-      const outcome = await scenario.run({ driver, capabilities, probe });
+      const outcome = await scenario.run({ driver, capabilities, probe, ...options });
       results.push({
         id: scenario.id,
         name: scenario.name,

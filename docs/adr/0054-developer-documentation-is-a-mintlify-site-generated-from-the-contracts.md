@@ -71,4 +71,4 @@ were written.
   is refused, because the MDX pages are portable.
 - **Keep the package READMEs as the documentation.** They are good, and they stay, but three
   READMEs cannot carry a quickstart, a concept model, cross-cutting client behaviour and a
-  complete reference without becoming what `docs/sdk/04-api-specification.md` already is.
+  complete reference without becoming what `docs/10-product/sdk/04-api-specification.md` already is.

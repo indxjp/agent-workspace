@@ -11,7 +11,7 @@ A **session** is "not a run; it is the continuity between runs": one conversatio
 belongs to exactly one workspace, one agent and one owning principal, to at most one project, and
 to at most one member (the legacy `user_id`, which must then be a member of the same workspace).
 
-Three identifiers meet here, and the glossary in `docs/formal/units/concept-work.md` keeps them
+Three identifiers meet here, and the glossary in `docs/20-design/formal/units/concept-work.md` keeps them
 apart:
 
 * `Session.id` — the platform's own row id (`sessions.id`, `SessionResource.id`,
@@ -61,7 +61,7 @@ end SessionStatus
 /-- One session, with the fields `sessions` stores. -/
 @[aw_spec (ts := "packages/core/src/db/schema/sessions.ts#sessions")
   (ts := "packages/contracts/src/sessions.ts#SessionResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Session where
   id : SessionId
   workspace : WorkspaceId
@@ -161,7 +161,7 @@ def isWindowsDeviceName (s : String) : Bool :=
 project key passes the SDK's validator and is not a Windows device name. A scope that fails is
 one the SDK would silently ignore, keying the session under a path shared across tenants. -/
 @[aw_spec (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def tenantScopeOk (projectKey configDir : String) : Bool :=
   !ModelConnection.isBlank configDir && isProjectKey projectKey &&
     !isWindowsDeviceName projectKey
@@ -192,7 +192,7 @@ def splitSlash : List Char → List (List Char)
 more segments joined by `/`) and at most 128 characters. The empty string is refused. -/
 @[aw_spec (ts := "packages/contracts/src/sessions.ts#TRANSCRIPT_SUBPATH_PATTERN")
   (ts := "packages/contracts/src/sessions.ts#TRANSCRIPT_SUBPATH_MAX_LENGTH")
-  (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
 def isWireSubpath (s : String) : Bool :=
   s.length ≤ subpathMaxLength && (splitSlash s.toList).all isSubpathSegment
 

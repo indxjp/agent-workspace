@@ -129,7 +129,7 @@ private theorem mem_of_any {l : List ForeignKey} {p : ForeignKey → Bool} (h : 
 /-- Every composite foreign key of today's schema pairs the child's tenant column with the
 parent's, so the database itself compares the two workspaces as part of the key. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem every_composite_key_is_tenant_paired (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) (hlen : 2 ≤ fk.columns.length) :
@@ -142,7 +142,7 @@ theorem every_composite_key_is_tenant_paired (t : TableName) (fk : ForeignKey)
 /-- In any state of today's database, consistent or not, a reference through a composite foreign
 key joins two rows of the same workspace. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem composite_reference_stays_in_workspace (st : State) {t : TableName} {fk : ForeignKey}
     {r r' : Row} (href : References catalogue st t fk r r') (hlen : 2 ≤ fk.columns.length) :
@@ -153,7 +153,7 @@ theorem composite_reference_stays_in_workspace (st : State) {t : TableName} {fk 
 /-- In every consistent state of today's whole schema, no foreign-key reference joins a row of one
 workspace to a tenant-carrying row of another. -/
 @[aw_spec (tier := T2) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem no_cross_workspace_reference (st : State) (hc : Current.consistent st = true)
     {t : TableName} {fk : ForeignKey} {r r' : Row}
@@ -173,7 +173,7 @@ theorem reference_chain_stays_in_workspace (st : State) (hc : Current.consistent
 
 /-- Every state a database with constraint set `P` reaches from empty, by any sequence of
 committed transactions, satisfies `P`, provided the empty database does. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/00-orchestrator-prompt.md#61-tiers")]
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/00-orchestrator-prompt.md#61-tiers")]
 theorem reachable_state_satisfies_constraints (P : State → Bool) (hP : P State.empty = true)
     {st : State} (h : Current.Reachable P st) : P st = true := by
   induction h with
@@ -186,13 +186,13 @@ theorem reachable_state_satisfies_constraints (P : State → Bool) (hP : P State
 
 /-- The empty database satisfies every constraint of today's whole schema. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem empty_database_is_consistent : Current.consistent State.empty = true := by decide +kernel
 
 /-- No sequence of committed transactions, whatever rows any writer sends, reaches a state of
 today's database with a reference from one workspace to a tenant-carrying row of another. -/
 @[aw_spec (tier := T2) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (doc := "docs/formal/00-orchestrator-prompt.md#61-tiers")
+  (doc := "docs/20-design/formal/00-orchestrator-prompt.md#61-tiers")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reachable_state_has_no_cross_workspace_reference {st : State}
     (h : Current.Reachable Current.consistent st) {t : TableName} {fk : ForeignKey} {r r' : Row}
@@ -248,7 +248,7 @@ theorem tenant_row_has_exactly_one_workspace (st : State) (hc : Current.consiste
 
 /-- In every consistent state of today's database, a row whose owner column is set names exactly
 one principal, and that principal belongs to the row's own workspace. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#workspace-and-principal")
   (ts := "packages/core/src/db/schema/agents.ts#agents_owner_principal_workspace_fk")]
 theorem owner_reference_names_exactly_one_principal (st : State)
@@ -275,7 +275,7 @@ theorem owner_reference_names_exactly_one_principal (st : State)
 
 /-- The owner column is `NOT NULL` on every table that has one except `audit_events`, whose actor
 may be a deleted principal or none. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")]
 theorem owner_is_mandatory_except_for_audit_actors (t : TableName) (c : String)
     (hown : Current.ownerColumn? t = some c) :
@@ -285,7 +285,7 @@ theorem owner_is_mandatory_except_for_audit_actors (t : TableName) (c : String)
 
 /-- In every consistent state of today's database, every row of a table whose owner column is
 `NOT NULL` has exactly one owning principal, in its own workspace. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#workspace-and-principal")
   (ts := "packages/core/src/db/schema/agents.ts#agents_owner_principal_workspace_fk")]
 theorem owned_row_has_exactly_one_owner (st : State) (hc : Current.consistent st = true)
@@ -302,7 +302,7 @@ theorem owned_row_has_exactly_one_owner (st : State) (hc : Current.consistent st
 /-- The two checks two clusters both give a meaning to, `workspaces_default_model_pair` (identity
 and configuration) and `projects_default_model_pair` (work and configuration), mean the same on
 every row in both clusters. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "packages/core/src/db/schema/workspaces.ts#workspaces")
   (ts := "packages/core/src/db/schema/projects.ts#projects")]
 theorem shared_checks_agree (r : Row) :
@@ -326,7 +326,7 @@ theorem shared_checks_agree (r : Row) :
 
 /-- In every consistent state of the target schema, no foreign-key reference joins a row of one
 workspace to a tenant-carrying row of another. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/concepts.md#the-target-er-model")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")
   (doc := "docs/architecture.md#runtime-and-trust-boundaries")]
 theorem target_has_no_cross_workspace_reference (st : State) (hc : Target.consistent st = true)
     {t : TableName} {fk : ForeignKey} {r r' : Row}
@@ -531,7 +531,7 @@ example : ∃ p ∈ Refinement.toTarget Current.Witness.state .workspacePrincipa
 catalogue yet is inconsistent for the whole schema, because it breaks exactly one check that only
 that cluster gives a meaning to. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem every_cluster_check_is_enforced :
     Refinement.Refusals.cells.map (·.1) = (WireEnum.all : List Current.Cluster) ∧
       (Refinement.Refusals.cells.all fun (c, st, t, n) =>
@@ -542,7 +542,7 @@ theorem every_cluster_check_is_enforced :
 /-! ## Reachable target states -/
 
 /-- The empty database satisfies every constraint of the target. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/concepts.md#the-target-er-model")]
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")]
 theorem target_empty_database_is_consistent : Target.consistent State.empty = true := by
   decide +kernel
 
@@ -553,7 +553,7 @@ private theorem target_load_runs_to_base :
 
 /-- The image of today's witness is reachable under the target's constraints: loading it into an
 empty target database in one transaction commits. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 theorem target_witness_is_reachable :
     Current.Reachable Target.consistent (Refinement.toTarget Current.Witness.state) := by
   have h := Current.Reachable.commit (P := Target.consistent) Refinement.TargetCells.load .empty
@@ -565,7 +565,7 @@ theorem target_witness_is_reachable :
 
 /-- No sequence of committed transactions under the target's constraints reaches a state with a
 reference from one workspace to a tenant-carrying row of another. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/concepts.md#the-target-er-model")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")
   (doc := "docs/architecture.md#runtime-and-trust-boundaries")]
 theorem target_reachable_state_has_no_cross_workspace_reference {st : State}
     (h : Current.Reachable Target.consistent st) {t : TableName} {fk : ForeignKey} {r r' : Row}

@@ -27,7 +27,7 @@ import {
 import { MAX_REQUEST_BODY_BYTES } from '../agents/http';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import type { AgentStoreProvider } from '../agents/store';
-import { type WorkspaceResolution } from '../agents/runtime';
+import { type WorkspaceResolution } from '../agents/wiring';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { createSkillRowsWorld } from '../skills/rows-fixture';

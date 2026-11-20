@@ -1,4 +1,4 @@
-// Generated from each live entry's source folder by `APPS_WRITE=1 pnpm vitest run --project tests tests/store`.
+// Generated from each live entry's source folder by `APPS_WRITE=1 pnpm vitest run --project tests-store tests/store`.
 // Do not edit by hand: tests/store/sources.test.ts fails when it differs from the sources.
 
 import type { SourceView } from './define.ts';

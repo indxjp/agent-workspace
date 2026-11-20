@@ -33,7 +33,7 @@ if (!process.argv.includes('--no-conformance')) {
 }
 
 writeFileSync(
-  new URL('docs/runtime-driver-matrix.md', root),
+  new URL('docs/30-reference/matrices/runtime-driver-matrix.md', root),
   await renderDriverMatrix(spec, results),
 );
 console.log('wrote the A.10 matrix from the checked-in evidence record');

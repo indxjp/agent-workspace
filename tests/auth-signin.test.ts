@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_SESSION_SECRET_LENGTH,
-  sessionCookieName,
+  signInSessionCookieName,
   readBootstrapAdmin,
   signIn,
-  verifySessionToken,
+  verifySignInSessionToken,
 } from '../apps/web/server/auth/session.js';
 
 const SECRET = 'a'.repeat(MIN_SESSION_SECRET_LENGTH);
@@ -57,7 +57,7 @@ describe('signIn', () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const verified = await verifySessionToken(result.token, SECRET);
+    const verified = await verifySignInSessionToken(result.token, SECRET);
     expect(verified.ok).toBe(true);
     if (verified.ok) {
       expect(verified.claims.sub).toBe('admin@example.com');
@@ -70,7 +70,7 @@ describe('signIn', () => {
         role: 'owner',
       });
     }
-    expect(result.cookie.name).toBe(sessionCookieName(GOOD_ENV));
+    expect(result.cookie.name).toBe(signInSessionCookieName(GOOD_ENV));
   });
 
   it('refuses a wrong password and a wrong email with the same code', async () => {

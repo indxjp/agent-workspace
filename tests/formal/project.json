@@ -1,0 +1,30 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "tests-formal",
+  "implicitDependencies": ["!agent-workspace"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --project tests-formal --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+        "env": {
+          "NODE_OPTIONS": "--unhandled-rejections=strict",
+          "VITEST_MAX_WORKERS": "4"
+        }
+      },
+      "inputs": [
+        "default",
+        "^default",
+        "vitestConfig",
+        "{workspaceRoot}/tests/projects.mjs",
+        "{workspaceRoot}/tests/vitest.shared.ts",
+        "{workspaceRoot}/.claude/**/*",
+        "{workspaceRoot}/docs/20-design/formal/concepts.md",
+        "{workspaceRoot}/formal/generated/vectors/**/*",
+        "{workspaceRoot}/infra/terraform/azure-container-apps/apps.tf",
+        "{workspaceRoot}/migrations/**/*",
+        "{workspaceRoot}/packages/core/src/db/schema/**/*"
+      ]
+    }
+  }
+}

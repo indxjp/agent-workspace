@@ -3,7 +3,7 @@ import AgentWorkspace.Er.Current.Catalog
 /-!
 T5 — properties of the catalog specification itself: where two of its layers disagree, or where
 a document's sentence and the code part ways. Each theorem pins one entry of the unit's findings
-(`docs/formal/units/concept-catalog.md`), so that fixing the code or the document breaks the
+(`docs/20-design/formal/units/concept-catalog.md`), so that fixing the code or the document breaks the
 theorem by name.
 -/
 
@@ -20,7 +20,7 @@ admits a name of three spaces (`/^.{1,200}$/u`), and the row it produces fails
 `mcp_servers_name_not_blank`, so the database, not the route, refuses it. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 theorem blank_connector_name_passes_the_parser_but_not_the_check :
     ∃ p, Connector.parseBody (some blankNameBody) = .ok p ∧
       (p.toConnector ⟨"c1"⟩ ⟨"w1"⟩ ⟨"s1"⟩ none ⟨"p1"⟩).nameNotBlank = false ∧
@@ -45,7 +45,7 @@ theorem openapi_credential_pairing_is_not_a_database_check :
 names a file of the catalog; the same repetition of a skill or connector id is merged silently. -/
 @[aw_spec (tier := T5)
   (ts := "packages/core/src/db/repositories/agent-resources.ts#createDatabaseAgentResourceRepositoryProvider")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 theorem repeated_ids_are_treated_differently_by_kind (p : Agent.Permissions)
     (cat : Grant.CatalogIds) (f k : String) (a : Grant.FileAccess) (hk : k ∈ cat.skills) :
     Grant.replace (some p) cat ⟨[⟨f, a⟩, ⟨f, a⟩], [], []⟩ = .unknownFile f ∧
@@ -64,7 +64,7 @@ example : Grant.replace (some ⟨true, true, false, false⟩) ⟨["f1"], ["k1"],
 /-- Finding: 04 §2 says every row that can be own or other carries `ownerPrincipalId`, and the
 tables do, but only the agent and connector bodies carry it on the wire; the file and skill
 bodies carry neither the owner nor the creator. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/contracts/src/files.ts#FileResourceSchema")
   (ts := "packages/contracts/src/skills.ts#SkillDetailSchema")]
 theorem file_and_skill_bodies_carry_no_owner :

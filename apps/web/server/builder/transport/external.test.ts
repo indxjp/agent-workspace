@@ -16,7 +16,7 @@ import { counterIds } from '../../ids';
 import { TOOL_ENDPOINT_RATE_LIMITS, resetToolEndpointLimits } from '../../tool-endpoint/limits';
 import { draftBody } from '../adapters/checker/checker.contract';
 import { makeMemoryPorts } from '../testing/ports';
-import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/wiring';
 import { WORKSPACE, builderDoor, type Door } from './e2e/harness.test-support';
 import { serveExternalBuilderMcp, toExternalCallContext, type ExternalPrincipal } from './external';
 

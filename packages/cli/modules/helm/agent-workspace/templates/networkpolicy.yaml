@@ -223,7 +223,7 @@ spec:
         - { protocol: TCP, port: 53 }
 ---
 # An app reaches PostgreSQL as its own role, on the same `database.port` and destination as the
-# platform. The role owns only the app's `app_<name>` schema (docs/deploy/kubernetes.md).
+# platform. The role owns only the app's `app_<name>` schema (docs/40-operate/deploy/kubernetes.md).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: { name: apps-database }

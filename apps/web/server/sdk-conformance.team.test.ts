@@ -29,7 +29,11 @@ import {
   UserListResponseSchema,
   UserResourceSchema,
 } from '@indx-workspace/contracts/team';
-import { mintSessionToken, newSessionClaims, verifySessionToken } from './auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from './auth/session';
 import {
   acceptInvitation,
   createInvitation,
@@ -37,7 +41,7 @@ import {
   resendInvitation,
   revokeInvitation,
 } from './invitations/handlers';
-import { type InvitationsRuntime } from './invitations/runtime';
+import { type InvitationsRuntime } from './invitations/wiring';
 import { createManualLinkInvitationSender } from './invitations/send-invitation';
 import {
   API_KEY_PREFIX as SERVER_API_KEY_PREFIX,
@@ -82,11 +86,11 @@ function teamDirectory() {
 
 /** The real session principal the invitation handlers demand — never an API key. */
 async function teamOwnerPrincipal(): Promise<Principal> {
-  const token = await mintSessionToken(
-    newSessionClaims(TEAM_OWNER_EMAIL, TEAM_WORKSPACE_SLUG),
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims(TEAM_OWNER_EMAIL, TEAM_WORKSPACE_SLUG),
     TEAM_SESSION_SECRET,
   );
-  const verified = await verifySessionToken(token, TEAM_SESSION_SECRET);
+  const verified = await verifySignInSessionToken(token, TEAM_SESSION_SECRET);
   if (!verified.ok) throw new Error(`session could not be verified: ${verified.reason}`);
   const built = Principal.fromSession(
     verified.claims,

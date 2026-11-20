@@ -26,7 +26,7 @@ private theorem classified_scope_narrows (role : Role) (q : Query) (res : Resour
 /-- A browser-token scope only narrows: the scoped decision is the unscoped one, or a
 `token_out_of_scope` deny — never an `allow` the minter would not get, and never a different
 refusal. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem scope_only_narrows (q : Query) (s : Scope) :
     decideOrdinary { q with scope := some s } = decideOrdinary { q with scope := none } ∨
@@ -52,7 +52,7 @@ theorem scope_only_narrows (q : Query) (s : Scope) :
 
 /-- A scoped query is allowed only if the same query without the scope is allowed, with the same
 route facts. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/decide.ts#decide")]
 theorem scoped_allow_implies_unscoped_allow (q : Query) (s : Scope) (f : Option RouteFacts)
     (h : decideOrdinary { q with scope := some s } = .allow f) :
@@ -94,7 +94,7 @@ theorem unknown_owner_is_decided_as_other (q : Query) :
 /-- Every `allow` that consulted §21's table is backed by it: the role parses, the path parses to
 the allowed resource, the grant is that role's cell, it is not `none`, an `own` grant saw an `own`
 or `not-applicable` fact, and a `permitted` grant saw an `own` or `permitted` fact (ADR-0152). -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#33-roles")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")
   (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
   (ts := "apps/web/server/rbac/decide.ts#decide")]
 theorem every_allow_is_backed_by_the_table (q : Query) (f : RouteFacts)

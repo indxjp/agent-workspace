@@ -9,7 +9,10 @@
 // describe what ACTUALLY triggered the job — a PR run gets
 // `ref=refs/pull/<n>/merge`, `event_name=pull_request`, whatever its YAML
 // says. Deciding the role from those claims, here on the server, is what
-// makes "a PR can never write the trusted cache" an enforced property.
+// makes the write policy an enforced property rather than a workflow
+// convention. Since ADR-0110's Amendment 2026-11-19 (owner decisions D1/D1b)
+// that policy lets merge-queue groups and same-repository pull requests write
+// too; it still never lets a workflow choose its own role.
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 
 export const GITHUB_ISSUER = "https://token.actions.githubusercontent.com";
@@ -92,11 +95,91 @@ export async function verifyGithubJwt(
   return claims;
 }
 
+// The ref GitHub itself puts in the token for each event that may ever write
+// (docs/adr/0110, Amendment 2026-11-19). A write needs the event in
+// `writeEvents`, the ref in `writeRefs` AND the ref to have its event's shape,
+// so the two lists cannot combine into a pair GitHub never issues: a `push` to
+// a branch named `gh-readonly-queue/...` is not a queue group, and a
+// `pull_request` token never carries `refs/heads/main`.
+const REF_SHAPE_BY_EVENT = {
+  push: /^refs\/heads\/(?!gh-readonly-queue\/)[^\s]+$/,
+  schedule: /^refs\/heads\/(?!gh-readonly-queue\/)[^\s]+$/,
+  merge_group: /^refs\/heads\/gh-readonly-queue\/[^\s]+$/,
+  pull_request: /^refs\/pull\/[0-9]+\/merge$/,
+};
+
+/** The events a write policy may name; anything else is a configuration error. */
+export const WRITE_CAPABLE_EVENTS = Object.freeze(
+  Object.keys(REF_SHAPE_BY_EVENT),
+);
+
+/**
+ * A `writeRefs` entry: an exact ref, or a pattern where each `*` stands for
+ * one or more characters other than `/` (so `refs/pull/*\/merge` matches
+ * `refs/pull/12/merge` and never `refs/pull/12/head/merge`).
+ * @param {string} pattern
+ */
+export function refPattern(pattern) {
+  const source = pattern
+    .split("*")
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[^/]+");
+  return new RegExp(`^${source}$`);
+}
+
+/**
+ * Validate and compile a write policy once, at startup. Throws on an event no
+ * write rule can be checked for, so a typo fails the deploy instead of silently
+ * granting or refusing.
+ * @param {{ repository: string, repositoryId?: string, writeRefs: string[],
+ *           writeEvents: string[], pullRequestBaseRefs?: string[],
+ *           allowRead: boolean }} policy
+ */
+export function compilePolicy(policy) {
+  for (const event of policy.writeEvents) {
+    if (!WRITE_CAPABLE_EVENTS.includes(event)) {
+      throw new Error(
+        `NX_CACHE_OIDC_WRITE_EVENTS: "${event}" cannot be granted write (allowed: ${WRITE_CAPABLE_EVENTS.join(", ")})`,
+      );
+    }
+  }
+  if (
+    policy.writeEvents.includes("pull_request") &&
+    (policy.pullRequestBaseRefs ?? []).length === 0
+  ) {
+    throw new Error(
+      "NX_CACHE_OIDC_WRITE_PR_BASE_REFS must name at least one base branch when pull_request may write",
+    );
+  }
+  return {
+    ...policy,
+    pullRequestBaseRefs: policy.pullRequestBaseRefs ?? [],
+    writeRefMatchers: policy.writeRefs.map(refPattern),
+  };
+}
+
 /**
  * Map verified claims to a cache role, or null (= no access at all).
+ *
+ * Which claims decide (docs/40-operate/operations/ci.md "Who may read and who may write"):
+ * - `repository` + `repository_id` must be this instance's repository. They
+ *   name the repository the workflow RUNS in — the base repository, for every
+ *   pull_request run.
+ * - `event_name` must be in `writeEvents`, `ref` must match `writeRefs` and
+ *   have that event's shape (REF_SHAPE_BY_EVENT).
+ * - a `pull_request` run must also target one of `pullRequestBaseRefs`
+ *   (`base_ref`, the PR's base branch).
+ *
+ * GitHub's token has NO claim naming a pull request's HEAD repository, so a
+ * fork's pull_request run, which also runs in the base repository, would carry
+ * the same claims. Forks are excluded because GitHub issues them no OIDC token
+ * (public repositories never; private and internal ones only when the
+ * "Send write tokens to workflows from fork pull requests" setting is on,
+ * which must stay off — ADR-0110, Amendment 2026-11-19).
  * @param {Record<string, unknown>} claims
  * @param {{ repository: string, repositoryId?: string, writeRefs: string[],
- *           writeEvents: string[], allowRead: boolean }} policy
+ *           writeEvents: string[], pullRequestBaseRefs?: string[],
+ *           allowRead: boolean, writeRefMatchers?: RegExp[] }} policy
  */
 export function roleForClaims(claims, policy) {
   if (claims.repository !== policy.repository) return null;
@@ -105,11 +188,26 @@ export function roleForClaims(claims, policy) {
     String(claims.repository_id) !== String(policy.repositoryId)
   )
     return null;
-  if (
-    policy.writeRefs.includes(claims.ref) &&
-    policy.writeEvents.includes(claims.event_name)
-  ) {
-    return "write";
+  return mayWrite(claims, policy)
+    ? "write"
+    : policy.allowRead
+      ? "read"
+      : null;
+}
+
+/** @param {Record<string, unknown>} claims @param {Parameters<typeof roleForClaims>[1]} policy */
+function mayWrite(claims, policy) {
+  const event = String(claims.event_name ?? "");
+  const ref = String(claims.ref ?? "");
+  if (!policy.writeEvents.includes(event)) return false;
+  const shape = REF_SHAPE_BY_EVENT[event];
+  if (!shape || !shape.test(ref)) return false;
+  const matchers = policy.writeRefMatchers ?? policy.writeRefs.map(refPattern);
+  if (!matchers.some((m) => m.test(ref))) return false;
+  if (event === "pull_request") {
+    return (policy.pullRequestBaseRefs ?? []).includes(
+      String(claims.base_ref ?? ""),
+    );
   }
-  return policy.allowRead ? "read" : null;
+  return true;
 }

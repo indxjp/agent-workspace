@@ -13,7 +13,7 @@ import { readVertexDefaults } from '../models/vertex-defaults';
 import { storedEffective, type CeilingAgent } from '../policy-ceiling/ceiling';
 import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
 import { setupSecretsOf, setupStepFailure } from '../setup/failure';
-import type { Setup, SetupInput, SetupRuntime } from '../setup/runtime';
+import type { Setup, SetupInput, SetupRuntime } from '../setup/wiring';
 import { scriptedModelsOption, setupRuntimeNetworkPolicy } from './config';
 import {
   persistSetup,

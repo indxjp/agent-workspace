@@ -24,7 +24,7 @@ import { createMemoryDirectory } from './rbac/memory-directory';
 import { Principal } from './rbac/principal';
 import { PublishShareRequestSchema } from './shares/core/input';
 import { parsePublishShareRequest } from './shares/publish-request';
-import { type WorkspaceSharing } from './shares/runtime';
+import { type WorkspaceSharing } from './shares/wiring';
 import { clearApplicationContext } from './application-context';
 import { installTestDomains } from './application-context-fixtures';
 

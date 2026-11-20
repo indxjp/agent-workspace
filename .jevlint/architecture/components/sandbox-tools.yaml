@@ -1,0 +1,18 @@
+id: sandbox-tools
+title: Sandbox tool host and egress proxy
+summary: >
+  Processes in or beside a sandbox: the tool host that runs an agent's code tools from a manifest, and the egress proxy that enforces the host allow-list and refuses private and metadata addresses.
+layer: delivery
+paths:
+  - "packages/tool-host/**"
+  - "packages/egress-proxy/**"
+key_files:
+  - { path: packages/tool-host/src/sandbox.ts, role: "runSandbox: manifest, bundles, ready file" }
+  - { path: packages/tool-host/src/intake.ts, role: "HTTP file intake for Cloud Run tool sandboxes" }
+  - { path: packages/egress-proxy/src/proxy.ts, role: "the CONNECT proxy" }
+interface: [runSandbox, runIntakeSandbox]
+depends_on: [aw-cli, contracts]
+uses: []
+rules: []
+checklist: []
+status: current

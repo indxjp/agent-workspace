@@ -1,0 +1,68 @@
+title: How a run travels through Agent Workspace
+description: Every caller enters through the routes; the execution domain hands the run to the runner over HTTP, and the runner alone picks the driver and the engine.
+groups:
+  - { id: clients, label: Published clients }
+  - { id: control, label: Control plane (apps/web) }
+  - { id: exec, label: Execution plane }
+  - { id: base, label: Contracts and persistence }
+nodes:
+  - { id: member, label: Workspace member, kind: actor }
+  - { id: developer, label: Developer or CI, kind: actor }
+  - { id: aw, label: aw command line, kind: component, component: aw-cli, group: clients }
+  - { id: sdk, label: TypeScript SDK, kind: component, component: sdk, group: clients }
+  - { id: chat, label: Hosted chat, kind: component, component: react-chat, group: clients }
+  - { id: screens, label: Browser screens, kind: component, component: web-ui, group: control }
+  - { id: routes, label: Routes and pages, kind: component, component: web-routes, group: control }
+  - { id: compose, label: Composition root, kind: component, component: composition, group: control }
+  - { id: identity, label: Identity and RBAC, kind: component, component: identity, group: control }
+  - { id: runs, label: Runs and sessions, kind: component, component: execution, group: control }
+  - { id: storage, label: Storage catalog, kind: component, component: storage-sharing, group: control }
+  - { id: agents, label: Agents and Builder, kind: component, component: agent-authoring, group: control }
+  - { id: integrations, label: Connectors and triggers, kind: component, component: integrations, group: control }
+  - { id: runner, label: Runner, kind: component, component: runner, group: exec }
+  - { id: drivers, label: Runtime drivers, kind: component, component: runtime-drivers, group: exec }
+  - { id: engines, label: Engine adapters, kind: component, component: engine-adapters, group: exec }
+  - { id: gateway, label: Model gateway, kind: component, component: gateway, group: exec }
+  - { id: contracts, label: API contracts, kind: component, component: contracts, group: base }
+  - { id: run-protocol, label: Engine port and RunRequest, kind: component, component: run-contract, group: base }
+  - { id: core, label: Persistence and storage, kind: component, component: persistence, group: base }
+  - { id: postgres, label: PostgreSQL, kind: store, path: packages/core/src/db }
+  - { id: objects, label: Object storage, kind: store, path: packages/core/src/storage }
+  - { id: engine-sdks, label: Engine SDKs, kind: external, packages: ["@anthropic-ai/claude-agent-sdk", "@openai/agents", "@mastra/core", "@earendil-works/pi-coding-agent"] }
+  - { id: sandboxes, label: Sandbox platforms, kind: external, packages: ["@kubernetes/client-node"] }
+  - { id: providers, label: Model providers, kind: external }
+edges:
+  - { from: member, to: screens, verb: uses the console }
+  - { from: developer, to: aw, verb: runs commands }
+  - { from: aw, to: sdk, verb: calls the API }
+  - { from: screens, to: sdk, verb: calls the API }
+  - { from: screens, to: chat, verb: renders chat }
+  - { from: sdk, to: contracts, verb: validates responses }
+  - { from: sdk, to: routes, verb: "HTTPS /api/**", style: dashed }
+  - { from: routes, to: screens, verb: renders screens }
+  - { from: routes, to: compose, verb: boots once }
+  - { from: routes, to: identity, verb: authenticates }
+  - { from: routes, to: runs, verb: starts runs }
+  - { from: routes, to: agents, verb: edits agents }
+  - { from: routes, to: storage, verb: serves files }
+  - { from: compose, to: core, verb: opens database }
+  - { from: compose, to: drivers, verb: builds drivers }
+  - { from: runs, to: identity, verb: authorises }
+  - { from: runs, to: storage, verb: grants files }
+  - { from: runs, to: core, verb: stores runs }
+  - { from: runs, to: run-protocol, verb: builds RunRequest }
+  - { from: runs, to: runner, verb: "POST /run", style: dashed }
+  - { from: agents, to: storage, verb: stores skills }
+  - { from: integrations, to: runs, verb: starts triggered runs }
+  - { from: storage, to: core, verb: reads and writes }
+  - { from: core, to: postgres, verb: queries }
+  - { from: core, to: objects, verb: streams bytes }
+  - { from: runner, to: drivers, verb: allocates sandboxes }
+  - { from: runner, to: run-protocol, verb: parses RunRequest }
+  - { from: runner, to: engines, verb: loads the engine }
+  - { from: engines, to: run-protocol, verb: emits agent frames }
+  - { from: engines, to: engine-sdks, verb: drives the SDK }
+  - { from: engines, to: gateway, verb: model calls, style: dashed }
+  - { from: drivers, to: sandboxes, verb: creates sandboxes }
+  - { from: gateway, to: core, verb: reads credentials }
+  - { from: gateway, to: providers, verb: forwards calls, style: dashed }

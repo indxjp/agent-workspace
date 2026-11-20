@@ -1,0 +1,23 @@
+id: storage-sharing
+title: Files, storage and sharing
+summary: >
+  The storage catalog service, the only way files, skills, attachments and run delivery reach the object store, with row-first saves; bucket connections, hashed public share links and hosted surfaces.
+layer: application
+paths:
+  - "apps/web/server/files/**"
+  - "apps/web/server/shares/**"
+  - "apps/web/server/storage/**"
+  - "apps/web/server/storage-and-sharing/**"
+  - "apps/web/server/storage-connections/**"
+  - "apps/web/server/surfaces/**"
+key_files:
+  - { path: apps/web/server/storage/service.ts, role: "createStorageService: the catalog service, the only way to a stored object" }
+  - { path: apps/web/server/storage/store.ts, role: "the catalog store provider over the core repositories" }
+  - { path: apps/web/server/files/http.ts, role: "file route helpers over the catalog" }
+interface: [createStorageService, StorageService]
+depends_on: [identity, composition, server-kernel, web-ui, persistence, run-contract, contracts]
+uses: []
+rules: []
+checklist:
+  - { id: catalog-service-owns-objects, text: "A domain reaches object storage only through apps/web/server/storage/, never @agent-workspace/core/storage directly." }
+status: current

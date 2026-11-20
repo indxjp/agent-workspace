@@ -21,9 +21,9 @@ import { fileURLToPath } from 'node:url';
 
 // Use the same signing implementation the real authentication boundary verifies.
 import {
-  sessionCookieName,
-  mintSessionToken,
-  newSessionClaims,
+  signInSessionCookieName,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
   readSessionSecret,
 } from '../../auth/session.ts';
 
@@ -81,11 +81,11 @@ if (!sessionSecret.ok) {
   console.error(`ACCEPTANCE ABORTED: ${sessionSecret.reason}`);
   process.exit(2);
 }
-const sessionToken = await mintSessionToken(
-  newSessionClaims('acceptance-harness@w1-cp04b.test', 'w1-cp04b-acceptance'),
+const sessionToken = await mintSignInSessionToken(
+  newSignInSessionClaims('acceptance-harness@w1-cp04b.test', 'w1-cp04b-acceptance'),
   sessionSecret.secret,
 );
-const sessionCookieHeader = `${sessionCookieName(process.env)}=${sessionToken}`;
+const sessionCookieHeader = `${signInSessionCookieName(process.env)}=${sessionToken}`;
 
 /** Cookie + a same-host Origin, for a request addressed to `origin` (e.g. `WEB_ORIGIN`). */
 function authHeaders(origin, extra) {

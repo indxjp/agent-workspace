@@ -77,7 +77,7 @@ theorem role_is_read_from_the_membership (st : State) (c : ClaimsTarget) (p r : 
 /-- In the proposed target resolution, a workspace selection is honoured only through a membership in
 that workspace: the resolved principal belongs to the workspace the slug selects. -/
 @[aw_spec (tier := T1) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")
+  (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")
   (doc := "docs/adr/FORMAL-P1-identity-permission-tenant-selection.md#decision")]
 theorem tenant_selection_requires_a_membership (st : State) (c : ClaimsTarget) (p r : String)
     (h : resolveTarget st c = some (p, r)) :
@@ -132,7 +132,7 @@ theorem current_role_is_read_from_the_membership (st : State) (c : ClaimsCurrent
 /-- Today, a workspace slug is honoured only through a membership in the workspace it selects,
 and the resolved principal belongs to that workspace. -/
 @[aw_spec (tier := T1) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")
+  (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")
   (ts := "packages/core/src/db/repositories/root.ts#resolveMembership")]
 theorem current_tenant_selection_requires_a_membership (st : State) (c : ClaimsCurrent)
     (p r : String) (h : resolveCurrent st c = some (p, r)) :

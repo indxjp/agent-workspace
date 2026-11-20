@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEPLOYMENT_FEATURES_ENV, readDeploymentFeatures } from './deployment';
 import { featureRefusal, refuseIfFeatureDisabled } from './guard';
 import { routeFeatureOf } from './route-feature';
-import { clearFeatureSwitches, configureFeatureSwitches, enabledFeaturesFor } from './runtime';
+import { clearFeatureSwitches, configureFeatureSwitches, enabledFeaturesFor } from './wiring';
 
 describe('routeFeatureOf', () => {
   it.each([

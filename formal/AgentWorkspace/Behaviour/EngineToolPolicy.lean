@@ -16,7 +16,7 @@ it computes changed**, and that is the claim `Theorems/Refinement/EngineToolPoli
 
 ## Why both versions are modelled, and why the equality is over arrays
 
-`docs/formal/README.md` asks that where today's code and the target differ, both are modelled and
+`docs/20-design/formal/README.md` asks that where today's code and the target differ, both are modelled and
 related. They differ in *where the derivation runs* and in *what crosses the private `/run`
 contract*, and not at all in the answer — so {@link composeCurrent} is the pre-ENG-04b computation
 and {@link adapterTarget} is the adapter's, and the refinement is an equality.

@@ -49,7 +49,7 @@ theorem details_decode_encode (v : List String) :
 /-! ## `ApiProblemSchema` -/
 
 /-- The inner object of the standard envelope: `{ code, message, details?, detail? }`. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")]
 structure ApiProblemBody where
   code : String
@@ -147,7 +147,7 @@ def apiProblemCodec : Codec ApiProblem where
 
 /-- The RBAC layer's envelope before SDK unit 6 (#238): `{ error: { code, detail } }`. A current
 server answers the standard envelope instead; an older deployment still answers this one. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemDetailSchema")]
 structure ApiProblemDetail where
   code : String
@@ -210,7 +210,7 @@ def apiProblemDetailCodec : Codec ApiProblemDetail where
 
 /-- The bare envelope of `POST /api/runtimes/test` (and of `GET /api/audit-events` before SDK unit
 6): `{ error: '<code>', message? }`. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemBareCodeSchema")]
 structure ApiProblemBareCode where
   error : String
@@ -311,7 +311,7 @@ example : normaliseLenient (.obj [("error", .obj [("code", .str "x"), ("message"
 
 /-- The documented target (SPEC §4): `ApiProblemSchema` on every route, so only the standard
 envelope is read. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")]
 def normaliseTarget (j : JValue) : Option ApiProblemBody := readStandard j
 
 /-! ## `COMMON_PROBLEM_CODES` -/
@@ -381,7 +381,7 @@ def documentedCommonCodes : List (String × Nat) :=
     ("upstream_failure", 502)]
 
 /-- The statuses SPEC §4's "Status" row lists for a failure (4xx rows, and the `5xx` family). -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")]
 def documentedFailureStatus (n : Nat) : Bool :=
   n ∈ [400, 401, 403, 404, 409, 410, 413, 415, 422, 429] || (500 ≤ n && n ≤ 599)
 

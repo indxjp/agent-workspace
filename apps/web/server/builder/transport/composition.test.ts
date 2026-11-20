@@ -3,7 +3,7 @@ import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions
 import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/wiring';
 import { randomIds } from '../../ids';
 import { versionRequest } from '../../agent-versions/fixtures';
 import { createInMemoryAgentVersionStoreProvider } from '../../agent-versions/memory-store';

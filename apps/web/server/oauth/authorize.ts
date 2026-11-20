@@ -23,7 +23,7 @@ import {
 } from './http';
 import { admitOAuthSession } from './limits';
 import { publicOrigin, resourceUrl } from './resource';
-import type { OAuthClient, OAuthRuntime } from './runtime';
+import type { OAuthClient, OAuthRuntime } from './wiring';
 import { OAUTH_SCOPE } from './token';
 import { isPkceChallenge, mintOAuthToken, OAUTH_TOKEN_TTL_MS } from './tokens';
 

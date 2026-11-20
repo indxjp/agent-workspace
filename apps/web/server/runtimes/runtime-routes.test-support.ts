@@ -10,7 +10,7 @@ import {
   configureWebRuntimeRegistry,
   createWebRuntimeRegistry,
 } from './registry';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 
 export const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 

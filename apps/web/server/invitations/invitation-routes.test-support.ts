@@ -1,5 +1,9 @@
 import crypto from 'node:crypto';
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from '../auth/session';
 import { Principal } from '../rbac/principal';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
 export const MEMBERS = [
@@ -38,8 +42,11 @@ export function installInvitationHarness() {
 }
 
 export async function sessionPrincipal(email: string, role: 'admin'): Promise<Principal> {
-  const token = await mintSessionToken(newSessionClaims(email, 'default'), TEST_SESSION_SECRET);
-  const verified = await verifySessionToken(token, TEST_SESSION_SECRET);
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims(email, 'default'),
+    TEST_SESSION_SECRET,
+  );
+  const verified = await verifySignInSessionToken(token, TEST_SESSION_SECRET);
   if (!verified.ok) throw new Error(`test session could not be verified: ${verified.reason}`);
   const built = Principal.fromSession(
     verified.claims,

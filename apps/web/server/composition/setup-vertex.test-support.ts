@@ -1,6 +1,6 @@
 import { VERTEX_DEFAULT_MODEL } from '@indx-workspace/contracts/models';
 import { describe, expect, it, vi } from 'vitest';
-import type { SetupInput } from '../setup/runtime';
+import type { SetupInput } from '../setup/wiring';
 import {
   complete,
   expectUntouched,

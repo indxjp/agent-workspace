@@ -39,7 +39,7 @@ variable "bootstrap_admin_email" {
 }
 
 variable "images" {
-  description = "The images this stack runs, pinned by immutable OCI digest. See docs/deploy/gcp-cloudrun.md for how each is built. egress_proxy is needed only with sandbox_internet and tool_host only for code-tool sandboxes; both stay empty otherwise."
+  description = "The images this stack runs, pinned by immutable OCI digest. See docs/40-operate/deploy/gcp-cloudrun.md for how each is built. egress_proxy is needed only with sandbox_internet and tool_host only for code-tool sandboxes; both stay empty otherwise."
   type = object({
     web          = string
     gateway      = string

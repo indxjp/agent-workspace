@@ -130,7 +130,7 @@ it('runs on a change to any file the journey imports or builds with', () => {
   ]) {
     expect(filtered(file)).toBe(true);
   }
-  expect(filtered('docs/operations/ci.md')).toBe(false);
+  expect(filtered('docs/40-operate/operations/ci.md')).toBe(false);
   // The packages come built from ci.yml's `build` job; the journey job never runs an Nx build.
   expect(workflow).toContain('uses: ./.github/actions/workspace-build');
   expect(workflow).not.toContain('scripts/ci/nx.sh');

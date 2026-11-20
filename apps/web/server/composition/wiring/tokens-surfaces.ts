@@ -4,8 +4,8 @@ import { isStoppedRunStatus } from '@indx-workspace/contracts/runs';
 
 import { mintBrowserToken } from '../../rbac/browser-token';
 import { createSurfaceSessionsRuntime } from '../../surfaces/public/composition';
-import type { SurfaceSessionsRuntime } from '../../surfaces/public/runtime';
-import type { TokensRuntime } from '../../tokens/runtime';
+import type { SurfaceSessionsRuntime } from '../../surfaces/public/wiring';
+import type { TokensRuntime } from '../../tokens/wiring';
 import type { AgentsWiring } from './agents';
 import type { RunRuntimeWiring } from './run-runtime';
 

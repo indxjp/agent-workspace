@@ -34,8 +34,23 @@ on:
   schedule:
     - cron: '23 3 * * 1'
   workflow_dispatch:
+  # Only a pull request whose diff one of the two pull-request jobs reads starts this workflow: the union
+  # of their scope patterns below (ADR-0053, Amendment 2026-11-19e). Each job still decides from its
+  # own pattern. Any other pull request started both jobs on the MS-A2 pool only to free disk and skip.
+  # Not a required check, so a path filter cannot leave a queued pull request waiting.
   pull_request:
     branches: [main]
+    paths:
+      - docs/release/**
+      - scripts/release/**
+      - infra/release/**
+      - tests/e2e/build-deploy-journey/**
+      - packages/platforms/**
+      - packages/aw/src/commands/platforms**
+      - packages/cli/src/publish/**
+      - packages/cli/src/create**
+      - tests/e2e/platforms-journey/**
+      - .github/workflows/journey-live.yml
 
 concurrency:
   group: journey-live-${{ github.event_name == 'pull_request' && github.ref || 'nightly' }}

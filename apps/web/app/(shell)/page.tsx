@@ -15,7 +15,7 @@
  * rather than build around it, and it does not hold: `apps/web/server/auth/index.ts` reads the
  * session from `next/headers`'s `cookies()`, imported by exactly two files before this one —
  * `apps/web/server/auth/index.ts` itself and `apps/web/app/signin/actions.ts` — and this route's own
- * sibling, `apps/web/app/(shell)/layout.tsx`, has been calling `getSession()` from an `async` Server
+ * sibling, `apps/web/app/(shell)/layout.tsx`, has been calling `getSignInSession()` from an `async` Server
  * Component on every request the whole time this file has been saying it could not be done. Next's
  * App Router gives a Server Component read access to the incoming request's cookies for exactly this
  * reason; it withholds mutation (`cookies().set` outside a Server Action or Route Handler), not
@@ -24,7 +24,7 @@
  *
  * `AgentsRuntime.resolveWorkspace` still takes a `Request` — that part of the earlier reasoning was
  * correct, a Server Component is not handed one by Next — but a `Request` is a value, not a
- * privilege: `composerAgents` below builds one from the same cookie header `getSession()` already
+ * privilege: `composerAgents` below builds one from the same cookie header `getSignInSession()` already
  * reads, and hands it to `resolveWorkspace` unchanged, so the workspace decision runs through the
  * *exact* session-verification-and-membership-lookup code path every `/api/**` route already uses
  * (`instrumentation.ts`'s `register()`), rather than a second, page-local reimplementation of it.
@@ -81,8 +81,8 @@ import type { HomeChatProps } from '../../components/composer/home-chat-types';
 import { versionsLocaleOf, type VersionsLocale } from '../../components/agents/versions-messages';
 import type { Speaker } from '@indx-workspace/react/run-model';
 import type { AgentPermissions } from '../../contracts/agents';
-import { getSession } from '../../server/auth';
-import type { WorkspaceResolution } from '../../server/agents/runtime';
+import { getSignInSession } from '../../server/auth';
+import type { WorkspaceResolution } from '../../server/agents/wiring';
 import type { AgentRecord } from '../../server/agents/contract';
 import type {
   ComposerAgent,
@@ -131,7 +131,7 @@ export const dynamic = 'force-dynamic';
  * `instrumentation.ts`'s own implementation of it) — the method exists to be called from a route
  * handler, which has a real `Request`, but nothing in its contract requires *this* file's request
  * to have travelled the network. The URL is a fixed placeholder because nothing downstream reads
- * it; only the header matters, and it is the same header `getSession()` (`server/auth/index.ts`)
+ * it; only the header matters, and it is the same header `getSignInSession()` (`server/auth/index.ts`)
  * already reads from the same `cookies()` call for the same render.
  */
 async function requestCarryingThisSessionCookie(): Promise<Request> {
@@ -328,7 +328,7 @@ async function composerAgents(strings: ComposerStrings): Promise<ComposerAgents>
  * regardless of whether an agent could be offered.
  */
 async function composerUser(): Promise<Speaker | null> {
-  const session = await getSession();
+  const session = await getSignInSession();
   if (session === null) return null;
   return { initials: initialsFrom(session.sub), name: session.sub };
 }

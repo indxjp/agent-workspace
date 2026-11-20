@@ -54,7 +54,7 @@ per-sandbox credential, and enforce network policy only where the provider can a
   `/ping`). E2 builds it; E3 and E4 reuse it. Each driver is added to `SERVED_RUNTIME_DRIVERS`
   (`apps/runner/src/manager-start.ts:244`) when it is implemented.
 - Each provider is called through its **REST API with `fetch`, not a vendor SDK**. The six vendor
-  packages stay on `denyByName` (`docs/dependency-policy.md` §6, `scripts/check-licenses.mjs`), so
+  packages stay on `denyByName` (`docs/30-reference/policies/dependency-policy.md` §6, `scripts/check-licenses.mjs`), so
   dependency-policy §6.3 and §6.4 need no change, and no vendor type is near the driver boundary.
   The REST surfaces used are `POST https://api.e2b.app/v2/sandboxes` with an `X-API-Key` header
   ([E2B create-sandbox](https://docs.e2b.dev/api-reference/sandboxes/create-sandbox-v2), checked

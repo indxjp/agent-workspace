@@ -2,10 +2,10 @@
  * Test support for {@link ApplicationContext}: a route test wires only the domains it exercises.
  * No route imports it.
  */
-import type { AgentVersionsRuntime } from './agent-versions/runtime';
+import type { AgentVersionsRuntime } from './agent-versions/wiring';
 import { createInMemoryAgentStoreProvider } from './agents/memory-store';
 import { NO_DEMO_OPERATOR } from './demo/operator';
-import type { AgentsRuntime } from './agents/runtime';
+import type { AgentsRuntime } from './agents/wiring';
 import {
   applicationContext,
   installApplicationContext,

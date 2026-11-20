@@ -217,7 +217,7 @@ proposed" for `production` only.
   CLI's `./deploy` export, and `aw-reaches-cli-only-through-deploy` refuses any other aw file
   reaching the CLI (`dependency-cruiser.config.mjs`, `docs/architecture.md`).
 - **A single-VM deploy publishes web on `127.0.0.1:3000` only** and trusts one proxy hop: the
-  Owner terminates TLS for `url` with Caddy on the VM (`docs/deploy/single-vm.md`). Every Owner
+  Owner terminates TLS for `url` with Caddy on the VM (`docs/40-operate/deploy/single-vm.md`). Every Owner
   prerequisite — Node.js 24, Docker Engine with the Compose plugin, the published release images,
   and (for `--yes`) a DNS record for the `url` host — is refused by name before anything is
   created.

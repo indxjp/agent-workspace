@@ -17,7 +17,7 @@ open AgentWorkspace.Er.Current.Configuration
 
 /-- The model providers are spelled and ordered as `modelProviders` lists them. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/model-connections.ts#modelProviders")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 theorem provider_wires :
     WireEnum.wires ModelConnection.Provider =
       ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible",
@@ -34,7 +34,7 @@ theorem config_field_wires :
 /-- The runtime drivers are spelled and ordered as `runtimeProfileDrivers` lists them. -/
 @[aw_spec (tier := T0)
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfileDrivers")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem driver_wires :
     WireEnum.wires RuntimeProfile.Driver =
       ["local", "sandbox-runtime", "docker", "kubernetes", "gke-agent-sandbox", "aca-sessions",
@@ -63,14 +63,14 @@ theorem algorithm_wires : WireEnum.wires Secret.Algorithm = ["aes-256-gcm"] := b
 /-- `model_connections_provider_valid` constrains `provider` to exactly the provider enumeration. -/
 @[aw_spec (tier := T0)
   (ts := "packages/core/src/db/schema/model-connections.ts#modelConnections")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem provider_check_is_the_provider_enum :
     (catalogue .modelConnections).oneOfCheck? "model_connections_provider_valid" =
       some ("provider", WireEnum.wires ModelConnection.Provider) := by decide +kernel
 
 /-- `runtime_profiles_driver_valid` constrains `driver` to exactly the driver enumeration. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem driver_check_is_the_driver_enum :
     (catalogue .runtimeProfiles).oneOfCheck? "runtime_profiles_driver_valid" =
       some ("driver", WireEnum.wires RuntimeProfile.Driver) := by decide +kernel
@@ -107,7 +107,7 @@ theorem cluster_value_lists_pass_the_ddl_gate :
 /-- The cluster's list of foreign keys is exact: each listed key exists with its target, and every
 key of today's schema that starts or ends in a cluster table is listed. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem cluster_foreign_keys_are_complete : clusterForeignKeysComplete = true := by decide +kernel
 
@@ -245,7 +245,7 @@ private theorem octet_bytesCell (n : Nat) : octetLength (bytesCell n) = n := by
 /-- A secret the concept calls valid is a row every check of `secrets` accepts: the closed-set
 algorithm check and the six name and envelope checks. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem valid_secret_satisfies_the_secret_checks (s : Secret.Secret) (h : s.valid = true) :
     (catalogue .secrets).checks.all (checkHolds [secretRow s]) = true ∧
       (refinedChecks.filter (·.1 == .secrets)).all

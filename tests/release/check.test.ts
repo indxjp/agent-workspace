@@ -91,7 +91,10 @@ describe('Wave 8 release consistency gate', () => {
 
   it('keeps every enforcement path named by the upgrade policy resolvable', async () => {
     const repository = new URL('../../', import.meta.url);
-    const policy = await readFile(new URL('../../docs/upgrade-policy.md', import.meta.url), 'utf8');
+    const policy = await readFile(
+      new URL('../../docs/30-reference/policies/upgrade-policy.md', import.meta.url),
+      'utf8',
+    );
     const paths = [
       ...new Set(
         [...policy.matchAll(/`((?:scripts|tests)\/[^`]+\.(?:mjs|ts))`/gu)].map(

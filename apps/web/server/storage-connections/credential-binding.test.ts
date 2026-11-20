@@ -32,7 +32,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createRunStorageConnections } from '../composition/wiring/run-resources';
 import { Principal } from '../rbac/principal';
 import { rotateStorageConnectionCredential, updateStorageConnection } from './handlers';
-import type { StorageConnectionsRuntime } from './runtime';
+import type { StorageConnectionsRuntime } from './wiring';
 import {
   boundCredential,
   createRepositoryStorageConnectionsStoreProvider,

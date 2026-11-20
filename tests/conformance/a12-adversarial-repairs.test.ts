@@ -23,6 +23,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { runA12ConformanceSuite } from './harness.js';
+import { FIXTURE_TIMERS } from './timers.js';
 import { decodeArchive, encodeArchive } from './fixtures/archive.js';
 import {
   createFixtureStarter,
@@ -99,7 +100,9 @@ describe('B1 (scenario 7): a driver that claims a ceiling but never enforces it 
       },
     };
 
-    const report = await runA12ConformanceSuite(driver, capabilities, containerFixtureProbe);
+    const report = await runA12ConformanceSuite(driver, capabilities, containerFixtureProbe, {
+      timers: FIXTURE_TIMERS,
+    });
     const result = report.results.find((r) => r.id === 'enforce-resource-limits');
 
     console.log(
@@ -134,6 +137,7 @@ describe('B2 + B3 (scenarios 9, 10, and 3): a probe that never reports readPath 
       driver,
       CONTAINER_FIXTURE_CAPABILITIES,
       strippedProbe,
+      { timers: FIXTURE_TIMERS },
     );
 
     console.log(
@@ -208,7 +212,9 @@ describe('B4 (scenario 3): a driver that never runs an agent must not pass hydra
       },
     };
 
-    const report = await runA12ConformanceSuite(driver, capabilities, containerFixtureProbe);
+    const report = await runA12ConformanceSuite(driver, capabilities, containerFixtureProbe, {
+      timers: FIXTURE_TIMERS,
+    });
     const result = report.results.find((r) => r.id === 'hydrate-and-collect-files');
 
     console.log(
@@ -271,7 +277,9 @@ describe('C1 (scenario 3): a driver whose startAgent can never run an agent must
       },
     };
 
-    const report = await runA12ConformanceSuite(driver, capabilities, fileTransferFixtureProbe);
+    const report = await runA12ConformanceSuite(driver, capabilities, fileTransferFixtureProbe, {
+      timers: FIXTURE_TIMERS,
+    });
     const result = report.results.find((r) => r.id === 'hydrate-and-collect-files');
 
     console.log(
@@ -356,7 +364,9 @@ describe("C2 (scenario 9): the putFiles/getFiles branch's adversarial cross-read
       },
     };
 
-    const report = await runA12ConformanceSuite(driver, capabilities, fileTransferFixtureProbe);
+    const report = await runA12ConformanceSuite(driver, capabilities, fileTransferFixtureProbe, {
+      timers: FIXTURE_TIMERS,
+    });
     const result = report.results.find((r) => r.id === 'concurrent-sessions-file-isolation');
 
     console.log(
@@ -388,6 +398,7 @@ describe("C3 (scenario 10): the check must fail on a clean machine — it never 
         driver,
         LOCAL_RUNTIME_CAPABILITIES,
         localFixtureProbe,
+        { timers: FIXTURE_TIMERS },
       );
       const result = report.results.find((r) => r.id === 'no-host-claude-config-visible');
 
@@ -495,7 +506,9 @@ describe('C4 (scenario 3): a correct container driver whose in-sandbox mount dif
       },
     };
 
-    const report = await runA12ConformanceSuite(driver, capabilities, containerFixtureProbe);
+    const report = await runA12ConformanceSuite(driver, capabilities, containerFixtureProbe, {
+      timers: FIXTURE_TIMERS,
+    });
     const result = report.results.find((r) => r.id === 'hydrate-and-collect-files');
     const isolationResult = report.results.find(
       (r) => r.id === 'concurrent-sessions-file-isolation',

@@ -37,7 +37,7 @@ import {
   createRepositoryAgentResourceStoreProvider,
   createRepositoryAgentStoreProvider,
 } from '../../../../../server/agents/store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import { versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { clearApplicationContext } from '../../../../../server/application-context';
 import { installTestDomains } from '../../../../../server/application-context-fixtures';

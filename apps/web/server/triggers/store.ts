@@ -6,7 +6,7 @@ import type { DatabaseRoot } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
 
 import { Principal, type ResolveRunOwnership } from '../identity';
-import type { TriggersRuntime, ZoomSecretTokens } from './runtime';
+import type { TriggersRuntime, ZoomSecretTokens } from './wiring';
 
 type StoreRoot = Pick<DatabaseRoot, 'scopes' | 'triggers' | 'directory' | 'findTriggerForIngress'>;
 

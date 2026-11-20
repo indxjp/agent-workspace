@@ -75,7 +75,7 @@ instance : WireEnum SubjectType where
 /-- The table a subject lives in: the polymorphic target of `shares.subject_id`, which no foreign
 key enforces. -/
 @[aw_spec (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 def SubjectType.table : SubjectType → TableName
   | .agent => .agents
   | .session => .sessions
@@ -429,7 +429,7 @@ share includes nothing; the token has the `pub_` prefix; and it starts unstopped
 unsuspended and with nothing spent. -/
 @[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "apps/web/server/shares/core/input.ts#PublishShareRequestSchema")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def Share.wellPublished (s : Share) : Bool :=
   s.dbValid && (s.mode.isSome == (s.subjectType == .agent)) &&
     (s.budgetCapUsd.isSome == (s.mode == some .runnable)) &&
@@ -447,7 +447,7 @@ agent share, `budgetCapUsd` only with `mode: 'runnable'`, `transcript` and `incl
 session share (`PublishShareRequestSchema`'s refinement). -/
 @[aw_spec (ts := "apps/web/server/shares/core/input.ts#PublishShareRequestSchema")
   (ts := "packages/contracts/src/shares.ts#PublishShareCommand")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def optionsFit (t : SubjectType) (mode : Option Mode)
     (hasInclude hasBudget hasTranscript hasDefinition : Bool) : Bool :=
   (t == .agent || (mode.isNone && !hasDefinition && !hasBudget)) &&
@@ -476,7 +476,7 @@ and `expires_at`, in that order of precedence (inventory §2 lists the same five
 
 /-- The derived lifecycle state of a share. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/shares.ts#ShareRepository")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 inductive ShareState where
   /-- Open: nothing below applies. -/
   | live
@@ -512,7 +512,7 @@ def Share.expiredAt (s : Share) (now : Nat) : Bool := s.expiresAt.any (· ≤ no
 
 /-- The state of a share at instant `now`. -/
 @[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 def Share.stateAt (s : Share) (now : Nat) : ShareState :=
   if s.revokedAt.isSome then .revoked
   else if s.suspendedAt.isSome then .suspended
@@ -550,7 +550,7 @@ cannot (part 06 step 3 phase 2). -/
 @[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
   (ts := "apps/web/server/shares/core/resource.ts#toShareListItem")
   (ts := "packages/contracts/src/shares.ts#ShareResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def resourceKeys (v : Visibility) (withViewCount : Bool) : List String :=
   ["id", "subjectType", "subjectId", "subjectLabel", "visibility", "mode", "snapshot", "include",
     "budgetCapUsd", "spentUsd", "stopped", "expiresAt", "revokedAt", "suspendedAt", "createdAt"] ++
@@ -566,7 +566,7 @@ def persistenceOnlyKeys : List String :=
 /-- The public URL a share carries on the wire: `/p/<token>` for a public share, absent otherwise. -/
 @[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
   (ts := "packages/contracts/src/shares.ts#PUBLIC_URL_INVARIANT")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def Share.url? (s : Share) : Option String :=
   if s.visibility == .«public» then some (publicUrlPrefix ++ s.token) else none
 
@@ -574,7 +574,7 @@ def Share.url? (s : Share) : Option String :=
 workspace, anyone else only the shares it published (`share.publisherPrincipalId ===
 actor.principalId`). -/
 @[aw_spec (ts := "apps/web/app/api/shares/route.ts#GET")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def listedFor (role : Membership.Role) (viewer : PrincipalId) (s : Share) : Bool :=
   role == .owner || role == .admin || decide (s.publisher = viewer)
 
@@ -603,7 +603,7 @@ structure PublishRequest where
 /-- Why `ShareService.publish` refuses an otherwise valid request. -/
 @[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "packages/contracts/src/shares.ts#SHARES_PROBLEM_CODES")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 inductive PublishRefusal where
   /-- A `public` share while the workspace's public sharing is off. -/
   | publicSharingOff
@@ -649,7 +649,7 @@ def ownerOrAdmin (role : Membership.Role) : Bool := role == .owner || role == .a
 workspace's public-sharing policy, the runnable release gate, at instant `now`. -/
 @[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "apps/web/server/shares/runnable/feature.ts#runnablePublicLinksEnabled")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def publishDecision (r : PublishRequest) (role : Membership.Role)
     (publicSharingEnabled runnableEnabled : Bool) (now : Nat) : PublishOutcome :=
   if r.visibility == .«public» && !publicSharingEnabled then .refused .publicSharingOff
@@ -666,7 +666,7 @@ def publishDecision (r : PublishRequest) (role : Membership.Role)
 
 /-- The release gate of runnable links today: closed (D-06). -/
 @[aw_spec (ts := "apps/web/server/shares/runnable/feature.ts#runnablePublicLinksEnabled")
-  (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#513-shares--awshares")]
 def runnableReleased : Bool := false
 
 /-! ## Opening a public link: `ShareService.resolve` -/

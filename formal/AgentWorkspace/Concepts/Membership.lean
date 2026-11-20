@@ -71,7 +71,7 @@ def parseRole (s : String) : Option Role := WireEnum.ofWire? s
 /-- A membership: one user in one workspace, with one role. -/
 @[aw_spec (ts := "packages/core/src/db/schema/memberships.ts#memberships")
   (ts := "packages/contracts/src/team.ts#MembershipResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Membership where
   id : MembershipId
   workspace : WorkspaceId

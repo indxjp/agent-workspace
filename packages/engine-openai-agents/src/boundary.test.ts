@@ -85,8 +85,9 @@ it('reads, patches and tests a file over Responses, with every request on the ga
   expect(source.indexOf('setTracingDisabled(true);')).toBeLessThan(start);
   const body = source.slice(start);
   expect(body.indexOf('setTracingDisabled(true);')).toBeGreaterThan(0);
-  expect(body.indexOf('setTracingDisabled(true);')).toBeLessThan(body.indexOf('new Runner('));
-  expect(body.indexOf('new Runner(')).toBeLessThan(body.indexOf('runner.run('));
+  expect(body.indexOf('setTracingDisabled(true);')).toBeLessThan(body.indexOf('yield* streamRun('));
+  expect(source.indexOf('new Runner({ tracingDisabled: true')).toBeGreaterThan(0);
+  expect(source.indexOf('new Runner(')).toBeLessThan(source.indexOf('runner.run('));
 });
 
 it('reaches an Anthropic-family connection over Messages with the run token as a bearer', async () => {

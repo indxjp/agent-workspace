@@ -15,7 +15,7 @@ import { type ResourceCatalogStoreProvider } from '../storage/store';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { createStorageService, type StorageService } from '../storage/service';
 import { createRepositorySkillsStoreProvider } from '../storage/store';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 
 export const WORKSPACE_A = '33333333-3333-4333-8333-333333333333';
 

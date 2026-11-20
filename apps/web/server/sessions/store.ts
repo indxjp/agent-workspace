@@ -8,20 +8,20 @@
  */
 import { createHash } from 'node:crypto';
 
-import {
-  SESSION_STATE_PAGE_LIMIT,
-  type KeysetPosition,
-  type SessionRecord,
-  type SessionRepository,
-  type SessionRepositoryProvider,
-  type SessionStateRepository,
-  type SessionStateRepositoryProvider,
-  type SessionTranscriptRepository,
-  type StoredSessionStateBlob,
-  type SessionTranscriptRepositoryProvider,
-  type SessionVisibility,
-  type WorkspaceScopeResolver,
+import type {
+  KeysetPosition,
+  SessionRecord,
+  SessionRepository,
+  SessionRepositoryProvider,
+  SessionStateRepository,
+  SessionStateRepositoryProvider,
+  SessionTranscriptRepository,
+  StoredSessionStateBlob,
+  SessionTranscriptRepositoryProvider,
+  SessionVisibility,
+  WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { SESSION_STATE_PAGE_LIMIT } from '@agent-workspace/core/db-model';
 import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
 import { readBytes } from '../storage/objects';
 

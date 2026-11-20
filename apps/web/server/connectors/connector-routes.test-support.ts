@@ -7,7 +7,7 @@ import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import type { ConnectorResource } from './contract';
 import { createInMemoryConnectorsStoreProvider } from './memory-store';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 
 export const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 

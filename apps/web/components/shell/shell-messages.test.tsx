@@ -88,6 +88,20 @@ describe('the shell in the reader’s language (UX-15)', () => {
     expect(renderToStaticMarkup(<SkipLink />)).toContain('Skip to content');
   });
 
+  it('says the line under the workspace name in the reader’s language', () => {
+    expect(shellStrings('en').selfHosted).toBe('Self-hosted');
+    const ja = renderToStaticMarkup(
+      <Sidebar
+        workspace={{ name: 'Acme', detail: shellStrings('ja').selfHosted, slug: null }}
+        user={null}
+        managers
+        locale="ja"
+      />,
+    );
+    expect(ja).toContain('>セルフホスト<');
+    expect(ja).not.toContain('Self-hosted');
+  });
+
   it('says the runtime chip and the driver band in the reader’s language', () => {
     const chip = { label: '未設定', warn: true, href: null } as const;
     const ja = renderToStaticMarkup(<RuntimeIndicator runtime={chip} locale="ja" />);

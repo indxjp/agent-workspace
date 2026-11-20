@@ -5,7 +5,7 @@ Date: 2026-09-29
 Decided by: the implementer of SDK migration unit 7 (K-1, issue #239)
 Scope: `packages/contracts/src/agents.ts` (`AgentDefinitionSchema`,
 `AGENT_DEFINITION_PROBLEM_CODES`); `packages/sdk/src/resources/agent-definitions.ts`;
-`packages/aw/src/commands/agents.ts` (`agents export|import`); `docs/sdk/04-api-specification.md` §6.2;
+`packages/aw/src/commands/agents.ts` (`agents export|import`); `docs/10-product/sdk/04-api-specification.md` §6.2;
 the additive `source` of `AgentPolicyResponseSchema` and `apps/web/app/api/agents/[id]/policy/route.ts`
 (D2)
 

@@ -68,6 +68,15 @@ export function withProductionApps(
   target: 'single-vm' | 'kubernetes',
 ): string;
 export function standInImage(name: string): string;
+export function standInPlatformImages(): Record<string, string>;
+export function renderedPlan(options: {
+  readonly id: string;
+  readonly copy: string;
+  readonly image: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly work: string;
+  readonly target: 'single-vm' | 'kubernetes';
+}): { readonly problem: string } | { readonly parsed: unknown; readonly state: string };
 export function composeAppsProblem(
   compose: unknown,
   name: string,

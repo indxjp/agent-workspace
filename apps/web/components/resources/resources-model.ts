@@ -18,6 +18,7 @@ import {
 } from '@indx-workspace/sdk';
 
 import { ENGLISH_FILES_STRINGS as EN_FILES, type FilesStrings } from './files-messages';
+import { connectorsStrings, type ConnectorsStrings } from './connectors-messages';
 
 /** What a failed call says: the server's message and details, as the screens always showed. */
 /** The SDK client the screens hand to the model; only this file imports the SDK. */
@@ -228,11 +229,16 @@ export async function deleteConnector(client: AgentWorkspaceClient, id: string):
 }
 
 /** The sentence a connection probe reports; a failed probe is a `200` with `ok: false`. */
-export async function testConnector(client: AgentWorkspaceClient, id: string, name: string) {
+export async function testConnector(
+  client: AgentWorkspaceClient,
+  id: string,
+  name: string,
+  strings: ConnectorsStrings = connectorsStrings('en'),
+) {
   const outcome = await client.connectors.test(id);
   return outcome.ok
-    ? `${name} connection passed.`
-    : `${name}: ${outcome.message || 'Connection failed.'}`;
+    ? strings.connectionPassed(name)
+    : `${name}: ${outcome.message || strings.connectionFailed}`;
 }
 
 export interface ConnectorDraft {
@@ -249,6 +255,7 @@ export async function submitConnector(
   client: AgentWorkspaceClient,
   draft: ConnectorDraft,
   dryRun: boolean,
+  strings: ConnectorsStrings = connectorsStrings('en'),
 ): Promise<string | null> {
   const auth = {
     authType: draft.authType,
@@ -274,7 +281,7 @@ export async function submitConnector(
     return null;
   }
   const outcome = await client.connectors.testDraft(input);
-  return outcome.ok ? 'Connection test passed.' : outcome.message || 'Connection test failed.';
+  return outcome.ok ? strings.draftTestPassed : outcome.message || strings.draftTestFailed;
 }
 
 // --- API keys and settings ---------------------------------------------------------------------

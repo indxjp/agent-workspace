@@ -37,7 +37,7 @@ open AgentWorkspace
 /-- `connectorKinds` / `CONNECTOR_KINDS` (ADR-0113 C15), in their `as const` order. -/
 @[aw_spec (ts := "packages/core/src/db/schema/mcp-servers.ts#connectorKinds")
   (ts := "packages/contracts/src/connectors.ts#CONNECTOR_KINDS")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 inductive Kind where
   | mcp
   | openapi
@@ -62,7 +62,7 @@ instance : WireEnum Kind where
 /-- `mcpTransports` / `CONNECTOR_TRANSPORTS`, in §8's order. -/
 @[aw_spec (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpTransports")
   (ts := "packages/contracts/src/connectors.ts#CONNECTOR_TRANSPORTS")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 inductive Transport where
   | stdio
   | http
@@ -93,7 +93,7 @@ def Transport.isRemote : Transport → Bool
 /-- `mcpAuthTypes` / `CONNECTOR_AUTH_TYPES`: §8's None / API Key / Bearer Token / OAuth. -/
 @[aw_spec (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpAuthTypes")
   (ts := "packages/contracts/src/connectors.ts#CONNECTOR_AUTH_TYPES")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 inductive AuthType where
   | none
   | apiKey
@@ -128,7 +128,7 @@ def AuthType.needsCredential : AuthType → Bool
 /-- One `mcp_servers` row of kind `mcp`, typed. `args` is the `jsonb` string list (`McpArgs`);
 the row's `kind` is `mcp` and its `tool_config` is `NULL` (`Er.Current.Catalog.connectorRow`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 structure Connector where
   id : ConnectorId
   workspace : WorkspaceId
@@ -176,7 +176,7 @@ def nameNotBlank : Bool := File.notBlank c.name
 
 /-- Every `mcp_servers` check holds on the row (the two closed sets hold by the types). -/
 @[aw_spec (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 def valid : Bool :=
   c.stdioHasCommand && c.remoteHasUrl && c.argsStdioOnly && c.commandNotBlank && c.urlShapeOk &&
     c.credentialRequired && c.nameNotBlank
@@ -233,7 +233,7 @@ def dbColumns : List String :=
 /-- `ConnectorResource`: the connector as every route renders it. The secret reference is
 replaced by `hasCredential`; there is no field a credential value could occupy. -/
 @[aw_spec (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 structure Resource where
   id : ConnectorId
   workspace : WorkspaceId
@@ -422,7 +422,7 @@ def credentialOf (authField credential : Field) : List String × Option String :
 /-- `parseCreateConnectorBody`: `none` for a body that is not a JSON object, else the ordered
 error list or the parsed input, exactly as the TypeScript computes them. -/
 @[aw_spec (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 def parseBody : Option Body → Except (List String) Parsed
   | none => .error ["the request body must be a JSON object"]
   | some b =>

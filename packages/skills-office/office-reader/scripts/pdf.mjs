@@ -61,22 +61,25 @@ function skipSpace(s, start) {
 
 const ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
 
+/** The text a backslash escape stands for, and the index of the last character it consumed. */
+function readEscape(s, at) {
+  const next = s[at] ?? '';
+  const octal = /^[0-7]{1,3}/u.exec(s.slice(at, at + 3));
+  if (octal) return [String.fromCharCode(parseInt(octal[0], 8) & 0xff), at + octal[0].length - 1];
+  if (next === '\r') return ['', s[at + 1] === '\n' ? at + 1 : at];
+  if (next === '\n') return ['', at];
+  return [ESCAPES[next] ?? next, at];
+}
+
 function literalString(s, start) {
   let depth = 0;
   let out = '';
-  let i = start;
-  for (; i < s.length; i += 1) {
+  for (let i = start; i < s.length; i += 1) {
     const c = s[i] ?? '';
     if (c === '\\') {
-      i += 1;
-      const next = s[i] ?? '';
-      const octal = /^[0-7]{1,3}/u.exec(s.slice(i, i + 3));
-      if (octal) {
-        out += String.fromCharCode(parseInt(octal[0], 8) & 0xff);
-        i += octal[0].length - 1;
-      } else if (next === '\r') {
-        if (s[i + 1] === '\n') i += 1;
-      } else if (next !== '\n') out += ESCAPES[next] ?? next;
+      const [text, last] = readEscape(s, i + 1);
+      out += text;
+      i = last;
     } else if (c === '(') {
       depth += 1;
       if (depth > 1) out += c;
@@ -101,6 +104,64 @@ const NUMBER = /[+-]?(?:\d+\.?\d*|\.\d+)/uy;
 const REFERENCE = /\s+(\d+)\s+R(?![\w])/uy;
 const KEYWORD = /[^\s()<>[\]{}/%]+/uy;
 
+function parseDictionary(s, start) {
+  const dict = Object.create(null);
+  let at = skipSpace(s, start);
+  while (!(s[at] === '>' && s[at + 1] === '>')) {
+    if (s[at] !== '/') throw new Error('dictionary key is not a name');
+    const [key, afterKey] = parseValue(s, at);
+    const [value, afterValue] = parseValue(s, afterKey);
+    dict[key.slice(1)] = value;
+    at = skipSpace(s, afterValue);
+  }
+  return [dict, at + 2];
+}
+
+function parseArray(s, start) {
+  const items = [];
+  let at = skipSpace(s, start);
+  while (s[at] !== ']') {
+    const [item, after] = parseValue(s, at);
+    items.push(item);
+    at = skipSpace(s, after);
+  }
+  return [items, at + 1];
+}
+
+function parseName(s, start) {
+  KEYWORD.lastIndex = start + 1;
+  const name = KEYWORD.exec(s)?.[0] ?? '';
+  const decoded = name.replace(/#([0-9a-f]{2})/giu, (_, hex) =>
+    String.fromCharCode(parseInt(hex, 16)),
+  );
+  return [`/${decoded}`, start + 1 + name.length];
+}
+
+/** A number, or an `N G R` reference when a generation number and R follow an integer. */
+function parseNumberOrReference(s, start, number) {
+  const after = start + number.length;
+  if (/^\d+$/u.test(number)) {
+    REFERENCE.lastIndex = after;
+    const ref = REFERENCE.exec(s);
+    if (ref) return [{ ref: Number(number) }, after + ref[0].length];
+  }
+  return [Number(number), after];
+}
+
+const KEYWORD_VALUES = new Map([
+  ['true', true],
+  ['false', false],
+  ['null', null],
+]);
+
+function parseKeyword(s, start, c) {
+  KEYWORD.lastIndex = start;
+  const word = KEYWORD.exec(s)?.[0];
+  if (word !== undefined && KEYWORD_VALUES.has(word))
+    return [KEYWORD_VALUES.get(word), start + word.length];
+  throw new Error(`unexpected ${JSON.stringify(word ?? c)}`);
+}
+
 /**
  * One PDF object starting at `start`: a number, `/Name` (kept with its slash), `{ string }`,
  * `{ ref }`, an array, a dictionary (no prototype) or a boolean or null.
@@ -108,56 +169,15 @@ const KEYWORD = /[^\s()<>[\]{}/%]+/uy;
 function parseValue(s, start) {
   const i = skipSpace(s, start);
   const c = s[i] ?? '';
-  if (c === '<' && s[i + 1] === '<') {
-    const dict = Object.create(null);
-    let at = skipSpace(s, i + 2);
-    while (!(s[at] === '>' && s[at + 1] === '>')) {
-      if (s[at] !== '/') throw new Error('dictionary key is not a name');
-      const [key, afterKey] = parseValue(s, at);
-      const [value, afterValue] = parseValue(s, afterKey);
-      dict[key.slice(1)] = value;
-      at = skipSpace(s, afterValue);
-    }
-    return [dict, at + 2];
-  }
-  if (c === '[') {
-    const items = [];
-    let at = skipSpace(s, i + 1);
-    while (s[at] !== ']') {
-      const [item, after] = parseValue(s, at);
-      items.push(item);
-      at = skipSpace(s, after);
-    }
-    return [items, at + 1];
-  }
+  if (c === '<' && s[i + 1] === '<') return parseDictionary(s, i + 2);
+  if (c === '[') return parseArray(s, i + 1);
   if (c === '(') return literalString(s, i);
   if (c === '<') return hexString(s, i);
-  if (c === '/') {
-    KEYWORD.lastIndex = i + 1;
-    const name = KEYWORD.exec(s)?.[0] ?? '';
-    const decoded = name.replace(/#([0-9a-f]{2})/giu, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16)),
-    );
-    return [`/${decoded}`, i + 1 + name.length];
-  }
+  if (c === '/') return parseName(s, i);
   NUMBER.lastIndex = i;
   const number = NUMBER.exec(s);
-  if (number) {
-    const after = i + number[0].length;
-    if (/^\d+$/u.test(number[0])) {
-      REFERENCE.lastIndex = after;
-      const ref = REFERENCE.exec(s);
-      // `12 0 R` is a reference only when a generation number and R follow the object number.
-      if (ref) return [{ ref: Number(number[0]) }, after + ref[0].length];
-    }
-    return [Number(number[0]), after];
-  }
-  KEYWORD.lastIndex = i;
-  const word = KEYWORD.exec(s)?.[0];
-  if (word === 'true') return [true, i + 4];
-  if (word === 'false') return [false, i + 5];
-  if (word === 'null') return [null, i + 4];
-  throw new Error(`unexpected ${JSON.stringify(word ?? c)}`);
+  if (number) return parseNumberOrReference(s, i, number[0]);
+  return parseKeyword(s, i, c);
 }
 
 const isDict = (value) =>
@@ -228,24 +248,29 @@ class Document {
 
   unpackObjectStreams() {
     for (const object of [...this.objects.values()]) {
-      if (!isDict(object.value) || object.value.Type !== '/ObjStm' || object.stream === null)
-        continue;
+      const isObjectStream =
+        isDict(object.value) && object.value.Type === '/ObjStm' && object.stream !== null;
+      if (!isObjectStream) continue;
       try {
-        const text = this.streamData(object).toString('latin1');
-        const first = Number(this.deref(object.value.First));
-        const header = text.slice(0, first).trim().split(/\s+/u).map(Number);
-        const count = Math.min(Number(this.deref(object.value.N)), header.length / 2);
-        for (let index = 0; index < count; index += 1) {
-          const number = header[index * 2];
-          const offset = header[index * 2 + 1];
-          if (number === undefined || offset === undefined || this.objects.has(number)) continue;
-          this.add(number, { value: parseValue(text, first + offset)[0], stream: null });
-        }
+        this.unpackObjectStream(object);
       } catch (error) {
         if (error instanceof PdfRefusal) throw error;
         // An object stream that cannot be opened leaves its objects missing; the pages that
         // needed them come out unreadable.
       }
+    }
+  }
+
+  unpackObjectStream(object) {
+    const text = this.streamData(object).toString('latin1');
+    const first = Number(this.deref(object.value.First));
+    const header = text.slice(0, first).trim().split(/\s+/u).map(Number);
+    const count = Math.min(Number(this.deref(object.value.N)), header.length / 2);
+    for (let index = 0; index < count; index += 1) {
+      const number = header[index * 2];
+      const offset = header[index * 2 + 1];
+      if (number === undefined || offset === undefined || this.objects.has(number)) continue;
+      this.add(number, { value: parseValue(text, first + offset)[0], stream: null });
     }
   }
 
@@ -309,6 +334,23 @@ class Document {
       (object) => isDict(object.value) && object.value.Type === '/Catalog',
     );
     const found = [];
+    const addPage = (page) => {
+      if (found.length >= PDF_LIMITS.pages)
+        throw new PdfRefusal(
+          'too_many_pages',
+          `the PDF has more than ${PDF_LIMITS.pages} pages; it is not read`,
+        );
+      found.push(page);
+    };
+    if (catalog) this.walkPageTree(catalog.value.Pages, addPage);
+    else
+      for (const object of this.objects.values())
+        if (isDict(object.value) && object.value.Type === '/Page')
+          addPage({ dict: object.value, resources: object.value.Resources });
+    return found;
+  }
+
+  walkPageTree(root, addPage) {
     const seen = new Set();
     const walk = (node, inherited, depth) => {
       const dict = this.deref(node);
@@ -322,27 +364,9 @@ class Document {
       const resources = dict.Resources ?? inherited;
       const kids = this.deref(dict.Kids);
       if (Array.isArray(kids)) for (const kid of kids) walk(kid, resources, depth + 1);
-      else {
-        if (found.length >= PDF_LIMITS.pages)
-          throw new PdfRefusal(
-            'too_many_pages',
-            `the PDF has more than ${PDF_LIMITS.pages} pages; it is not read`,
-          );
-        found.push({ dict, resources });
-      }
+      else addPage({ dict, resources });
     };
-    if (catalog) walk(catalog.value.Pages, undefined, 0);
-    else
-      for (const object of this.objects.values())
-        if (isDict(object.value) && object.value.Type === '/Page') {
-          if (found.length >= PDF_LIMITS.pages)
-            throw new PdfRefusal(
-              'too_many_pages',
-              `the PDF has more than ${PDF_LIMITS.pages} pages; it is not read`,
-            );
-          found.push({ dict: object.value, resources: object.value.Resources });
-        }
-    return found;
+    walk(root, undefined, 0);
   }
 }
 
@@ -355,32 +379,46 @@ const utf16 = (hex) =>
 
 const HEX = '[0-9A-Fa-f]';
 
-/** The code → text map of a ToUnicode CMap, and the byte width of its codes (0 if not stated). */
-function parseCMap(text) {
-  const map = new Map();
-  const space = new RegExp(`begincodespacerange\\s*<(${HEX}+)>`, 'u').exec(text);
-  const width = space ? (space[1] ?? '').length / 2 : 0;
+function addCharMappings(map, text) {
+  const pair = new RegExp(`<(${HEX}+)>\\s*<(${HEX}*)>`, 'gu');
   for (const block of text.matchAll(/beginbfchar([\s\S]*?)endbfchar/gu))
-    for (const pair of (block[1] ?? '').matchAll(new RegExp(`<(${HEX}+)>\\s*<(${HEX}*)>`, 'gu')))
-      map.set(parseInt(pair[1] ?? '', 16), utf16(pair[2] ?? ''));
+    for (const entry of (block[1] ?? '').matchAll(pair))
+      map.set(parseInt(entry[1] ?? '', 16), utf16(entry[2] ?? ''));
+}
+
+/** The texts a `bfrange` target gives its codes: an array of texts, or a base text counted up. */
+function rangeTarget(target) {
+  if (target.startsWith('[')) {
+    const list = [...target.matchAll(new RegExp(`<(${HEX}*)>`, 'gu'))].map((one) =>
+      utf16(one[1] ?? ''),
+    );
+    return (offset) => list[offset] ?? '';
+  }
+  const base = utf16(target.slice(1, -1));
+  const stem = base.slice(0, -1);
+  const lastCode = base.charCodeAt(base.length - 1);
+  return (offset) => stem + String.fromCharCode(lastCode + offset);
+}
+
+function addRangeMappings(map, text) {
   const range = new RegExp(`<(${HEX}+)>\\s*<(${HEX}+)>\\s*(<${HEX}*>|\\[[^\\]]*\\])`, 'gu');
   for (const block of text.matchAll(/beginbfrange([\s\S]*?)endbfrange/gu)) {
     for (const entry of (block[1] ?? '').matchAll(range)) {
       const low = parseInt(entry[1] ?? '', 16);
       const high = Math.min(parseInt(entry[2] ?? '', 16), low + 0xffff);
-      const target = entry[3] ?? '';
-      const list = target.startsWith('[')
-        ? [...target.matchAll(new RegExp(`<(${HEX}*)>`, 'gu'))].map((one) => utf16(one[1] ?? ''))
-        : null;
-      const base = list ? '' : utf16(target.slice(1, -1));
-      for (let code = low; code <= high; code += 1) {
-        const text16 = list
-          ? (list[code - low] ?? '')
-          : base.slice(0, -1) + String.fromCharCode(base.charCodeAt(base.length - 1) + code - low);
-        map.set(code, text16);
-      }
+      const textAt = rangeTarget(entry[3] ?? '');
+      for (let code = low; code <= high; code += 1) map.set(code, textAt(code - low));
     }
   }
+}
+
+/** The code → text map of a ToUnicode CMap, and the byte width of its codes (0 if not stated). */
+function parseCMap(text) {
+  const map = new Map();
+  const space = new RegExp(`begincodespacerange\\s*<(${HEX}+)>`, 'u').exec(text);
+  const width = space ? (space[1] ?? '').length / 2 : 0;
+  addCharMappings(map, text);
+  addRangeMappings(map, text);
   return { map, width };
 }
 
@@ -395,6 +433,85 @@ function pageContent(document, page) {
     .map((object) => document.streamData(object).toString('latin1'))
     .join('\n');
 }
+
+const MAX_FORM_DEPTH = 8;
+
+const OPERAND_START = /[-+.\d/(<[]/u;
+
+const showString = (reader, state, value) => {
+  if (value?.string !== undefined) reader.show(state.font, value.string);
+};
+
+/** What each text operator does to the reader and the running state of one content stream. */
+const TEXT_OPERATORS = new Map([
+  [
+    'BT',
+    (reader, state) => {
+      reader.parts.push('\n');
+      state.lastTm = null;
+    },
+  ],
+  [
+    'Tf',
+    (reader, state) => {
+      const [name] = state.operands;
+      state.font = typeof name === 'string' ? reader.font(state.resources, name) : null;
+    },
+  ],
+  ['Tj', (reader, state) => showString(reader, state, state.operands[0])],
+  [
+    'TJ',
+    (reader, state) => {
+      const [items] = state.operands;
+      for (const item of Array.isArray(items) ? items : []) {
+        if (item?.string !== undefined) showString(reader, state, item);
+        else if (typeof item === 'number' && item < -200) reader.parts.push(' ');
+      }
+    },
+  ],
+  [
+    "'",
+    (reader, state, operator) => {
+      reader.parts.push('\n');
+      showString(reader, state, state.operands[operator === '"' ? 2 : 0]);
+    },
+  ],
+  [
+    'Td',
+    (reader, state) => {
+      const [x, y] = state.operands;
+      if (Number(y) !== 0) reader.parts.push('\n');
+      else if (Number(x) !== 0) reader.parts.push(' ');
+    },
+  ],
+  ['T*', (reader) => reader.parts.push('\n')],
+  [
+    'Tm',
+    (reader, state) => {
+      const [, , , , x, y] = state.operands;
+      const { lastTm } = state;
+      if (lastTm !== null) reader.parts.push(y === lastTm.y ? (x === lastTm.x ? '' : ' ') : '\n');
+      state.lastTm = { x, y };
+    },
+  ],
+  [
+    'Do',
+    (reader, state) => {
+      const [name] = state.operands;
+      if (typeof name === 'string' && state.depth < MAX_FORM_DEPTH)
+        reader.form(state.resources, name, state.depth);
+    },
+  ],
+  [
+    'BI',
+    (_reader, state) => {
+      const end = state.content.slice(state.at).search(/\sEI(?=\s|$)/u);
+      state.at = end < 0 ? state.content.length : state.at + end + 3;
+    },
+  ],
+]);
+TEXT_OPERATORS.set('"', TEXT_OPERATORS.get("'"));
+TEXT_OPERATORS.set('TD', TEXT_OPERATORS.get('Td'));
 
 class TextReader {
   constructor(document) {
@@ -413,20 +530,22 @@ class TextReader {
     let font = this.fonts.get(dict);
     if (font === undefined) {
       const composite = document.deref(dict.Subtype) === '/Type0';
-      const toUnicode = document.objectOf(dict.ToUnicode);
-      let cmap = null;
-      if (toUnicode?.stream) {
-        try {
-          cmap = parseCMap(document.streamData(toUnicode).toString('latin1'));
-        } catch (error) {
-          if (error instanceof PdfRefusal) throw error;
-          cmap = null;
-        }
-      }
-      font = { composite, cmap };
+      font = { composite, cmap: this.toUnicodeMap(dict) };
       this.fonts.set(dict, font);
     }
     return font;
+  }
+
+  toUnicodeMap(fontDict) {
+    const { document } = this;
+    const toUnicode = document.objectOf(fontDict.ToUnicode);
+    if (!toUnicode?.stream) return null;
+    try {
+      return parseCMap(document.streamData(toUnicode).toString('latin1'));
+    } catch (error) {
+      if (error instanceof PdfRefusal) throw error;
+      return null;
+    }
   }
 
   show(font, string) {
@@ -444,76 +563,25 @@ class TextReader {
   }
 
   run(content, resources, depth) {
-    let font = null;
-    let operands = [];
-    let lastTm = null;
-    let at = 0;
+    const state = { content, resources, depth, at: 0, operands: [], font: null, lastTm: null };
     while (true) {
-      at = skipSpace(content, at);
-      if (at >= content.length) break;
-      if (/[-+.\d/(<[]/u.test(content[at] ?? '')) {
-        const [value, next] = parseValue(content, at);
-        operands.push(value);
-        at = next;
+      state.at = skipSpace(content, state.at);
+      if (state.at >= content.length) break;
+      if (OPERAND_START.test(content[state.at] ?? '')) {
+        const [value, next] = parseValue(content, state.at);
+        state.operands.push(value);
+        state.at = next;
         continue;
       }
-      KEYWORD.lastIndex = at;
+      KEYWORD.lastIndex = state.at;
       const operator = KEYWORD.exec(content)?.[0];
       if (operator === undefined) {
-        at += 1;
+        state.at += 1;
         continue;
       }
-      at += operator.length;
-      const [first, second, , , tmX, tmY] = operands;
-      switch (operator) {
-        case 'BT':
-          this.parts.push('\n');
-          lastTm = null;
-          break;
-        case 'Tf':
-          font = typeof first === 'string' ? this.font(resources, first) : null;
-          break;
-        case 'Tj':
-          if (first?.string !== undefined) this.show(font, first.string);
-          break;
-        case 'TJ':
-          for (const item of Array.isArray(first) ? first : []) {
-            if (item?.string !== undefined) this.show(font, item.string);
-            else if (typeof item === 'number' && item < -200) this.parts.push(' ');
-          }
-          break;
-        case "'":
-        case '"': {
-          this.parts.push('\n');
-          const shown = operator === '"' ? operands[2] : first;
-          if (shown?.string !== undefined) this.show(font, shown.string);
-          break;
-        }
-        case 'Td':
-        case 'TD':
-          if (Number(second) !== 0) this.parts.push('\n');
-          else if (Number(first) !== 0) this.parts.push(' ');
-          break;
-        case 'T*':
-          this.parts.push('\n');
-          break;
-        case 'Tm':
-          if (lastTm !== null)
-            this.parts.push(tmY === lastTm.y ? (tmX === lastTm.x ? '' : ' ') : '\n');
-          lastTm = { x: tmX, y: tmY };
-          break;
-        case 'Do':
-          if (typeof first === 'string' && depth < 8) this.form(resources, first, depth);
-          break;
-        case 'BI': {
-          const end = content.slice(at).search(/\sEI(?=\s|$)/u);
-          at = end < 0 ? content.length : at + end + 3;
-          break;
-        }
-        default:
-          break;
-      }
-      operands = [];
+      state.at += operator.length;
+      TEXT_OPERATORS.get(operator)?.(this, state, operator);
+      state.operands = [];
     }
   }
 

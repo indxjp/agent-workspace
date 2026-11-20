@@ -110,7 +110,7 @@ interface HelmApp {
  * Ingress class, cert-manager issuer and database CIDR come from `AW_INGRESS_CLASS_NAME`,
  * `AW_TLS_CLUSTER_ISSUER` and `AW_DATABASE_CIDR`, and are kept from the previous overlay when a
  * later run does not set them. No credential is written: the three Secrets the chart reads are the
- * operator's (docs/deploy/kubernetes.md).
+ * operator's (docs/40-operate/deploy/kubernetes.md).
  */
 function helmOverlay(
   project: ProjectDocument,

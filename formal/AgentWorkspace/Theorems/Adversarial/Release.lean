@@ -17,7 +17,7 @@ open AgentWorkspace AgentWorkspace.Concepts.Release
 
 /-- No step changes the version of a started conversation: not `push`, `point`, `promote` or
 `rollback`, and not a second `startSession` for the same conversation. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/domains/release.md#the-release-model")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/domains/release.md#the-release-model")
   (ts := "apps/web/server/agent-versions/session-version.ts#resolveSessionVersion")]
 theorem session_version_stable (t : Option Score) (r r' : Release) (op : Op)
     (h : step t r op = .ok r') (s : SessionId) (pin : AgentId × VersionNo)
@@ -56,7 +56,7 @@ theorem session_version_stable (t : Option Score) (r r' : Release) (op : Op)
 
 /-- Every content-changing operation adds exactly one version, and every other operation adds
 none: a UI edit is a `push`, so it is a version. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 theorem ui_edit_is_a_version (t : Option Score) (r r' : Release) (op : Op)
     (h : step t r op = .ok r') (a : AgentId) :
     (r'.versions a).length = (r.versions a).length + if op.addsVersionTo a then 1 else 0 := by

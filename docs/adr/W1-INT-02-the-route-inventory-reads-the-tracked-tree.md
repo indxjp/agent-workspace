@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W1-INT-02 (Wave 1 invariants)
-Scope: `tests/route-inventory.test.ts`, `tests/auth.test.ts`'s probe-set derivation; binding on any
+Scope: `tests/route-inventory.policy-check.ts`, `tests/auth.test.ts`'s probe-set derivation; binding on any
 later test that plants a file under `apps/web/app`
 
 ## Context
@@ -11,7 +11,7 @@ later test that plants a file under `apps/web/app`
 Two test files write real route handlers into `apps/web/app/api` while a third walks it, all in the
 same Vitest project set and therefore in parallel workers.
 
-- `tests/route-inventory.test.ts` planted `apps/web/app/api/agents/inventory-probe-…/route.jsx` with
+- `tests/route-inventory.policy-check.ts` planted `apps/web/app/api/agents/inventory-probe-…/route.jsx` with
   `mkdtempSync` for the duration of one test, to prove the gate sees a `route.jsx` Next.js would
   serve.
 - `tests/auth.test.ts` writes `apps/web/app/api/w1cp06-unregistered/deep/route.ts` at collection time
@@ -46,7 +46,7 @@ It fails closed in the two ways that matter: `git ls-files` returning nothing th
 reporting an application with no routes, and a file that git tracks but the worktree lacks throws
 rather than being skipped.
 
-**2 — `tests/route-inventory.test.ts` writes nothing into the repository tree, and asserts that it
+**2 — `tests/route-inventory.policy-check.ts` writes nothing into the repository tree, and asserts that it
 does not.**
 
 The `route.jsx` probe is now a synthetic entry handed to the same two functions the live gate uses —

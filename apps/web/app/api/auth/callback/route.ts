@@ -38,13 +38,13 @@ import {
   invitationIdentityCookie,
   mintInvitationIdentityToken,
   mintSelectionToken,
-  mintSessionToken,
-  newSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
   oidcConfiguration,
   sessionSecret,
   safeNextPath,
   selectionCookie,
-  sessionCookie,
+  signInSessionCookie,
 } from '../../../../server/auth';
 import { cookieValue } from '../../../../server/auth/cookies';
 import { resolveOidcSignIn } from '../../../../server/auth/login';
@@ -171,14 +171,14 @@ export async function handleCallback(
       return response;
     }
     case 'session': {
-      const token = await mintSessionToken(
-        newSessionClaims(result.email, result.workspaceSlug),
+      const token = await mintSignInSessionToken(
+        newSignInSessionClaims(result.email, result.workspaceSlug),
         secret.secret,
       );
       // Re-validated although the transaction is signed: the guard is the only thing standing
       // between a `next` value and an open redirect.
       const response = redirectTo(safeNextPath(identity.next) ?? '/');
-      response.cookies.set(sessionCookie(token));
+      response.cookies.set(signInSessionCookie(token));
       response.cookies.set(clearedInvitationIdentityCookie());
       response.cookies.set(clearTransactionCookie(request));
       return response;

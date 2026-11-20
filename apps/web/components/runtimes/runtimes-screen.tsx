@@ -11,7 +11,7 @@ import {
   saveRuntimeProfile,
   testSelectedRuntime,
 } from './model';
-import { runtimesStrings } from './runtimes-messages';
+import { registeredRuntimeReason, runtimesStrings } from './runtimes-messages';
 
 export type RuntimeScreenEntry = Readonly<{
   id: string;
@@ -58,17 +58,18 @@ export function RuntimesScreen({
     return {
       option,
       entry:
-        registered ??
-        ({
-          id: option.id,
-          label: strings.option[option.id].label,
-          connectionExists: false,
-          imageReachable: false,
-          testPassed: false,
-          state: 'disabled',
-          reason: strings.option[option.id].defaultReason ?? strings.notRegistered,
-          networkPolicies: null,
-        } satisfies RuntimeScreenEntry),
+        registered !== undefined
+          ? { ...registered, reason: registeredRuntimeReason(registered, locale) }
+          : ({
+              id: option.id,
+              label: strings.option[option.id].label,
+              connectionExists: false,
+              imageReachable: false,
+              testPassed: false,
+              state: 'disabled',
+              reason: strings.option[option.id].defaultReason ?? strings.notRegistered,
+              networkPolicies: null,
+            } satisfies RuntimeScreenEntry),
     };
   });
   const [selected, setSelected] = useState(

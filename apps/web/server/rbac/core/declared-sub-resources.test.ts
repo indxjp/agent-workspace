@@ -14,7 +14,7 @@
  * written to classify, which reads like a wrong classification rather than an absent one.
  *
  * So the file set is derived from the tracked tree, twice and through a wider pathspec, the way
- * `tests/route-inventory.test.ts` derives its own (ADR-0027 §1), and compared against what the
+ * `tests/route-inventory.policy-check.ts` derives its own (ADR-0027 §1), and compared against what the
  * module actually composed. The comparison is on the **owners**, because that is what both sides
  * know independently: a declaration file is named for its owning task, and every entry in it must
  * name the same task.

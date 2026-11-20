@@ -1211,7 +1211,7 @@
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/audit/runtime.ts",
+    "from": "apps/web/server/audit/wiring.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
     "dependencyTypes": [
@@ -1241,7 +1241,7 @@
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/cli-auth/runtime.ts",
+    "from": "apps/web/server/cli-auth/wiring.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
     "dependencyTypes": [
@@ -1747,7 +1747,7 @@
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/workspaces/runtime.ts",
+    "from": "apps/web/server/workspaces/wiring.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
     "dependencyTypes": [

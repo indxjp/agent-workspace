@@ -2,7 +2,7 @@ import type { DatabaseRoot, WorkspaceScope } from '@agent-workspace/core/db';
 import type { ModelDiscovery } from '../models/discovery';
 import type { WorkspaceModelsStore } from '../models/store';
 import { setupSecretsOf, setupStepFailure } from '../setup/failure';
-import { type SetupInput } from '../setup/runtime';
+import { type SetupInput } from '../setup/wiring';
 import type { setupRuntimeNetworkPolicy } from './config';
 import { reconcileSetupDefaults, type SeededSetupProvider } from './setup-reconciliation';
 import {

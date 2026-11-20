@@ -3,7 +3,7 @@ import type { SecretsService } from '@agent-workspace/core/secrets';
 import { openAgentArchiveStore, type AgentArchiveRoot } from '../../agents/archive/store';
 import { createAgentArchiveSweep, startAgentArchiveScheduler } from '../../agents/archive/sweep';
 import { resolveAgentRunOwnership } from '../../agents/run-ownership';
-import type { TriggersRuntime } from '../../triggers/runtime';
+import type { TriggersRuntime } from '../../triggers/wiring';
 import {
   runSchedulePass,
   startSchedulePassScheduler,

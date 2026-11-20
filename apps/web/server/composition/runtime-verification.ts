@@ -1,7 +1,10 @@
 import type { RuntimeDriverId } from '@agent-workspace/run-protocol';
 
 import type { RuntimeManagerClient } from '../compose/runtime-manager-client';
-import type { ProviderCredentialSpec } from '../compose/runtime-provider-credential';
+import {
+  takesProviderCredential,
+  type ProviderCredentialSpec,
+} from '../compose/runtime-provider-credential';
 import type { RuntimeProbeConfig, TestableDriverRegistry } from '../runtimes/registry';
 import type { RuntimeVerificationCache } from '../runtimes/verification-store';
 
@@ -98,17 +101,14 @@ export function createRuntimeVerificationRegistry(
     verified,
     sharedVerifications,
   } = options;
+  const countsWithoutTest = (driverId: string): boolean =>
+    verifiedWithoutTest &&
+    (driverId === 'local' ||
+      // aw dev --sandbox docker verifies its manager before starting this process.
+      (driverId === 'docker' && managedDriverId === 'docker' && options.runnerManager !== null));
   return {
     async wasVerified(driverId, workspaceId) {
-      if (verifiedWithoutTest && driverId === 'local') return true;
-      // aw dev --sandbox docker verifies its manager before starting this process.
-      if (
-        verifiedWithoutTest &&
-        driverId === 'docker' &&
-        managedDriverId === 'docker' &&
-        options.runnerManager !== null
-      )
-        return true;
+      if (countsWithoutTest(driverId)) return true;
       const configurationKey = options.configurationKeys.get(driverId);
       if (configurationKey === undefined) return false;
       if (verified.wasVerified(driverId, configurationKey)) return true;
@@ -127,6 +127,25 @@ export function createRuntimeVerificationRegistry(
         (sharedVerifications !== undefined &&
           (await sharedVerifications.get(workspaceId, driverId)) !== null)
       );
+    },
+    // A driver that takes no runtime connection's key runs the same Test Runtime in every
+    // workspace: nothing of the workspace reaches it. This instance's current pass of it is then
+    // the very proof a Test Runtime in `workspaceId` would make, so it is recorded there with its
+    // own window (never extended), for the other instances serving that workspace.
+    async carry(driverId, workspaceId) {
+      if (countsWithoutTest(driverId)) return true;
+      if (takesProviderCredential(driverId)) return false;
+      const configurationKey = options.configurationKeys.get(driverId);
+      if (configurationKey === undefined) return false;
+      const pass = verified.current(driverId, configurationKey);
+      if (pass === null) return false;
+      await sharedVerifications?.record(workspaceId, driverId, {
+        configurationKey,
+        fingerprint: pass.fingerprint,
+        verifiedAt: new Date(pass.verifiedAt),
+        expiresAt: new Date(pass.expiresAt),
+      });
+      return true;
     },
     async test(driverId, config, request, renderEvent) {
       const transcript: string[] = [];

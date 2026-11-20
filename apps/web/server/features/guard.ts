@@ -11,7 +11,7 @@ import {
 } from '@indx-workspace/contracts/features';
 
 import { noStoreResultResponse, problemBody, type ApiResult } from '../http/result';
-import { enabledFeaturesFor } from './runtime';
+import { enabledFeaturesFor } from './wiring';
 import { routeFeatureOf } from './route-feature';
 
 const FEATURE_DISABLED = 'feature_disabled' satisfies FeatureProblemCode;

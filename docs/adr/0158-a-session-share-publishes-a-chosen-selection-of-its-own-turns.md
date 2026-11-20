@@ -4,7 +4,7 @@ Status: accepted
 Date: 2026-10-19
 Decided by: Owner decision D8 (2026-10-19), engineering audit #1356, unit RF-103 (W3-7)
 Scope: `packages/contracts/src/shares.ts`, `packages/sdk/src/resources/shares.ts`, `packages/core/src/db/repositories/runs.ts`, `packages/core/src/db/repositories/runs/{rows,types}.ts`, `apps/web/server/shares/**`, `apps/web/server/composition/wiring/projects.ts`, `apps/web/app/api/shares/route.ts`, `apps/web/app/p/[token]/page.tsx`, `apps/web/components/shares/**`, `apps/web/components/run/run-view.tsx`, `apps/web/components/composer/home-chat.tsx`
-Related: RF-103 in `docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md` (this ADR settles its transcript part; `subjectLabel`, `snapshot` and `definition` stay with RF-103); ADR-FORMAL-P1-share-subject-is-a-typed-reference
+Related: RF-103 in `docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md` (this ADR settles its transcript part; `subjectLabel`, `snapshot` and `definition` stay with RF-103); ADR-FORMAL-P1-share-subject-is-a-typed-reference
 
 ## Context
 

@@ -225,7 +225,7 @@ export const AgentStopReasonSchema = z.enum(AGENT_STOP_REASONS);
  *
  * The cap is per frame, and every frame derived from one engine message carries that message: a
  * message that fans out into _n_ frames stores up to _n_ capped copies. That is deliberate — each
- * frame is readable on its own — and `docs/sdk/04-api-specification.md` §6.3 states the cost.
+ * frame is readable on its own — and `docs/10-product/sdk/04-api-specification.md` §6.3 states the cost.
  */
 export const AGENT_FRAME_RAW_MAX_BYTES = 65_536;
 

@@ -2,7 +2,7 @@ import type { SecretsService } from '@agent-workspace/core/secrets';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
 import { startWebhookDeliveryWorker, WEBHOOK_DELIVERY_INTERVAL_MS } from '../../webhooks/delivery';
-import type { Webhooks } from '../../webhooks/runtime';
+import type { Webhooks } from '../../webhooks/wiring';
 import {
   createRepositoryWebhookDeliverySources,
   createRepositoryWebhooksRuntime,

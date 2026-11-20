@@ -130,7 +130,7 @@ export default {
       name: 'browser-ui-does-not-import-persistence',
       severity: 'error',
       from: { path: '^apps/web/components/' },
-      to: { path: '^packages/core/src/db/' },
+      to: { path: '^packages/core/src/(?:db/|db-model\\.ts$)' },
     },
     {
       name: 'web-contracts-do-not-import-persistence',
@@ -138,7 +138,7 @@ export default {
       comment:
         'Refactoring plan, architecture enforcement end state: a domain wire contract never names a database record; mappers take structural inputs. Covers every `<domain>/contract.ts` and `projects/resource.ts`, the other record → wire-resource mapper that is clean today. `runtimes/connections.ts` is not listed because it still imports `core/db`: its port and store live in the same file as its mapper.',
       from: { path: '^apps/web/server/(?:[^/]+/contract|projects/resource)\\.ts$' },
-      to: { path: '^packages/core/src/db/' },
+      to: { path: '^packages/core/src/(?:db/|db-model\\.ts$)' },
     },
     {
       name: 'libraries-do-not-import-applications',
@@ -452,13 +452,13 @@ export default {
       name: 'domain-does-not-import-persistence',
       severity: 'error',
       comment:
-        'F-15: a web server domain names no `packages/core/src/db` record or repository; only its `store.ts` adapter (and the test-only `catalog-store.memory.ts`) may. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
+        'F-15: a web server domain names no `packages/core/src/db` record or repository; only its `store.ts` adapter (and the test-only `catalog-store.memory.ts`) may. `core/db-model` (the database-free values of the layer, kept apart for load cost) counts as the layer. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
       from: {
         path: '^apps/web/server/[^/]+/',
         pathNot:
           '/store\.ts$|/catalog-store\.memory\.ts$|\.(?:test|spec|test-support)\.[cm]?[jt]sx?$',
       },
-      to: { path: '^packages/core/src/db/' },
+      to: { path: '^packages/core/src/(?:db/|db-model\\.ts$)' },
     },
     {
       name: 'memory-catalog-store-is-for-tests',

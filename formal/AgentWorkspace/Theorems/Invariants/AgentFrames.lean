@@ -31,7 +31,7 @@ There is no input for which `toAgentFrames` answers nothing: a message the neutr
 express becomes `agent.native`, and one that could not be parsed becomes `agent.malformed`. This is
 the guarantee the runner's writer relies on without re-checking, and the reason the closed frame set
 is safe to close. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#63-the-neutral-event-vocabulary")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#63-the-neutral-event-vocabulary")
   (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem never_drops_an_engine_message (classified : Classified) :
     toAgentFrames classified ≠ [] :=
@@ -81,7 +81,7 @@ This is what makes the pairing invariant hold across a whole run without the map
 anything: the Claude Agent SDK carries a `tool_use` block on the assistant's message and the matching
 `tool_result` on the *following* user message, so the frame announcing a `toolCallId` is always
 emitted before the frame answering it. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#63-the-neutral-event-vocabulary")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#63-the-neutral-event-vocabulary")
   (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem tool_frames_follow_the_turn_that_can_carry_them (items : List JValue) :
     (toolFrames "assistant" (some (.arr items))).all Frame.isToolCall = true ∧

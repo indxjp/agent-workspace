@@ -12,7 +12,7 @@ import type { SurfaceDefinition, SurfaceLocale } from '@indx-workspace/contracts
 import { Chat } from '@indx-workspace/react';
 import { awDevModelFix, surfaceStrings } from '@indx-workspace/react/locale';
 
-import type { SurfaceModelRefusal } from '../../../../../server/surfaces/public/runtime';
+import type { SurfaceModelRefusal } from '../../../../../server/surfaces/public/wiring';
 import { CopyButton } from './copy-button';
 
 export interface TryPageProps {

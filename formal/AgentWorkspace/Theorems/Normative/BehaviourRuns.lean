@@ -19,20 +19,20 @@ def request (route : Route) : Request := { route, id := "run" }
 
 /-- R-1 accepts a run into the queue and returns the events location. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#startRun")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem start_accepted :
     (step fixture owner (request .start)).reply =
       { status := 202, bodyKind := "start" } := by decide +kernel
 
 /-- R-2 returns the list envelope, with a mandatory owner filter for an own grant. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#listRuns")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem list_forces_owner :
     (step fixture builder (request .list)).reply.ownerFilter = some "owner" := by decide +kernel
 
 /-- R-3 conceals a run in another workspace as `run_not_found`. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#readRun")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem read_foreign_is_not_found :
     (step fixture { owner with workspaceId := "other" } (request .read)).reply =
       problem 404 "run_not_found" := by decide +kernel
@@ -177,7 +177,7 @@ theorem scoped_problem_codes :
 
 /-- The all-token callback reports the three documented outcomes without changing the envelope. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#revokeRunTokens")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem revoke_outcomes :
     (step fixture owner (request .revoke)).reply.revokeOutcome = some "revoked" ∧
     (step fixture owner { (request .revoke) with revokeCount := 0 }).reply.revokeOutcome =

@@ -89,12 +89,12 @@ letter, then at most 127 upper-case letters, digits and underscores. -/
 @[aw_spec (ts := "packages/contracts/src/secrets.ts#SECRET_NAME_PATTERN")
   (ts := "apps/web/server/secrets/contract.ts#parseSecretName")
   (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 def isValidName (s : String) : Bool := isValidNameChars s.toList
 
 /-- `parseSecretValue` on a string of `length` code units: non-empty and at most 64 KiB. -/
 @[aw_spec (ts := "apps/web/server/secrets/contract.ts#parseSecretValue")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 def valueAccepted (length : Nat) : Bool := 1 ≤ length && length ≤ valueMaxLength
 
 /-! ## The stored row -/
@@ -106,7 +106,7 @@ def sqlNotBlank (s : String) : Bool := s.toList.any (· != ' ')
 /-- The envelope: the master key that wrapped the data key, and the octet lengths of the seven
 `bytea` parts. -/
 @[aw_spec (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 structure Envelope where
   masterKeyId : String
   wrappedDataKey : Nat
@@ -128,7 +128,7 @@ def Envelope.wellFormed (e : Envelope) : Bool :=
 
 /-- One `secrets` row as the concept knows it. -/
 @[aw_spec (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 structure Secret where
   id : SecretId
   workspace : WorkspaceId
@@ -188,12 +188,12 @@ inductive Operation where
 
 /-- Today's operations (`GET`/`POST /api/secrets`, `PUT` and `DELETE /api/secrets/:id`). Issue
 #240 (S-10) added `remove`, refused while the secret is referenced. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "apps/web/server/secrets/store.ts#WorkspaceSecretsStore")]
 def operationsCurrent : List Operation := [.list, .create, .replace, .remove]
 
 /-- The documented target: the four operations, `remove` included (roadmap S-10). -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 def operationsTarget : List Operation := [.list, .create, .replace, .remove]
 
 /-- The fields `POST /api/secrets` accepts. -/
@@ -221,12 +221,12 @@ def openBodyAccepts (required keys : List String) : Bool := required.all keys.co
 /-- `parseCreateSecretBody` over the keys of a body: closed, and both `name` and `value` are
 required. -/
 @[aw_spec (ts := "apps/web/server/secrets/contract.ts#parseCreateSecretBody")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 def createAccepts (keys : List String) : Bool := closedBodyAccepts createFields createFields keys
 
 /-- `parseReplaceSecretBody` over the keys of a body: closed, and `value` is required. -/
 @[aw_spec (ts := "apps/web/server/secrets/contract.ts#parseReplaceSecretBody")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 def replaceAccepts (keys : List String) : Bool := closedBodyAccepts replaceFields replaceFields keys
 
 /-- The wire name of an operation, as the store and the SDK method name it. -/
@@ -241,7 +241,7 @@ def Operation.toWire : Operation → String
 /-- What a secrets row is for, read from its name (the only place today's code records it). -/
 @[aw_spec (ts := "apps/web/server/models/store.ts#modelConnectionSecretName")
   (ts := "apps/web/server/runtimes/connections.ts#decodeDriver")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 inductive Purpose where
   /-- A secret a workspace owner stored directly under `/api/secrets`. -/
   | plain

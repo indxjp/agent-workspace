@@ -8,7 +8,7 @@
  *   same value. A manager with no image at all refuses to start, naming no key.
  *
  * A disagreement is a failing test, and the fix is never to edit a vector
- * (`docs/formal/00-orchestrator-prompt.md` §10).
+ * (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import { EngineImageConfigurationError } from '@agent-workspace/runtime/engine-images';
 import { describe, expect, it } from 'vitest';

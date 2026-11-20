@@ -94,7 +94,7 @@ private theorem mem_of_contains {l : List (String × String)} {p : String × Str
 /-- A reference through a tenant-paired foreign key joins two rows of the same workspace, in any
 state and under any schema: the database compares the two tenant columns as part of the key. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem paired_reference_preserves_tenant (S : Schema) (st : State) {t : TableName}
     {fk : ForeignKey} {r r' : Row} (hp : isPaired S t fk = true)
@@ -116,7 +116,7 @@ theorem paired_reference_preserves_tenant (S : Schema) (st : State) {t : TableNa
 joins two rows of the same workspace: the sibling pins a parent row in the child's workspace,
 and the parent key is unique, so both constraints reach that one row. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem sibling_reference_preserves_tenant (S : Schema) (st : State)
     (hc : consistent S st = true) {t : TableName} {fk : ForeignKey} {r r' : Row}
@@ -171,7 +171,7 @@ theorem sibling_reference_preserves_tenant (S : Schema) (st : State)
 /-- In a consistent state, every reference through a foreign key that is neither unpaired nor a
 reference to a global table joins two rows of the same workspace. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reference_preserves_tenant (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {fk : ForeignKey} {r r' : Row} (hu : classify S t fk ≠ .unpaired)
@@ -226,7 +226,7 @@ private theorem classify_ne_unpaired {S : Schema} (hS : pairingComplete S = true
 of one workspace to a tenant-carrying row of another: cross-tenant references are
 unrepresentable in the database. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem no_cross_tenant_reference (S : Schema) (hS : pairingComplete S = true) (st : State)
     (hc : consistent S st = true) {t : TableName} {fk : ForeignKey} {r r' : Row}
@@ -238,7 +238,7 @@ theorem no_cross_tenant_reference (S : Schema) (hS : pairingComplete S = true) (
 /-- Under a schema with no unpaired reference, every row reached from a row by a chain of
 references through tenant-carrying tables belongs to the starting row's workspace. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem tenant_path_preserves_tenant (S : Schema) (hS : pairingComplete S = true) (st : State)
     (hc : consistent S st = true) {t t' : TableName} {r r' : Row}
@@ -251,7 +251,7 @@ theorem tenant_path_preserves_tenant (S : Schema) (hS : pairingComplete S = true
 
 /-- In a consistent state every row of a tenant-carrying table has a workspace (its tenant
 column is `NOT NULL`), provided the schema declares that column `NOT NULL`. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenant_row_has_workspace (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {tc : String} (htc : (S t).tenantColumn? = some tc)
@@ -284,7 +284,7 @@ private theorem other_check_holds {S : Schema} {st : State} (hc : consistent S s
 /-- In a consistent state, under today's schema, every principal has exactly one source: a
 membership principal has a membership and no API key, and an API-key principal has a key and no
 membership. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]
 theorem principal_has_exactly_one_source (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .workspacePrincipals) :

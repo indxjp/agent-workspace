@@ -70,7 +70,7 @@ import {
   type SurfaceSessionOpening,
   type SurfaceSessionsRuntime,
   type VisitorSurface,
-} from './runtime';
+} from './wiring';
 
 /**
  * The environment a session of an agent with `pointers` runs from for `mode` (issue #612): the
@@ -286,6 +286,151 @@ export async function resolveDeploymentScope(
   return slug.ok ? scopes.forWorkspaceSlug(slug.slug) : null;
 }
 
+type ResolveSurface = SurfaceSessionsRuntime['resolve'];
+
+async function resolveSurface(
+  dependencies: SurfaceSessionsDependencies,
+  name: string,
+  mode: SurfaceMode,
+): Promise<ResolvedSurface | null> {
+  const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
+  if (scope === null) return null;
+  const picked = await pickSurfaceVersion(dependencies.agentVersions.forScope(scope), name, mode);
+  if (picked === null) return null;
+  const { pointed } = picked;
+  const surface = SurfaceDefinitionSchema.safeParse(pointed.surface);
+  if (!surface.success) {
+    // Every saved surface was parsed on the way in; one that no longer parses was written by
+    // an older contract. It is not served, and the log names it so it can be re-saved.
+    log.error(
+      `[surfaces] the surface "${name}" of agent ${pointed.agentId} version ` +
+        `${String(pointed.number)} no longer parses and is not served: ${surface.error.message}`,
+    );
+    return null;
+  }
+  const agent = await dependencies.agents.forWorkspace(scope.workspaceId).get(pointed.agentId);
+  if (agent === null) return null;
+  return {
+    workspaceId: scope.workspaceId,
+    agentId: agent.id,
+    agentName: agent.name,
+    environment: picked.environment,
+    versionId: pointed.versionId,
+    versionNumber: pointed.number,
+    promoted: picked.promoted,
+    surface: withDeploymentOrigin(surface.data, picked.environment, dependencies.env()),
+  };
+}
+
+async function openSurfaceSession(
+  dependencies: SurfaceSessionsDependencies,
+  resolved: ResolvedSurface,
+  request: SurfaceSessionRequest,
+): Promise<SurfaceSessionOpening> {
+  const prepared = await prepareSurfaceSession(dependencies, resolved, request);
+  if (prepared.kind !== 'ready') return prepared;
+  const { scope, agent, versionId, publisher } = prepared;
+  const { resume } = request;
+  const tokens = dependencies.tokens();
+  if (tokens === null) {
+    throw new Error(
+      'the surface session bootstrap needs the tokens runtime, and none is installed',
+    );
+  }
+
+  const session =
+    resume === undefined
+      ? await createSurfaceSession(
+          dependencies,
+          { scope, resolved, agent },
+          { versionId, publisher },
+        )
+      : { sessionId: resume.sessionId, resumeKey: null };
+  if (session === null) return GONE;
+  const { sessionId, resumeKey } = session;
+  const minted = await tokens.issue(
+    publisher,
+    { kind: 'session', id: sessionId },
+    SURFACE_SESSION_TTL_SECONDS,
+  );
+  // `issue` refuses a session that went away after the checks above (e.g. archived after
+  // `isResumable`): a resume answers as any other unresumable session, not as a gone surface.
+  if (minted === null) return resume === undefined ? GONE : NOT_RESUMABLE;
+  return {
+    kind: 'opened',
+    sessionId,
+    agentId: agent.id,
+    token: minted.token,
+    expiresAt: minted.expiresAt,
+    resumeKey,
+  };
+}
+
+async function checkSurfaceModel(
+  dependencies: SurfaceSessionsDependencies,
+  resolved: ResolvedSurface,
+): Promise<SurfaceModelRefusal | null> {
+  const { workspaceId } = resolved;
+  if (!(await dependencies.runGate.isUsable(workspaceId))) return null;
+  const agent = await dependencies.agents.forWorkspace(workspaceId).get(resolved.agentId);
+  if (agent === null) return null;
+  const owner = await publisherOf(dependencies, workspaceId, agent);
+  if (owner === null) return null;
+  if (owner.agentRef.archived === true) return AGENT_ARCHIVED;
+  const refusal = await dependencies.preflight(
+    owner.publisher,
+    owner.agentRef,
+    null,
+    resolved.versionId,
+  );
+  return refusal === null ? null : { code: refusal.code, message: refusal.message };
+}
+
+async function visitorSurfaceOf(
+  dependencies: SurfaceSessionsDependencies,
+  resolve: ResolveSurface,
+  workspaceId: string,
+  sessionId: string,
+): Promise<VisitorSurface | null> {
+  const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
+  if (scope === null) return null;
+  const key = await dependencies.surfaceSessionKeys.forScope(scope).find(sessionId);
+  if (key === null) return null;
+  // Issue #622: the surface of the version the session pinned, so a promote moves neither the
+  // conversation's version nor its limits.
+  const pinned = (await dependencies.sessions.forScope(scope).get(sessionId))?.agentVersionId;
+  const version =
+    pinned === undefined || pinned === null
+      ? null
+      : await dependencies.agentVersions.forScope(scope).findById(pinned);
+  const surface = version === null ? undefined : surfaceOfVersion(version, key.surfaceName);
+  // The pinned surface is read as served: here the origin only adds a limit (the default turn
+  // cap), so a draft's visitor session meets a stricter cap and never a looser one.
+  if (surface !== undefined) {
+    return { surface: withDeploymentOrigin(surface, 'production', dependencies.env()) };
+  }
+  // ponytail: a switcher session pins its own agent's version, which carries no such surface,
+  // so it reads the surface the public is served now; record the surface's version with the
+  // key if a switched conversation must keep its limits across a promote.
+  const resolved = await resolve(key.surfaceName, 'public');
+  return { surface: resolved?.workspaceId === workspaceId ? resolved.surface : null };
+}
+
+async function servedSurfacesOf(
+  dependencies: SurfaceSessionsDependencies,
+  resolve: ResolveSurface,
+): Promise<readonly ServedSurface[]> {
+  const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
+  if (scope === null) return [];
+  const names = await dependencies.agentVersions.forScope(scope).listPointedSurfaceNames();
+  // ponytail: one names query plus a resolve per surface on every cross-origin run call;
+  // cache it per request or with a short TTL if it shows up in latency.
+  const resolved = await Promise.all(names.map((name) => resolve(name, 'public')));
+  return resolved.flatMap((served) =>
+    served === null ? [] : [{ ...served.surface, servedFrom: served.environment }],
+  );
+}
+
 export function createSurfaceSessionsRuntime(
   dependencies: SurfaceSessionsDependencies,
 ): SurfaceSessionsRuntime {
@@ -297,139 +442,16 @@ export function createSurfaceSessionsRuntime(
       `[surfaces] ${deploymentSlug.reason} Every hosted surface and A2A agent card will answer "not found" until it is fixed.`,
     );
   }
-  const runtime: SurfaceSessionsRuntime = {
+  const resolve: ResolveSurface = (name, mode) => resolveSurface(dependencies, name, mode);
+  return {
     env: dependencies.env,
-    async resolve(name: string, mode: SurfaceMode): Promise<ResolvedSurface | null> {
-      const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
-      if (scope === null) return null;
-      const picked = await pickSurfaceVersion(
-        dependencies.agentVersions.forScope(scope),
-        name,
-        mode,
-      );
-      if (picked === null) return null;
-      const { pointed } = picked;
-      const surface = SurfaceDefinitionSchema.safeParse(pointed.surface);
-      if (!surface.success) {
-        // Every saved surface was parsed on the way in; one that no longer parses was written by
-        // an older contract. It is not served, and the log names it so it can be re-saved.
-        log.error(
-          `[surfaces] the surface "${name}" of agent ${pointed.agentId} version ` +
-            `${String(pointed.number)} no longer parses and is not served: ${surface.error.message}`,
-        );
-        return null;
-      }
-      const agent = await dependencies.agents.forWorkspace(scope.workspaceId).get(pointed.agentId);
-      if (agent === null) return null;
-      return {
-        workspaceId: scope.workspaceId,
-        agentId: agent.id,
-        agentName: agent.name,
-        environment: picked.environment,
-        versionId: pointed.versionId,
-        versionNumber: pointed.number,
-        promoted: picked.promoted,
-        surface: withDeploymentOrigin(surface.data, picked.environment, dependencies.env()),
-      };
-    },
-
-    async open(
-      resolved: ResolvedSurface,
-      request: SurfaceSessionRequest,
-    ): Promise<SurfaceSessionOpening> {
-      const prepared = await prepareSurfaceSession(dependencies, resolved, request);
-      if (prepared.kind !== 'ready') return prepared;
-      const { scope, agent, versionId, publisher } = prepared;
-      const { resume } = request;
-      const tokens = dependencies.tokens();
-      if (tokens === null) {
-        throw new Error(
-          'the surface session bootstrap needs the tokens runtime, and none is installed',
-        );
-      }
-
-      const session =
-        resume === undefined
-          ? await createSurfaceSession(
-              dependencies,
-              { scope, resolved, agent },
-              { versionId, publisher },
-            )
-          : { sessionId: resume.sessionId, resumeKey: null };
-      if (session === null) return GONE;
-      const { sessionId, resumeKey } = session;
-      const minted = await tokens.issue(
-        publisher,
-        { kind: 'session', id: sessionId },
-        SURFACE_SESSION_TTL_SECONDS,
-      );
-      // `issue` refuses a session that went away after the checks above (e.g. archived after
-      // `isResumable`): a resume answers as any other unresumable session, not as a gone surface.
-      if (minted === null) return resume === undefined ? GONE : NOT_RESUMABLE;
-      return {
-        kind: 'opened',
-        sessionId,
-        agentId: agent.id,
-        token: minted.token,
-        expiresAt: minted.expiresAt,
-        resumeKey,
-      };
-    },
-
-    async checkModel(resolved: ResolvedSurface): Promise<SurfaceModelRefusal | null> {
-      const { workspaceId } = resolved;
-      if (!(await dependencies.runGate.isUsable(workspaceId))) return null;
-      const agent = await dependencies.agents.forWorkspace(workspaceId).get(resolved.agentId);
-      if (agent === null) return null;
-      const owner = await publisherOf(dependencies, workspaceId, agent);
-      if (owner === null) return null;
-      if (owner.agentRef.archived === true) return AGENT_ARCHIVED;
-      const refusal = await dependencies.preflight(
-        owner.publisher,
-        owner.agentRef,
-        null,
-        resolved.versionId,
-      );
-      return refusal === null ? null : { code: refusal.code, message: refusal.message };
-    },
-
-    async visitorSurface(workspaceId: string, sessionId: string): Promise<VisitorSurface | null> {
-      const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
-      if (scope === null) return null;
-      const key = await dependencies.surfaceSessionKeys.forScope(scope).find(sessionId);
-      if (key === null) return null;
-      // Issue #622: the surface of the version the session pinned, so a promote moves neither the
-      // conversation's version nor its limits.
-      const pinned = (await dependencies.sessions.forScope(scope).get(sessionId))?.agentVersionId;
-      const version =
-        pinned === undefined || pinned === null
-          ? null
-          : await dependencies.agentVersions.forScope(scope).findById(pinned);
-      const surface = version === null ? undefined : surfaceOfVersion(version, key.surfaceName);
-      // The pinned surface is read as served: here the origin only adds a limit (the default turn
-      // cap), so a draft's visitor session meets a stricter cap and never a looser one.
-      if (surface !== undefined)
-        return { surface: withDeploymentOrigin(surface, 'production', dependencies.env()) };
-      // ponytail: a switcher session pins its own agent's version, which carries no such surface,
-      // so it reads the surface the public is served now; record the surface's version with the
-      // key if a switched conversation must keep its limits across a promote.
-      const resolved = await runtime.resolve(key.surfaceName, 'public');
-      return { surface: resolved?.workspaceId === workspaceId ? resolved.surface : null };
-    },
-
-    async servedSurfaces(): Promise<readonly ServedSurface[]> {
-      const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
-      if (scope === null) return [];
-      const names = await dependencies.agentVersions.forScope(scope).listPointedSurfaceNames();
-      // ponytail: one names query plus a resolve per surface on every cross-origin run call;
-      // cache it per request or with a short TTL if it shows up in latency.
-      const resolved = await Promise.all(names.map((name) => runtime.resolve(name, 'public')));
-      return resolved.flatMap((served) =>
-        served === null ? [] : [{ ...served.surface, servedFrom: served.environment }],
-      );
-    },
+    resolve,
+    open: (resolved, request) => openSurfaceSession(dependencies, resolved, request),
+    checkModel: (resolved) => checkSurfaceModel(dependencies, resolved),
+    visitorSurface: (workspaceId, sessionId) =>
+      visitorSurfaceOf(dependencies, resolve, workspaceId, sessionId),
+    servedSurfaces: () => servedSurfacesOf(dependencies, resolve),
   };
-  return runtime;
 }
 
 async function prepareSurfaceSession(

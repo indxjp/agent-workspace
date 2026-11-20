@@ -116,7 +116,7 @@ const TranscriptSubkeySchema = z
 
 /**
  * One transcript entry: a Claude Agent SDK JSONL line, stored and returned verbatim. The line
- * format is the provider's (`docs/sdk/04-api-specification.md` §6.1), so the contract says only
+ * format is the provider's (`docs/10-product/sdk/04-api-specification.md` §6.1), so the contract says only
  * that each entry is one JSON value and gives it no shape of its own.
  */
 export const TranscriptEntrySchema = z.unknown();

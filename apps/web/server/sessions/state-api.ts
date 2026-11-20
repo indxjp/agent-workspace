@@ -21,7 +21,7 @@
  *
  * Issue #305 drew the family as `/api/sessions/:id/state/streams/:streamKey/entries`. That shape
  * is four levels deep under the resource, and ADR-0026 decision 3 — enforced by
- * `tests/route-inventory.test.ts` — stops at `/api/<resource>/:id/<sub>`: *"a fourth level is a
+ * `tests/route-inventory.policy-check.ts` — stops at `/api/<resource>/:id/<sub>`: *"a fourth level is a
  * resource that has not been named"*. `subkeys` is a sibling of `transcript` today for exactly this
  * reason, and it is recorded in that route's own header. So the family keeps the shape rule and the
  * stream key travels as a query parameter, which it can because it is one opaque string. ADR-0071

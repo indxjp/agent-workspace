@@ -1,15 +1,12 @@
-import { access, readFile } from 'node:fs/promises';
-
+/**
+ * The site matrix page's sync, on in-memory pages. `scripts/docs/sync-platform-matrix.mjs --check`
+ * compares the real page with docs/30-reference/matrices/platform-matrix.md in `pnpm docs:check`,
+ * and tests/platform-matrix/platform-matrix.docs-check.ts checks every platform has a guide.
+ */
 import { describe, expect, it } from 'vitest';
 
-import {
-  matrixTable,
-  PLATFORM_MATRIX_PAGE,
-  PLATFORM_MATRIX_SOURCE,
-  withMatrixRegion,
-} from '../scripts/docs/sync-platform-matrix.mjs';
+import { matrixTable, withMatrixRegion } from '../scripts/docs/sync-platform-matrix.mjs';
 
-const repository = new URL('../', import.meta.url);
 const START = '{/* platform-matrix:start */}';
 const END = '{/* platform-matrix:end */}';
 
@@ -42,37 +39,5 @@ describe('withMatrixRegion', () => {
 
   it('refuses an end marker that precedes the start', () => {
     expect(() => withMatrixRegion(`${END}\n${START}\n`, '| t |')).toThrow('platform-matrix:end');
-  });
-});
-
-describe('docs/sdk/site/platforms/matrix.mdx', () => {
-  it('carries the table of docs/platform-matrix.md and nothing else between its markers', async () => {
-    const source = await readFile(new URL(PLATFORM_MATRIX_SOURCE, repository), 'utf8');
-    const page = await readFile(new URL(PLATFORM_MATRIX_PAGE, repository), 'utf8');
-    expect(
-      withMatrixRegion(page, matrixTable(source)),
-      'run `node scripts/docs/sync-platform-matrix.mjs --write`',
-    ).toBe(page);
-  });
-
-  it('has a guide for every platform in the matrix header', async () => {
-    const source = await readFile(new URL(PLATFORM_MATRIX_SOURCE, repository), 'utf8');
-    const header = matrixTable(source).split('\n')[0] ?? '';
-    const ids = header
-      .split('|')
-      .map((cell) => cell.trim())
-      .filter((cell) => cell !== '' && cell !== 'Capability');
-    expect(ids.length).toBeGreaterThan(0);
-    const eject = await readFile(new URL('docs/sdk/site/platforms/eject.mdx', repository), 'utf8');
-    for (const id of ids) {
-      if (id.startsWith('eject-')) {
-        expect(eject, `platforms/eject.mdx names ${id}`).toContain(id);
-      } else {
-        await expect(
-          access(new URL(`docs/sdk/site/platforms/${id}.mdx`, repository)),
-          `docs/sdk/site/platforms/${id}.mdx`,
-        ).resolves.toBeUndefined();
-      }
-    }
   });
 });

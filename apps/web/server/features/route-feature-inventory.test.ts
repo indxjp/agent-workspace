@@ -27,15 +27,8 @@
  *     refused at the edge only (part (a) drives them).
  */
 import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-import {
-  createInMemoryWorkspaceScopeResolver,
-  type WorkspaceScope,
-} from '@agent-workspace/core/db';
-import type { TriggerRecord, TriggerRepository } from '@agent-workspace/core/db';
-import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 import {
   FEATURE_IDS,
   featuresMissingDependencies,
@@ -47,22 +40,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { REPO_ROOT } from '../../../../tests/inventory-support';
 import { proxy } from '../../proxy';
-import { applicationContext } from '../application-context';
-import { installTestDomains, installTestRunApi } from '../application-context-fixtures';
-import { createBuilderCallerVerifier } from '../builder/transport/mcp';
-import type { EndpointClientsRuntime } from '../endpoint-clients/runtime';
-import { installEmptyDeployment } from '../empty-deployment-fixture';
 import { encodeFileId } from '../files/file-id';
-import type { RunTokenDatabase } from '../gateway/run-token-verifier';
-import { mintClientSecret } from '../oauth/tokens';
-import { Principal } from '../rbac/principal';
-import { callerHeaders, installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
-import type { RunPrincipal } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/memory-store';
-import type { ToolEndpointEnvironment } from '../tool-endpoint/env';
-import type { TriggersRuntime } from '../triggers/runtime';
+import { callerHeaders } from '../rbac/testing';
 import { routeFeatureOf } from './route-feature';
-import { clearFeatureSwitches, configureFeatureSwitches } from './runtime';
+import {
+  installInventoryWorkspace,
+  ORIGIN,
+  OWNER,
+  UUID,
+} from './route-feature-inventory.test-support';
+import { clearFeatureSwitches, configureFeatureSwitches } from './wiring';
 
 type RouteHandler = (
   request: NextRequest,
@@ -71,15 +58,10 @@ type RouteHandler = (
 
 const ROUTE_MODULES = import.meta.glob(['../../app/api/**/route.ts', '../../app/mcp/**/route.ts']);
 
-const ORIGIN = 'https://control-plane.test';
-const OWNER = { email: 'owner@features.test' };
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const UUID = '00000000-0000-4000-8000-000000000000';
-const CLIENT = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
-const RUN_TOKEN_SECRET = 'inventory-run-token-signing-secret-at-least-thirty-two-bytes';
-const RUN = 'run-1';
-const SESSION = 'session-1';
-const AGENT = 'agent-1';
+const BODY_PREVIEW_EDGE = 120;
+const BODY_PREVIEW_DRIVEN = 100;
+const SUITE_TIMEOUT_MS = 120_000;
 
 const FIRE = 'POST /api/triggers/:id/fire/:secret';
 const TOOL_ENDPOINT = 'POST /mcp/projects/:name';
@@ -207,245 +189,186 @@ describe('the route inventory covers every feature-tagged route', () => {
   });
 });
 
-describe('(a) the edge refuses a feature the deployment does not install, before authentication', () => {
+interface ErrorBody {
+  readonly error?: { readonly code?: string; readonly details?: unknown };
+}
+
+/** Whether a response is the 404 `feature_disabled` that names exactly `feature`. */
+function refusesFeature(status: number, body: ErrorBody, feature: FeatureId): boolean {
+  return (
+    status === 404 &&
+    body.error?.code === 'feature_disabled' &&
+    JSON.stringify(body.error.details) === JSON.stringify([feature])
+  );
+}
+
+function installedWithout(feature: FeatureId): readonly FeatureId[] {
+  let installed = FEATURE_IDS.filter((id) => id !== feature);
+  for (;;) {
+    const stranded = featuresMissingDependencies(installed).map((missing) => missing.feature);
+    if (stranded.length === 0) return installed;
+    installed = installed.filter((id) => !stranded.includes(id));
+  }
+}
+
+function edgeRequest(route: Route, pathname: string): NextRequest {
+  return new NextRequest(new URL(pathname, ORIGIN), { method: route.method });
+}
+
+async function edgeRefusalProblems(edgeRoutes: readonly Route[]): Promise<string[]> {
+  const wrong: string[] = [];
+  for (const route of edgeRoutes) {
+    const feature = route.feature as FeatureId;
+    process.env['AW_DEPLOYMENT_FEATURES'] = installedWithout(feature).join(',');
+    const response = await proxy(edgeRequest(route, concretePath(route, paramsFor(route))));
+    const body = (await response.json()) as ErrorBody;
+    if (!refusesFeature(response.status, body, feature)) {
+      const preview = JSON.stringify(body).slice(0, BODY_PREVIEW_EDGE);
+      wrong.push(`${key(route)}: ${String(response.status)} ${preview}`);
+    }
+  }
+  return wrong;
+}
+
+async function coreRouteProblems(narrowest: readonly FeatureId[]): Promise<string[]> {
+  const wrong: string[] = [];
+  for (const route of coreRoutes) {
+    const pathname = concretePath(route, paramsFor(route));
+    const tagged = routeFeatureOf(route.method, pathname);
+    if (tagged !== 'core') wrong.push(`${key(route)}: ${pathname} is tagged ${String(tagged)}`);
+    for (const only of narrowest) {
+      process.env['AW_DEPLOYMENT_FEATURES'] = only;
+      const response = await proxy(edgeRequest(route, pathname));
+      const text = await response.text();
+      if (text.includes('feature_disabled')) {
+        const preview = text.slice(0, BODY_PREVIEW_EDGE);
+        wrong.push(`${key(route)} [${only}]: ${String(response.status)} ${preview}`);
+      }
+    }
+  }
+  return wrong;
+}
+
+describe('(a) the edge refuses an uninstalled feature, before authentication', () => {
   const previous = process.env['AW_DEPLOYMENT_FEATURES'];
   afterAll(() => {
     if (previous === undefined) delete process.env['AW_DEPLOYMENT_FEATURES'];
     else process.env['AW_DEPLOYMENT_FEATURES'] = previous;
   });
 
-  function installedWithout(feature: FeatureId): readonly FeatureId[] {
-    let installed = FEATURE_IDS.filter((id) => id !== feature);
-    for (;;) {
-      const stranded = featuresMissingDependencies(installed).map((missing) => missing.feature);
-      if (stranded.length === 0) return installed;
-      installed = installed.filter((id) => !stranded.includes(id));
-    }
-  }
-
   it('answers 404 feature_disabled with the feature on every route outside /p/**', async () => {
-    const wrong: string[] = [];
     const edgeRoutes = featureRoutes.filter((route) => !route.path.startsWith('/p/'));
-    for (const route of edgeRoutes) {
-      const feature = route.feature as FeatureId;
-      process.env['AW_DEPLOYMENT_FEATURES'] = installedWithout(feature).join(',');
-      const params = paramsFor(route);
-      const response = await proxy(
-        new NextRequest(new URL(concretePath(route, params), ORIGIN), { method: route.method }),
-      );
-      const body = (await response.json()) as { error?: { code?: string; details?: unknown } };
-      if (
-        response.status !== 404 ||
-        body.error?.code !== 'feature_disabled' ||
-        JSON.stringify(body.error.details) !== JSON.stringify([feature])
-      ) {
-        wrong.push(
-          `${key(route)}: ${String(response.status)} ${JSON.stringify(body).slice(0, 120)}`,
-        );
-      }
-    }
-    expect(wrong).toEqual([]);
+    expect(await edgeRefusalProblems(edgeRoutes)).toEqual([]);
     expect(edgeRoutes.length).toBeGreaterThan(0);
   });
 
   it('tags every core route core, and never refuses one under the narrowest deployment', async () => {
-    const wrong: string[] = [];
     // The narrowest valid `AW_DEPLOYMENT_FEATURES`: one feature that needs no other.
     const narrowest = FEATURE_IDS.filter((id) => featuresMissingDependencies([id]).length === 0);
-    for (const route of coreRoutes) {
-      const pathname = concretePath(route, paramsFor(route));
-      const tagged = routeFeatureOf(route.method, pathname);
-      if (tagged !== 'core') wrong.push(`${key(route)}: ${pathname} is tagged ${String(tagged)}`);
-      for (const only of narrowest) {
-        process.env['AW_DEPLOYMENT_FEATURES'] = only;
-        const response = await proxy(
-          new NextRequest(new URL(pathname, ORIGIN), { method: route.method }),
-        );
-        const text = await response.text();
-        if (text.includes('feature_disabled')) {
-          wrong.push(`${key(route)} [${only}]: ${String(response.status)} ${text.slice(0, 120)}`);
-        }
-      }
-    }
-    expect(wrong).toEqual([]);
+    expect(await coreRouteProblems(narrowest)).toEqual([]);
     expect(coreRoutes.length).toBeGreaterThan(0);
     expect(narrowest.length).toBeGreaterThan(0);
   });
 });
 
-describe('(b) a route answers 404 feature_disabled once its credential verifies and its feature is off', () => {
+const JSON_HEADERS = { 'content-type': 'application/json' };
+
+/** A POST to one of the JSON-RPC doors, carrying the credential that door takes. */
+function rpcDoorRequest(url: URL, door: string, runToken: string): NextRequest {
+  // The harness reads any bearer as an API key, so the member reaches /mcp/builder by cookie.
+  const credential: Record<string, string> =
+    door === BUILDER_EXTERNAL
+      ? { cookie: 'session=member', ...callerHeaders(OWNER) }
+      : { authorization: door === BUILDER_RUN ? `Bearer ${runToken}` : 'Bearer door-credential' };
+  return new NextRequest(url, {
+    method: 'POST',
+    headers: { ...JSON_HEADERS, ...credential },
+    body: RPC,
+  });
+}
+
+/** A request as the owner member would send it to a console route. */
+function memberRequest(url: URL, method: string): NextRequest {
+  const unsafe = !SAFE_METHODS.has(method);
+  return new NextRequest(url, {
+    method,
+    headers: {
+      accept: 'application/json',
+      ...callerHeaders(OWNER),
+      ...(unsafe ? { origin: ORIGIN, ...JSON_HEADERS } : {}),
+    },
+    ...(unsafe ? { body: '{}' } : {}),
+  });
+}
+
+function requestFor(route: Route, params: Record<string, string>, runToken: string): NextRequest {
+  const url = new URL(concretePath(route, params), ORIGIN);
+  const door = key(route);
+  if (door === FIRE) return new NextRequest(url, { method: 'POST', body: 'hello' });
+  if (door === TOOL_ENDPOINT || door === BUILDER_EXTERNAL || door === BUILDER_RUN) {
+    return rpcDoorRequest(url, door, runToken);
+  }
+  return memberRequest(url, route.method);
+}
+
+async function drive(route: Route, runToken: string): Promise<{ status: number; text: string }> {
+  const load = ROUTE_MODULES[moduleKey(route.path)];
+  if (load === undefined) throw new Error(`no route module for ${key(route)}`);
+  const loaded = (await load()) as Record<string, unknown>;
+  const handler = loaded[route.method] as RouteHandler;
+  const params = paramsFor(route);
+  const response = await handler(requestFor(route, params, runToken), {
+    params: Promise.resolve(params),
+  });
+  return { status: response.status, text: await response.text() };
+}
+
+async function featureOffProblems(runToken: string): Promise<string[]> {
+  const wrong: string[] = [];
+  for (const route of driven) {
+    const feature = route.feature as FeatureId;
+    configureFeatureSwitches({
+      enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== feature)),
+    });
+    try {
+      const { status, text } = await drive(route, runToken);
+      if (!refusesFeature(status, JSON.parse(text) as ErrorBody, feature)) {
+        const preview = text.slice(0, BODY_PREVIEW_DRIVEN);
+        wrong.push(`${key(route)} [${feature}]: ${String(status)} ${preview}`);
+      }
+    } catch (error) {
+      wrong.push(`${key(route)} [${feature}]: threw ${String(error)}`);
+    }
+  }
+  return wrong;
+}
+
+async function featureOnProblems(runToken: string): Promise<string[]> {
+  const wrong: string[] = [];
+  configureFeatureSwitches({ enabledFor: () => Promise.resolve(FEATURE_IDS) });
+  for (const route of driven) {
+    try {
+      const { text } = await drive(route, runToken);
+      if (text.includes('feature_disabled')) {
+        wrong.push(`${key(route)}: ${text.slice(0, BODY_PREVIEW_DRIVEN)}`);
+      }
+    } catch (error) {
+      wrong.push(`${key(route)}: threw ${String(error)}`);
+    }
+  }
+  return wrong;
+}
+
+describe('(b) a route answers 404 feature_disabled once its credential verifies', () => {
   let teardown = (): void => {};
   let runToken = '';
-  let secretHash = '';
 
   beforeAll(async () => {
-    vi.stubEnv('AW_PUBLIC_URL', ORIGIN);
-    const harness = installRbacHarness([
-      { email: OWNER.email, name: 'Owner', workspaceId: TEST_WORKSPACE_ID, role: 'owner' },
-    ]);
-    teardown = () => harness.teardown();
-    installEmptyDeployment();
-    const minted = await mintClientSecret();
-    secretHash = minted.secretHash;
-    triggerSecret = minted.presented;
-
-    const principal: RunPrincipal = {
-      principalId: 'principal-owner',
-      ownerPrincipalId: 'principal-owner',
-      userId: null,
-      workspaceId: TEST_WORKSPACE_ID,
-      role: 'owner',
-      scope: null,
-    };
-    installTestRunApi({
-      authenticate: () => Promise.resolve(principal),
-      findAgent: () => Promise.resolve(null),
-      openSession: () => Promise.resolve(null),
-      ownsRun: () => Promise.resolve(false),
-      store: new InMemoryRunStore(),
-      launch: () => undefined,
-      recordRunFeedback: () => Promise.resolve(),
-      listAgentFeedback: () => Promise.resolve([]),
-    });
-
-    const trigger: TriggerRecord = {
-      id: UUID,
-      workspaceId: TEST_WORKSPACE_ID,
-      agentId: UUID,
-      name: 'inbox',
-      kind: 'webhook',
-      promptTemplate: 'Handle this: {{body}}',
-      cron: null,
-      timezone: null,
-      enabled: true,
-      outputSchema: null,
-      subject: null,
-      ownerPrincipalId: 'principal-owner',
-      hasSecret: true,
-      lastFiredAt: null,
-      scheduleFrom: null,
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    };
-    const emptyRepository: TriggerRepository = {
-      list: () => Promise.resolve([]),
-      get: () => Promise.resolve(null),
-      create: () => Promise.resolve({ kind: 'agent-not-found' }),
-      update: () => Promise.resolve({ kind: 'not-found' }),
-      setSecretHash: () => Promise.resolve({ kind: 'not-found' }),
-      countDeliveriesSince: () => Promise.resolve(0),
-      countUnfinishedRuns: () => Promise.resolve(0),
-      markFired: () => Promise.resolve(false),
-      remove: () => Promise.resolve(false),
-      claimDelivery: () => Promise.resolve({ kind: 'claimed' }),
-      recordDeliveryRun: () => Promise.resolve(false),
-      releaseDelivery: () => Promise.resolve(false),
-      pruneDeliveries: () => Promise.resolve(0),
-    };
-    const triggers: TriggersRuntime = {
-      repository: () => Promise.resolve(emptyRepository),
-      findForIngress: () => Promise.resolve({ trigger, secretHash }),
-      owner: () => Promise.resolve(null),
-      agentOwnership: () => Promise.resolve('unknown'),
-      zoomTokens: null,
-      now: () => new Date(0),
-    };
-    installTestDomains({ triggers: { kind: 'serving', runtime: triggers } });
-
-    const toolEndpoint: ToolEndpointEnvironment = {
-      identify: () =>
-        Promise.resolve({
-          principal: { ...principal, role: 'builder', scope: { kind: 'mcp-project', id: CLIENT } },
-          via: 'api-key',
-          apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-          label: 'inventory key',
-          oauth: null,
-        }),
-      agentOwnership: () => Promise.resolve('unknown'),
-      productionToolBundles: () => Promise.resolve([]),
-      route: () => Promise.reject(new Error('no sandbox is opened')),
-      closeSandbox: () => Promise.resolve(),
-      fetch: () => Promise.reject(new Error('nothing is fetched')),
-      now: () => Date.now(),
-    };
-    const endpointClients: Partial<EndpointClientsRuntime> = { get: () => Promise.resolve(null) };
-    installTestDomains({
-      toolEndpoint: { kind: 'serving', environment: toolEndpoint },
-      endpointClients: endpointClients as EndpointClientsRuntime,
-    });
-
-    const context = applicationContext();
-    if (context === null) throw new Error('the application context is not installed');
-    const memberRbac = context.rbac;
-    installTestDomains({
-      rbac: {
-        directory: memberRbac.directory,
-        identify: async (request) => {
-          const member = await memberRbac.identify(request);
-          if (member === null || new URL(request.url).pathname !== '/mcp/builder') return member;
-          return Principal.fromOAuthToken(
-            member,
-            { kind: 'builder', id: CLIENT },
-            { clientId: CLIENT, audience: `${ORIGIN}/mcp/builder` },
-          );
-        },
-      },
-    });
-
-    const tokens = createRunTokenCodec({ secret: RUN_TOKEN_SECRET, now: () => 1_000 });
-    runToken = await tokens.issue({
-      runId: RUN,
-      sessionId: SESSION,
-      workspaceId: TEST_WORKSPACE_ID,
-      agentId: AGENT,
-      modelConnectionId: 'connection-1',
-    });
-    const verified = await tokens.verify(runToken);
-    if (!verified.ok) throw new Error('the fixture run token did not verify');
-    const hash = createHash('sha256').update(runToken).digest('hex');
-    const database: RunTokenDatabase<WorkspaceScope> = {
-      scopes: createInMemoryWorkspaceScopeResolver([{ id: TEST_WORKSPACE_ID, slug: 'inventory' }]),
-      runTokens: {
-        forScope: () => ({
-          isActive: (id, runId, tokenHash) =>
-            Promise.resolve(id === verified.claims.tokenId && runId === RUN && tokenHash === hash),
-        }),
-      },
-      runs: {
-        forScope: () => ({
-          get: () =>
-            Promise.resolve({
-              sessionId: SESSION,
-              workspaceId: TEST_WORKSPACE_ID,
-              agentId: AGENT,
-              status: 'running' as const,
-            }),
-        }),
-      },
-    };
-    installTestDomains({
-      builder: {
-        verifyCaller: createBuilderCallerVerifier({
-          tokens,
-          database,
-          directory: harness.directory,
-          agents: {
-            forWorkspace: () => ({
-              get: () =>
-                Promise.resolve({
-                  name: 'Builder',
-                  ownerPrincipalId: 'principal-owner',
-                  builtin: 'builder',
-                }),
-            }),
-          },
-          ceiling: null,
-        }),
-        ports: null,
-        readRun: () => Promise.resolve(null),
-      },
-    });
-  }, 120_000);
+    const workspace = await installInventoryWorkspace();
+    teardown = workspace.teardown;
+    runToken = workspace.runToken;
+    triggerSecret = workspace.triggerSecret;
+  }, SUITE_TIMEOUT_MS);
 
   afterAll(() => {
     clearFeatureSwitches();
@@ -453,86 +376,20 @@ describe('(b) a route answers 404 feature_disabled once its credential verifies 
     teardown();
   });
 
-  function requestFor(route: Route, params: Record<string, string>): NextRequest {
-    const url = new URL(concretePath(route, params), ORIGIN);
-    const door = key(route);
-    if (door === FIRE) {
-      return new NextRequest(url, { method: 'POST', body: 'hello' });
-    }
-    if (door === TOOL_ENDPOINT || door === BUILDER_EXTERNAL || door === BUILDER_RUN) {
-      // The harness reads any bearer as an API key, so the member reaches /mcp/builder by cookie.
-      const credential: Record<string, string> =
-        door === BUILDER_EXTERNAL
-          ? { cookie: 'session=member', ...callerHeaders(OWNER) }
-          : {
-              authorization: door === BUILDER_RUN ? `Bearer ${runToken}` : 'Bearer door-credential',
-            };
-      return new NextRequest(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...credential },
-        body: RPC,
-      });
-    }
-    const unsafe = !SAFE_METHODS.has(route.method);
-    return new NextRequest(url, {
-      method: route.method,
-      headers: {
-        accept: 'application/json',
-        ...callerHeaders(OWNER),
-        ...(unsafe ? { origin: ORIGIN, 'content-type': 'application/json' } : {}),
-      },
-      ...(unsafe ? { body: '{}' } : {}),
-    });
-  }
+  it(
+    'answers 404 feature_disabled, naming the feature, on every driven route',
+    async () => {
+      expect(driven.length).toBeGreaterThan(0);
+      expect(await featureOffProblems(runToken)).toEqual([]);
+    },
+    SUITE_TIMEOUT_MS,
+  );
 
-  async function drive(route: Route): Promise<{ status: number; text: string }> {
-    const load = ROUTE_MODULES[moduleKey(route.path)];
-    if (load === undefined) throw new Error(`no route module for ${key(route)}`);
-    const loaded = (await load()) as Record<string, unknown>;
-    const handler = loaded[route.method] as RouteHandler;
-    const params = paramsFor(route);
-    const response = await handler(requestFor(route, params), {
-      params: Promise.resolve(params),
-    });
-    return { status: response.status, text: await response.text() };
-  }
-
-  it('answers 404 feature_disabled, naming the feature, on every driven route', async () => {
-    expect(driven.length).toBeGreaterThan(0);
-    const wrong: string[] = [];
-    for (const route of driven) {
-      const feature = route.feature as FeatureId;
-      configureFeatureSwitches({
-        enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== feature)),
-      });
-      try {
-        const { status, text } = await drive(route);
-        const error = (JSON.parse(text) as { error?: { code?: string; details?: unknown } }).error;
-        if (
-          status !== 404 ||
-          error?.code !== 'feature_disabled' ||
-          JSON.stringify(error.details) !== JSON.stringify([feature])
-        ) {
-          wrong.push(`${key(route)} [${feature}]: ${String(status)} ${text.slice(0, 100)}`);
-        }
-      } catch (error) {
-        wrong.push(`${key(route)} [${feature}]: threw ${String(error)}`);
-      }
-    }
-    expect(wrong).toEqual([]);
-  }, 120_000);
-
-  it('does not answer feature_disabled on any driven route while every feature is on', async () => {
-    const wrong: string[] = [];
-    configureFeatureSwitches({ enabledFor: () => Promise.resolve(FEATURE_IDS) });
-    for (const route of driven) {
-      try {
-        const { text } = await drive(route);
-        if (text.includes('feature_disabled')) wrong.push(`${key(route)}: ${text.slice(0, 100)}`);
-      } catch (error) {
-        wrong.push(`${key(route)}: threw ${String(error)}`);
-      }
-    }
-    expect(wrong).toEqual([]);
-  }, 120_000);
+  it(
+    'does not answer feature_disabled on any driven route while every feature is on',
+    async () => {
+      expect(await featureOnProblems(runToken)).toEqual([]);
+    },
+    SUITE_TIMEOUT_MS,
+  );
 });

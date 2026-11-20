@@ -37,6 +37,16 @@ describe('the no-skip gate finds every project report', () => {
     expect(run(root)).toContain('Every one of the 1 collected tests ran.');
   });
 
+  // The tests/ tree is several Nx projects (tests/projects.mjs): `tests` itself and tests/<dir>.
+  it('reads the reports of the tests/ projects, the remainder and a subdirectory', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'aw-no-skip-'));
+    temporaryRoots.push(root);
+    await mkdir(path.join(root, 'tests/docs'), { recursive: true });
+    await writeFile(path.join(root, 'tests/.vitest-report.json'), JSON.stringify(report));
+    await writeFile(path.join(root, 'tests/docs/.vitest-report.json'), JSON.stringify(report));
+    expect(run(root)).toContain('Every one of the 2 collected tests ran.');
+  });
+
   it('still fails when no report exists', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'aw-no-skip-'));
     temporaryRoots.push(root);

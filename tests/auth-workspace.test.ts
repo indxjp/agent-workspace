@@ -5,36 +5,39 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   MIN_SESSION_SECRET_LENGTH,
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
 } from '../apps/web/server/auth/session.js';
-import { WorkspaceScope, workspaceScopeFrom } from '../apps/web/server/auth/workspace.js';
+import { CallerWorkspace, callerWorkspaceFrom } from '../apps/web/server/auth/workspace.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const SECRET = 'a'.repeat(MIN_SESSION_SECRET_LENGTH);
 
-describe('a genuine WorkspaceScope cannot have its tenant mutated in place (runtime)', () => {
+describe('a genuine CallerWorkspace cannot have its tenant mutated in place (runtime)', () => {
   const VICTIM = 'victim-tenant';
 
-  const realScope = async (): Promise<WorkspaceScope> => {
-    const token = await mintSessionToken(newSessionClaims('admin@example.com', 'default'), SECRET);
-    const result = await verifySessionToken(token, SECRET);
+  const realScope = async (): Promise<CallerWorkspace> => {
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('admin@example.com', 'default'),
+      SECRET,
+    );
+    const result = await verifySignInSessionToken(token, SECRET);
     if (!result.ok) throw new Error(result.reason);
-    return workspaceScopeFrom(result.claims);
+    return callerWorkspaceFrom(result.claims);
   };
 
   it('is frozen the moment it exists, which is what the routes below all run into', async () => {
     const scope = await realScope();
     expect(Object.isFrozen(scope)).toBe(true);
-    expect(WorkspaceScope.isWorkspaceScope(scope)).toBe(true);
+    expect(CallerWorkspace.isCallerWorkspace(scope)).toBe(true);
     expect(scope.workspaceSlug).toBe('default');
   });
 
   // One entry per mutation route a handler could plausibly write. The first is the exact line
   // verification round 2 used to refute the previous version of this property.
-  type Mutation = [name: string, mutate: (scope: WorkspaceScope) => void];
+  type Mutation = [name: string, mutate: (scope: CallerWorkspace) => void];
   const mutations: Mutation[] = [
     [
       'Object.assign of the tenant',
@@ -95,7 +98,7 @@ describe('a genuine WorkspaceScope cannot have its tenant mutated in place (runt
     expect(JSON.stringify(scope), name).toBe(
       '{"workspaceSlug":"default","actorEmail":"admin@example.com"}',
     );
-    expect(WorkspaceScope.isWorkspaceScope(scope), name).toBe(true);
+    expect(CallerWorkspace.isCallerWorkspace(scope), name).toBe(true);
   });
 
   /**
@@ -107,7 +110,7 @@ describe('a genuine WorkspaceScope cannot have its tenant mutated in place (runt
   it('answers false for every value that is shaped like a scope but is not one', async () => {
     const scope = await realScope();
     const impostors: readonly (readonly [string, unknown])[] = [
-      ['Object.create(prototype)', Object.create(WorkspaceScope.prototype) as unknown],
+      ['Object.create(prototype)', Object.create(CallerWorkspace.prototype) as unknown],
       ['a spread copy of a real scope', { ...scope }],
       ['a JSON round-trip', JSON.parse(JSON.stringify(scope)) as unknown],
       ['a structuredClone', structuredClone(scope)],
@@ -121,14 +124,14 @@ describe('a genuine WorkspaceScope cannot have its tenant mutated in place (runt
       ['undefined', undefined],
     ];
     for (const [label, impostor] of impostors) {
-      expect(WorkspaceScope.isWorkspaceScope(impostor), label).toBe(false);
+      expect(CallerWorkspace.isCallerWorkspace(impostor), label).toBe(false);
     }
     // And the positive half, so this test cannot pass by the guard answering false to everything.
-    expect(WorkspaceScope.isWorkspaceScope(scope)).toBe(true);
+    expect(CallerWorkspace.isCallerWorkspace(scope)).toBe(true);
   });
 });
 
-describe('a WorkspaceScope cannot be forged from request data (compile-time)', () => {
+describe('a CallerWorkspace cannot be forged from request data (compile-time)', () => {
   const fixtureDir = path.join(repoRoot, 'node_modules', '.w1cp06-type-negative');
   const fixtureFile = path.join(fixtureDir, 'forgery.ts');
   const posix = (value: string): string => value.split(path.sep).join('/');
@@ -140,31 +143,31 @@ describe('a WorkspaceScope cannot be forged from request data (compile-time)', (
    * are writing to, and a crashed run leaves nothing tracked behind.
    */
   const fixtureSource = [
-    "import { workspaceScopeFrom, WorkspaceScope } from '../../apps/web/server/auth/workspace.js';",
-    "import { mintSessionToken, newSessionClaims, verifySessionToken } from '../../apps/web/server/auth/session.js';",
-    "import type { VerifiedSessionClaims } from '../../apps/web/server/auth/session.js';",
+    "import { callerWorkspaceFrom, CallerWorkspace } from '../../apps/web/server/auth/workspace.js';",
+    "import { mintSignInSessionToken, newSignInSessionClaims, verifySignInSessionToken } from '../../apps/web/server/auth/session.js';",
+    "import type { VerifiedSignInSessionClaims } from '../../apps/web/server/auth/session.js';",
     '',
     "const body = JSON.parse('{}') as { email: string; workspace: string; role: 'owner' };",
     '',
     '// Every shape a handler author could plausibly reach for, one per line.',
-    "export const a = workspaceScopeFrom({ sub: body.email, ws: body.workspace, role: 'owner' }); // FORBIDDEN partial claims from a request body",
-    'export const b = workspaceScopeFrom({ sub: body.email, ws: body.workspace, role: body.role, iat: 0, exp: 9e9 }); // FORBIDDEN complete claims from a request body',
-    'export const c = workspaceScopeFrom(newSessionClaims(body.email, body.workspace)); // FORBIDDEN unverified claims laundered through newSessionClaims',
-    "export const d: WorkspaceScope = { workspaceSlug: body.workspace, actorEmail: body.email, role: 'owner' }; // FORBIDDEN the scope written out as an object literal",
-    'export const e = async (): Promise<WorkspaceScope> => ({ ...(await legitimate()), workspaceSlug: body.workspace }); // FORBIDDEN a real scope spread and its tenant overwritten',
-    'export const f = async (c: VerifiedSessionClaims): Promise<WorkspaceScope> => workspaceScopeFrom({ ...c, ws: body.workspace }); // FORBIDDEN real claims spread and their tenant overwritten',
-    'export const g = async (c: VerifiedSessionClaims): Promise<WorkspaceScope> => new WorkspaceScope(c); // FORBIDDEN the constructor called directly',
+    "export const a = callerWorkspaceFrom({ sub: body.email, ws: body.workspace, role: 'owner' }); // FORBIDDEN partial claims from a request body",
+    'export const b = callerWorkspaceFrom({ sub: body.email, ws: body.workspace, role: body.role, iat: 0, exp: 9e9 }); // FORBIDDEN complete claims from a request body',
+    'export const c = callerWorkspaceFrom(newSignInSessionClaims(body.email, body.workspace)); // FORBIDDEN unverified claims laundered through newSignInSessionClaims',
+    "export const d: CallerWorkspace = { workspaceSlug: body.workspace, actorEmail: body.email, role: 'owner' }; // FORBIDDEN the scope written out as an object literal",
+    'export const e = async (): Promise<CallerWorkspace> => ({ ...(await legitimate()), workspaceSlug: body.workspace }); // FORBIDDEN a real scope spread and its tenant overwritten',
+    'export const f = async (c: VerifiedSignInSessionClaims): Promise<CallerWorkspace> => callerWorkspaceFrom({ ...c, ws: body.workspace }); // FORBIDDEN real claims spread and their tenant overwritten',
+    'export const g = async (c: VerifiedSignInSessionClaims): Promise<CallerWorkspace> => new CallerWorkspace(c); // FORBIDDEN the constructor called directly',
     '',
     '// Escapes this task did not close at compile time. Each is a declared gap in the PR body,',
     '// and each is asserted here to compile clean so the declaration cannot quietly go stale.',
-    'export const h = async (): Promise<WorkspaceScope> => Object.assign(await legitimate(), { workspaceSlug: body.workspace }); // DECLARED Object.assign onto a real scope: no diagnostic, and a TypeError at runtime because the scope is frozen',
-    "export const i = async (): Promise<WorkspaceScope> => { const s = 'x'.repeat(32); const r = await verifySessionToken(await mintSessionToken(newSessionClaims(body.email, body.workspace), s), s); if (!r.ok) throw new Error(r.reason); return workspaceScopeFrom(r.claims); }; // DECLARED a token minted and verified with a secret the caller chose",
+    'export const h = async (): Promise<CallerWorkspace> => Object.assign(await legitimate(), { workspaceSlug: body.workspace }); // DECLARED Object.assign onto a real scope: no diagnostic, and a TypeError at runtime because the scope is frozen',
+    "export const i = async (): Promise<CallerWorkspace> => { const s = 'x'.repeat(32); const r = await verifySignInSessionToken(await mintSignInSessionToken(newSignInSessionClaims(body.email, body.workspace), s), s); if (!r.ok) throw new Error(r.reason); return callerWorkspaceFrom(r.claims); }; // DECLARED a token minted and verified with a secret the caller chose",
     '',
     '// The one way that is meant to work, so a fixture that fails everywhere fails this test.',
-    'export async function legitimate(): Promise<WorkspaceScope> {',
-    "  const result = await verifySessionToken('token', 'x'.repeat(32));",
+    'export async function legitimate(): Promise<CallerWorkspace> {',
+    "  const result = await verifySignInSessionToken('token', 'x'.repeat(32));",
     '  if (!result.ok) throw new Error(result.reason);',
-    '  return workspaceScopeFrom(result.claims); // PERMITTED the only derivation there is',
+    '  return callerWorkspaceFrom(result.claims); // PERMITTED the only derivation there is',
     '}',
   ].join('\n');
 

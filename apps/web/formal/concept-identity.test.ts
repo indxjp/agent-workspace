@@ -544,20 +544,20 @@ describe('concept-identity: hand-built principals', () => {
   // is exactly what `isPrincipal`'s structural half exists to refuse.
   function construct(value: unknown, what: string): unknown {
     const r = asRecord(value, what);
-    const args: unknown[] = [
-      asString(r['principalId'], what),
-      asServerKind(r['kind'], what),
-      asString(r['workspaceId'], what),
-      asString(r['label'], what),
-      asString(r['actor'], what),
-      asRole(r['role'], what),
-      asString(r['via'], what),
-      asNullableString(r['userId'], what),
-      asNullableString(r['apiKeyId'], what),
-      r['scope'] === null ? null : asScope(r['scope'], what),
-      asString(r['ownerPrincipalId'], what),
-    ];
-    const built: unknown = Reflect.construct(Principal, args);
+    const fields = {
+      principalId: asString(r['principalId'], what),
+      kind: asServerKind(r['kind'], what),
+      workspaceId: asString(r['workspaceId'], what),
+      label: asString(r['label'], what),
+      actor: asString(r['actor'], what),
+      role: asRole(r['role'], what),
+      via: asString(r['via'], what),
+      userId: asNullableString(r['userId'], what),
+      apiKeyId: asNullableString(r['apiKeyId'], what),
+      scope: r['scope'] === null ? null : asScope(r['scope'], what),
+      ownerPrincipalId: asString(r['ownerPrincipalId'], what),
+    };
+    const built: unknown = Reflect.construct(Principal, [fields]);
     return built;
   }
 

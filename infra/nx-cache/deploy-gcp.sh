@@ -40,12 +40,40 @@ REPO="${REPO:-nx-cache}"
 # re-created repository of the same name cannot inherit its trust.
 OIDC_REPOSITORY="${OIDC_REPOSITORY:?set OIDC_REPOSITORY (owner/repo)}"
 OIDC_REPOSITORY_ID="${OIDC_REPOSITORY_ID:?set OIDC_REPOSITORY_ID (gh api repos/<owner>/<repo> --jq .id)}"
+# The write policy (src/oidc.mjs, src/main.mjs). Owner decisions D1 and D1b, ADR-0110 Amendment
+# 2026-11-19: main's push and nightly, main's merge-queue groups and same-repository pull requests
+# into main write; every other run of the repository reads. Roll back to main-only writes with
+#   WRITE_REFS=refs/heads/main WRITE_EVENTS=push,schedule infra/nx-cache/deploy-gcp.sh
+WRITE_REFS="${WRITE_REFS:-refs/heads/main,refs/heads/gh-readonly-queue/main/*,refs/pull/*/merge}"
+WRITE_EVENTS="${WRITE_EVENTS:-push,schedule,merge_group,pull_request}"
+WRITE_PR_BASE_REFS="${WRITE_PR_BASE_REFS:-main}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 MAX_INSTANCES="${MAX_INSTANCES:-4}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TAG="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo nogit)-$(date +%Y%m%d%H%M%S)"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}:${TAG}"
 g() { gcloud --project "$PROJECT" --quiet "$@"; }
+
+# A writing pull_request needs forks kept out before the server sees a token: GitHub's OIDC claims
+# do not name a pull request's head repository, so the server cannot tell a fork's run from a
+# branch's (ADR-0110 Amendment 2026-11-19, D1b). On a private or internal repository that rests on
+# two settings, read here before anything changes; the deploy stops unless both are off, and stops
+# if they cannot be read (it needs `gh` signed in with admin read on the repository). A public
+# repository's fork runs get no id-token at all.
+if [[ ",${WRITE_EVENTS}," == *,pull_request,* ]]; then
+  echo "==> fork pull request settings of ${OIDC_REPOSITORY}"
+  visibility="$(gh api "repos/${OIDC_REPOSITORY}" --jq .visibility)"
+  if [ "$visibility" != "public" ]; then
+    fork_settings="$(gh api "repos/${OIDC_REPOSITORY}/actions/permissions/fork-pr-workflows-private-repos" \
+      --jq '"\(.run_workflows_from_fork_pull_requests) \(.send_write_tokens_to_workflows)"')"
+    if [ "$fork_settings" != "false false" ]; then
+      echo "refusing: WRITE_EVENTS grants pull_request write, but ${OIDC_REPOSITORY} has" >&2
+      echo "  run_workflows_from_fork_pull_requests and send_write_tokens_to_workflows = ${fork_settings}" >&2
+      echo "  (both must be false). Turn them off, or deploy with WRITE_EVENTS=push,schedule,merge_group." >&2
+      exit 1
+    fi
+  fi
+fi
 
 echo "==> APIs"
 g services enable run.googleapis.com storage.googleapis.com secretmanager.googleapis.com \
@@ -102,7 +130,7 @@ g run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --service-account="$
   --use-http2 --allow-unauthenticated --ingress=all \
   --min-instances=0 --max-instances="$MAX_INSTANCES" --concurrency=32 \
   --cpu=1 --memory=512Mi --timeout=900 --cpu-boost \
-  --set-env-vars="^@^NX_CACHE_HTTP2=1@NX_CACHE_STORAGE=gcs@NX_CACHE_GCS_BUCKET=${BUCKET}@NX_CACHE_OIDC_AUDIENCE=${AUDIENCE}@NX_CACHE_OIDC_REPOSITORY=${OIDC_REPOSITORY}@NX_CACHE_OIDC_REPOSITORY_ID=${OIDC_REPOSITORY_ID}@NX_CACHE_OIDC_WRITE_REFS=refs/heads/main@NX_CACHE_OIDC_WRITE_EVENTS=push,schedule" \
+  --set-env-vars="^@^NX_CACHE_HTTP2=1@NX_CACHE_STORAGE=gcs@NX_CACHE_GCS_BUCKET=${BUCKET}@NX_CACHE_OIDC_AUDIENCE=${AUDIENCE}@NX_CACHE_OIDC_REPOSITORY=${OIDC_REPOSITORY}@NX_CACHE_OIDC_REPOSITORY_ID=${OIDC_REPOSITORY_ID}@NX_CACHE_OIDC_WRITE_REFS=${WRITE_REFS}@NX_CACHE_OIDC_WRITE_EVENTS=${WRITE_EVENTS}@NX_CACHE_OIDC_WRITE_PR_BASE_REFS=${WRITE_PR_BASE_REFS}" \
   --set-secrets="NX_CACHE_READ_TOKENS=${SECRET_PREFIX}-read-tokens:latest,NX_CACHE_SIGNING_KEY=${SECRET_PREFIX}-signing-key:latest"
 
 URL="$(g run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"

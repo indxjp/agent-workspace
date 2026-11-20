@@ -155,7 +155,7 @@ export function enforcementFor(surface: Surface): Enforcement {
     case 'page':
       // Not a claim that pages need no session. It is a statement that **this** middleware does
       // not gate them: no Wave 1 task owns a sign-in page, so a redirect here would point at a
-      // route that does not exist. Page-level enforcement is `requireSession()` in the server
+      // route that does not exist. Page-level enforcement is `requireSignInSession()` in the server
       // component, and is declared unbuilt in W1-CP-06's PR. See
       // docs/adr/W1-CP-06-the-gate-covers-api-only.md.
       return 'allow';

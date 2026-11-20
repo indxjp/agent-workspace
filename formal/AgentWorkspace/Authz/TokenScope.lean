@@ -36,7 +36,7 @@ open AgentWorkspace AgentWorkspace.Authz.Resources AgentWorkspace.Authz.Permissi
 /-- `TOKEN_SCOPE_GRAMMAR`: the route shapes, as `(resource, operation, sub-resource)` cells, a kind
 may reach. A `none` sub-resource matches any sub-resource (see `inGrammar`). -/
 @[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def grammar : ScopeKind → List (Resource × Operation × Option String)
   | .run => [(.runs, .read, none)]
   | .session => [(.runs, .read, none), (.agents, .run, none), (.runs, .run, some "feedback"),
@@ -50,7 +50,7 @@ def inGrammar (k : ScopeKind) (resource : Resource) (op : Operation) (sub : Opti
 
 /-- §3.1.1's grammar table as the document prints it, route by route: (scope, method, path).
 Transcribed independently of `grammar`; `Normative.AuthzDecide` proves the two agree. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def documentedScopeRoutes : List (ScopeKind × String × String) :=
   [ (.run, "GET", "/api/runs/:id"),
     (.run, "GET", "/api/runs/:id/events"),
@@ -87,7 +87,7 @@ def sameRunId (pathId : Option String) (scopeId : String) : Bool :=
 
 /-- `checkTokenScope`: `some d` denies with `token_out_of_scope`; `none` defers to §21's table. -/
 @[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def checkTokenScope (scope : Scope) (resource : Resource) (op : Operation)
     (sub : Option String) (pathId : Option String) : Option ScopeDenial :=
   if !inGrammar scope.kind resource op sub then some .notInGrammar

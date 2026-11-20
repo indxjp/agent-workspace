@@ -1,0 +1,54 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "tests-store",
+  "implicitDependencies": ["!agent-workspace", "!tests", "@agent-workspace/web"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --project tests-store --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+        "env": {
+          "NODE_OPTIONS": "--unhandled-rejections=strict",
+          "VITEST_MAX_WORKERS": "4"
+        }
+      },
+      "inputs": [
+        "default",
+        "^default",
+        "vitestConfig",
+        "{workspaceRoot}/tests/projects.mjs",
+        "{workspaceRoot}/tests/vitest.shared.ts",
+        "{workspaceRoot}/.claude/skills/**/*",
+        "{workspaceRoot}/.dockerignore",
+        "{workspaceRoot}/.github/workflows/**/*",
+        "{workspaceRoot}/.gitignore",
+        "{workspaceRoot}/AGENTS.md",
+        "{workspaceRoot}/CHANGELOG.md",
+        "{workspaceRoot}/Dockerfile",
+        "{workspaceRoot}/LICENSE",
+        "{workspaceRoot}/README.md",
+        "{workspaceRoot}/apps/web/server/demo/proof/no-internet.test.ts",
+        "{workspaceRoot}/apps/web/server/demo/proof/run-recorded.test.ts",
+        "{workspaceRoot}/apps/web/server/demo/provision/fake-sends.test.ts",
+        "{workspaceRoot}/apps/web/server/runs/attachments.test.ts",
+        "{workspaceRoot}/apps/web/server/runs/transcription.ts",
+        "{workspaceRoot}/apps/web/server/sdk-conformance.runs-approval.test.ts",
+        "{workspaceRoot}/dependency-cruiser.config.mjs",
+        "{workspaceRoot}/docs/sdk/site/**/*",
+        "{workspaceRoot}/examples/**/*",
+        "{workspaceRoot}/infra/agent-store/agent-workspace.yaml",
+        "{workspaceRoot}/packages/**/*",
+        "{workspaceRoot}/scripts/check-workflows/workflow-rules.mjs",
+        "{workspaceRoot}/scripts/release/boot-smoke.mjs",
+        "{workspaceRoot}/scripts/release/consumer-process.mjs",
+        "{workspaceRoot}/scripts/release/pack-packages.mjs",
+        "{workspaceRoot}/scripts/release/package-smoke.mjs",
+        "{workspaceRoot}/scripts/release/package-tar.mjs",
+        "{workspaceRoot}/tests/apps/benchmark.ts",
+        "{workspaceRoot}/tests/apps/lane.mjs",
+        "{workspaceRoot}/tests/apps/registry.ts",
+        "{workspaceRoot}/tests/gallery/**/*"
+      ]
+    }
+  }
+}

@@ -8,9 +8,9 @@ import {
   invitationIdentityCookieName,
   mintInvitationIdentityToken,
   oidcTransactionCookieName,
-  sessionCookieName,
+  signInSessionCookieName,
 } from '../auth';
-import { mintSessionToken, newSessionClaims } from '../auth/session';
+import { mintSignInSessionToken, newSignInSessionClaims } from '../auth/session';
 import { TEST_WORKSPACE_ID } from '../rbac/testing';
 import {
   IDENTITY_ISSUER,
@@ -19,7 +19,7 @@ import {
   setCookieValue,
   TEST_SESSION_SECRET,
 } from './invitation-routes.test-support';
-import type { InvitationAuditEvent } from './runtime';
+import type { InvitationAuditEvent } from './wiring';
 import { createManualLinkInvitationSender } from './send-invitation';
 
 export function registerAcceptanceTests(env: NodeJS.ProcessEnv) {
@@ -84,8 +84,8 @@ async function makesMismatchedIdentityActiveTenantSessionNonexistentInvitation(
     expect(mismatch.text).not.toContain(TEST_WORKSPACE_ID);
     expect(mismatch.text).not.toContain('admin@example.test');
 
-    const workspaceBSession = await mintSessionToken(
-      newSessionClaims('viewer@example.test', 'workspace-b'),
+    const workspaceBSession = await mintSignInSessionToken(
+      newSignInSessionClaims('viewer@example.test', 'workspace-b'),
       TEST_SESSION_SECRET,
     );
     const matchingIdentity = await mintInvitationIdentityToken(
@@ -101,7 +101,7 @@ async function makesMismatchedIdentityActiveTenantSessionNonexistentInvitation(
       origin: 'https://control-plane.test',
       cookies: {
         [invitationIdentityCookieName()]: matchingIdentity,
-        [sessionCookieName()]: workspaceBSession,
+        [signInSessionCookieName()]: workspaceBSession,
       },
     });
     expect(activeOtherSession.status).toBe(404);
@@ -157,7 +157,9 @@ async function acceptsOnlyDedicatedOIDCIdentityCookieBindsIdentity(env: NodeJS.P
       expect.objectContaining({ workspaceId: TEST_WORKSPACE_ID, role: 'viewer' }),
     ]);
     const setCookies = response.headers.getSetCookie();
-    expect(setCookies.some((cookie) => cookie.startsWith(`${sessionCookieName()}=`))).toBe(true);
+    expect(setCookies.some((cookie) => cookie.startsWith(`${signInSessionCookieName()}=`))).toBe(
+      true,
+    );
     expect(
       setCookies.some(
         (cookie) =>
@@ -269,7 +271,7 @@ async function chainsZeroMembershipOIDCCallbackIntoAtomicNew(env: NodeJS.Process
     const identityCookie = setCookieValue(callback, invitationIdentityCookieName());
     expect(callback.status).toBe(303);
     expect(identityCookie).toBeDefined();
-    expect(setCookieValue(callback, sessionCookieName())).toBeUndefined();
+    expect(setCookieValue(callback, signInSessionCookieName())).toBeUndefined();
     expect(await harness.directory.findUserByEmail('callback-new@example.test')).toBeNull();
 
     const accepted = await harness.call(ACCEPT, {
@@ -290,7 +292,7 @@ async function chainsZeroMembershipOIDCCallbackIntoAtomicNew(env: NodeJS.Process
     expect(
       accepted.headers
         .getSetCookie()
-        .some((cookie) => cookie.startsWith(`${sessionCookieName()}=`)),
+        .some((cookie) => cookie.startsWith(`${signInSessionCookieName()}=`)),
     ).toBe(true);
   } finally {
     harness.teardown();

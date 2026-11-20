@@ -41,7 +41,7 @@ private theorem pointer_is_reference {st : State} {t : TableName} {n c : String}
 /-- Whatever runtime-connection id a writer puts on a runtime profile, naming a secret of another
 workspace makes the state inconsistent: PostgreSQL refuses it. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtime_profiles_runtime_connection_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem profile_cannot_name_another_workspaces_connection (st : State) {r s : Row}
     (hr : r ∈ st .runtimeProfiles) (hs : s ∈ st .secrets)
     (hid : r.get "runtime_connection_id" = s.get "id") (hsome : (s.get "id").isSome = true)
@@ -56,7 +56,7 @@ theorem profile_cannot_name_another_workspaces_connection (st : State) {r s : Ro
 /-- Whatever model-connection id a writer puts on an agent, naming a connection of another
 workspace makes the state inconsistent. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/agents.ts#agents_model_connection_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem agent_cannot_use_another_workspaces_model_connection (st : State) {r m : Row}
     (hr : r ∈ st .agents) (hm : m ∈ st .modelConnections)
     (hid : r.get "model_connection_id" = m.get "id") (hsome : (m.get "id").isSome = true)
@@ -71,7 +71,7 @@ theorem agent_cannot_use_another_workspaces_model_connection (st : State) {r m :
 /-- Whatever runtime-profile id a writer puts on an agent, naming a profile of another workspace
 makes the state inconsistent. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/agents.ts#agents_runtime_profile_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem agent_cannot_use_another_workspaces_runtime_profile (st : State) {r p : Row}
     (hr : r ∈ st .agents) (hp : p ∈ st .runtimeProfiles)
     (hid : r.get "runtime_profile_id" = p.get "id") (hsome : (p.get "id").isSome = true)
@@ -86,7 +86,7 @@ theorem agent_cannot_use_another_workspaces_runtime_profile (st : State) {r p : 
 /-- Whatever default connection a writer puts on a project, naming a connection of another
 workspace makes the state inconsistent. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/projects.ts#projects")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem project_cannot_default_to_another_workspaces_connection (st : State) {r m : Row}
     (hr : r ∈ st .projects) (hm : m ∈ st .modelConnections)
     (hid : r.get "default_model_connection_id" = m.get "id") (hsome : (m.get "id").isSome = true)
@@ -101,7 +101,7 @@ theorem project_cannot_default_to_another_workspaces_connection (st : State) {r 
 /-- Whatever connection a writer records on a run, naming a connection of another workspace makes
 the state inconsistent. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/runs.ts#runs_model_connection_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem run_cannot_record_another_workspaces_connection (st : State) {r m : Row}
     (hr : r ∈ st .runs) (hm : m ∈ st .modelConnections)
     (hid : r.get "model_connection_id" = m.get "id") (hsome : (m.get "id").isSome = true)
@@ -116,7 +116,7 @@ theorem run_cannot_record_another_workspaces_connection (st : State) {r m : Row}
 /-- Whatever default connection a writer puts on a workspace, naming a connection of another
 workspace makes the state inconsistent. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/workspaces.ts#workspaces")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem workspace_cannot_default_to_another_workspaces_connection (st : State) {w m : Row}
     (hw : w ∈ st .workspaces) (hm : m ∈ st .modelConnections)
     (hid : w.get "default_model_connection_id" = m.get "id") (hsome : (m.get "id").isSome = true)
@@ -136,7 +136,7 @@ private theorem table_consistent {st : State} (hc : consistent catalogue st = tr
 workspace makes the state inconsistent: the composite key finds no secret with that id in the
 connector's workspace, and the id identifies one secret. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/mcp-servers.ts#mcp_servers_credential_secret_workspace_fk")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem connector_cannot_use_another_workspaces_secret (st : State) {k s : Row}
     (hk : k ∈ st .mcpServers) (hs : s ∈ st .secrets)
     (hid : k.get "credential_secret_id" = s.get "id") (hsome : (s.get "id").isSome = true)

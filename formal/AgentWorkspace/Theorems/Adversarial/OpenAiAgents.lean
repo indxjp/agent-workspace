@@ -24,7 +24,7 @@ open AgentWorkspace AgentWorkspace.Authz.PathGrant AgentWorkspace.Behaviour.Engi
 
 /-- No write the compiled Editor permits lands inside a read-only grant of the request: the grants
 it enforces are the request's own, normalised, and an allowed write is outside every read-only one. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-openai-agents.md#path-grants")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-openai-agents.md#path-grants")
   (ts := "packages/engine-openai-agents/src/workspace.ts#workspaceWriteVerdict")
   (ts := "packages/engine-openai-agents/src/executors.ts#applyPatch")]
 theorem no_permitted_write_lands_in_a_read_only_grant {r : Request} {c : Compiled}
@@ -51,7 +51,7 @@ example :
 
 /-- Every model request an accepted configuration can issue targets the gateway's base URL plus
 `/v1`, carries the run token as `Authorization: Bearer`, and there is exactly one such endpoint. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-openai-agents.md#egress")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-openai-agents.md#egress")
   (ts := "packages/engine-openai-agents/src/compile.ts#openAiAgentsModelConnection")
   (ts := "packages/engine-openai-agents/src/boundary.ts#startOpenAiAgentsRun")]
 theorem every_model_request_goes_to_the_gateway_with_the_run_token {r : Request} {c : Compiled}
@@ -75,7 +75,7 @@ example :
 
 /-- Every compiled run has tracing disabled. The SDK's side — `setTracingDisabled(true)` before
 `run`, and no trace export after it — is the declared hypothesis the boundary suite enforces. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/units/engine-openai-agents.md#tracing")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/units/engine-openai-agents.md#tracing")
   (ts := "packages/engine-openai-agents/src/compile.ts#compileOpenAiAgentsRun")
   (ts := "packages/engine-openai-agents/src/boundary.ts#startOpenAiAgentsRun")]
 theorem tracing_is_disabled_for_every_compiled_run {r : Request} {c : Compiled}

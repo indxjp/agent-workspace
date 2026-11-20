@@ -11,7 +11,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('../../server/auth', () => ({
-  getSession: () => Promise.resolve(null),
+  getSignInSession: () => Promise.resolve(null),
 }));
 
 vi.mock('../../server/features/console', () => ({

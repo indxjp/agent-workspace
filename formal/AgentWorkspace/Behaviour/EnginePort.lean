@@ -21,7 +21,7 @@ three are modelled here as pure functions over explicit state:
 
 ## Current and Target
 
-ENG-04 is behaviour-preserving for the Claude engine, and `docs/formal/README.md` asks that where
+ENG-04 is behaviour-preserving for the Claude engine, and `docs/20-design/formal/README.md` asks that where
 today's code and the target differ both are modelled and related. They differ in exactly one
 place — *where the compile step lives* — and not at all in what it computes, which is why
 `Refinement/EnginePortCompile.lean` can state the relation as an equality rather than as a

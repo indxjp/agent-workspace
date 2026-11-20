@@ -4,7 +4,7 @@
  *
  * Every write path and the compose step judge the ceiling through these two functions, so a
  * disagreement with `formal/AgentWorkspace/Concepts/PolicyCeiling.lean` is a failing test, and the
- * fix is never to edit a vector (`docs/formal/00-orchestrator-prompt.md` §10).
+ * fix is never to edit a vector (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import { AgentPermissionsSchema, AgentPolicyLimitsSchema } from '@indx-workspace/contracts/agents';
 import { EngineIdSchema } from '@indx-workspace/contracts/engines';

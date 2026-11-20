@@ -171,7 +171,7 @@ elab "aw_config_fk_theorems" : command => do
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T2))
-        (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+        (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
         (ts := $ts)]
       theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : consistent catalogue st = true)
           {r r' : AgentWorkspace.Er.Core.Row}
@@ -201,7 +201,7 @@ private theorem one_workspace {st : State} (hc : consistent catalogue st = true)
     exact ⟨p, hp, hpv, huniq⟩
 
 /-- In every consistent state, a model connection belongs to exactly one workspace. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")
   (ts := "packages/core/src/db/schema/model-connections.ts#modelConnections")]
 theorem model_connection_has_exactly_one_workspace (st : State)
     (hc : consistent catalogue st = true) {r : Row} (hr : r ∈ st .modelConnections) :
@@ -210,7 +210,7 @@ theorem model_connection_has_exactly_one_workspace (st : State)
   one_workspace hc "model_connections_workspace_id_workspaces_id_fk" (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a runtime profile belongs to exactly one workspace. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")]
 theorem runtime_profile_has_exactly_one_workspace (st : State)
     (hc : consistent catalogue st = true) {r : Row} (hr : r ∈ st .runtimeProfiles) :
@@ -219,7 +219,7 @@ theorem runtime_profile_has_exactly_one_workspace (st : State)
   one_workspace hc "runtime_profiles_workspace_id_workspaces_id_fk" (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a secret belongs to exactly one workspace. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")
   (ts := "packages/core/src/db/schema/secrets.ts#secrets")]
 theorem secret_has_exactly_one_workspace (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .secrets) :
@@ -293,7 +293,7 @@ private theorem name_unique {st : State} (hc : consistent catalogue st = true) {
 same row. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/model-connections.ts#modelConnections")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 theorem model_connection_name_is_unique_in_its_workspace (st : State)
     (hc : consistent catalogue st = true) {r1 r2 : Row} (h1 : r1 ∈ st .modelConnections)
     (h2 : r2 ∈ st .modelConnections) (hws : r1.get "workspace_id" = r2.get "workspace_id")
@@ -305,7 +305,7 @@ theorem model_connection_name_is_unique_in_its_workspace (st : State)
 same row. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem runtime_profile_name_is_unique_in_its_workspace (st : State)
     (hc : consistent catalogue st = true) {r1 r2 : Row} (h1 : r1 ∈ st .runtimeProfiles)
     (h2 : r2 ∈ st .runtimeProfiles) (hws : r1.get "workspace_id" = r2.get "workspace_id")
@@ -316,7 +316,7 @@ theorem runtime_profile_name_is_unique_in_its_workspace (st : State)
 /-- In every consistent state, two secrets of one workspace with the same name are the same row,
 so a model-connection credential or a runtime connection, found by name, is found at most once. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 theorem secret_name_is_unique_in_its_workspace (st : State) (hc : consistent catalogue st = true)
     {r1 r2 : Row} (h1 : r1 ∈ st .secrets) (h2 : r2 ∈ st .secrets)
     (hws : r1.get "workspace_id" = r2.get "workspace_id") (hname : r1.get "name" = r2.get "name") :
@@ -372,7 +372,7 @@ theorem stored_algorithm_is_aes_gcm (st : State) (hc : consistent catalogue st =
 /-- In every state where the cluster's checks hold, a stored secret has a name of the documented
 shape and an envelope whose parts all have their exact sizes and a non-empty ciphertext. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/secrets.ts#secrets")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem stored_secret_is_well_formed (st : State) (hc : consistentConfig st = true) {r : Row}
     (hr : r ∈ st .secrets) :
     cellOk r "name" Secret.isValidName = true ∧
@@ -399,7 +399,7 @@ theorem stored_secret_is_well_formed (st : State) (hc : consistentConfig st = tr
 /-- In every state where the cluster's checks hold, a workspace or project default model is set
 exactly when its default model connection is: the model choice is always the pair. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "packages/core/src/db/schema/workspaces.ts#workspaces")
   (ts := "packages/core/src/db/schema/projects.ts#projects")]
 theorem default_model_is_set_with_its_connection (st : State) (hc : consistentConfig st = true) :

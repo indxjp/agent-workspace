@@ -3,11 +3,11 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W1-INF-01 (Infra)
-Scope: `compose.yaml`, the `minio` service; `docs/dependency-policy.md` §5
+Scope: `compose.yaml`, the `minio` service; `docs/30-reference/policies/dependency-policy.md` §5
 
 ## Context
 
-`docs/dependency-policy.md` §5 is unambiguous about copyleft: *"No strong copyleft, anywhere in any
+`docs/30-reference/policies/dependency-policy.md` §5 is unambiguous about copyleft: *"No strong copyleft, anywhere in any
 of them. GPL and AGPL, in every spelling including the deprecated identifiers, are DENY and are not
 clearable by an exception."*
 
@@ -49,7 +49,7 @@ literals in `compose.yaml` for the reason recorded in
 * **Add a recorded exception to `scripts/check-licenses.mjs`.** The gate reads the npm tree. It
   has never seen a container image and cannot; an exception there would be a claim that the gate
   checked something it structurally cannot check — ADR-0015's shape exactly.
-* **Say nothing.** The next person to read `docs/dependency-policy.md` §5 and then `compose.yaml`
+* **Say nothing.** The next person to read `docs/30-reference/policies/dependency-policy.md` §5 and then `compose.yaml`
   will believe one of them is wrong. This record is cheaper than that conversation happening twice.
 
 ## Honest downside
@@ -58,7 +58,7 @@ literals in `compose.yaml` for the reason recorded in
 strong-copyleft image to `compose.yaml` in circumstances where the reasoning above does *not* hold
 — for example, an image we fork, patch and publish. The rule is: **if we build it or publish it,
 §5 applies in full; if the operator pulls it from its own upstream, unmodified, §5 does not
-reach it.** That sentence belongs in `docs/dependency-policy.md`, which is not this task's file, so
+reach it.** That sentence belongs in `docs/30-reference/policies/dependency-policy.md`, which is not this task's file, so
 it is proposed here and declared as a gap in this task's PR.
 
 **Recent MinIO community releases have removed features from the web console.** Irrelevant to this

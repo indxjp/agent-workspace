@@ -6,7 +6,7 @@ import { POST as CREATE } from '../../app/api/triggers/route';
 import { clearApplicationContext } from '../application-context';
 import { resetTestRunApi } from '../application-context-fixtures';
 import { clearEngineImagesConfiguredForTests } from '../engines/images';
-import { clearFeatureSwitches } from '../features/runtime';
+import { clearFeatureSwitches } from '../features/wiring';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
 import { installTriggerFakes, type TriggerTestState } from './triggers.runtime.test-support';
 

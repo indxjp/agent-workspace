@@ -34,7 +34,7 @@ runtime path: every message is an ordinary run.
 5. **Paths.** `POST /api/a2a/agents/{agentName}` (JSON-RPC) and
    `GET /api/a2a/agents/{agentName}/.well-known/agent-card.json` (card). `agentName` is unique per
    workspace; the workspace comes from the credential. The two literal shapes are named exceptions
-   in `tests/route-inventory.test.ts`'s `routeShape` (beside `/api/me`): `a2a` is a protocol prefix,
+   in `tests/route-inventory.policy-check.ts`'s `routeShape` (beside `/api/me`): `a2a` is a protocol prefix,
    not a plural resource, and the card path is deeper than `/api/<resource>/:id/<sub>`. `decide()`'s
    path parser cannot read them, so authorisation is decided on the canonical shape
    `POST /api/agents/{id}/runs` with the same run-ownership resolution the run route uses. Spec §34

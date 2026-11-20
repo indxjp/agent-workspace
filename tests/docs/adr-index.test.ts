@@ -1,4 +1,9 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+/**
+ * The ADR index renderer, on a fixture directory. Its two properties of the real docs/adr/ — every
+ * record indexed, no index committed into the README — are tests/docs/adr-index.docs-check.ts,
+ * in `pnpm docs:check`.
+ */
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -6,7 +11,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { renderAdrIndex } from '../../scripts/docs/adr-index.mjs';
 
-const adrDir = path.resolve(import.meta.dirname, '../../docs/adr');
 let fixture: string | undefined;
 
 afterAll(async () => {
@@ -42,16 +46,5 @@ describe('renderAdrIndex', () => {
         '',
       ].join('\n'),
     );
-  });
-
-  it('indexes every record in docs/adr, so nothing needs committing', async () => {
-    const records = (await readdir(adrDir)).filter((f) => f.endsWith('.md') && f !== 'README.md');
-    const rows = (await renderAdrIndex(adrDir)).split('\n').filter((l) => l.startsWith('| ['));
-    expect(rows).toHaveLength(records.length);
-  });
-
-  it('is not committed into docs/adr/README.md, where every ADR PR would conflict on it', async () => {
-    const readme = await readFile(path.join(adrDir, 'README.md'), 'utf8');
-    expect(readme).not.toMatch(/GENERATED INDEX|^\| \[[^\]]+\]\([^)]+\.md\) \|/mu);
   });
 });

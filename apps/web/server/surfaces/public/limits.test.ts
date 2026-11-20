@@ -11,7 +11,7 @@ import {
   SURFACE_RATE_LIMITS,
   turnsPerConversation,
 } from './limits';
-import { type VisitorSurface } from './runtime';
+import { type VisitorSurface } from './wiring';
 import { installTestDomains } from '../../application-context-fixtures';
 import { clearApplicationContext } from '../../application-context';
 

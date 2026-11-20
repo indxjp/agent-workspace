@@ -13,7 +13,7 @@ diagnosed it correctly and refused to patch it:
 
 | Gate | Owner | Fails on files owned by |
 | --- | --- | --- |
-| `tests/route-inventory.test.ts` | W1-CP-05 | W1-CP-04's `api/runs/**`, `api/agents/[id]/runs` |
+| `tests/route-inventory.policy-check.ts` | W1-CP-05 | W1-CP-04's `api/runs/**`, `api/agents/[id]/runs` |
 | `apps/web/server/runs/routes.test.ts` | W1-CP-04 | W1-CP-05's `api/agents/route.ts`, `[id]/route.ts` |
 | `tests/no-sdk-import.test.ts` | W1-RN-01 | W1-CP-04's acceptance scripts, W1-CP-05's test file |
 
@@ -22,7 +22,7 @@ Every one of these gates is **correct**. Each asserts a closed world — *these 
 requires. That is why they broke: a closed-world assertion is only true of the *whole* tree, and each
 was written by an author who could see, and own, one glob of it.
 
-A sixth defect has the same shape. `tests/route-inventory.test.ts` plants
+A sixth defect has the same shape. `tests/route-inventory.policy-check.ts` plants
 `api/agents/inventory-probe-*/route.jsx` mid-test while `tests/auth.test.ts` walks `apps/web/app/api`
 to build its probe matrix — same Vitest project, parallel workers. Proved deterministically in both
 directions; the second direction is a *spurious failure* currently masked by the seven above and
@@ -70,7 +70,7 @@ feature task.**
   what the integration branch is for — but it means a wave is not verified until it is integrated.
 - The invariants task becomes a serialisation point at the top of every wave. It is small, and it is
   cheaper than the restack that routing these fixes downward would cost.
-- Plan §6's task cards assign `tests/route-inventory.test.ts` to W1-CP-05 and `tests/no-sdk-import.test.ts`
+- Plan §6's task cards assign `tests/route-inventory.policy-check.ts` to W1-CP-05 and `tests/no-sdk-import.test.ts`
   to W1-RN-01. Under [ADR-0018](0018-the-declared-owns-line-is-the-ownership-boundary.md) the
   declared line governs, so those files move without a plan amendment; the wave manifest records it.
 - The seven failures and the Vitest race are fixed **above** the feature branches, so no branch below

@@ -316,9 +316,9 @@ digest in the project file.
    `app_<name>` that owns the schema `app_<name>` and no platform table. The app never receives the
    platform's `DATABASE_URL`. The TLS host, the app's secrets and registering its connector are in
    the `Apps` section of the
-   [single-VM](https://github.com/indxjp/agent-workspace/blob/main/docs/deploy/single-vm.md#apps)
-   [Kubernetes](https://github.com/indxjp/agent-workspace/blob/main/docs/deploy/kubernetes.md#apps)
-   and [Cloud Run](https://github.com/indxjp/agent-workspace/blob/main/docs/deploy/gcp-cloudrun.md#apps)
+   [single-VM](https://github.com/indxjp/agent-workspace/blob/main/docs/40-operate/deploy/single-vm.md#apps)
+   [Kubernetes](https://github.com/indxjp/agent-workspace/blob/main/docs/40-operate/deploy/kubernetes.md#apps)
+   and [Cloud Run](https://github.com/indxjp/agent-workspace/blob/main/docs/40-operate/deploy/gcp-cloudrun.md#apps)
    deployment guides; `aw deploy --yes` prints them for each app.
 
 The image migrates its own schema as it starts. `aw deploy` sets `AW_APP_MIGRATE_ON_START=1`, so

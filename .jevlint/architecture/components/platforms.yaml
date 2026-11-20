@@ -1,0 +1,17 @@
+id: platforms
+title: Platform translators
+summary: >
+  The PlatformTarget port and one pure translator per agent platform (Copilot Studio, Foundry, Gemini Enterprise, AgentCore, ...) that exports a portable agent.
+layer: contracts
+paths:
+  - "packages/platforms/**"
+key_files:
+  - { path: packages/platforms/src/port.ts, role: "PlatformTarget" }
+  - { path: packages/platforms/src/registry.ts, role: "the list of targets" }
+  - { path: packages/platforms/src/compile.ts, role: "compiles a portable agent for a target, with verdicts" }
+interface: [PlatformTarget]
+depends_on: [contracts]
+uses: [zod]
+rules: []
+checklist: []
+status: current

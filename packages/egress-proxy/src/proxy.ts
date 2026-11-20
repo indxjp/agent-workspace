@@ -103,6 +103,276 @@ function withoutHopByHop(headers: http.IncomingHttpHeaders): http.OutgoingHttpHe
   return forwarded;
 }
 
+/** The resolved options and collaborators every request handler shares. */
+interface ProxyRuntime {
+  readonly allowedPorts: readonly number[];
+  readonly resolve: (host: string) => Promise<readonly string[]>;
+  readonly dial: (address: string, port: number) => Socket;
+  readonly writeLog: (line: string) => void;
+  readonly authenticate: (req: http.IncomingMessage) => Principal;
+}
+
+/** A request that passed authentication and names a host and port to reach. */
+interface EgressRequest {
+  readonly principal: Principal & { readonly ok: true };
+  readonly rawHost: string;
+  readonly port: number;
+}
+
+const UPSTREAM_UNAVAILABLE = JSON.stringify({ error: 'upstream_unavailable' });
+
+function isValidPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
+
+async function resolveChecked(runtime: ProxyRuntime, host: string): Promise<Decision> {
+  let addresses: readonly string[];
+  try {
+    addresses = await runtime.resolve(host);
+  } catch {
+    return { allowed: false, reason: 'resolution_failed' };
+  }
+  const [address] = addresses;
+  if (address === undefined) return { allowed: false, reason: 'resolution_failed' };
+  if (addresses.some((candidate) => classifyAddress(candidate) !== null)) {
+    return { allowed: false, reason: 'resolves_to_denied_address' };
+  }
+  return { allowed: true, address };
+}
+
+async function decide(
+  runtime: ProxyRuntime,
+  allowlist: Allowlist,
+  rawHost: string,
+  port: number,
+): Promise<Decision> {
+  const host = normalizeHost(rawHost);
+  if (host === null || !isValidPort(port)) return { allowed: false, reason: 'bad_request' };
+  if (!runtime.allowedPorts.includes(port)) return { allowed: false, reason: 'port_not_allowed' };
+  const literal = isIP(host) !== 0;
+  if (literal) {
+    const reason = classifyAddress(host);
+    if (reason !== null) return { allowed: false, reason };
+  }
+  if (!isHostAllowed(allowlist, host)) return { allowed: false, reason: 'host_not_allowed' };
+  if (literal) return { allowed: true, address: host };
+  return resolveChecked(runtime, host);
+}
+
+/** Who is asking: the configured session, or the session the signed credential names. */
+function authenticatorFor(options: EgressProxyOptions): (req: http.IncomingMessage) => Principal {
+  if ('credentialKey' in options) {
+    const { credentialKey, now } = options;
+    return (req) =>
+      verifyCredential(
+        req.headers['proxy-authorization'],
+        credentialKey,
+        now?.() ?? Math.floor(Date.now() / 1000),
+      );
+  }
+  const principal: Principal = { ok: true, sid: options.sessionId, allowlist: options.allowlist };
+  return () => principal;
+}
+
+/** Logs the denial and returns the JSON body to send back. */
+function denialBody(
+  runtime: ProxyRuntime,
+  sid: string | null,
+  host: string | null,
+  port: number | null,
+  reason: DenialReason,
+): string {
+  runtime.writeLog(JSON.stringify({ event: 'egress_denied', sessionId: sid, host, port, reason }));
+  return JSON.stringify({ error: 'egress_denied', reason });
+}
+
+/** Parses an absolute-form `http:` request target, or returns null when it is anything else. */
+function parseForwardTarget(requestUrl: string): URL | null {
+  if (requestUrl.startsWith('/')) return null;
+  try {
+    const target = new URL(requestUrl);
+    return target.protocol === 'http:' ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+function forward(runtime: ProxyRuntime, req: http.IncomingMessage, res: http.ServerResponse): void {
+  const requestUrl = req.url ?? '';
+  if (req.method === 'GET' && requestUrl === '/healthz') {
+    res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
+    return;
+  }
+  const principal = runtime.authenticate(req);
+  if (!principal.ok) {
+    respond(res, 407, denialBody(runtime, null, null, null, principal.reason), {
+      'proxy-authenticate': PROXY_AUTHENTICATE,
+    });
+    return;
+  }
+  const target = parseForwardTarget(requestUrl);
+  if (target === null) {
+    respond(res, 400, denialBody(runtime, principal.sid, null, null, 'bad_request'));
+    return;
+  }
+  const port = target.port === '' ? 80 : Number(target.port);
+  void decide(runtime, principal.allowlist, target.hostname, port).then(
+    (decision) => {
+      if (!decision.allowed) {
+        const host = normalizeHost(target.hostname);
+        const body = denialBody(runtime, principal.sid, host, port, decision.reason);
+        respond(res, STATUS[decision.reason], body);
+        return;
+      }
+      relay(runtime, { req, res, target, port, address: decision.address });
+    },
+    () => respond(res, 502, UPSTREAM_UNAVAILABLE),
+  );
+}
+
+interface RelayRequest {
+  readonly req: http.IncomingMessage;
+  readonly res: http.ServerResponse;
+  readonly target: URL;
+  readonly port: number;
+  readonly address: string;
+}
+
+function relay(runtime: ProxyRuntime, { req, res, target, port, address }: RelayRequest): void {
+  const upstream = http.request({
+    method: req.method,
+    host: address,
+    port,
+    path: `${target.pathname}${target.search}`,
+    // The client's Host header is never trusted to name a different site than the one checked.
+    headers: { ...withoutHopByHop(req.headers), host: target.host },
+    timeout: IDLE_TIMEOUT_MS,
+    createConnection: () => runtime.dial(address, port),
+  });
+  upstream.on('response', (response) => {
+    res.writeHead(
+      response.statusCode ?? 502,
+      response.statusMessage,
+      withoutHopByHop(response.headers),
+    );
+    response.pipe(res);
+    response.on('error', () => res.destroy());
+  });
+  const fail = (): void => {
+    upstream.destroy();
+    if (res.headersSent) res.destroy();
+    else respond(res, 502, UPSTREAM_UNAVAILABLE);
+  };
+  upstream.on('error', fail);
+  upstream.on('timeout', fail);
+  req.on('error', () => upstream.destroy());
+  res.on('close', () => upstream.destroy());
+  req.pipe(upstream);
+}
+
+/** Writes a complete HTTP/1.1 refusal to a CONNECT client and closes the socket. */
+function refuseConnect(client: Duplex, status: number, body: string, extraHeaders = ''): void {
+  client.end(
+    `HTTP/1.1 ${status} ${http.STATUS_CODES[status] ?? 'Error'}\r\n${extraHeaders}` +
+      `content-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n` +
+      `connection: close\r\n\r\n${body}`,
+  );
+}
+
+/** Authenticates a CONNECT request and parses its authority; refuses the client on failure. */
+function readConnectRequest(
+  runtime: ProxyRuntime,
+  req: http.IncomingMessage,
+  client: Duplex,
+): EgressRequest | null {
+  const principal = runtime.authenticate(req);
+  if (!principal.ok) {
+    refuseConnect(
+      client,
+      407,
+      denialBody(runtime, null, null, null, principal.reason),
+      `proxy-authenticate: ${PROXY_AUTHENTICATE}\r\n`,
+    );
+    return null;
+  }
+  const match = CONNECT_AUTHORITY.exec(req.url ?? '');
+  if (match === null) {
+    refuseConnect(client, 400, denialBody(runtime, principal.sid, null, null, 'bad_request'));
+    return null;
+  }
+  return { principal, rawHost: match[1] ?? match[2] ?? '', port: Number(match[3]) };
+}
+
+/** Joins the client to the checked upstream address, answering 200 once the upstream connects. */
+function openTunnel(
+  runtime: ProxyRuntime,
+  client: Duplex,
+  head: Buffer,
+  target: { readonly address: string; readonly port: number },
+): void {
+  const upstream = runtime.dial(target.address, target.port);
+  let established = false;
+  const close = (): void => {
+    upstream.destroy();
+    client.destroy();
+  };
+  upstream.on('error', () => {
+    if (established) {
+      close();
+      return;
+    }
+    upstream.destroy();
+    refuseConnect(client, 502, UPSTREAM_UNAVAILABLE);
+  });
+  upstream.setTimeout(IDLE_TIMEOUT_MS, close);
+  upstream.once('connect', () => {
+    established = true;
+    client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+    if (head.length > 0) upstream.write(head);
+    client.pipe(upstream);
+    upstream.pipe(client);
+  });
+  client.on('close', close);
+  upstream.on('close', close);
+}
+
+function tunnel(
+  runtime: ProxyRuntime,
+  req: http.IncomingMessage,
+  client: Duplex,
+  head: Buffer,
+): void {
+  client.on('error', () => client.destroy());
+  const request = readConnectRequest(runtime, req, client);
+  if (request === null) return;
+  const { principal, rawHost, port } = request;
+  // The server keeps half-open sockets, so a sandbox that drops the CONNECT while the name is
+  // resolving only shows up as 'end'; it must not be given an upstream connection.
+  const abandon = (): void => {
+    client.destroy();
+  };
+  client.once('end', abandon);
+  void decide(runtime, principal.allowlist, rawHost, port).then(
+    (decision) => {
+      client.off('end', abandon);
+      if (!decision.allowed) {
+        const body = denialBody(
+          runtime,
+          principal.sid,
+          normalizeHost(rawHost),
+          port,
+          decision.reason,
+        );
+        refuseConnect(client, STATUS[decision.reason], body);
+        return;
+      }
+      if (client.destroyed) return;
+      openTunnel(runtime, client, head, { address: decision.address, port });
+    },
+    () => refuseConnect(client, 502, UPSTREAM_UNAVAILABLE),
+  );
+}
+
 /**
  * One HTTP forward + CONNECT proxy for one sandbox session, or for all of them when each request
  * carries a signed credential (docs/adr/0117).
@@ -113,214 +383,17 @@ function withoutHopByHop(headers: http.IncomingHttpHeaders): http.OutgoingHttpHe
  * TLS is not inspected: the allowlist matches the CONNECT authority, not the SNI.
  */
 export function createEgressProxy(options: EgressProxyOptions): http.Server {
-  const allowedPorts = options.allowedPorts ?? DEFAULT_PORTS;
-  const resolve = options.resolve ?? defaultResolve;
-  const dial = options.dial ?? defaultDial;
-  const writeLog = options.writeLog ?? ((line: string) => process.stdout.write(`${line}\n`));
-
-  async function decide(allowlist: Allowlist, rawHost: string, port: number): Promise<Decision> {
-    const host = normalizeHost(rawHost);
-    if (host === null || !Number.isInteger(port) || port < 1 || port > 65535) {
-      return { allowed: false, reason: 'bad_request' };
-    }
-    if (!allowedPorts.includes(port)) return { allowed: false, reason: 'port_not_allowed' };
-    const literal = isIP(host) !== 0;
-    if (literal) {
-      const reason = classifyAddress(host);
-      if (reason !== null) return { allowed: false, reason };
-    }
-    if (!isHostAllowed(allowlist, host)) return { allowed: false, reason: 'host_not_allowed' };
-    if (literal) return { allowed: true, address: host };
-    let addresses: readonly string[];
-    try {
-      addresses = await resolve(host);
-    } catch {
-      return { allowed: false, reason: 'resolution_failed' };
-    }
-    const [address] = addresses;
-    if (address === undefined) return { allowed: false, reason: 'resolution_failed' };
-    if (addresses.some((candidate) => classifyAddress(candidate) !== null)) {
-      return { allowed: false, reason: 'resolves_to_denied_address' };
-    }
-    return { allowed: true, address };
-  }
-
-  /** Who is asking: the configured session, or the session the signed credential names. */
-  function authenticate(req: http.IncomingMessage): Principal {
-    if ('credentialKey' in options) {
-      const nowSeconds = options.now?.() ?? Math.floor(Date.now() / 1000);
-      return verifyCredential(
-        req.headers['proxy-authorization'],
-        options.credentialKey,
-        nowSeconds,
-      );
-    }
-    return { ok: true, sid: options.sessionId, allowlist: options.allowlist };
-  }
-
-  function deny(
-    sid: string | null,
-    host: string | null,
-    port: number | null,
-    reason: DenialReason,
-  ): string {
-    writeLog(JSON.stringify({ event: 'egress_denied', sessionId: sid, host, port, reason }));
-    return JSON.stringify({ error: 'egress_denied', reason });
-  }
-
-  function forward(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const requestUrl = req.url ?? '';
-    if (req.method === 'GET' && requestUrl === '/healthz') {
-      res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
-      return;
-    }
-    const principal = authenticate(req);
-    if (!principal.ok) {
-      respond(res, 407, deny(null, null, null, principal.reason), {
-        'proxy-authenticate': PROXY_AUTHENTICATE,
-      });
-      return;
-    }
-    if (requestUrl.startsWith('/')) {
-      respond(res, 400, deny(principal.sid, null, null, 'bad_request'));
-      return;
-    }
-    let target: URL;
-    try {
-      target = new URL(requestUrl);
-    } catch {
-      respond(res, 400, deny(principal.sid, null, null, 'bad_request'));
-      return;
-    }
-    if (target.protocol !== 'http:') {
-      respond(res, 400, deny(principal.sid, null, null, 'bad_request'));
-      return;
-    }
-    const port = target.port === '' ? 80 : Number(target.port);
-    void decide(principal.allowlist, target.hostname, port).then(
-      (decision) => {
-        if (!decision.allowed) {
-          const host = normalizeHost(target.hostname);
-          respond(res, STATUS[decision.reason], deny(principal.sid, host, port, decision.reason));
-          return;
-        }
-        relay(req, res, target, port, decision.address);
-      },
-      () => respond(res, 502, JSON.stringify({ error: 'upstream_unavailable' })),
-    );
-  }
-
-  function relay(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    target: URL,
-    port: number,
-    address: string,
-  ): void {
-    const upstream = http.request({
-      method: req.method,
-      host: address,
-      port,
-      path: `${target.pathname}${target.search}`,
-      // The client's Host header is never trusted to name a different site than the one checked.
-      headers: { ...withoutHopByHop(req.headers), host: target.host },
-      timeout: IDLE_TIMEOUT_MS,
-      createConnection: () => dial(address, port),
-    });
-    upstream.on('response', (response) => {
-      res.writeHead(
-        response.statusCode ?? 502,
-        response.statusMessage,
-        withoutHopByHop(response.headers),
-      );
-      response.pipe(res);
-      response.on('error', () => res.destroy());
-    });
-    const fail = (): void => {
-      upstream.destroy();
-      if (res.headersSent) res.destroy();
-      else respond(res, 502, JSON.stringify({ error: 'upstream_unavailable' }));
-    };
-    upstream.on('error', fail);
-    upstream.on('timeout', fail);
-    req.on('error', () => upstream.destroy());
-    res.on('close', () => upstream.destroy());
-    req.pipe(upstream);
-  }
-
-  function tunnel(req: http.IncomingMessage, client: Duplex, head: Buffer): void {
-    client.on('error', () => client.destroy());
-    const refuse = (status: number, body: string, extraHeaders = ''): void => {
-      client.end(
-        `HTTP/1.1 ${status} ${http.STATUS_CODES[status] ?? 'Error'}\r\n${extraHeaders}` +
-          `content-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n` +
-          `connection: close\r\n\r\n${body}`,
-      );
-    };
-    const principal = authenticate(req);
-    if (!principal.ok) {
-      refuse(
-        407,
-        deny(null, null, null, principal.reason),
-        `proxy-authenticate: ${PROXY_AUTHENTICATE}\r\n`,
-      );
-      return;
-    }
-    const match = CONNECT_AUTHORITY.exec(req.url ?? '');
-    if (match === null) {
-      refuse(400, deny(principal.sid, null, null, 'bad_request'));
-      return;
-    }
-    const rawHost = match[1] ?? match[2] ?? '';
-    const port = Number(match[3]);
-    // The server keeps half-open sockets, so a sandbox that drops the CONNECT while the name is
-    // resolving only shows up as 'end'; it must not be given an upstream connection.
-    const abandon = (): void => {
-      client.destroy();
-    };
-    client.once('end', abandon);
-    void decide(principal.allowlist, rawHost, port).then(
-      (decision) => {
-        client.off('end', abandon);
-        if (!decision.allowed) {
-          refuse(
-            STATUS[decision.reason],
-            deny(principal.sid, normalizeHost(rawHost), port, decision.reason),
-          );
-          return;
-        }
-        if (client.destroyed) return;
-        const upstream = dial(decision.address, port);
-        let established = false;
-        const close = (): void => {
-          upstream.destroy();
-          client.destroy();
-        };
-        upstream.on('error', () => {
-          if (established) {
-            close();
-            return;
-          }
-          upstream.destroy();
-          refuse(502, JSON.stringify({ error: 'upstream_unavailable' }));
-        });
-        upstream.setTimeout(IDLE_TIMEOUT_MS, close);
-        upstream.once('connect', () => {
-          established = true;
-          client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-          if (head.length > 0) upstream.write(head);
-          client.pipe(upstream);
-          upstream.pipe(client);
-        });
-        client.on('close', close);
-        upstream.on('close', close);
-      },
-      () => refuse(502, JSON.stringify({ error: 'upstream_unavailable' })),
-    );
-  }
-
-  const server = http.createServer(forward);
-  server.on('connect', tunnel);
+  const runtime: ProxyRuntime = {
+    allowedPorts: options.allowedPorts ?? DEFAULT_PORTS,
+    resolve: options.resolve ?? defaultResolve,
+    dial: options.dial ?? defaultDial,
+    writeLog: options.writeLog ?? ((line: string) => process.stdout.write(`${line}\n`)),
+    authenticate: authenticatorFor(options),
+  };
+  const server = http.createServer((req, res) => forward(runtime, req, res));
+  server.on('connect', (req: http.IncomingMessage, client: Duplex, head: Buffer) =>
+    tunnel(runtime, req, client, head),
+  );
   server.headersTimeout = HEADERS_TIMEOUT_MS;
   return server;
 }

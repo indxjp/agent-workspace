@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 
 import { validateCiWorkflow } from './check-workflows/ci-jobs.mjs';
 import { CI_WORKFLOW, WAVE_GATE_STEP, WORKFLOWS_DIRECTORY } from './check-workflows/ci-text.mjs';
+import { validatePeripheralWorkflows } from './check-workflows/peripheral.mjs';
+import { ACTIONLINT_CONFIG, validateWorkflowTree } from './check-workflows/tree-rules.mjs';
 import { validateWorkflowFile } from './check-workflows/workflow-rules.mjs';
 
 const INTERNAL_WORKFLOW = path.posix.join(WORKFLOWS_DIRECTORY, 'internal-checks.yml');
@@ -19,12 +21,15 @@ const PR_TEMPLATE = '.github/pull_request_template.md';
  * @param {boolean} [hasInternalWaves]
  * @param {ReadonlyMap<string, readonly [string, string]>} [extraActions] pins from the export-excluded
  *   `.github/indx-dev.actions.json`; a missing file only makes the check stricter.
+ * @param {string} [actionlintConfig] the text of `.github/actionlint.yaml`; without it the runner
+ *   label rule is not checked (validateWorkflows always passes it).
  */
 export function validateWorkflowDocuments(
   workflows,
   _prTemplate,
   hasInternalWaves = false,
   extraActions = new Map(),
+  actionlintConfig = undefined,
 ) {
   /** @type {string[]} */
   const failures = [];
@@ -46,6 +51,8 @@ export function validateWorkflowDocuments(
   const ciSource = workflows.get(CI_WORKFLOW);
   if (ciSource === undefined) failures.push(`${CI_WORKFLOW}: workflow is missing`);
   else validateCiWorkflow(failures, ciSource);
+  validatePeripheralWorkflows(failures, workflows);
+  validateWorkflowTree(failures, workflows, actionlintConfig);
   return failures;
 }
 
@@ -66,12 +73,14 @@ export async function validateWorkflows(repositoryRoot = process.cwd()) {
   const extraActions = existsSync(extraFile)
     ? new Map(Object.entries(JSON.parse(await readFile(extraFile, 'utf8'))))
     : new Map();
+  const actionlintConfig = await readFile(path.join(repositoryRoot, ACTIONLINT_CONFIG), 'utf8');
   return {
     failures: validateWorkflowDocuments(
       workflows,
       prTemplate,
       existsSync(path.join(repositoryRoot, 'internal', 'waves')),
       extraActions,
+      actionlintConfig,
     ),
     workflowCount: workflowFiles.length,
   };
@@ -90,7 +99,7 @@ if (
     process.exitCode = 1;
   } else {
     console.log(
-      `Workflow validation passed: ${String(result.workflowCount)} workflows use reviewed immutable action SHAs; CI runs its light jobs on GitHub-hosted runners and its runner labels follow the policy, builds once and runs the rest in parallel behind one ci-success check, and preserves the PR ownership template.`,
+      `Workflow validation passed: ${String(result.workflowCount)} workflows use reviewed immutable action SHAs; CI runs its light jobs on GitHub-hosted runners and its runner labels follow the policy and are known to actionlint, keeps the costly peripheral lanes off the pull request, builds once and runs the rest in parallel behind one ci-success check, and preserves the PR ownership template.`,
     );
   }
 }

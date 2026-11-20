@@ -18,7 +18,7 @@
  *     provider set is `MODEL_PROVIDERS`, the set `runs.provider` already enforces;
  *   - refusals: each cluster's one check that whole-schema consistency must enforce is declared
  *     by Drizzle on that cluster's table;
- *   - diagram and glossary: `docs/formal/concepts.md` carries the generated target ER diagram
+ *   - diagram and glossary: `docs/20-design/formal/concepts.md` carries the generated target ER diagram
  *     verbatim and lists every glossary term.
  */
 import { readFileSync } from 'node:fs';
@@ -417,7 +417,7 @@ describe('er-synthesis: every cluster check is part of whole-schema consistency'
 });
 
 describe('er-synthesis: the concept page', () => {
-  const page = readFileSync(path.join(REPO_ROOT, 'docs/formal/concepts.md'), 'utf8');
+  const page = readFileSync(path.join(REPO_ROOT, 'docs/20-design/formal/concepts.md'), 'utf8');
 
   for (const vector of diagramVectors) {
     it(vector.id, () => {

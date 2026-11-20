@@ -26,7 +26,7 @@ import { GET as listRoute, POST as createRoute } from '../../app/api/secrets/rou
 import { PUT as replaceRoute } from '../../app/api/secrets/[id]/route';
 import { installWorkspaceHeaderRbac } from '../rbac/testing';
 import { createRepositorySecretsStoreProvider } from './store';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
 

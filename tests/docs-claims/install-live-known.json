@@ -10,10 +10,10 @@
     "where": "docs/sdk/site/features/self-host-securely.mdx:195",
     "issue": 892
   },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:155", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:442", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:874", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/examples.html:103", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:159", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:446", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:878", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/examples.html:107", "issue": 892 },
   {
     "lane": "claims-windows-pwsh",
     "where": "docs/sdk/site/features/run-observe-evaluate.mdx:52",
@@ -35,10 +35,10 @@
     "where": "docs/sdk/site/features/self-host-securely.mdx:195",
     "issue": 892
   },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:155", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:442", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:874", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/examples.html:103", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:159", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:446", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:878", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/examples.html:107", "issue": 892 },
   {
     "lane": "claims-windows-bash",
     "where": "docs/sdk/site/features/run-observe-evaluate.mdx:52",

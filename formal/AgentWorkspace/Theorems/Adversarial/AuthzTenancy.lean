@@ -50,7 +50,7 @@ theorem scoped_read_is_blind_to_other_workspaces (st₁ st₂ : State) (t : Tabl
 /-- No run route lets a caller observe another workspace's runs: two states whose runs of the
 caller's workspace are the same give every run route the same answer, for every route, caller,
 run id and continuation. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/adr/W1-CP-04-start-run-request-shape.md#decision")
   (ts := "apps/web/server/runs/api.ts#findRunForPrincipal")]
 theorem run_route_sees_only_the_callers_workspace {α : Type} (route : RunRoute) (st₁ st₂ : State)
@@ -65,7 +65,7 @@ theorem run_route_sees_only_the_callers_workspace {α : Type} (route : RunRoute)
 /-- A run of another workspace is indistinguishable from no run at all: adding a foreign run row
 (with any id, including the one asked for) changes no run route's answer. -/
 @[aw_spec (tier := T3) (doc := "docs/adr/W1-CP-04-start-run-request-shape.md#decision")
-  (doc := "docs/sdk/04-api-specification.md#4-conventions")
+  (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "apps/web/server/runs/api.ts#findRunForPrincipal")]
 theorem foreign_run_is_indistinguishable_from_absent {α : Type} (route : RunRoute) (st : State)
     (caller : RunCaller) (runId : String) (k : Row → Except RunProblem α) (r : Row)

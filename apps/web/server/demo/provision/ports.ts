@@ -29,6 +29,13 @@ export interface DemoSandbox {
    * host's network.
    */
   readonly enforcesNoNetwork: (driver: DemoRuntimeDriver) => Promise<boolean>;
+  /**
+   * Give the workspace a current Test Runtime pass of `driver`, which a run there needs and its
+   * guest cannot make: the runtimes domain carries this deployment's current pass, or runs Test
+   * Runtime for the workspace now. It resolves either way; without a pass, a run there is refused
+   * with `runtime_not_verified`.
+   */
+  readonly verifyRuntime: (workspaceId: string, driver: DemoRuntimeDriver) => Promise<void>;
 }
 
 /**

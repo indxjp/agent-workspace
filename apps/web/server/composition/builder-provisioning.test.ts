@@ -5,9 +5,9 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ModelsRuntime } from '../models/runtime';
+import type { ModelsRuntime } from '../models/wiring';
 import type { WorkspaceModelsStore } from '../models/store';
-import type { SetupInput, SetupResult } from '../setup/runtime';
+import type { SetupInput, SetupResult } from '../setup/wiring';
 import {
   provisioningAfterConnectionWrites,
   provisioningAfterSetup,

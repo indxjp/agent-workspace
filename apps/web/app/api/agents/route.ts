@@ -2,7 +2,7 @@
  * `POST /api/agents` and `GET /api/agents` — two of the five agent routes of spec §34.
  *
  * The other three live in `[id]/route.ts`. Nothing else belongs in this directory: §34 names five
- * agent routes and `tests/route-inventory.test.ts` fails the build if a sixth appears, whether it
+ * agent routes and `tests/route-inventory.policy-check.ts` fails the build if a sixth appears, whether it
  * is a search endpoint, a bulk endpoint or a count endpoint.
  *
  * These functions are deliberately trivial: the create use case is `server/agents/create.ts` (W2-3),
@@ -22,7 +22,7 @@ import { parseAgentListQuery, withAuthorisedWorkspaceStore } from '../../../serv
 import type { ApiResult } from '../../../server/http/result';
 import { route } from '../../../server/http/route';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`, "runs every route on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`, "runs every route on the
 // Node runtime and never prerenders one"). Added by W1-INT-02: the assertion was written by
 // W1-CP-04 over every file under `app/api` and had never run against this file, because the gate
 // carrying it lived on a sibling branch. `force-dynamic` is right here independently of the gate —

@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  sessionCookieName,
-  mintSessionToken,
-  newSessionClaims,
+  signInSessionCookieName,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
 } from '../apps/web/server/auth/session.js';
 import { readDeclarationFiles, requireString, REPO_ROOT as repoRoot } from './inventory-support.js';
 import {
@@ -57,6 +57,9 @@ export const SESSION_REFUSED_BY_HANDLER: Readonly<Record<string, string>> = {
 };
 
 const STARTUP_TIMEOUT_MS = 180_000;
+
+/** How many route paths are in flight at once (see `probeRoutes`). */
+const PROBE_CONCURRENCY = 8;
 
 export const PROBE_TIMEOUT_MS = 600_000;
 
@@ -122,27 +125,47 @@ class RouteProbe {
   }
 
   private async probeRoutes() {
-    const token = await mintSessionToken(newSessionClaims(ADMIN_EMAIL, 'default'), SECRET);
-    this.cookie = `${sessionCookieName(process.env)}=${token}`;
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims(ADMIN_EMAIL, 'default'),
+      SECRET,
+    );
+    this.cookie = `${signInSessionCookieName(process.env)}=${token}`;
 
+    // `next dev` compiles a route module on its first request, and that compile is most of this
+    // probe's time. Routes of one path share a module and keep their declared order, one request
+    // after another, so nothing about a path's own sequence changes; distinct paths are distinct
+    // modules and are probed PROBE_CONCURRENCY at a time, so the dev server compiles them side by
+    // side instead of one after another.
+    const byPath = new Map<string, Probe[]>();
     for (const route of this.routes) {
-      const url = `${this.base}${concretePath(route.path)}`;
-      const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(route.method);
-      const response = await fetch(url, {
-        method: route.method,
-        headers: {
-          cookie: this.cookie,
-          ...(unsafe ? { origin: this.base, 'content-type': 'application/json' } : {}),
-        },
-        ...(unsafe ? { body: '{}' } : {}),
-        redirect: 'manual',
-      });
-      this.answers.set(`${route.method} ${route.path}`, response.status);
+      byPath.set(route.path, [...(byPath.get(route.path) ?? []), route]);
     }
+    const queue = [...byPath.values()];
+    const worker = async (): Promise<void> => {
+      for (let group = queue.shift(); group !== undefined; group = queue.shift()) {
+        for (const route of group) await this.probe(route);
+      }
+    };
+    await Promise.all(Array.from({ length: PROBE_CONCURRENCY }, worker));
     for (const route of this.routes) {
       const key = `${route.method} ${route.path}`;
       console.log(`  ${String(this.answers.get(key) ?? 0)}  ${key}  (${route.owner})`);
     }
+  }
+
+  private async probe(route: Probe): Promise<void> {
+    const url = `${this.base}${concretePath(route.path)}`;
+    const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(route.method);
+    const response = await fetch(url, {
+      method: route.method,
+      headers: {
+        cookie: this.cookie,
+        ...(unsafe ? { origin: this.base, 'content-type': 'application/json' } : {}),
+      },
+      ...(unsafe ? { body: '{}' } : {}),
+      redirect: 'manual',
+    });
+    this.answers.set(`${route.method} ${route.path}`, response.status);
   }
 
   private launchServer(storage: string, probeUrl: string): () => string {

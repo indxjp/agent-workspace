@@ -3,7 +3,7 @@
  *
  * Thin wiring over `apps/web/server/invitations/handlers.ts`, the same split
  * `apps/web/app/api/users/route.ts`'s header explains: everything worth testing lives in the
- * framework-free handler, and this file exists so `tests/route-inventory.test.ts` sees a route
+ * framework-free handler, and this file exists so `tests/route-inventory.policy-check.ts` sees a route
  * that answers, and so `routes.test.ts`-style suites can drive the real wiring with a real
  * `Request`.
  *

@@ -6,8 +6,8 @@
  * it is read; a later step hands them the parsed object instead.
  *
  * Each settings module lists the variables it reads in a catalogue ({@link WEB_SETTINGS} here), and
- * `docs/operations/settings.md` is generated from those catalogues (part 03, step 7):
- * `tests/settings-table.test.ts` fails when a catalogue misses a variable its parser reads, or when
+ * `docs/40-operate/operations/settings.md` is generated from those catalogues (part 03, step 7):
+ * `tests/settings-table/settings-table.docs-check.ts` fails when a catalogue misses a variable its parser reads, or when
  * the committed table is stale.
  */
 

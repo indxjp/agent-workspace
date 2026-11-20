@@ -10,8 +10,8 @@ Scope: `packages/core/src/db/schema/{mcp-servers,agent-mcp-servers,project-mcp-s
 One concept has three names: connector (wire, SDK, CLI, `IdKind.connector`), MCP server
 (`mcp_servers`, `agent_mcp_servers.mcp_server_id`, `project_mcp_servers`) and `mcpServerIds` on the
 project wire next to `connectorIds` on the agent wire (catalog finding 9;
-`docs/sdk/04-api-specification.md` §5.8 is headed "Connectors (MCP servers)"). The glossary
-(`docs/formal/concepts.md`) keeps "connector" and lists the others as aliases.
+`docs/10-product/sdk/04-api-specification.md` §5.8 is headed "Connectors (MCP servers)"). The glossary
+(`docs/20-design/formal/concepts.md`) keeps "connector" and lists the others as aliases.
 
 ## Decision
 

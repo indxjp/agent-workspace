@@ -18,7 +18,7 @@ replays it against the live Drizzle table objects:
   proposed cleanup lands and the model has to follow;
 * `refusals.json`: per cluster, the one check only it gives a meaning to that whole-schema
   consistency must enforce, with the table the Drizzle schema declares it on;
-* `diagram.json`: the generated target ER diagram, which `docs/formal/concepts.md` must carry
+* `diagram.json`: the generated target ER diagram, which `docs/20-design/formal/concepts.md` must carry
   verbatim;
 * `glossary.json`: every glossary term with its aliases and tables, which the concept page must
   list.
@@ -200,7 +200,7 @@ def refusalVectors : List Vector :=
 
 def diagramVectors : List Vector :=
   [{ id := "target-er-diagram",
-     input := Json.mkObj [("document", "docs/formal/concepts.md")],
+     input := Json.mkObj [("document", "docs/20-design/formal/concepts.md")],
      expected := Json.mkObj [("mermaid", Target.erDiagram)],
      witnesses := [wf ++ "er_diagram_draws_each_relationship_once",
        wf ++ "target_tables_are_well_formed", ref ++ "table_names_diverge_exactly_at"] }]
@@ -232,10 +232,10 @@ def files : List (String × Json) :=
       "Per cluster, one check only it refines that whole-schema consistency enforces."
       refusalVectors),
    ("diagram.json", file "er-synthesis"
-      "The generated target ER diagram, carried verbatim by docs/formal/concepts.md."
+      "The generated target ER diagram, carried verbatim by docs/20-design/formal/concepts.md."
       diagramVectors),
    ("glossary.json", file "er-synthesis"
-      "Every glossary term, its aliases today and its tables, listed by docs/formal/concepts.md."
+      "Every glossary term, its aliases today and its tables, listed by docs/20-design/formal/concepts.md."
       glossaryVectors)]
 
 end Vectors.ErSynthesis

@@ -1528,7 +1528,7 @@ interface Project {
 > Implementation note (RF-001): the current application already persists workspace and project model
 > defaults, which conflicts with rule 5. The refactoring safe default preserves that existing behavior
 > without expanding it until Product and Architecture ratify removal or retention. See the
-> [refactoring decision ledger](architecture/refactoring/claude-agent-workspace-refactoring-decisions.md).
+> [refactoring decision ledger](20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md).
 
 ---
 
@@ -1542,7 +1542,7 @@ ratings, installs, or discovery ranking. See section 38.
 
 > Refactoring note (RF-001): the safe default, ratification owner, and first blocking unit for
 > runnable public links live in the
-> [refactoring decision ledger](architecture/refactoring/claude-agent-workspace-refactoring-decisions.md).
+> [refactoring decision ledger](20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md).
 > Runnable public links specifically are not a currently releasable capability.
 
 ## 20.6.1 Three visibilities, for every shareable object
@@ -1778,7 +1778,7 @@ Store only a secure hash.
 > provides a machine `WorkspacePrincipal` that explicitly owns it. Today `resolveActorUserId` still
 > falls back to the workspace's oldest human Owner; RF-101 characterizes that behavior, and until
 > RF-101 lands an API key must not borrow a human Owner for an own-scoped Session operation; see the
-> [refactoring decision ledger](architecture/refactoring/claude-agent-workspace-refactoring-decisions.md).
+> [refactoring decision ledger](20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md).
 
 ---
 

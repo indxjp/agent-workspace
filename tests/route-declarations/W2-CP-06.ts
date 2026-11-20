@@ -8,7 +8,7 @@
  * author did not know it was already named.
  *
  * The other seven are §34's "Examples:" being a shape rule rather than a closed list. Each cites
- * the section that requires the capability, and `tests/route-inventory.test.ts` looks that section
+ * the section that requires the capability, and `tests/route-inventory.policy-check.ts` looks that section
  * up in `docs/spec.md`'s headings, so none of these citations can be invented.
  *
  * These same entries are what `apps/web/server/rbac/authorisation-matrix.test.ts` crosses with
