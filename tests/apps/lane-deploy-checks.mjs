@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { URL } from 'node:url';
+import { PINNED_FIELDS } from '../generated-project/images.mjs';
 import { PLATFORM_URL, appUrl, appSchema } from './lane-config.mjs';
 
 /**
@@ -45,6 +46,25 @@ export function withProductionApps(projectYaml, apps, target) {
 export function standInImage(name) {
   const digest = createHash('sha256').update(`apps-lane-${name}`).digest('hex');
   return `registry.apps-lane.test/${name}@sha256:${digest}`;
+}
+
+/**
+ * The `AW_*_IMAGE` overrides a plan rendering runs with: a {@link standInImage} for each platform
+ * image the CLI pins. Without them `aw deploy production` resolves this checkout's release tags
+ * (`ghcr.io/indxjp/agent-workspace/<name>:<version>`), which do not exist between a version bump
+ * and its image release, and the image release's own gate runs in exactly that window: `images.yml`
+ * is what publishes them. A rendering checks only where each app lands; the boot runs the platform
+ * images it built from this checkout.
+ *
+ * @returns {Record<string, string>}
+ */
+export function standInPlatformImages() {
+  return Object.fromEntries(
+    PINNED_FIELDS.map((field) => [
+      `AW_${field.toUpperCase()}_IMAGE`,
+      standInImage(`platform-${field}`),
+    ]),
+  );
 }
 
 /**

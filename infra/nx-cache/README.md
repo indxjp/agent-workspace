@@ -5,7 +5,7 @@ A small, zero-dependency Node service that implements the
 in front of Google Cloud Storage (or a local filesystem). It replaced Nx
 Cloud's remote cache in 2026-10 — see
 [ADR-0110](../../docs/adr/0110-nx-cloud-is-replaced-by-a-self-hosted-oidc-gated-remote-cache.md)
-for why, and [`docs/operations/ci.md`](../../docs/operations/ci.md) → "Who may read and who
+for why, and [`docs/40-operate/operations/ci.md`](../../docs/40-operate/operations/ci.md) → "Who may read and who
 may write" for how CI uses it.
 
 The code is vendored from a sibling project's `infra/nx-cache`, unchanged except
@@ -26,12 +26,12 @@ GCS bucket (private; only the service identity, create + read, no delete)
 
 ## API
 
-| Endpoint | Auth | Result |
-| --- | --- | --- |
-| `GET /v1/cache/{hash}` | read or write token | `200` tar stream · `404` · `401` |
-| `PUT /v1/cache/{hash}` | write token | `200` · `409` exists · `403` read token · `401` · `411` · `413` · `400` length mismatch |
-| `POST /v1/token` | GitHub Actions OIDC JWT (`aud=aw-nx-cache`) | `200 {token, role, expires_at}` · `401` · `403` |
-| `GET /v1/health` | none | `200 ok` |
+| Endpoint               | Auth                                        | Result                                                                                  |
+| ---------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `GET /v1/cache/{hash}` | read or write token                         | `200` tar stream · `404` · `401`                                                        |
+| `PUT /v1/cache/{hash}` | write token                                 | `200` · `409` exists · `403` read token · `401` · `411` · `413` · `400` length mismatch |
+| `POST /v1/token`       | GitHub Actions OIDC JWT (`aud=aw-nx-cache`) | `200 {token, role, expires_at}` · `401` · `403`                                         |
+| `GET /v1/health`       | none                                        | `200 ok`                                                                                |
 
 (`/healthz` is not used: Cloud Run's front end reserves paths ending in `z`.)
 
@@ -41,10 +41,20 @@ GCS bucket (private; only the service identity, create + read, no delete)
 
 - **Role is decided server-side.** Static tokens map to a fixed role;
   OIDC-minted tokens get `write` only when GitHub's signed claims say
-  `repository=example-org/example-repo`, `repository_id=123456789`,
-  `ref=refs/heads/main`, `event_name ∈ {push, schedule}`. Any other run of the
-  repository gets `read`. A pull request cannot obtain `write`, even by
-  editing its workflow.
+  `repository=example-org/example-repo`, `repository_id=123456789` and one of
+  (ADR-0110, Amendment 2026-11-19, owner decisions D1 and D1b):
+  `event_name ∈ {push, schedule}` with `ref=refs/heads/main`;
+  `event_name=merge_group` with `ref=refs/heads/gh-readonly-queue/main/*`;
+  `event_name=pull_request` with `ref=refs/pull/<n>/merge` and `base_ref=main`.
+  Each event must also carry the ref shape GitHub gives it, so a push to a
+  branch named `gh-readonly-queue/...` does not count as a queue group. Any
+  other run of the repository gets `read` (a dispatch, a PR into another
+  branch). No claim names a pull request's head repository: forks are kept
+  out because GitHub issues a fork's run no OIDC token (for a private or
+  internal repository, only while "Send write tokens to workflows from fork
+  pull requests" is off — keep it off). A same-repository pull request CAN
+  write, by the owner's decision; the 409 below is what stops it from
+  replacing an entry `main` or the queue already wrote.
 - **Immutable keys, first writer wins** — GCS `ifGenerationMatch=0`
   (fs backend: `link(2)`), atomically. Concurrent writers: one `200`, the
   rest `409`.
@@ -64,15 +74,15 @@ GCS bucket (private; only the service identity, create + read, no delete)
 All configuration is environment variables — see the header of
 [`src/main.mjs`](src/main.mjs) for the full list. The important ones:
 
-| Variable | Purpose |
-| --- | --- |
-| `NX_CACHE_STORAGE` | `gcs` (default) · `fs` · `memory` |
-| `NX_CACHE_GCS_BUCKET` / `NX_CACHE_FS_ROOT` | where artifacts live |
-| `NX_CACHE_HTTP2=1` | serve h2c — required behind Cloud Run `--use-http2` |
-| `NX_CACHE_READ_TOKENS` | comma-separated static read tokens (secret) |
-| `NX_CACHE_WRITE_TOKENS` | break-glass static write tokens — **unset in normal operation** |
-| `NX_CACHE_SIGNING_KEY` | enables `POST /v1/token` (secret) |
-| `NX_CACHE_OIDC_REPOSITORY` / `_REPOSITORY_ID` / `_WRITE_REFS` / `_WRITE_EVENTS` | OIDC trust policy |
+| Variable                                                                                                | Purpose                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NX_CACHE_STORAGE`                                                                                      | `gcs` (default) · `fs` · `memory`                                                                                                                                 |
+| `NX_CACHE_GCS_BUCKET` / `NX_CACHE_FS_ROOT`                                                              | where artifacts live                                                                                                                                              |
+| `NX_CACHE_HTTP2=1`                                                                                      | serve h2c — required behind Cloud Run `--use-http2`                                                                                                               |
+| `NX_CACHE_READ_TOKENS`                                                                                  | comma-separated static read tokens (secret)                                                                                                                       |
+| `NX_CACHE_WRITE_TOKENS`                                                                                 | break-glass static write tokens — **unset in normal operation**                                                                                                   |
+| `NX_CACHE_SIGNING_KEY`                                                                                  | enables `POST /v1/token` (secret)                                                                                                                                 |
+| `NX_CACHE_OIDC_REPOSITORY` / `_REPOSITORY_ID` / `_WRITE_REFS` / `_WRITE_EVENTS` / `_WRITE_PR_BASE_REFS` | OIDC trust policy (unset: main-only, `_WRITE_REFS=refs/heads/main`, `_WRITE_EVENTS=push,schedule`; `deploy-gcp.sh` sets the D1/D1b queue and pull request policy) |
 
 ## Testing
 
@@ -89,8 +99,9 @@ winner · 10 byte-exact round trip · 11 256 MiB streamed without buffering ·
 12 unsafe hashes rejected · 13 storage errors → safe 5xx, no record ·
 14 no token in logs. Every case runs against the memory, fs and (emulated)
 GCS backends; `gcs.integration.test.mjs` repeats the race against real GCS.
-`.github/workflows/ci-nx-cache.yml` runs the suite plus a live check that a PR's OIDC token
-yields a read-only token whose `PUT` gets `403`.
+`.github/workflows/ci-nx-cache.yml` runs the suite plus a live check of the role the deployed
+server grants: a `read` grant's `PUT` must get `403`; a `write` grant's `PUT` must get `200`, a
+second `PUT` of the same key `409`, and the bytes must round-trip.
 
 ## Deploying
 
@@ -116,9 +127,15 @@ docker build -t nx-cache infra/nx-cache
 docker run -d -p 8080:8080 -v /srv/nx-cache:/data \
   -e NX_CACHE_STORAGE=fs -e NX_CACHE_FS_ROOT=/data \
   -e NX_CACHE_READ_TOKENS=... -e NX_CACHE_SIGNING_KEY=... \
-  -e NX_CACHE_OIDC_AUDIENCE=aw-nx-cache \n  -e NX_CACHE_OIDC_REPOSITORY=example-org/example-repo -e NX_CACHE_OIDC_REPOSITORY_ID=123456789 \
+  -e NX_CACHE_OIDC_AUDIENCE=aw-nx-cache \
+  -e NX_CACHE_OIDC_REPOSITORY=example-org/example-repo -e NX_CACHE_OIDC_REPOSITORY_ID=123456789 \
   nx-cache
 ```
+
+Without `NX_CACHE_OIDC_WRITE_REFS` and `NX_CACHE_OIDC_WRITE_EVENTS` only `main`'s push and nightly
+write; every other run reads. Grant the merge queue and same-repository pull requests write (owner
+decisions D1 and D1b, ADR-0110 Amendment 2026-11-19) only after checking that forks get no OIDC
+token, as `deploy-gcp.sh` does before it sets them.
 
 The image runs as the unprivileged `node` user (uid 1000), so
 `chown 1000 /srv/nx-cache` first. Put TLS in front (Caddy/nginx/a load balancer); HTTP/1.1 has no size limit

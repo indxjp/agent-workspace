@@ -22,7 +22,7 @@ open AgentWorkspace AgentWorkspace.Authz.PathGrant AgentWorkspace.Behaviour.Engi
 
 /-- An accepted agent offers exactly the tools the four permission switches allow, with `bash`
 withheld while a read-only grant exists. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-pi.md#tools")
   (ts := "packages/engine-pi/src/tools.ts#piToolPlan")
   (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
 theorem accepted_agent_offers_exactly_the_permitted_tools {r : Request} {c : Compiled}
@@ -71,7 +71,7 @@ example :
 
 /-- Whenever the agent's `runCommands` switch is off, the compiled guard blocks every `bash` call,
 whatever it asks for: pi is never told about the tool, and a call the model invents is blocked. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#tools")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-pi.md#tools")
   (ts := "packages/engine-pi/src/workspace.ts#piToolCallVerdict")
   (ts := "packages/engine-pi/src/boundary.ts#startPiRun")]
 theorem the_guard_blocks_bash_when_run_commands_is_off {r : Request} {c : Compiled}
@@ -109,7 +109,7 @@ example :
 
 /-- An accepted compile carries no connector: pi has no MCP client, so no agent with a connector is
 ever run on it. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-pi.md#compile")
   (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
 theorem no_accepted_agent_has_a_connector {r : Request} {c : Compiled} (h : compile r = .ok c) :
     r.connectors = [] := by
@@ -118,7 +118,7 @@ theorem no_accepted_agent_has_a_connector {r : Request} {c : Compiled} (h : comp
 
 /-- A connector is refused `engine_capability_unsupported` naming `mcp` on a request whose policy
 and grants read, never dropped and never bridged. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-pi.md#compile")
   (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
 theorem a_connector_is_refused_by_name {r : Request} {grants : List Grant}
     (hp : r.policyReadable = true)
@@ -134,14 +134,14 @@ theorem a_connector_is_refused_by_name {r : Request} {grants : List Grant}
 /-- A per-run budget cap never changes the compile: it is neither refused, whatever the model,
 nor carried into the configuration, because the gateway enforces it from the deployment's
 catalogue (ADR-0162, #342). The adapter-side provisional cap (ADR-0074 D7) is retired. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-pi.md#compile")
   (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
 theorem a_budget_cap_never_changes_the_compile (r : Request) (cap : Bool) :
     compile { r with budgetCap := cap } = compile r := rfl
 
 /-- A connection served over any dialect but Anthropic Messages is refused naming
 `wireProtocols`. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/units/engine-pi.md#compile")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/units/engine-pi.md#compile")
   (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
 theorem an_unspoken_protocol_is_refused_by_name {r : Request} {grants : List Grant}
     {b t w : String}

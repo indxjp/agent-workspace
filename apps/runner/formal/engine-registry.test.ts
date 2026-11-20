@@ -12,7 +12,7 @@
  *     compiled environment rather than as one provider's spelling of a key.
  *
  * A disagreement with the Lean model is a failing test, and the fix is never to edit a vector
- * (`docs/formal/00-orchestrator-prompt.md` §10).
+ * (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import { sandboxEnvironmentVerdict } from '@agent-workspace/engine';
 import type { AgentEngine } from '@agent-workspace/engine';

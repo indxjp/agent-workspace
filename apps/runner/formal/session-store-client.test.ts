@@ -5,7 +5,7 @@
  * `apps/runner/src/session-state.ts` — the store an engine adapter is actually handed — and
  * `apps/runner/src/runtime.ts`'s durability fold, and compares them to what
  * `formal/AgentWorkspace/Behaviour/SessionState.lean` says they must do. A disagreement is a failing
- * test, and the fix is never to edit a vector (`docs/formal/00-orchestrator-prompt.md` §10).
+ * test, and the fix is never to edit a vector (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  *
  * Two of the family's six files are replayed here — the two that are about the client rather than
  * the control plane:

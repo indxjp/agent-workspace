@@ -5,7 +5,7 @@ import type { SecretsService } from '@agent-workspace/core/secrets';
 import { POST as CREATE } from '../../app/api/model-connections/route';
 import { installModelsApi } from '../composition/services';
 import { createInMemoryModelsStoreProvider } from './store';
-import type { ModelsAuditEvent } from './runtime';
+import type { ModelsAuditEvent } from './wiring';
 import type { Role } from '../rbac/core/roles';
 import { Principal } from '../rbac/principal';
 import { installTestDomains } from '../application-context-fixtures';

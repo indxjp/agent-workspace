@@ -1,10 +1,10 @@
 import { describe, expectTypeOf, it } from 'vitest';
 
 import type { RunOwnershipPrincipal } from '../run-ownership';
-import type { ProjectActor } from '../../projects/runtime';
+import type { ProjectActor } from '../../projects/wiring';
 import type { RunPrincipal } from '../../runs/environment';
 import type { SessionApiPrincipal } from '../../sessions/environment';
-import type { ShareActor } from '../../shares/runtime';
+import type { ShareActor } from '../../shares/wiring';
 import type { ShareService } from '../../shares/service';
 import type { Principal } from '../principal';
 

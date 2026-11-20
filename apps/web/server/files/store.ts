@@ -13,14 +13,16 @@
  * check — only its existence mattered here, not its identity — which is what keeps this module
  * free of the cross-module class-identity hazard `object-store.ts`'s header documents.
  */
+import type {
+  FileTextRepository,
+  FileTextRepositoryProvider,
+  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+} from '@agent-workspace/core/db';
 import {
   CatalogPathPendingError,
   FILE_TEXT_MAX_CHARS,
   UnknownWorkspaceError,
-  type FileTextRepository,
-  type FileTextRepositoryProvider,
-  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
-} from '@agent-workspace/core/db';
+} from '@agent-workspace/core/db-model';
 
 import type { ObjectStoreCapabilities, ObjectStore, ObjectStoreProvider } from '../storage/objects';
 

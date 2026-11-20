@@ -275,7 +275,7 @@ describe('POST /api/agents/:id/runs', () => {
   });
 });
 
-// issue #117 (W9-AUTH-117): `resolveAgentRunOwnership` reads `apps/web/server/agents/runtime.ts`'s
+// issue #117 (W9-AUTH-117): `resolveAgentRunOwnership` reads `apps/web/server/agents/wiring.ts`'s
 // own registry — a seam separate from this file's `RunApiEnvironment` — so these two cases
 // configure it directly rather than through `install()`'s `findAgent`/`authenticate` overrides.
 describe('POST /api/agents/:id/runs > Builder ownership (issue #117)', () => {

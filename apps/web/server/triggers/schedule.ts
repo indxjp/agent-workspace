@@ -5,7 +5,7 @@
  */
 import { Cron } from 'croner';
 
-import type { TriggerRecord } from './runtime';
+import type { TriggerRecord } from './wiring';
 
 /** The first instant strictly after `after` that `cron` matches in `timezone`, or `null` if never. */
 export function nextFireAt(cron: string, timezone: string, after: Date): Date | null {

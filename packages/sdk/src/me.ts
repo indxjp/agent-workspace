@@ -4,7 +4,7 @@
  * It sits here rather than under `resources/` on purpose. Every file in that directory is a
  * resource *family* — a class the root client exposes as a property, and which
  * `scripts/docs/lib/families.mjs` renders a `reference/sdk/<family>.mdx` page for. `me` is not a
- * family: it is one operation, it takes no id, and `docs/sdk/04-api-specification.md` §5.2 prints
+ * family: it is one operation, it takes no id, and `docs/10-product/sdk/04-api-specification.md` §5.2 prints
  * it as `me()` with no prefix. So it is a function over the shared transport, exposed as a method
  * on {@link AgentWorkspaceClient} rather than as a nested client.
  */

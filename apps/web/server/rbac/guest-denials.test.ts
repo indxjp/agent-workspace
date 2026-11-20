@@ -31,7 +31,7 @@ import { clearApplicationContext } from '../application-context';
 import { installTestDomains, resetTestRunApi } from '../application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import { createInMemoryConnectorsStoreProvider } from '../connectors/memory-store';
-import type { ConnectorsRuntime } from '../connectors/runtime';
+import type { ConnectorsRuntime } from '../connectors/wiring';
 import {
   CALL,
   PRINCIPAL,

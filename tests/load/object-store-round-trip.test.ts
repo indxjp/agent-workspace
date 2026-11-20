@@ -2,9 +2,11 @@
  * Load round trips per object-store backend: write a generated body through the store, read it
  * back, compare SHA-256, and assert the process RSS grew by less than 64 MiB.
  *
- * The payload is at least 256 MiB even by default, so a backend that buffers the body grows RSS
- * past the bound on every run, not only with `AW_LOAD_TESTS=1` (1 GiB). The in-memory backend is
- * exempt: it holds its bytes in RAM by design. Each emulator-backed case runs under the same gate
+ * Collected only with `AW_LOAD_TESTS=1` (tests/projects.mjs, `LOAD_TEST_SUITES`), which makes the
+ * payload 1 GiB: ci.yml's storage load step sets it on every diff that reaches the storage code or
+ * tests/load and on every run with no diff base (the nightly run). The payload stays at least
+ * 256 MiB should the file be run without it, so a backend that buffers the body grows RSS past the
+ * bound either way. The in-memory backend is exempt: it holds its bytes in RAM by design. Each emulator-backed case runs under the same gate
  * as its contract suite: S3 (SeaweedFS) `TEST_S3_ENDPOINT`, Azure Blob (Azurite) `TEST_AZURITE_URL`,
  * Google Cloud Storage (fake-gcs-server) `TEST_GCS_ENDPOINT`. ci.yml runs this file at 1 GiB and
  * requires all four non-memory cases to pass (the storage design, §07 "Load test").

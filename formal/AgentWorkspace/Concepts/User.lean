@@ -11,7 +11,7 @@ it as a row of `users`; the wire knows it as `UserResourceSchema`
 
 A **user identity** is one OIDC `(issuer, subject)` pair bound to exactly one user
 (`packages/core/src/db/schema/user-identities.ts`). It is global too, and the SDK never reaches it
-(`docs/sdk/07-structure-map.md`, "Tables the SDK does not reach").
+(`docs/10-product/sdk/07-structure-map.md`, "Tables the SDK does not reach").
 
 **Email.** Stored lower-case (`users_email_lowercase`) with a shape check (`users_email_shape`).
 The model's `lowercase` is ASCII lower case, because Lean's `Char.toLower` is; PostgreSQL's
@@ -63,7 +63,7 @@ def nameMaxLength : Nat := 200
 /-- A user: a global identity with a unique lower-case email and a display name. -/
 @[aw_spec (ts := "packages/core/src/db/schema/users.ts#users")
   (ts := "packages/contracts/src/team.ts#UserResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure User where
   id : UserId
   email : String

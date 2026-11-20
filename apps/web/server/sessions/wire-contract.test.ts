@@ -39,7 +39,7 @@
  * expression is ADR-0030's rule applied to the same problem one level down: a property name is a
  * node, not a substring, so an escape or a reformat cannot walk past it.
  *
- * The declarations file is the third source because it is what `tests/route-inventory.test.ts`
+ * The declarations file is the third source because it is what `tests/route-inventory.policy-check.ts`
  * checks the real App Router files against. Comparing the mirror's paths to it therefore reaches
  * the route files themselves, without this test having to know where they live.
  *
@@ -254,7 +254,7 @@ function readMirrorWire(): MirrorWire {
 }
 
 /**
- * The `{ method, path }` pairs ENG-06 declares to `tests/route-inventory.test.ts`, with
+ * The `{ method, path }` pairs ENG-06 declares to `tests/route-inventory.policy-check.ts`, with
  * `:param` segments normalised to the mirror's `{}` so the two are comparable.
  *
  * Every element of the exported array must yield both fields. One that does not fails the gate by

@@ -14,6 +14,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { runA12ConformanceSuite } from './harness.js';
+import { FIXTURE_TIMERS } from './timers.js';
 import {
   CONTAINER_FIXTURE_CAPABILITIES,
   containerFixtureProbe,
@@ -27,6 +28,7 @@ describe('A.12 against a fixture driver that actually enforces what it claims', 
       driver,
       CONTAINER_FIXTURE_CAPABILITIES,
       containerFixtureProbe,
+      { timers: FIXTURE_TIMERS },
     );
 
     console.log(

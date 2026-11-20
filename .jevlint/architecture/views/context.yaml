@@ -1,0 +1,31 @@
+title: What surrounds Agent Workspace
+description: People and programs come in through the control plane; only the runner touches sandboxes and only the gateway touches model providers.
+groups:
+  - { id: platform, label: Agent Workspace }
+nodes:
+  - { id: member, label: Workspace member, kind: actor }
+  - { id: developer, label: Developer or CI job, kind: actor }
+  - { id: visitor, label: Surface or app visitor, kind: actor }
+  - { id: agent-client, label: External A2A agent, kind: actor }
+  - { id: web, label: Control plane, kind: component, path: "apps/web", group: platform }
+  - { id: runner, label: Runner, kind: component, component: runner, group: platform }
+  - { id: gateway, label: Model gateway, kind: component, component: gateway, group: platform }
+  - { id: postgres, label: PostgreSQL, kind: store, path: packages/core/src/db }
+  - { id: objects, label: Object storage, kind: store, path: packages/core/src/storage }
+  - { id: providers, label: Model providers, kind: external }
+  - { id: sandboxes, label: Sandbox platforms, kind: external, packages: ["@kubernetes/client-node"] }
+  - { id: idp, label: OIDC identity provider, kind: external, packages: ["jose", "openid-client"] }
+edges:
+  - { from: member, to: web, verb: uses the console }
+  - { from: developer, to: web, verb: calls the API }
+  - { from: visitor, to: web, verb: chats on a surface }
+  - { from: agent-client, to: web, verb: sends A2A tasks }
+  - { from: web, to: postgres, verb: reads and writes }
+  - { from: web, to: objects, verb: streams files }
+  - { from: web, to: idp, verb: verifies ID tokens }
+  - { from: web, to: runner, verb: "posts /run", style: dashed }
+  - { from: runner, to: sandboxes, verb: allocates sandboxes, style: dashed }
+  - { from: runner, to: gateway, verb: model calls, style: dashed }
+  - { from: gateway, to: postgres, verb: reads credentials }
+  - { from: gateway, to: providers, verb: forwards calls, style: dashed }
+  - { from: gateway, to: web, verb: forwards aw-control, style: dashed }

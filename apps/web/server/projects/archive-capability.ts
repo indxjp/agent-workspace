@@ -35,7 +35,7 @@
  * cost of being wrong in the other is an actionable control that answers 404.
  */
 import type { ProjectArchiveCapability } from '../../contracts/projects';
-import { getSession } from '../auth';
+import { getSignInSession } from '../auth';
 import { decide, type DirectoryRoot, parseRole } from '../identity';
 import { applicationContext } from '../application-context';
 
@@ -118,14 +118,14 @@ export async function ownershipCapabilityFor(
  * The signed-in caller's archive capability for the current request.
  *
  * The RBAC runtime is checked before the session deliberately: an unwired runtime is this
- * application's declared fail-closed state (`rbac/runtime.ts`), it is the cheaper question, and
+ * application's declared fail-closed state (`rbac/wiring.ts`), it is the cheaper question, and
  * asking it first means the answer for an unconfigured deployment does not depend on `next/headers`
  * having a request to read.
  */
 export async function resolveProjectArchiveCapability(): Promise<ProjectArchiveCapability> {
   const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) return NO_ARCHIVE_CAPABILITY;
-  const session = await getSession();
+  const session = await getSignInSession();
   if (session === null) return NO_ARCHIVE_CAPABILITY;
   return ownershipCapabilityFor(runtime.directory, session);
 }

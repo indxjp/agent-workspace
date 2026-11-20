@@ -209,7 +209,7 @@ private def tableTerm (t : TableName) : Term := mkIdent (``TableName ++ ctorName
 private def strsTerm (xs : List String) : CommandElabM Term :=
   `([$((xs.map fun x => (Syntax.mkStrLit x : Term)).toArray),*])
 
-private def erDoc : String := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
+private def erDoc : String := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
 
 private partial def findRoot (dir : System.FilePath) : IO (Option System.FilePath) := do
   if ← (dir / "packages" / "core" / "src" / "db" / "schema").pathExists then return some dir
@@ -297,7 +297,7 @@ elab "aw_identity_relationship_theorems" : command => do
       elabCommand (← `(command|
         $doc:docComment
         @[aw_spec (tier := $(mkIdent `T2))
-          (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+          (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
           (ts := $(cite u.name))]
         theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : Er.Core.consistent catalogue st = true) {r1 r2 : Row}
             (h1 : r1 ∈ st $tT) (h2 : r2 ∈ st $tT) (hp : r1.present $cols = true)
@@ -323,7 +323,7 @@ private theorem single_project (r : Row) (c : String) : r.project [c] = [r.get c
 shape of `Concepts.Principal.Source` is what the database stores. -/
 @[aw_spec (tier := T2)
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_source_xor")
-  (doc := "docs/sdk/04-api-specification.md#11-vocabulary")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")]
 theorem principal_row_has_one_source (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {p : Row} (hp : p ∈ st .workspacePrincipals) :
     (sourceOfRow? p).isSome = true := by
@@ -359,7 +359,7 @@ private theorem scope_kind_present {st : Er.Core.State}
 /-- In every consistent state (with the refined checks), every browser-token row decodes to
 exactly one scope: a run or a session, never both and never neither. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_scope_xor")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem browser_token_row_has_one_scope (st : Er.Core.State)
     (hc : Er.Current.Identity.consistent st = true) {r : Row} (hr : r ∈ st .browserTokens) :
     (scopeOfRow? r).isSome = true := by
@@ -386,7 +386,7 @@ example : ∀ r ∈ Witness.state .browserTokens, (scopeOfRow? r).isSome = true 
 /-- In every consistent state a membership links exactly one user and exactly one workspace: the
 `users` row its `user_id` names and the `workspaces` row its `workspace_id` names exist and are
 unique. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/memberships.ts#memberships")]
 theorem membership_links_exactly_one_user_and_one_workspace (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {m : Row} (hm : m ∈ st .memberships) :
@@ -426,7 +426,7 @@ example : ∀ m ∈ Witness.state .memberships, (∃ u ∈ Witness.state .users,
 
 /-- In every consistent state a membership principal is backed by exactly one membership, and
 that membership is in the principal's workspace. -/
-@[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
+@[aw_spec (tier := T2) (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_membership_workspace_fk")]
 theorem membership_principal_has_exactly_one_membership (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {p : Row} (hp : p ∈ st .workspacePrincipals)
@@ -509,7 +509,7 @@ example : ∃ k ∈ Witness.state .apiKeys, k.get "workspace_id" = some "w1" ∧
 /-- A key that is not live at an instant is not live at any later instant: revocation and expiry
 are both permanent for a fixed row. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 theorem api_key_liveness_is_lost_for_good (k : ApiKey) {t t' : Instant} (hle : t ≤ t')
     (h : k.live t = false) : k.live t' = false := by
   cases hr : k.revokedAt <;> cases he : k.expiresAt <;>
@@ -530,7 +530,7 @@ theorem api_key_live_iff_active (k : ApiKey) (now : Instant) :
 
 /-- A browser token that is not live at an instant is not live at any later instant. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/browser-tokens.ts#findActiveBrowserTokenByHash")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem browser_token_liveness_is_lost_for_good (b : BrowserToken) {t t' : Instant}
     (hle : t ≤ t') (h : b.live t = false) : b.live t' = false := by
   cases hr : b.revokedAt <;> simp [BrowserToken.live, hr] at h ⊢ <;> exact Nat.le_trans h hle
@@ -548,7 +548,7 @@ theorem browser_token_live_iff_active (b : BrowserToken) (now : Instant) :
 /-- Once an invitation has left `pending` (revoked, accepted or expired), its state at every later
 instant is the same: resolution and expiry are both final for a fixed row. -/
 @[aw_spec (tier := T2) (ts := "apps/web/components/team/invitations-model.ts#invitationStateOf")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 theorem invitation_resolution_is_stable (i : Invitation) {t t' : Instant} (hle : t ≤ t')
     (h : i.stateAt t ≠ .pending) : i.stateAt t' = i.stateAt t := by
   cases hr : i.revokedAt <;> cases ha : i.acceptedAt <;>
@@ -572,7 +572,7 @@ private def keyPrincipal (rev : Option Instant) : Principal :=
 /-- Admission of an API key, once lost, is lost for good: for fixed key and principal rows, a key
 not admitted at an instant is not admitted at any later instant. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 theorem api_key_admission_is_lost_for_good (k : ApiKey) (p : Principal)
     (target : Option ActsForRow) {t t' : Instant} (hle : t ≤ t')
     (h : apiKeyAdmitted k p t target = false) : apiKeyAdmitted k p t' target = false := by
@@ -614,7 +614,7 @@ private theorem resolves_earlier (m : Principal) (src : SourceRow) (target : Opt
 /-- Browser-token admission, once lost to time, is lost for good: for fixed token, scoped and
 minter rows, a token not admitted at an instant is not admitted at any later instant. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem browser_token_admission_is_lost_for_good (b : BrowserToken) (target : Option ScopedRow)
     (m : Principal) (src : SourceRow) (actsFor : Option ActsForRow) {t t' : Instant} (hle : t ≤ t')
     (h : browserTokenAdmitted b target m src t actsFor = false) :
@@ -643,7 +643,7 @@ different total lengths (74 and 75 characters), so `apps/web/proxy.ts` can tell 
 shape alone. -/
 @[aw_spec (tier := T2) (ts := "packages/contracts/src/api-keys.ts#API_KEY_PATTERN")
   (ts := "packages/contracts/src/tokens.ts#BROWSER_TOKEN_PATTERN")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem no_bearer_is_both_an_api_key_and_a_browser_token (s : String) :
     ¬ (Concepts.ApiKey.presentedShaped s = true ∧
       Concepts.BrowserToken.presentedShaped s = true) := by
@@ -680,7 +680,7 @@ def crossedCoverage (m k : Bool) : State
 principal row that names it, and that row is in the membership's own workspace ("one human
 principal per Membership"). -/
 @[aw_spec (tier := T2)
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_workspace_membership_key")]
 theorem target_gives_each_membership_exactly_one_principal (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) (hcov : everySourceHasPrincipal st = true)
@@ -711,7 +711,7 @@ example : ∀ m ∈ Witness.state .memberships, ∃ p ∈ Witness.state .workspa
 principal row that names it, and that row is in the key's own workspace ("one machine principal
 per APIKey"). -/
 @[aw_spec (tier := T2)
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_workspace_api_key_key")]
 theorem target_gives_each_api_key_exactly_one_principal (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) (hcov : everySourceHasPrincipal st = true)

@@ -28,8 +28,14 @@ describe('Wave 8 evidence-backed matrix weakening gates', () => {
   it('quotes both source legends and publishes the two honesty extensions', async () => {
     const [spec, providers, runtimes] = await Promise.all([
       readFile(new URL('../../docs/spec.md', import.meta.url), 'utf8'),
-      readFile(new URL('../../docs/compatibility/providers.md', import.meta.url), 'utf8'),
-      readFile(new URL('../../docs/runtime-driver-matrix.md', import.meta.url), 'utf8'),
+      readFile(
+        new URL('../../docs/30-reference/compatibility/providers.md', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../../docs/30-reference/matrices/runtime-driver-matrix.md', import.meta.url),
+        'utf8',
+      ),
     ]);
     expect(spec).toContain('✓ native/compatible\n~ approximated\n- unsupported');
     expect(providers).toContain('✓ native/compatible\n~ approximated\n- unsupported');

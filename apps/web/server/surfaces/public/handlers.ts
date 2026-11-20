@@ -55,7 +55,7 @@ import {
   type SurfaceSessionResponse,
 } from '@indx-workspace/contracts/surfaces';
 
-import { enabledFeaturesFor } from '../../features/runtime';
+import { enabledFeaturesFor } from '../../features/wiring';
 import { formatIssues, type ApiResult } from '../../http/result';
 import {
   frameAncestorsFor,
@@ -72,7 +72,7 @@ import {
   type SurfaceMode,
   type SurfaceModelRefusal,
   type SurfaceSessionsRuntime,
-} from './runtime';
+} from './wiring';
 
 /** The response headers every answer of the bootstrap carries, besides `cache-control`. */
 export const SURFACE_RESPONSE_HEADERS: Readonly<Record<string, string>> = {

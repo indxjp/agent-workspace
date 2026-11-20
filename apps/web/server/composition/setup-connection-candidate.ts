@@ -3,7 +3,7 @@ import { log } from '../telemetry/logger';
 import { isKeylessProvider } from '@indx-workspace/contracts/models';
 import type { VertexDefaults } from '../models/vertex-defaults';
 import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
-import { setupConnectionName } from '../setup/runtime';
+import { setupConnectionName } from '../setup/wiring';
 import { type SeededSetupProvider } from './setup-reconciliation';
 import type { SetupFailure } from './setup-undo';
 

@@ -21,7 +21,7 @@ open AgentWorkspace.Theorems.Invariants.ConceptPublication.Witness (stateWith)
 /-- Every state the Target reading admits is a state today's schema admits: the Target only adds
 constraints. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem target_refines_current (st : State) (h : Publication.Target.consistent st = true) :
     Publication.consistent st = true := by
   unfold Publication.Target.consistent at h
@@ -86,7 +86,7 @@ theorem current_admits_a_dangling_subject :
 /-- A share that names an existing agent's id as a session is consistent today but refused by the
 Target: nothing ties `subject_id` to the table `subject_type` names. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 theorem current_admits_a_subject_of_the_wrong_type :
     let st := stateWith [{ Invariants.ConceptPublication.Witness.share with
       subjectType := .session, mode := none, budgetCapUsd := none }.toRow]

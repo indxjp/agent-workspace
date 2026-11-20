@@ -9,7 +9,11 @@ import { describe, expect, it } from 'vitest';
 
 import { mintInvitationIdentityToken, verifyInvitationIdentityToken } from './invitation-identity';
 import { mintSelectionToken, verifySelectionToken } from './selection';
-import { mintSessionToken, newSessionClaims, verifySessionToken } from './session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from './session';
 
 const SECRET = 'roll-over-test-secret-0123456789abcdef';
 const NOW_MS = Date.UTC(2026, 10, 10, 3, 0, 0);
@@ -55,8 +59,9 @@ const cases: readonly Case[] = [
     name: 'session',
     purpose: 'session',
     other: 'workspace-selection',
-    mint: () => mintSessionToken(newSessionClaims('a@b.test', 'default', NOW_MS), SECRET),
-    verifies: async (token) => (await verifySessionToken(token, SECRET, NOW_MS)).ok,
+    mint: () =>
+      mintSignInSessionToken(newSignInSessionClaims('a@b.test', 'default', NOW_MS), SECRET),
+    verifies: async (token) => (await verifySignInSessionToken(token, SECRET, NOW_MS)).ok,
   },
   {
     name: 'workspace selection',

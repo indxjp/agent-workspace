@@ -16,7 +16,7 @@
  * to it: a handler under `/p/`, or *"a Next.js server action or a form `POST` handled by a page
  * route: the page surface is also `allow`"*. This is the second. The reason the first was not
  * taken is recorded in `docs/adr/W1-COMP-01-sign-in-is-a-screen-not-a-route.md`: a
- * `route.ts` anywhere under `apps/web/app` joins the closed world `tests/route-inventory.test.ts`
+ * `route.ts` anywhere under `apps/web/app` joins the closed world `tests/route-inventory.policy-check.ts`
  * asserts against spec §34, §34 prints no sign-in route, and the gate's own failure text says to
  * amend the specification first. A screen is not in that world — the inventory ignores `page.tsx`
  * by name — and sign-in genuinely is a screen rather than a control-plane API endpoint.
@@ -45,8 +45,8 @@ import { admitSignInAttempt } from '../../server/auth/sign-in-limit';
 import {
   clearedInvitationIdentityCookie,
   clearedSelectionCookie,
-  clearedSessionCookie,
-  sessionCookie,
+  clearedSignInSessionCookie,
+  signInSessionCookie,
   signIn,
 } from '../../server/auth';
 import type { SignInFailure } from '../../server/auth/session';
@@ -137,7 +137,7 @@ export async function signInAction(form: FormData): Promise<void> {
   }
 
   const jar = await cookies();
-  const cookie = sessionCookie(result.token);
+  const cookie = signInSessionCookie(result.token);
   jar.set({
     name: cookie.name,
     value: cookie.value,
@@ -174,7 +174,7 @@ export async function signOutAction(): Promise<void> {
   }
   const jar = await cookies();
   for (const cookie of [
-    clearedSessionCookie(),
+    clearedSignInSessionCookie(),
     clearedSelectionCookie(),
     clearedInvitationIdentityCookie(),
   ]) {

@@ -16,7 +16,7 @@
  *
  *   * `rbac/http.ts` (`authorise`, `problem`): it loads the application context and the feature
  *     switches, so re-exporting it would start them for every caller of `decide`.
- *   * `auth/index.ts` (`getSession`): it imports `next/headers`.
+ *   * `auth/index.ts` (`getSignInSession`): it imports `next/headers`.
  *   * `oauth/resource.ts`: it imports `endpoints/`, downstream of identity, so re-exporting it would
  *     close an import cycle through this file.
  *   * `cli-auth/local-runtime-key-guard.ts`: it loads about 220 modules.
@@ -45,7 +45,7 @@ export type { DirectoryRoot, WorkspaceDirectory } from '../rbac/directory';
 export type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
 export { Principal, type OAuthGrant, type PrincipalKind, type Via } from '../rbac/principal';
 export type { ResolveRunOwnership, RunOwnershipPrincipal } from '../rbac/run-ownership';
-export { setupConnectionName } from '../setup/runtime';
-export type { TokensRuntime } from '../tokens/runtime';
+export { setupConnectionName } from '../setup/wiring';
+export type { TokensRuntime } from '../tokens/wiring';
 export type { WorkspaceFeatureStore } from '../workspaces/features-runtime';
 export type { RunGate } from '../workspaces/run-gate';

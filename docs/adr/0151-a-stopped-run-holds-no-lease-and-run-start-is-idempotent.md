@@ -3,19 +3,19 @@
 Status: accepted — option A (decided by the Owner, 2026-10-18)
 Date: 2026-10-18
 Decided by: the Owner, 2026-10-18, accepting option A. Drafted for the engineering audit, task W2-11 (finding F-09), tracker #1356; applied by OD-T3
-Scope: `docs/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md` (product default 6), `docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md` (RF-301, RF-303, the open-question row on `waiting/suspended`), ADR-0145, `packages/core/src/db/schema/runs.ts`, `packages/core/src/db/repositories/runs*`, `packages/contracts/src/runs.ts`, `packages/engine-claude-agent-sdk/src/boundary.ts`, issues #250 and #261
+Scope: `docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md` (product default 6), `docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md` (RF-301, RF-303, the open-question row on `waiting/suspended`), ADR-0145, `packages/core/src/db/schema/runs.ts`, `packages/core/src/db/repositories/runs*`, `packages/contracts/src/runs.ts`, `packages/engine-claude-agent-sdk/src/boundary.ts`, issues #250 and #261
 
 ## Context
 
 ### The two records
 
 **Decision-ledger item 6.** The sixth row of "Product defaults" in the
-[refactoring decision ledger](../architecture/refactoring/claude-agent-workspace-refactoring-decisions.md)
+[refactoring decision ledger](../20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md)
 reads, for "Persisted Run `waiting`/`suspended` state": _"Do not add either state until a runtime
 feature requires it."_ Its reason is that a speculative durable state creates transition, recovery
 and compatibility obligations with no producer. Its ratification owner is Product + runtime and its
 first blocking unit is RF-301. The ledger's own status line says product ratification remains open.
-The [refactoring plan](../architecture/refactoring/claude-agent-workspace-refactoring-plan.md)
+The [refactoring plan](../20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md)
 repeats it as an open question ("Is optional Run `waiting/suspended` needed now?") answered against
 "RF-301 schema state list", and RF-301 lists "RF-001 product decision on waiting/suspended" as a
 dependency and draws its target machine as requested / queued / starting / running /
@@ -154,7 +154,7 @@ with the acceptance "the RF-303 `it.fails` flips; a model-based test is green".
 
 - Accepted as option A. The ledger row and the plan rows named above are amended; no contract, schema
   or code changes with this record. W3-10 implements it.
-- Under A or B, the formal model of runs (`docs/formal/domains/d1-runs.md`,
+- Under A or B, the formal model of runs (`docs/20-design/formal/domains/d1-runs.md`,
   `tests/formal/contracts-runs.test.ts`) changes with the code that changes the state list, as
   ADR-0145 already requires.
 

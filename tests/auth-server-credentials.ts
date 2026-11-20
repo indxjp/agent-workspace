@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest';
 import {
-  sessionCookieName,
-  SESSION_TTL_SECONDS,
-  mintSessionToken,
-  newSessionClaims,
+  signInSessionCookieName,
+  SIGN_IN_SESSION_TTL_SECONDS,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
 } from '../apps/web/server/auth/session.js';
 import { SECRET } from './auth-server-fixtures.js';
 
@@ -19,7 +19,7 @@ export function registerCredentialProbes(server: {
   it('lets a valid session through the gate', async () => {
     const response = await fetch(`${server.base}/api/agents`, {
       redirect: 'manual',
-      headers: { cookie: `${sessionCookieName(process.env)}=${server.token}` },
+      headers: { cookie: `${signInSessionCookieName(process.env)}=${server.token}` },
     });
     // No handler exists on this branch, so "through the gate" is any status that is not the
     // gate's own. 404 is the routing layer answering, which is exactly the proof wanted.
@@ -32,7 +32,7 @@ export function registerCredentialProbes(server: {
       method: 'POST',
       redirect: 'manual',
       headers: {
-        cookie: `${sessionCookieName(process.env)}=${server.token}`,
+        cookie: `${signInSessionCookieName(process.env)}=${server.token}`,
         'content-type': 'application/json',
       },
       body: '{}',
@@ -46,7 +46,7 @@ export function registerCredentialProbes(server: {
       method: 'POST',
       redirect: 'manual',
       headers: {
-        cookie: `${sessionCookieName(process.env)}=${server.token}`,
+        cookie: `${signInSessionCookieName(process.env)}=${server.token}`,
         origin: 'https://evil.example',
         'content-type': 'application/json',
       },
@@ -56,17 +56,17 @@ export function registerCredentialProbes(server: {
   });
 
   it('rejects an expired session with 401', async () => {
-    const stale = await mintSessionToken(
-      newSessionClaims(
+    const stale = await mintSignInSessionToken(
+      newSignInSessionClaims(
         'admin@example.com',
         'default',
-        Date.now() - (SESSION_TTL_SECONDS + 60) * 1000,
+        Date.now() - (SIGN_IN_SESSION_TTL_SECONDS + 60) * 1000,
       ),
       SECRET,
     );
     const response = await fetch(`${server.base}/api/agents`, {
       redirect: 'manual',
-      headers: { cookie: `${sessionCookieName(process.env)}=${stale}` },
+      headers: { cookie: `${signInSessionCookieName(process.env)}=${stale}` },
     });
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({

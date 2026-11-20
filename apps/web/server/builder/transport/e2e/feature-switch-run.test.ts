@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clearFeatureSwitches } from '../../../features/runtime';
+import { clearFeatureSwitches } from '../../../features/wiring';
 
 import { draftBody } from '../../adapters/checker/checker.contract';
 import { InMemoryRunStore } from '../../../runs/memory-store';

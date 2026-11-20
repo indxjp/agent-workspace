@@ -9,7 +9,7 @@ import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { createInMemoryAgentStoreProvider, FIXTURE_PERMISSIONS } from '../../agents';
 import { createInMemoryAgentVersionStoreProvider } from '../../agent-versions/memory-store';
 import { createSurfaceSessionsRuntime } from '../public/composition';
-import { type SurfaceModelRefusal } from '../public/runtime';
+import { type SurfaceModelRefusal } from '../public/wiring';
 import { installTestDomains } from '../../application-context-fixtures';
 
 const WORKSPACE_ID = '66666666-6666-4666-8666-666666666666';

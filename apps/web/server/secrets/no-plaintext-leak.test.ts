@@ -4,7 +4,7 @@
  *
  * ## Why this reads `tests/route-declarations/W2-CP-02.ts` instead of hand-listing the routes
  *
- * This file imports the same declaration array `tests/route-inventory.test.ts` unions into the
+ * This file imports the same declaration array `tests/route-inventory.policy-check.ts` unions into the
  * repository-wide surface, drives **every** entry in it generically by `METHOD path`, and fails by
  * name if a route this task ships is not in the dispatch table below — see
  * `assertEveryDeclaredRouteIsCovered`. Adding a fourth route to `tests/route-declarations/W2-CP-02.ts`
@@ -103,7 +103,7 @@ import { routes as declaredRoutes } from '../../../../tests/route-declarations/W
 import { createInMemorySecretsStoreProvider } from './memory-store';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 import type {
   CreateSecretOutcome,
   ReplaceSecretOutcome,

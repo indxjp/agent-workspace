@@ -9,7 +9,7 @@ import { applicationContext } from '../application-context';
 import { jsonBodyResponse, readBoundedJson, readRouteParam } from '../http/json-transport';
 import type { ResourceCatalogRepository } from '../storage/store';
 import type { Principal } from '../identity';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 import type { StorageContext, StorageService } from '../storage/service';
 import { Bytes } from '../newtypes';
 

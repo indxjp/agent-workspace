@@ -2,7 +2,7 @@ import type { SurfaceRuntimeInstaller } from './handlers.fixture.test-support';
 import { describe, expect, it } from 'vitest';
 import { MIN_SESSION_SECRET_LENGTH } from '../../auth/session';
 import { SURFACE_RATE_LIMITS } from './limits';
-import { type ResolvedSurface } from './runtime';
+import { type ResolvedSurface } from './wiring';
 import { RESOLVED, request, answer, codeOf } from './handlers.fixture.test-support';
 export function registerSurfaceOriginsTests(install: SurfaceRuntimeInstaller) {
   describe('POST /p/s/<name>/sessions from an allowed origin (#622)', () => {

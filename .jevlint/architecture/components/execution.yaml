@@ -1,0 +1,22 @@
+id: execution
+title: Runs, sessions and runtimes
+summary: >
+  Starts, streams, interrupts and settles runs: idempotent start and preflight, the launcher that posts a RunRequest to the runtime over HTTP and relays agent.* frames as SSE, sessions, engines, runtime profiles and usage.
+layer: application
+paths:
+  - "apps/web/server/engines/**"
+  - "apps/web/server/execution/**"
+  - "apps/web/server/runs/**"
+  - "apps/web/server/runtimes/**"
+  - "apps/web/server/sessions/**"
+  - "apps/web/server/usage/**"
+key_files:
+  - { path: apps/web/server/runs/api.ts, role: "the run routes' handlers: startRun, readRun, streams" }
+  - { path: apps/web/server/runs/launcher-execution.ts, role: "posts the RunRequest to the runtime and relays the SSE stream" }
+  - { path: apps/web/server/runs/launcher.ts, role: "composes preparation, execution, output relay and outcomes" }
+interface: [startRun, getRunApi, RunRecord, RunPrincipal, LaunchContext]
+depends_on: [identity, storage-sharing, composition, server-kernel, web-ui, persistence, run-contract, runtime-drivers, contracts]
+uses: []
+rules: []
+checklist: []
+status: current

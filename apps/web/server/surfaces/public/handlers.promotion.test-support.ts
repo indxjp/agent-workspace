@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiProblemSchema } from '@indx-workspace/contracts';
 import { preflightSurfaceSession } from './handlers';
-import { type ResolvedSurface } from './runtime';
+import { type ResolvedSurface } from './wiring';
 import { installTestDomains } from '../../application-context-fixtures';
 import { LOCAL_ENV, RESOLVED, request, answer } from './handlers.fixture.test-support';
 export function registerSurfacePromotionTests(

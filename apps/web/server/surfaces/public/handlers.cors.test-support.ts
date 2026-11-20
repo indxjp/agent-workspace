@@ -6,7 +6,7 @@ import {
   preflightVisitorRun,
   visitorRunResponseHeaders,
 } from './handlers';
-import { type ResolvedSurface } from './runtime';
+import { type ResolvedSurface } from './wiring';
 import { installTestDomains } from '../../application-context-fixtures';
 import { clearApplicationContext } from '../../application-context';
 import { RESOLVED } from './handlers.fixture.test-support';

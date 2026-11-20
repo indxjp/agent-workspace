@@ -48,25 +48,18 @@ import {
 import { aisdk } from '@openai/agents-extensions/ai-sdk';
 import { z } from 'zod';
 
-import {
-  credentialRejectedError,
-  executeRunSkillScript,
-  isGatewayTokenRefusal,
-  RUN_SKILL_SCRIPT_TOOL,
-  skillScriptToolDescription,
-} from '@agent-workspace/engine';
-
 import type { OpenAiAgentsCompiled, OpenAiAgentsMcpServer } from './compile.js';
 import {
-  applyPatch,
-  listWorkspaceFiles,
-  readWorkspaceFile,
-  runShell,
-  searchWorkspaceFiles,
-} from './executors.js';
-import { addResponseUsage, type OpenAiAgentsEvent, type OpenAiAgentsUsage } from './frames.js';
+  bearerTokenOf,
+  createUsageMeter,
+  mcpConnectionOf,
+  modelSettingsOf,
+  rejectedKeyFailure,
+  type OpenAiAgentsUsageMeter,
+} from './boundary-support.js';
+import { skillScriptToolSpec, workspaceToolSpec, type ToolContext } from './boundary-tool-specs.js';
+import type { OpenAiAgentsEvent } from './frames.js';
 import type { EngineStoreSession } from './session.js';
-import { nodeSkillScriptHost, OPENAI_AGENTS_SKILL_SCRIPT_INPUT } from './skill-script.js';
 
 /**
  * The run's answer: the last assistant message's text, and the SDK's parsed `finalOutput` when a
@@ -83,26 +76,6 @@ function finalAnswer(
   return z.fromJSONSchema(schema).safeParse(finalOutput).success
     ? { text, structured: finalOutput }
     : null;
-}
-
-/**
- * The failure a run ends with when a model call came back `401` or `403` from the provider
- * (issue #690), or `null` for any other error. The adapter never holds the model key, so this is
- * the first moment it can see the key is wrong. A gateway refusal of the run token carries a
- * `token_*` code (`packages/gateway/src/auth.ts`) and is left alone, so nobody is told to replace
- * a good key. Only the status is read: no key and no provider text reaches the message.
- */
-function rejectedKeyFailure(error: unknown): Error | null {
-  if (typeof error !== 'object' || error === null) return null;
-  // The OpenAI client names the status `status`, the AI SDK's Anthropic client `statusCode`.
-  const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : null;
-  if (status !== 401 && status !== 403) return null;
-  const code = 'code' in error ? error.code : null;
-  const body = 'responseBody' in error ? error.responseBody : null;
-  const gatewayRefusal =
-    (typeof code === 'string' && code.startsWith('token_')) ||
-    (typeof body === 'string' && isGatewayTokenRefusal(body));
-  return gatewayRefusal ? null : credentialRejectedError(status);
 }
 
 /** The pinned SDK version. `engine.test.ts` holds it to this package's manifest. */
@@ -159,19 +132,13 @@ function asSdkSession(session: EngineStoreSession): Session {
   return members;
 }
 
-function tokenOf(authorization: string): string {
-  return authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : authorization;
-}
-
 /** The model this run talks to. The endpoint and the bearer are the only connection inputs. */
 async function modelFor(
   compiled: OpenAiAgentsCompiled,
   model: string | null = compiled.agent.model,
 ): Promise<Model> {
   const { connection } = compiled;
-  const token = tokenOf(connection.authorization);
+  const token = bearerTokenOf(connection.authorization);
   if (connection.client === 'aisdk-anthropic') {
     // Loaded here, not at the top of the module: `@ai-sdk/anthropic` builds a default provider when
     // it is first evaluated and throws if `ANTHROPIC_BASE_URL` is set but empty, which would make
@@ -193,12 +160,10 @@ async function modelFor(
   return provider.getModel(model ?? undefined);
 }
 
-const PatchParameters = z.object({
-  type: z.enum(['create_file', 'update_file', 'delete_file']),
-  path: z.string(),
-  diff: z.string().nullable(),
-  moveTo: z.string().nullable(),
-});
+/** What every compiled function tool runs against. */
+function toolContextOf(compiled: OpenAiAgentsCompiled, signal: AbortSignal): ToolContext {
+  return { workspace: compiled.workspace, env: compiled.env, signal, applyDiff };
+}
 
 /**
  * One SDK function tool per compiled name, and `run_skill_script` on the main agent when the run
@@ -209,117 +174,26 @@ function toolsFor(
   signal: AbortSignal,
   subagentNames?: readonly OpenAiAgentsToolName[],
 ): Tool[] {
-  const names = subagentNames ?? compiled.agent.tools;
-  const { workspace, env } = compiled;
-  const build: Record<OpenAiAgentsToolName, () => Tool> = {
-    read_file: () =>
-      tool({
-        name: 'read_file',
-        description: `Read one UTF-8 file. Paths are relative to ${workspace.cwd}.`,
-        parameters: z.object({ path: z.string() }),
-        execute: ({ path }) => readWorkspaceFile(workspace, path),
-      }),
-    list_files: () =>
-      tool({
-        name: 'list_files',
-        description: `List one directory. Paths are relative to ${workspace.cwd}; use "." for the root.`,
-        parameters: z.object({ path: z.string() }),
-        execute: ({ path }) => listWorkspaceFiles(workspace, path),
-      }),
-    search_files: () =>
-      tool({
-        name: 'search_files',
-        description:
-          'Find the lines containing a plain-text query in one file or under a directory.',
-        parameters: z.object({ path: z.string(), query: z.string() }),
-        execute: ({ path, query }) => searchWorkspaceFiles(workspace, path, query),
-      }),
-    apply_patch: () =>
-      tool({
-        name: 'apply_patch',
-        description:
-          'Create, update or delete one file. `diff` is a V4A diff: for create_file every line starts with "+"; for update_file use "@@" sections with " ", "-" and "+" lines. Use null where a field does not apply.',
-        parameters: PatchParameters,
-        execute: (input) =>
-          applyPatch(
-            workspace,
-            input.type === 'delete_file'
-              ? { type: 'delete_file', path: input.path }
-              : input.type === 'create_file'
-                ? { type: 'create_file', path: input.path, diff: input.diff ?? '' }
-                : {
-                    type: 'update_file',
-                    path: input.path,
-                    diff: input.diff ?? '',
-                    moveTo: input.moveTo,
-                  },
-            applyDiff,
-          ),
-      }),
-    shell: () =>
-      tool({
-        name: 'shell',
-        description: `Run shell commands in ${workspace.cwd}, in order, stopping at the first failure.`,
-        parameters: z.object({
-          commands: z.array(z.string()),
-          timeoutMs: z.number().int().positive().nullable(),
-        }),
-        execute: ({ commands, timeoutMs }) =>
-          runShell(workspace, env, { commands, timeoutMs }, signal),
-      }),
-  };
+  const context = toolContextOf(compiled, signal);
+  const specs = (subagentNames ?? compiled.agent.tools).map((name) =>
+    workspaceToolSpec(name, context),
+  );
   const { skillScript } = compiled;
-  return [
-    ...names.map((name) => build[name]()),
-    ...(skillScript === null || subagentNames !== undefined
-      ? []
-      : [
-          tool({
-            name: RUN_SKILL_SCRIPT_TOOL,
-            description: skillScriptToolDescription(skillScript),
-            parameters: OPENAI_AGENTS_SKILL_SCRIPT_INPUT,
-            execute: async (input) => {
-              const { text, isError } = await executeRunSkillScript(
-                nodeSkillScriptHost,
-                skillScript,
-                input,
-                signal,
-              );
-              if (isError) throw new Error(text);
-              return text;
-            },
-          }),
-        ]),
-  ];
+  if (skillScript !== null && subagentNames === undefined) {
+    specs.push(skillScriptToolSpec(skillScript, signal));
+  }
+  return specs.map((spec) => tool(spec));
 }
 
 function mcpServerFor(
   server: OpenAiAgentsMcpServer,
   env: Readonly<Record<string, string>>,
 ): MCPServer {
-  const toolFilter =
-    server.blockedTools.length === 0 ? undefined : { blockedToolNames: [...server.blockedTools] };
-  const timeout = server.timeoutMs ?? undefined;
-  if (server.transport === 'stdio') {
-    return new MCPServerStdio({
-      name: server.name,
-      command: server.command,
-      args: [...server.args],
-      env: { ...env, ...server.env },
-      ...(timeout === undefined ? {} : { timeout }),
-      ...(toolFilter === undefined ? {} : { toolFilter }),
-    });
-  }
-  const options = {
-    name: server.name,
-    url: server.url,
-    requestInit: { headers: { ...server.headers } },
-    ...(timeout === undefined ? {} : { timeout }),
-    ...(toolFilter === undefined ? {} : { toolFilter }),
-  };
-  return server.transport === 'http'
-    ? new MCPServerStreamableHttp(options)
-    : new MCPServerSSE(options);
+  const connection = mcpConnectionOf(server, env);
+  if (connection.transport === 'stdio') return new MCPServerStdio(connection.options);
+  return connection.transport === 'http'
+    ? new MCPServerStreamableHttp(connection.options)
+    : new MCPServerSSE(connection.options);
 }
 
 /** One SDK stream event as plain data. Kept close to the SDK's own names. */
@@ -355,6 +229,127 @@ export type OpenAiAgentsRunStarter = (
   deps: OpenAiAgentsRunDeps,
 ) => AsyncIterable<OpenAiAgentsEvent>;
 
+/** One `Agent.asTool` per subagent (ADR-0133 D14): a nested run whose usage is metered, not a turn. */
+async function delegatesFor(
+  compiled: OpenAiAgentsCompiled,
+  deps: OpenAiAgentsRunDeps,
+  servers: readonly MCPServer[],
+  meter: OpenAiAgentsUsageMeter,
+): Promise<Tool[]> {
+  const modelSettings = modelSettingsOf(compiled.agent.modelSettings);
+  const delegates: Tool[] = [];
+  for (const subagent of compiled.subagents) {
+    const delegate = new Agent({
+      name: subagent.name,
+      instructions: subagent.instructions,
+      model: await modelFor(compiled, subagent.model),
+      tools: toolsFor(compiled, deps.signal, subagent.tools),
+      mcpServers: [...servers],
+      modelSettings,
+    });
+    delegates.push(
+      delegate.asTool({
+        toolName: subagent.toolName,
+        toolDescription: subagent.description,
+        onStream: ({ event }) => {
+          if (event.type === 'raw_model_stream_event') meter.record(event.data, false);
+        },
+        ...(compiled.limits.maxTurns === null
+          ? {}
+          : { runOptions: { maxTurns: compiled.limits.maxTurns } }),
+      }),
+    );
+  }
+  return delegates;
+}
+
+async function mainAgentFor(
+  compiled: OpenAiAgentsCompiled,
+  deps: OpenAiAgentsRunDeps,
+  servers: readonly MCPServer[],
+  meter: OpenAiAgentsUsageMeter,
+) {
+  const delegates = await delegatesFor(compiled, deps, servers, meter);
+  return new Agent({
+    name: compiled.agent.name,
+    instructions: compiled.agent.instructions,
+    model: await modelFor(compiled),
+    tools: [...toolsFor(compiled, deps.signal), ...delegates],
+    mcpServers: [...servers],
+    modelSettings: modelSettingsOf(compiled.agent.modelSettings),
+    // `strict: false`: the provider sees the caller's schema as written; the answer is checked
+    // after the stream, because the SDK only JSON-parses a plain JSON Schema.
+    ...(compiled.outputSchema === null
+      ? {}
+      : {
+          outputType: {
+            type: 'json_schema',
+            name: 'output',
+            strict: false,
+            // The contract fixes the root at `type: "object"`; the SDK's type wants a strict shape.
+            schema: compiled.outputSchema as JsonSchemaDefinition['schema'],
+          },
+        }),
+  });
+}
+
+/** How the SDK run ended, before the abort signal has the last word. */
+type RunOutcome = {
+  readonly stopReason: 'end_turn' | 'max_turns' | 'cancelled';
+  readonly unsatisfied: boolean;
+  readonly output?: { readonly text: string; readonly structured: unknown };
+};
+
+/** The outcome a run's error stands for, or the error itself re-thrown when it is a real failure. */
+function outcomeOfError(error: unknown, outputSchema: unknown, signal: AbortSignal): RunOutcome {
+  // The SDK raises this when the final text is not JSON; it is the only structured-output
+  // failure it reports, so with a schema asked for it is the model's answer that was wrong.
+  if (error instanceof ModelBehaviorError && outputSchema !== null) {
+    return { stopReason: 'end_turn', unsatisfied: true };
+  }
+  if (error instanceof MaxTurnsExceededError)
+    return { stopReason: 'max_turns', unsatisfied: false };
+  if (signal.aborted) return { stopReason: 'cancelled', unsatisfied: false };
+  throw rejectedKeyFailure(error) ?? error;
+}
+
+/** Stream one SDK run as plain events; returns how it ended. */
+async function* streamRun(
+  agent: Awaited<ReturnType<typeof mainAgentFor>>,
+  prompt: string,
+  compiled: OpenAiAgentsCompiled,
+  deps: OpenAiAgentsRunDeps,
+  meter: OpenAiAgentsUsageMeter,
+): AsyncGenerator<OpenAiAgentsEvent, RunOutcome, void> {
+  const runner = new Runner({ tracingDisabled: true, traceIncludeSensitiveData: false });
+  try {
+    const result = await runner.run(agent, prompt, {
+      stream: true,
+      signal: deps.signal,
+      ...(compiled.limits.maxTurns === null ? {} : { maxTurns: compiled.limits.maxTurns }),
+      ...(deps.session === null ? {} : { session: asSdkSession(deps.session) }),
+    });
+    for await (const event of result) {
+      const plain = toEvent(event);
+      if (plain.kind === 'raw_model_stream_event') meter.record(plain.data, true);
+      yield plain;
+    }
+    await result.completed;
+    const failure: unknown = result.error;
+    if (failure !== null && failure !== undefined) {
+      throw failure instanceof Error
+        ? failure
+        : new Error('the run failed with a non-Error value.');
+    }
+    const output = finalAnswer(result.newItems, result.finalOutput, compiled.outputSchema);
+    return output === null
+      ? { stopReason: 'end_turn', unsatisfied: true }
+      : { stopReason: 'end_turn', unsatisfied: false, output };
+  } catch (error) {
+    return outcomeOfError(error, compiled.outputSchema, deps.signal);
+  }
+}
+
 /**
  * Run one compiled agent on the real SDK, yielding plain events and, last, `run_completed`.
  *
@@ -373,115 +368,23 @@ export async function* startOpenAiAgentsRun(
 ): AsyncGenerator<OpenAiAgentsEvent, void, void> {
   setTracingDisabled(true);
   const servers = compiled.mcpServers.map((server) => mcpServerFor(server, compiled.env));
-  // An object, so reads after the stream loop are not narrowed away by the closure's writes.
-  const state: { usage: OpenAiAgentsUsage | null; turns: number } = { usage: null, turns: 0 };
-  // Add one model response's usage; `ownTurn` is false for a subagent's, which is reported usage
-  // but not one of the run's turns.
-  const meter = (raw: unknown, ownTurn: boolean): void => {
-    const data = raw as { type?: unknown; response?: { usage?: unknown } };
-    if (data.type !== 'response_done') return;
-    if (ownTurn) state.turns += 1;
-    state.usage = addResponseUsage(state.usage, data.response?.usage);
-  };
+  const meter = createUsageMeter();
   try {
     for (const server of servers) await server.connect();
-    const modelSettings = {
-      ...(compiled.agent.modelSettings.parallelToolCalls === null
-        ? {}
-        : { parallelToolCalls: compiled.agent.modelSettings.parallelToolCalls }),
-      ...(compiled.agent.modelSettings.reasoningEffort === null
-        ? {}
-        : { reasoning: { effort: compiled.agent.modelSettings.reasoningEffort } }),
-    };
-    const delegates: Tool[] = [];
-    for (const subagent of compiled.subagents) {
-      const delegate = new Agent({
-        name: subagent.name,
-        instructions: subagent.instructions,
-        model: await modelFor(compiled, subagent.model),
-        tools: toolsFor(compiled, deps.signal, subagent.tools),
-        mcpServers: servers,
-        modelSettings,
-      });
-      delegates.push(
-        delegate.asTool({
-          toolName: subagent.toolName,
-          toolDescription: subagent.description,
-          onStream: ({ event }) => {
-            if (event.type === 'raw_model_stream_event') meter(event.data, false);
-          },
-          ...(compiled.limits.maxTurns === null
-            ? {}
-            : { runOptions: { maxTurns: compiled.limits.maxTurns } }),
-        }),
-      );
-    }
-    const agent = new Agent({
-      name: compiled.agent.name,
-      instructions: compiled.agent.instructions,
-      model: await modelFor(compiled),
-      tools: [...toolsFor(compiled, deps.signal), ...delegates],
-      mcpServers: servers,
-      modelSettings,
-      // `strict: false`: the provider sees the caller's schema as written; the answer is checked
-      // below, because the SDK only JSON-parses a plain JSON Schema.
-      ...(compiled.outputSchema === null
-        ? {}
-        : {
-            outputType: {
-              type: 'json_schema',
-              name: 'output',
-              strict: false,
-              // The contract fixes the root at `type: "object"`; the SDK's type wants a strict shape.
-              schema: compiled.outputSchema as JsonSchemaDefinition['schema'],
-            },
-          }),
-    });
-    const runner = new Runner({ tracingDisabled: true, traceIncludeSensitiveData: false });
-    let stopReason: 'end_turn' | 'max_turns' | 'cancelled' = 'end_turn';
-    let output: { readonly text: string; readonly structured: unknown } | undefined;
-    let unsatisfied = false;
-    try {
-      const result = await runner.run(agent, prompt, {
-        stream: true,
-        signal: deps.signal,
-        ...(compiled.limits.maxTurns === null ? {} : { maxTurns: compiled.limits.maxTurns }),
-        ...(deps.session === null ? {} : { session: asSdkSession(deps.session) }),
-      });
-      for await (const event of result) {
-        const plain = toEvent(event);
-        if (plain.kind === 'raw_model_stream_event') meter(plain.data, true);
-        yield plain;
-      }
-      await result.completed;
-      const failure: unknown = result.error;
-      if (failure !== null && failure !== undefined) {
-        throw failure instanceof Error
-          ? failure
-          : new Error('the run failed with a non-Error value.');
-      }
-      const answer = finalAnswer(result.newItems, result.finalOutput, compiled.outputSchema);
-      if (answer === null) unsatisfied = true;
-      else output = answer;
-    } catch (error) {
-      // The SDK raises this when the final text is not JSON; it is the only structured-output
-      // failure it reports, so with a schema asked for it is the model's answer that was wrong.
-      if (error instanceof ModelBehaviorError && compiled.outputSchema !== null) {
-        unsatisfied = true;
-      } else if (error instanceof MaxTurnsExceededError) stopReason = 'max_turns';
-      else if (deps.signal.aborted) stopReason = 'cancelled';
-      else throw rejectedKeyFailure(error) ?? error;
-    }
-    if (deps.signal.aborted) stopReason = 'cancelled';
+    const agent = await mainAgentFor(compiled, deps, servers, meter);
+    const outcome = yield* streamRun(agent, prompt, compiled, deps, meter);
+    const stopReason = deps.signal.aborted ? 'cancelled' : outcome.stopReason;
     yield {
       kind: 'run_completed',
       stopReason,
-      turns: state.turns,
-      usage: state.usage,
-      ...(stopReason === 'end_turn' && output !== undefined ? { output } : {}),
+      turns: meter.turns(),
+      usage: meter.usage(),
+      ...(stopReason === 'end_turn' && outcome.output !== undefined
+        ? { output: outcome.output }
+        : {}),
     };
     // After the frames, so the usage of the run that missed its schema is still recorded.
-    if (unsatisfied && stopReason === 'end_turn') {
+    if (outcome.unsatisfied && stopReason === 'end_turn') {
       throw new Error(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`);
     }
   } finally {

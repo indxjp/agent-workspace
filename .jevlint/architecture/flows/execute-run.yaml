@@ -1,0 +1,9 @@
+id: execute-run
+title: Execute a run in the sandbox
+trigger: "POST /run on the runtime server inside a sandbox"
+steps:
+  - { from: runner, to: run-contract, verb: "parses the RunRequest", returns: "SSE stream of agent.* frames" }
+  - { from: runner, to: runtime-drivers, verb: "unpacks granted files" }
+  - { from: runner, to: engine-adapters, verb: "loads the engine" }
+  - { from: engine-adapters, to: run-contract, verb: "emits agent.* frames" }
+  - { from: runner, to: persistence, verb: "logs with traceparent" }

@@ -22,7 +22,7 @@ import {
 } from '../runs/api';
 import { getRunApi } from '../runs/environment';
 import { apiError, isUuid } from '../execution';
-import type { AgentTeamVersionRecord, AgentTeamsRuntime } from './runtime';
+import type { AgentTeamVersionRecord, AgentTeamsRuntime } from './wiring';
 
 type TeamVersionRead =
   | { readonly kind: 'version'; readonly version: AgentTeamVersionRecord }

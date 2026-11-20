@@ -18,7 +18,7 @@
  */
 import { NO_INVITATION_CAPABILITY, type InvitationCapability } from '../../contracts/invitations';
 import { NO_MEMBERSHIP_CAPABILITY, type MembershipCapability } from '../../contracts/team';
-import { getSession } from '../auth';
+import { getSignInSession } from '../auth';
 import { applicationContext } from '../application-context';
 import { invitationCapabilityForViewer } from './invitation-capability';
 import { membershipCapabilityForViewer } from './membership-capability';
@@ -57,14 +57,14 @@ export async function teamCapabilityFor(
  * The signed-in caller's team capability for the current request.
  *
  * The RBAC runtime is checked before the session deliberately: an unwired runtime is this
- * application's declared fail-closed state (`rbac/runtime.ts`), it is the cheaper question, and
+ * application's declared fail-closed state (`rbac/wiring.ts`), it is the cheaper question, and
  * asking it first means the answer for an unconfigured deployment does not depend on `next/headers`
  * having a request to read.
  */
 export async function resolveTeamCapability(): Promise<TeamCapability> {
   const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) return NO_TEAM_CAPABILITY;
-  const session = await getSession();
+  const session = await getSignInSession();
   if (session === null) return NO_TEAM_CAPABILITY;
   return teamCapabilityFor(runtime.directory, session);
 }

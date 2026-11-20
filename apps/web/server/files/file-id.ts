@@ -3,7 +3,7 @@
  *
  * ## Why an id at all, and why it is not the human-readable path
  *
- * `tests/route-inventory.test.ts`'s shape rule requires `/api/<resource>/:id`, where `:id` is a
+ * `tests/route-inventory.policy-check.ts`'s shape rule requires `/api/<resource>/:id`, where `:id` is a
  * single dynamic segment — the path a §16 file lives at is not that shape (`contracts/agreement.pdf`
  * has a `/` in it). This task's `Owns` globs do not include the `files` metadata table's repository
  * (`packages/core/src/db/repositories/**`, W2-DB-02's — see this task's PR "outside Owns" section),

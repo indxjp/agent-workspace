@@ -64,7 +64,7 @@ private theorem step_versions (t : Option Score) (r r' : Release) (op : Op)
 
 /-- No step deletes or changes a saved version: every agent's versions before a step are a prefix
 of its versions after it. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 theorem versions_append_only (t : Option Score) (r r' : Release) (op : Op)
     (h : step t r op = .ok r') (a : AgentId) :
     r.versions a <+: r'.versions a := by
@@ -83,7 +83,7 @@ private theorem hasVersion_mono (t : Option Score) (r r' : Release) (op : Op)
 /-- Every environment points at a version that exists, for the same agent: a step from a
 well-formed state (every history entry names a saved version) reaches a well-formed state, so every
 pointer it leaves names a saved version. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 theorem pointer_targets_existing_version (t : Option Score) (r r' : Release) (op : Op)
     (hw : r.WellFormed) (h : step t r op = .ok r') :
     r'.WellFormed ∧ ∀ a e v, r'.pointer a e = some v → r'.hasVersion a v = true := by
@@ -145,7 +145,7 @@ theorem pointer_targets_existing_version (t : Option Score) (r r' : Release) (op
 
 /-- After `rollback`, the pointer equals the second entry of the history before the step, and the
 version it left comes off the history, so a second rollback steps further back (BH061-004). -/
-@[aw_spec (tier := T2) (doc := "docs/formal/domains/release.md#the-release-model")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/domains/release.md#the-release-model")
   (ts := "apps/web/server/agent-versions/release.ts#decideRollback")]
 theorem rollback_restores_previous (t : Option Score) (r r' : Release) (a : AgentId) (e : Env)
     (h : step t r (.rollback a e) = .ok r') :
@@ -161,7 +161,7 @@ theorem rollback_restores_previous (t : Option Score) (r r' : Release) (a : Agen
 
 /-- Promote then rollback leaves the pointer where it was, whenever the target environment already
 pointed somewhere. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/domains/release.md#the-release-model")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/domains/release.md#the-release-model")
   (ts := "apps/web/server/agent-versions/release.ts#decidePromote") (ts := "apps/web/server/agent-versions/release.ts#decideRollback")]
 theorem rollback_after_promote_is_identity (t : Option Score) (r r₁ : Release) (a : AgentId)
     (src dst : Env) (h : step t r (.promote a src dst) = .ok r₁) (hp : (r.pointer a dst).isSome) :

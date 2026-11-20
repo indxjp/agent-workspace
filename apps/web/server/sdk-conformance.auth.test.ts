@@ -15,11 +15,15 @@ import {
   TOKEN_EXCHANGE_TTL_SECONDS,
 } from '@indx-workspace/contracts/token-exchange';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
-import { mintSessionToken, newSessionClaims, verifySessionToken } from './auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from './auth/session';
 import { readMe, wireKind, type WirePrincipalKind } from './rbac/me';
 import { toResponse as toRbacResponse } from './rbac/http';
 import { exchangeToken } from './auth/token-exchange';
-import type { OAuthClient } from './oauth/runtime';
+import type { OAuthClient } from './oauth/wiring';
 import { mintClientSecret } from './oauth/tokens';
 import { resetOAuthLimits } from './oauth/limits';
 import { Principal, PRINCIPAL_KINDS as SERVER_PRINCIPAL_KINDS } from './rbac/principal';
@@ -146,11 +150,11 @@ const ME_SESSION_SECRET = 'me-conformance-session-secret-that-is-long-enough';
 
 /** A real session principal, built the only way one can be built. */
 async function meSessionPrincipal(): Promise<Principal> {
-  const token = await mintSessionToken(
-    newSessionClaims(ME_EMAIL, ME_WORKSPACE_SLUG),
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims(ME_EMAIL, ME_WORKSPACE_SLUG),
     ME_SESSION_SECRET,
   );
-  const verified = await verifySessionToken(token, ME_SESSION_SECRET);
+  const verified = await verifySignInSessionToken(token, ME_SESSION_SECRET);
   if (!verified.ok) throw new Error(`session could not be verified: ${verified.reason}`);
   const built = Principal.fromSession(
     verified.claims,

@@ -1,12 +1,12 @@
 import { requireResourceAccess, type ResourceAccess } from '../resources/authorise';
 import { refuseIfFeatureDisabled } from '../features/guard';
-import { enabledFeaturesFor } from '../features/runtime';
+import { enabledFeaturesFor } from '../features/wiring';
 import { noStoreResultResponse, problemBody } from '../http/result';
 import { ownerPrincipalIdOf } from '../identity';
 import { DomainError } from '../errors';
 import { ShareService } from './service';
 import { applicationContext } from '../application-context';
-import type { ShareActor, SharesRuntime, WorkspaceSharing } from './runtime';
+import type { ShareActor, SharesRuntime, WorkspaceSharing } from './wiring';
 import type { SharedRun } from './session-snapshot/snapshot';
 
 export function shareProblem(status: number, code: string, message: string): Response {

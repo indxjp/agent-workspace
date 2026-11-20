@@ -9,10 +9,10 @@ import { NextRequest } from 'next/server';
 import { proxy } from './proxy';
 import { PASSED_THROUGH, useSessionSecret } from './proxy.test-support';
 import {
-  mintSessionToken,
-  newEmailLinkSessionClaims,
-  newSessionClaims,
-  sessionCookieName,
+  mintSignInSessionToken,
+  newEmailLinkSignInSessionClaims,
+  newSignInSessionClaims,
+  signInSessionCookieName,
 } from './server/auth';
 import { MIN_SESSION_SECRET_LENGTH } from './server/auth/session';
 
@@ -28,8 +28,8 @@ describe('the store origin at the edge', () => {
 
   beforeAll(async () => {
     previousBase = process.env['AW_EMAIL_LINK_BASE_URL'];
-    guestCookie = await mintSessionToken(newEmailLinkSessionClaims('u', 'w'), SECRET);
-    memberCookie = await mintSessionToken(newSessionClaims('u', 'w'), SECRET);
+    guestCookie = await mintSignInSessionToken(newEmailLinkSignInSessionClaims('u', 'w'), SECRET);
+    memberCookie = await mintSignInSessionToken(newSignInSessionClaims('u', 'w'), SECRET);
   });
   beforeEach(() => {
     process.env['AW_EMAIL_LINK_BASE_URL'] = `${STORE}/signin`;
@@ -47,7 +47,7 @@ describe('the store origin at the edge', () => {
     const headers: Record<string, string> = { ...options.headers };
     if (options.origin !== undefined) headers['origin'] = options.origin;
     if (options.cookie !== undefined) {
-      headers['cookie'] = `${sessionCookieName()}=${options.cookie}`;
+      headers['cookie'] = `${signInSessionCookieName()}=${options.cookie}`;
     }
     return proxy(new NextRequest(new URL(pathname, PLATFORM), { method, headers }));
   };

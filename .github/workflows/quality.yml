@@ -4,11 +4,20 @@ name: Quality extensions
 # header and scripts/check-workflows.mjs enforces (docs/adr/0053, Amendment 2026-10-26). The coverage floors and the
 # browser lane live in ci.yml, inside `ci-success`.
 
+# Only a change to the chart, or to this file, starts it (ADR-0053, Amendment 2026-11-19e): the job renders
+# infra/helm/agent-workspace and reads nothing else. Not a required check, so a path filter cannot
+# leave a queued pull request waiting.
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - infra/helm/**
+      - .github/workflows/quality.yml
   push:
     branches: [main]
+    paths:
+      - infra/helm/**
+      - .github/workflows/quality.yml
 
 permissions:
   contents: read

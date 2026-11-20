@@ -8,7 +8,7 @@ import { closeEndpointToolSandbox } from '../tool-endpoint/close';
 import { authenticateClient } from './client-auth';
 import { oauthError, oauthJson, type OAuthErrorCode } from './http';
 import { resourceUrl } from './resource';
-import type { OAuthClient, OAuthRuntime } from './runtime';
+import type { OAuthClient, OAuthRuntime } from './wiring';
 import type { OAuthTokenRows } from './store';
 import {
   mintOAuthToken,

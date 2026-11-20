@@ -1,5 +1,5 @@
 import { log } from '../telemetry/logger';
-import type { RuntimeNetworkPolicy } from '../../contracts/runtimes';
+import { runtimeDisabledReason, type RuntimeNetworkPolicy } from '../../contracts/runtimes';
 import { defineSlot } from '../runtime-slot';
 
 export type RuntimeRegistryEntry = Readonly<{
@@ -48,6 +48,14 @@ export interface WebRuntimeRegistry {
    * re-verified, so a run never stands in for an operator's first Test Runtime (BH061-002).
    */
   renew?(driverId: string, scope: RuntimeTestScope): Promise<boolean>;
+  /**
+   * Leave a workspace the deployment itself made — a visitor's demo copy, whose guest cannot run
+   * Test Runtime — with a current pass of the driver, and resolve whether it has one. This
+   * instance's current pass is carried there when the driver's Test Runtime reads nothing of the
+   * workspace; otherwise Test Runtime runs now, in the workspace's scope. A failure is logged and
+   * resolves `false`, and a run there is then refused with `runtime_not_verified`.
+   */
+  provide?(driverId: string, scope: Pick<RuntimeTestScope, 'workspaceId'>): Promise<boolean>;
 }
 
 export type RuntimeProbeConfig = Readonly<{
@@ -64,6 +72,11 @@ export interface TestableDriverRegistry<TRequest, TEvent> {
   wasVerified(driverId: string, workspaceId?: string): boolean | Promise<boolean>;
   /** A pass was ever recorded for the driver, current or not; see {@link WebRuntimeRegistry.renew}. */
   hasPassed?(driverId: string, workspaceId: string): boolean | Promise<boolean>;
+  /**
+   * Record this instance's current pass of the driver as `workspaceId`'s own, when that pass proves
+   * what a Test Runtime there would; resolve whether it did. See {@link WebRuntimeRegistry.provide}.
+   */
+  carry?(driverId: string, workspaceId: string): Promise<boolean>;
   test(
     driverId: string,
     config: RuntimeProbeConfig,
@@ -105,16 +118,13 @@ export function createWebRuntimeRegistry<TRequest, TEvent>(
     workspaceId: string | undefined,
   ): Promise<RuntimeRegistryEntry> => {
     const testPassed = await options.registry.wasVerified(seed.id, workspaceId);
-    const reasons = [
-      ...(seed.connectionExists ? [] : ['No runtime connection is configured.']),
-      ...(seed.imageReachable ? [] : ['The runtime image is not reachable.']),
-    ];
+    const reason = runtimeDisabledReason(seed);
     return {
       ...seed,
       networkPolicies: seed.networkPolicies ?? null,
       testPassed,
-      state: reasons.length === 0 ? 'enabled' : 'disabled',
-      reason: reasons.length === 0 ? null : reasons.join(' '),
+      state: reason === null ? 'enabled' : 'disabled',
+      reason,
     };
   };
   const test = async (driverId: string, echo: string, scope?: RuntimeTestScope) => {
@@ -142,9 +152,33 @@ export function createWebRuntimeRegistry<TRequest, TEvent>(
       return false;
     }
   };
+  // Workspaces made together (a burst of sign-ups on a new instance) wait for one Test Runtime of
+  // the driver and then carry its pass, instead of each probing the driver.
+  const firstTests = new Map<string, Promise<boolean>>();
+  const provide = async (
+    driverId: string,
+    scope: Pick<RuntimeTestScope, 'workspaceId'>,
+  ): Promise<boolean> => {
+    const carried = () => options.registry.carry?.(driverId, scope.workspaceId) ?? false;
+    if (await carried()) return true;
+    const pending = firstTests.get(driverId);
+    if (pending !== undefined) return (await pending) && (await carried());
+    const first = test(driverId, 'agent-workspace runtime verification', scope)
+      .then(
+        () => true,
+        (error: unknown) => {
+          log.error(`[runtimes] verifying ${driverId} for a workspace failed`, { error });
+          return false;
+        },
+      )
+      .finally(() => firstTests.delete(driverId));
+    firstTests.set(driverId, first);
+    return first;
+  };
   return {
     list: (workspaceId) => Promise.all(options.entries.map((seed) => entry(seed, workspaceId))),
     test,
+    provide,
     renew(driverId, scope) {
       const key = `${scope.workspaceId}:${driverId}`;
       const pending = renewals.get(key);

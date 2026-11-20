@@ -3,10 +3,10 @@
  * `formal/AgentWorkspace/Concepts/Release.lean`, and the state after each step.
  *
  * 80-07, 80-08 and 80-12 add the replay against the pure functions they export
- * (`resolveSessionVersion`, `decideRollback`, `decidePromote`); `docs/formal/domains/release.md`
+ * (`resolveSessionVersion`, `decideRollback`, `decidePromote`); `docs/20-design/formal/domains/release.md`
  * lists the rows each adds. 80-08's rows replay in `apps/web/formal/release.test.ts`. This suite
  * checks the vectors themselves, and pins the scenario set so no scenario is dropped silently. A disagreement with the model is a failing test,
- * and the fix is never to edit a vector (`docs/formal/00-orchestrator-prompt.md` §10).
+ * and the fix is never to edit a vector (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -35,7 +35,7 @@ const SCENARIOS = [
 ];
 
 describe('release: the vectors', () => {
-  it('emits exactly the scenarios the replay rows in docs/formal/domains/release.md name', () => {
+  it('emits exactly the scenarios the replay rows in docs/20-design/formal/domains/release.md name', () => {
     expect(vectors.map(({ id }) => id)).toStrictEqual(SCENARIOS);
   });
 

@@ -59,7 +59,7 @@ export const ENGINE_IMAGE_ENV_PREFIX = 'AGENT_WORKSPACE_RUNTIME_IMAGE_';
  *
  * A deployment upgraded in place has `RUNTIME_IMAGE` set and no per-engine variable; refusing to
  * start it would turn an additive change into an outage. The per-engine variable wins when both
- * are set, and `docs/deploy/engine-images.md` records the migration. It is deliberately **not** a
+ * are set, and `docs/40-operate/deploy/engine-images.md` records the migration. It is deliberately **not** a
  * default for any other engine: "the image we happened to have" is exactly the wrong answer for an
  * engine whose adapter that image does not carry.
  */

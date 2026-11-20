@@ -3,13 +3,13 @@
 Status: accepted
 Date: 2026-09-12
 Decided by: the Wave 9 orchestrator, on W9-RUNS-135's escalation
-Scope: `tests/route-inventory.test.ts` — one assertion; the ownership of that file (integration level, ADR-0019)
+Scope: `tests/route-inventory.policy-check.ts` — one assertion; the ownership of that file (integration level, ADR-0019)
 
 ## Context
 
 `W9-RUNS-135`'s whole deliverable is `GET /api/runs`, declared in
 `tests/route-declarations/W9-RUNS-135.ts` with its ADR-0026 mandate. Its PR (#163) turned CI's
-`build · service-backed tests` job red on exactly one test in `tests/route-inventory.test.ts`:
+`build · service-backed tests` job red on exactly one test in `tests/route-inventory.policy-check.ts`:
 
 ```
 serves the three run routes of spec §34 plus the security-mandated revocation operation
@@ -63,7 +63,7 @@ why the probe was `git add`ed for the proof.
 
 ## Consequences
 
-- `tests/route-inventory.test.ts` now has two derived closed-world assertions and no literal
+- `tests/route-inventory.policy-check.ts` now has two derived closed-world assertions and no literal
   ones under `/api/agents` or `/api/runs`; the remaining tree-wide assertion ("serves exactly the
   routes declared as landed") already worked this way.
 - PR #163 must restack onto `main` after this lands for its CI to go green; the orchestrator

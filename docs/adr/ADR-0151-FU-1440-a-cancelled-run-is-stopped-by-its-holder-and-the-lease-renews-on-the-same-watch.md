@@ -234,7 +234,7 @@ deferred. Each deferred item is listed under "Declared gaps" with the trigger th
 - No contract, route, schema or migration changes. The public status set and the SDK are unchanged.
   `cancelled` is the status a cross-replica interrupt already produced.
 - Rollback is the revert of the D1 code. No data is written in a new shape.
-- `docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md` (RF-301) and the
+- `docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md` (RF-301) and the
   roadmap entry "RF-301 Run leases and attempts" point here for what landed and what remains.
 
 ## Status of the #1440 checklist

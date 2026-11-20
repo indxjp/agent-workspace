@@ -30,7 +30,7 @@ import type { ApiResult } from '../http/result';
 import { problemWithDetail as problem } from '../http/result';
 import { resolveSessionActorUserId } from '../rbac/ownership';
 import type { Principal } from '../rbac/principal';
-import type { InvitationsRuntime } from './runtime';
+import type { InvitationsRuntime } from './wiring';
 
 /** The longest invitation token a request may carry; minted tokens are far shorter. */
 const MAX_INVITATION_TOKEN_CHARS = 4_096;

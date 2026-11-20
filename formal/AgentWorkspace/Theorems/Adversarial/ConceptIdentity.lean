@@ -30,7 +30,7 @@ private theorem w_consistent : Er.Core.consistent catalogue W = true := by decid
 /-- Whatever principal id a browser-token row names as its minter, in every consistent state the
 principal with that id belongs to the token's workspace: no token is minted in the name of
 another workspace's principal. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_minter_workspace_fk")]
 theorem foreign_principal_cannot_mint_a_browser_token (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {t p : Row} (ht : t ∈ st .browserTokens)
@@ -47,7 +47,7 @@ example : (⟨[("id", "p2"), ("workspace_id", "w1"), ("kind", "api_key"), ("api_
 
 /-- Whatever run id a run-scoped browser-token row names, in every consistent state the run with
 that id belongs to the token's workspace: a token cannot be scoped to another workspace's run. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_run_workspace_fk")]
 theorem foreign_run_cannot_scope_a_browser_token (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {t run : Row} (ht : t ∈ st .browserTokens)
@@ -66,7 +66,7 @@ example : ((W .runs).head!).get "workspace_id" = ((W .browserTokens).head!).get 
 
 /-- Whatever session id a session-scoped browser-token row names, in every consistent state the
 session with that id belongs to the token's workspace. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_session_workspace_fk")]
 theorem foreign_session_cannot_scope_a_browser_token (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {t s : Row} (ht : t ∈ st .browserTokens)
@@ -87,7 +87,7 @@ example : ((W .sessions).head!).get "workspace_id" =
 /-- Whatever membership id a principal row names, in every consistent state the membership with
 that id belongs to the principal's workspace: no principal is backed by another workspace's
 member. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_membership_workspace_fk")]
 theorem foreign_membership_cannot_back_a_principal (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {p m : Row} (hp : p ∈ st .workspacePrincipals)
@@ -109,7 +109,7 @@ example : ((W .memberships).head!).get "workspace_id" =
 
 /-- Whatever API-key id a principal row names, in every consistent state the key with that id
 belongs to the principal's workspace. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_api_key_workspace_fk")]
 theorem foreign_api_key_cannot_back_a_principal (st : Er.Core.State)
     (hc : Er.Core.consistent catalogue st = true) {p k : Row} (hp : p ∈ st .workspacePrincipals)
@@ -131,7 +131,7 @@ example : ((W .apiKeys).head!).get "workspace_id" =
 
 /-- A principal row in one workspace that names another workspace's membership makes the state
 inconsistent: the forged row is refused. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_membership_workspace_fk")]
 theorem forged_principal_source_is_refused :
     Er.Core.consistent catalogue (fun t => if t = .workspacePrincipals then
@@ -149,7 +149,7 @@ private def advMinter : Principal := ⟨⟨"p"⟩, ⟨"w"⟩, .membership ⟨"m"
 
 /-- Whatever scoped row a request resolves, a browser token is admitted only on the very run or
 session its row names: the admitted row's scope is the token's scope. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")]
 theorem browser_token_acts_only_on_its_own_scoped_row (t : BrowserToken) (row : ScopedRow)
     (m : Principal) (src : SourceRow) (now : Instant)
@@ -164,7 +164,7 @@ example : (ScopedRow.run ⟨"r"⟩ .running).scope = advToken.scope :=
 
 /-- A token minted for run `R` cannot act on any other run `R′`, whatever that run's status, the
 minter, or the instant. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")]
 theorem token_for_one_run_cannot_act_on_another_run (t : BrowserToken) (r r' : RunId)
     (hs : t.scope = .run r) (hne : r' ≠ r) (st : Contracts.RunStatus) (m : Principal)
@@ -184,7 +184,7 @@ example : browserTokenAdmitted advToken (some (.run ⟨"r2"⟩ .running)) advMin
   ⟨token_for_one_run_cannot_act_on_another_run _ ⟨"r"⟩ ⟨"r2"⟩ rfl (by decide +kernel) _ _ _ _, by decide⟩
 
 /-- A token minted for session `S` cannot act on any other session `S′`. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")]
 theorem token_for_one_session_cannot_act_on_another_session (t : BrowserToken) (s s' : SessionId)
     (hs : t.scope = .session s) (hne : s' ≠ s) (st : Concepts.Session.SessionStatus)
@@ -207,7 +207,7 @@ example : browserTokenAdmitted { advToken with scope := .session ⟨"s"⟩ }
 /-- Whatever principal row a caller gets a browser token checked against, an admitted token acts
 only as the principal its row names as minter, and only if that principal is in the token's own
 workspace. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_minter_workspace_fk")]
 theorem browser_token_acts_only_as_its_minter_in_its_workspace (t : BrowserToken)

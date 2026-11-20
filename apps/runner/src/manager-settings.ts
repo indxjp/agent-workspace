@@ -7,7 +7,7 @@
  * Each driver keeps its own parser in its `manager-driver-*.ts` module, a pure function over a
  * record called only from here, so tests pass values in and never touch `process.env`.
  * {@link RUNNER_MANAGER_SETTINGS} lists every variable those parsers read, and
- * `tests/settings-table.test.ts` fails when a read has no row or a row has no read.
+ * `tests/settings-table/settings-table.docs-check.ts` fails when a read has no row or a row has no read.
  */
 import { type RuntimeDriverId } from '@agent-workspace/runtime/driver';
 import { type DockerCommand } from '@agent-workspace/runtime/driver/docker';
@@ -29,7 +29,7 @@ import { parsePort } from './server.js';
 
 export type SettingsEnvironment = Readonly<Record<string, string | undefined>>;
 
-/** One row of the generated settings table (`docs/operations/settings.md`, refactoring part 03). */
+/** One row of the generated settings table (`docs/40-operate/operations/settings.md`, refactoring part 03). */
 export interface SettingDescription {
   readonly name: string;
   readonly default: string;
@@ -320,25 +320,51 @@ export function startFailureFields(error: unknown): Readonly<Record<string, unkn
   return error instanceof RunnerManagerSettingsError ? { refused: error.reasons } : { error };
 }
 
-/** Exported for the suite. Unset or blank selects Docker; an id the manager does not serve throws. */
+type ServedRuntimeDriver = (typeof SERVED_RUNTIME_DRIVERS)[number];
+
+/** How the manager builds one served driver's options, and whether ADR-0126's stateless mode serves it. */
+type ManagerDriver = Readonly<{
+  stateless: boolean;
+  options: (env: SettingsEnvironment, docker: DockerCommand | undefined) => DriverOptions;
+}>;
+
+/**
+ * One entry per id in {@link SERVED_RUNTIME_DRIVERS} (refactoring part 11): a served id without an
+ * entry, or an entry for an id that is not served, fails the typecheck.
+ */
+const MANAGER_DRIVERS: Readonly<Record<ServedRuntimeDriver, ManagerDriver>> = {
+  docker: { stateless: false, options: (env, docker) => dockerDriverOptions(env, docker) },
+  'cloud-run-service': { stateless: false, options: (env) => cloudRunDriverOptions(env) },
+  'aca-sessions': { stateless: false, options: (env) => acaSessionsDriverOptions(env) },
+  external: { stateless: true, options: (env) => externalDriverOptions(env) },
+  'vercel-sandbox': { stateless: true, options: (env) => vercelSandboxDriverOptions(env) },
+  'cloudflare-sandbox': { stateless: false, options: (env) => cloudflareSandboxDriverOptions(env) },
+  kubernetes: { stateless: false, options: (env) => kubernetesDriverOptions(env) },
+};
+
+function managerDriver(id: string): ManagerDriver | undefined {
+  return Object.hasOwn(MANAGER_DRIVERS, id)
+    ? MANAGER_DRIVERS[id as ServedRuntimeDriver]
+    : undefined;
+}
+
+/**
+ * Exported for the suite. Unset or blank selects Docker; an id the manager does not serve throws.
+ * The stateless refusal comes first, so an id the manager does not serve gets it too.
+ */
 export function managerDriverOptions(
   env: SettingsEnvironment,
   docker?: DockerCommand,
 ): DriverOptions {
   const driver = env['RUNTIME_DRIVER']?.trim() ?? '';
-  if (driver === 'external') return externalDriverOptions(env);
-  if (driver === 'vercel-sandbox') return vercelSandboxDriverOptions(env);
-  if (env['RUNNER_MANAGER_STATELESS']?.trim()) {
+  const entry = managerDriver(driver === '' ? 'docker' : driver);
+  if (entry?.stateless !== true && env['RUNNER_MANAGER_STATELESS']?.trim()) {
     throw new Error(
       'runner manager: RUNNER_MANAGER_STATELESS is served by the external and vercel-sandbox drivers only (ADR-0126).',
     );
   }
-  if (driver === 'cloud-run-service') return cloudRunDriverOptions(env);
-  if (driver === 'aca-sessions') return acaSessionsDriverOptions(env);
-  if (driver === 'cloudflare-sandbox') return cloudflareSandboxDriverOptions(env);
-  if (driver === '' || driver === 'docker') return dockerDriverOptions(env, docker);
-  if (driver === 'kubernetes') return kubernetesDriverOptions(env);
-  throw new RuntimeDriverConfigurationError(driver);
+  if (entry === undefined) throw new RuntimeDriverConfigurationError(driver);
+  return entry.options(env, docker);
 }
 
 /**

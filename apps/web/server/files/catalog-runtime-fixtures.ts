@@ -9,7 +9,7 @@ import type { ResourceCatalogStoreProvider } from '../storage/store';
 import type { ObjectStore } from '../storage/objects';
 import { createStorageService, type StorageService } from '../storage/service';
 import { createInMemoryObjectStore, createInMemoryObjectStoreProvider } from '../storage/testing';
-import type { FilesRuntime } from './runtime';
+import type { FilesRuntime } from './wiring';
 import { createRepositoryObjectStoreProvider } from './store';
 
 const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };

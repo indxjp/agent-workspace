@@ -3,7 +3,7 @@
  * `formal/generated/vectors/<family>/`). A vector is `{ id, input, expected, witnesses }`: an
  * input, the model's answer, and the Lean theorems that answer witnesses. The suites in this
  * directory and in `apps/<app>/formal/` replay each vector against the real TypeScript; a disagreement is a failing test, and
- * the fix is never to edit a vector (docs/formal/00-orchestrator-prompt.md §10).
+ * the fix is never to edit a vector (docs/20-design/formal/00-orchestrator-prompt.md §10).
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

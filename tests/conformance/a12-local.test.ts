@@ -30,6 +30,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { runA12ConformanceSuite } from './harness.js';
+import { FIXTURE_TIMERS } from './timers.js';
 import {
   createLocalFixtureDriver,
   LOCAL_RUNTIME_CAPABILITIES,
@@ -57,6 +58,7 @@ describe('A.12 against the real local driver', () => {
       driver,
       LOCAL_RUNTIME_CAPABILITIES,
       localFixtureProbe,
+      { timers: FIXTURE_TIMERS },
     );
 
     console.log(

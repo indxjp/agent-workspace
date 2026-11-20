@@ -511,7 +511,7 @@ route that refuses an API key (API specification §7.2).
 
 **Gates, beyond the four proofs:**
 
-- `tests/route-inventory.test.ts` derives the served route surface from every tracked
+- `tests/route-inventory.policy-check.ts` derives the served route surface from every tracked
   `apps/web/app/**/route.ts` and compares it against the union of
   `tests/route-declarations/<TASK-ID>.ts` — one hand-maintained file per owning task. A route that
   exists in code but is declared nowhere fails the gate by name; so does a declaration marked

@@ -1,9 +1,10 @@
-import path from 'node:path';
-
+/**
+ * The front-door checker's rules, on in-memory pages. `node scripts/docs/check-front-door.mjs`
+ * runs them over this repository in `pnpm docs:check`.
+ */
 import { describe, expect, it } from 'vitest';
 
 import {
-  checkFrontDoor,
   findApostropheAnchors,
   findOrphanPages,
   findPublicSiteIssues,
@@ -94,9 +95,5 @@ describe('front-door stale-claim check', () => {
 
   it('flags a page the navigation does not list', () => {
     expect(findOrphanPages(['a', 'b'], ['a'])).toEqual(['b: not in docs.json navigation']);
-  });
-
-  it('passes on this repository', async () => {
-    expect(await checkFrontDoor(path.resolve(import.meta.dirname, '../..'))).toEqual([]);
   });
 });

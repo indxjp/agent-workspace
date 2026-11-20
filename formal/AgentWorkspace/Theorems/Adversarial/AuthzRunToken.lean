@@ -182,7 +182,7 @@ whose body names it, and a rating of one of its runs. Whatever the route, the sc
 session match refuses it, and both with the same code. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")
-  (doc := "docs/formal/domains/visitor-sessions.md#the-visitor-token")]
+  (doc := "docs/20-design/formal/domains/visitor-sessions.md#the-visitor-token")]
 theorem visitor_token_reaches_only_its_session (s : SessionId) (req : Request)
     (h : req.sessionId ≠ some s.val) :
     visitorDecision (.session s) req = .deny 403 "token_out_of_scope" := by
@@ -198,7 +198,7 @@ or handing one file to its own session (`attachments` on `sessions`, issue #1308
 case for session `s`. `upload-urls` is not in the grammar (issue #1574). -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")
   (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")
-  (doc := "docs/formal/domains/visitor-sessions.md#the-visitor-token")]
+  (doc := "docs/20-design/formal/domains/visitor-sessions.md#the-visitor-token")]
 theorem visitor_token_proceeds_only_inside_its_grammar (s : SessionId) (req : Request)
     (h : visitorDecision (.session s) req = .proceed) :
     req.sessionId = some s.val ∧
@@ -242,7 +242,7 @@ theorem visitor_token_has_allow_witness :
 /-- On the allowed-origin branch, a cross-origin bootstrap opens a session only when its `Origin`
 is one the surface lists, and that `Origin` is the one echoed back. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/surfaces/public/conditions.ts#mayOpenSession")
-  (doc := "docs/formal/domains/visitor-sessions.md#opening-a-session")]
+  (doc := "docs/20-design/formal/domains/visitor-sessions.md#opening-a-session")]
 theorem cross_origin_visitor_opens_only_from_an_allowed_origin (loopback : Bool)
     (allowed : List String) (origin : Option String) (o : String)
     (h : openVerdict loopback false allowed origin .session = .allowedOrigin (some o)) :
@@ -256,7 +256,7 @@ theorem cross_origin_visitor_opens_only_from_an_allowed_origin (loopback : Bool)
 /-- A cross-origin bootstrap with no `Origin`, or the opaque `null` one, never opens a session
 off loopback: neither equals an origin the surface may list. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/surfaces/public/conditions.ts#mayOpenSession")
-  (doc := "docs/formal/domains/visitor-sessions.md#opening-a-session")]
+  (doc := "docs/20-design/formal/domains/visitor-sessions.md#opening-a-session")]
 theorem missing_origin_never_opens_a_session (allowed : List String) (origin : Option String)
     (hNull : "null" ∉ allowed) (h : origin = none ∨ origin = some "null") :
     openVerdict false false allowed origin .session = .refused := by
@@ -267,7 +267,7 @@ loopback flag, same-origin verdict, allowed list, `Origin` and the route's later
 token means `openVerdict` did not refuse, and its scope is the one session `runtime.open` opened. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/surfaces/public/handlers.ts#createSurfaceSession")
   (ts := "apps/web/server/surfaces/public/conditions.ts#mayOpenSession")
-  (doc := "docs/formal/domains/visitor-sessions.md#opening-a-session")]
+  (doc := "docs/20-design/formal/domains/visitor-sessions.md#opening-a-session")]
 theorem visitor_token_minted_only_after_open_verdict (loopback sameOrigin admitted : Bool)
     (allowed : List String) (origin : Option String) (opened : Option SessionId) (scope : Scope)
     (h : mintAfterOpen (openVerdict loopback sameOrigin allowed origin .session) admitted opened =
@@ -290,7 +290,7 @@ theorem visitor_mint_has_witness :
 at (`sessions.agent_version_id = resolved.versionId`); with `session_version_stable`, no later
 push, promote or rollback moves it. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/agent-versions/session-version.ts#resolveSessionVersion")
-  (doc := "docs/formal/domains/visitor-sessions.md#the-pinned-version")]
+  (doc := "docs/20-design/formal/domains/visitor-sessions.md#the-pinned-version")]
 theorem visitor_session_pins_the_resolved_version (t : Option Concepts.Release.Score)
     (r r' : Concepts.Release.Release) (s : SessionId) (a : AgentId) (e : Concepts.Release.Env)
     (h : Concepts.Release.step t r (.startSession s a e) = .ok r') :

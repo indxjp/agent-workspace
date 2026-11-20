@@ -284,6 +284,41 @@ describe('installDriverRegistry under a deployment posture', () => {
     expect(await passWith({ ...own, expiresAt: new Date(Date.now() - 1) })).toBe(false);
   });
 
+  it("never carries a pass made with a workspace's runtime connection key to another workspace", async () => {
+    const recorded: string[] = [];
+    let verifications = 0;
+    const manager = createRuntimeManagerClient('http://127.0.0.1:41000', 'm'.repeat(32), () => {
+      verifications += 1;
+      return Promise.resolve(
+        Response.json({
+          fingerprint: 'fp',
+          verifiedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        }),
+      );
+    });
+    vi.stubEnv('RUNTIME_DRIVER', 'external');
+    await installDriverRegistry(
+      manager,
+      'http://127.0.0.1:41000',
+      'open',
+      () => Promise.resolve('e2b_test_key_0123456789'),
+      {
+        get: () => Promise.resolve(null),
+        record: (workspaceId) => {
+          recorded.push(workspaceId);
+          return Promise.resolve();
+        },
+      },
+    );
+    const registry = currentWebRuntimeRegistry();
+    await registry?.test('external', 'hello', { workspaceId: 'workspace-a' });
+    expect(await registry?.provide?.('external', { workspaceId: 'workspace-b' })).toBe(true);
+    // workspace-b got a Test Runtime of its own (with its own key), not workspace-a's pass.
+    expect(verifications).toBe(2);
+    expect(recorded).toEqual(['workspace-a', 'workspace-b']);
+  });
+
   it('fails closed when the shared Test Runtime store cannot be read', async () => {
     const manager = createRuntimeManagerClient('http://127.0.0.1:41000', 'm'.repeat(32), () =>
       Promise.reject(new Error('the registry must not call the runner manager here')),

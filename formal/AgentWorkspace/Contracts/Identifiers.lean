@@ -64,7 +64,7 @@ theorem canonical_chars (s : String) (h : Uuid.isCanonical s = true) :
 
 /-- The documented rule, SPEC §4 "UUID v4 text": the canonical form whose version nibble
 (character 14) is `4` and whose variant nibble (character 19) is `8`, `9`, `a` or `b`. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#4-conventions")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")]
 def isUuidV4Target (s : String) : Bool :=
   Uuid.isCanonical s && s.toList[14]? == some '4' &&
     (s.toList[19]?.all fun c => c ∈ ['8', '9', 'a', 'b', 'A', 'B'])

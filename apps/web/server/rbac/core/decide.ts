@@ -12,7 +12,7 @@
  *
  * `refuse` is also what makes the authorisation matrix grow by itself. The matrix test
  * (`authorisation-matrix.test.ts`) enumerates the routes from `tests/route-declarations/**`, the
- * same union `tests/route-inventory.test.ts` reads, crosses them with §21's four roles and every
+ * same union `tests/route-inventory.policy-check.ts` reads, crosses them with §21's four roles and every
  * ownership answer, and fails on any `refuse`. A route another task adds is in that union the
  * moment it is committed, so it is in this matrix the moment it is committed, and it fails until
  * somebody classifies its resource. Nothing here counts routes and nothing here lists them.
@@ -148,7 +148,7 @@ type ParsedPath =
 
 /**
  * `/api/<resource>`, `/api/<resource>/:id`, `/api/<resource>/:id/<sub>` — ADR-0026 decision 3's
- * shape, and nothing deeper. The shape itself is enforced by `tests/route-inventory.test.ts`;
+ * shape, and nothing deeper. The shape itself is enforced by `tests/route-inventory.policy-check.ts`;
  * what this does is *use* it, and refuse anything it does not recognise rather than guess a
  * resource out of it.
  */

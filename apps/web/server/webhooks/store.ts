@@ -11,7 +11,7 @@ import { RunResourceSchema } from '@indx-workspace/contracts/runs';
 
 import { renderRun } from '../runs/api';
 import { webhookSigningSecretName } from '../secrets';
-import type { WebhookDeliverySources, WebhookSigningSecrets, WebhooksRuntime } from './runtime';
+import type { WebhookDeliverySources, WebhookSigningSecrets, WebhooksRuntime } from './wiring';
 
 type StoreRoot = Pick<
   DatabaseRoot,

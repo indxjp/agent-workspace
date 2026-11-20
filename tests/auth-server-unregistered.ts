@@ -4,9 +4,9 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import {
   MIN_SESSION_SECRET_LENGTH,
-  sessionCookieName,
-  mintSessionToken,
-  newSessionClaims,
+  signInSessionCookieName,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
 } from '../apps/web/server/auth/session.js';
 import {
   discoverApiRouteHandlers,
@@ -70,10 +70,10 @@ export function registerFixtureProbes(server: {
   it('serves the brand-new route to a valid session, so the 401 above was the gate', async () => {
     const response = await fetch(`${server.base}${UNREGISTERED_ROUTE_PATH}`, {
       redirect: 'manual',
-      headers: { cookie: `${sessionCookieName(process.env)}=${server.token}` },
+      headers: { cookie: `${signInSessionCookieName(process.env)}=${server.token}` },
     });
     expect(response.status, await response.clone().text()).toBe(200);
-    // The handler called `requireWorkspaceScope()`, so this body is also the proof that the whole
+    // The handler called `requireCallerWorkspace()`, so this body is also the proof that the whole
     // module graph under index.ts compiles and runs under Turbopack with workspace.ts's one
     // type-only sibling import erased.
     expect(await response.json()).toEqual({
@@ -109,13 +109,13 @@ export function registerFixtureProbes(server: {
   });
 
   it('rejects a session signed with somebody else’s secret with 401', async () => {
-    const forged = await mintSessionToken(
-      newSessionClaims('attacker@example.com', 'other'),
+    const forged = await mintSignInSessionToken(
+      newSignInSessionClaims('attacker@example.com', 'other'),
       'z'.repeat(MIN_SESSION_SECRET_LENGTH),
     );
     const response = await fetch(`${server.base}/api/agents`, {
       redirect: 'manual',
-      headers: { cookie: `${sessionCookieName(process.env)}=${forged}` },
+      headers: { cookie: `${signInSessionCookieName(process.env)}=${forged}` },
     });
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({

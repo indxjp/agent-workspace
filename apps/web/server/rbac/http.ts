@@ -27,7 +27,7 @@
 import type { FeatureId } from '@indx-workspace/contracts/features';
 
 import { featureRefusal } from '../features/guard';
-import { enabledFeaturesFor } from '../features/runtime';
+import { enabledFeaturesFor } from '../features/wiring';
 import { problemWithDetail as problem, type ApiResult } from '../http/result';
 import { decide, type Decision, type Ownership } from './decide';
 import type { WorkspaceDirectory } from './directory';

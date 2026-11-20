@@ -25,7 +25,7 @@ import {
 import { applicationContext } from '../application-context';
 import { formatIssues, problem, readJsonBody, type ApiResult } from '../http/result';
 import { authorise } from '../rbac/http';
-import type { WebhookRecord, WebhooksRuntime } from './runtime';
+import type { WebhookRecord, WebhooksRuntime } from './wiring';
 import { mintWebhookSecret } from './signature';
 
 /** The installed webhook routes, or `null` while they are not serving (their 503). */

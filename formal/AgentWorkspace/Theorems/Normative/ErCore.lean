@@ -26,7 +26,7 @@ theorem workspace_is_the_tenant_root :
 /-- "Every tenant-owned table carries `workspace_id`": every scoped table has a `NOT NULL uuid`
 `workspace_id` column, and no other table has one. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenant_scoped_iff_workspace_column (t : TableName) :
     ((catalogue t).tenancy == .scoped) = (catalogue t).hasColumn "workspace_id" ∧
@@ -37,7 +37,7 @@ theorem tenant_scoped_iff_workspace_column (t : TableName) :
 /-- `REQUIRED_REFERENCES`: `sessions_member_workspace_fk` exists with exactly the columns
 `(workspace_id, user_id) → memberships (workspace_id, user_id)` and is tenant-paired, so a session's
 person holds a membership in the session's workspace. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-references.test-support.ts#REQUIRED_REFERENCES")
   (ts := "packages/core/src/db/schema/sessions.ts#sessions_member_workspace_fk")]
 theorem session_member_reference_is_required :
@@ -52,7 +52,7 @@ theorem session_member_reference_is_required :
 `cli_sessions_member_workspace_fk` is `(workspace_id, user_id) → memberships (workspace_id,
 user_id)`, tenant-paired and `ON DELETE CASCADE` — so a sign-in exists only while its person is a
 member of its workspace, and moving it to a workspace where they are not is refused. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/cli-sessions.ts#cli_sessions_member_workspace_fk")]
 theorem cli_session_member_reference_is_required :
     (catalogue .cliSessions).foreignKey? "cli_sessions_member_workspace_fk" =
@@ -66,7 +66,7 @@ theorem cli_session_member_reference_is_required :
 /-- "The source pair is tenant-paired" (the comment on `workspacePrincipals`): a principal's
 membership and API-key sources are each referenced through a tenant-paired key, and the kind
 check admits exactly `membership` and `api_key`. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]
 theorem principal_sources_are_tenant_paired :
     fkVerdict catalogue .workspacePrincipals "workspace_principals_membership_workspace_fk" =
@@ -79,8 +79,8 @@ theorem principal_sources_are_tenant_paired :
 
 /-- The owner columns: `owner_principal_id` is `NOT NULL` on agents, files, connectors, projects,
 sessions and skills, and each references `workspace_principals` through a tenant-paired key. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem owned_tables_have_a_paired_owner_principal :
     [TableName.agents, .files, .mcpServers, .projects, .sessions, .skills].all (fun t =>
       (catalogue t).isNotNull "owner_principal_id" &&
@@ -92,7 +92,7 @@ theorem owned_tables_have_a_paired_owner_principal :
 /-- The owner equivalents: `shares.publisher_principal_id` and
 `browser_tokens.minted_by_principal_id` are `NOT NULL`, `audit_events.actor_principal_id` is
 nullable, and all three reference `workspace_principals` through a tenant-paired key. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_minter_workspace_fk")
   (ts := "packages/core/src/db/schema/audit-events.ts#audit_events_actor_principal_workspace_fk")]
@@ -111,7 +111,7 @@ theorem owner_equivalents_are_paired :
 /-- "`agent_grants` stores the membership's `user_id`": a grant row has a `user_id`, no principal
 column, and its person is pinned to a membership of the grant's workspace. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/agent-grants.ts#agent_grants_member_workspace_fk")]
 theorem agent_grants_store_the_membership_user :
     (catalogue .agentGrants).isNotNull "user_id" = true ∧
@@ -137,7 +137,7 @@ theorem closed_set_check_admits_only_its_values :
 
 /-- The composite unique targets: exactly these 21 tables declare a unique key over
 `{id, workspace_id}`, the target of every tenant-paired reference into them. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem composite_unique_targets :
     allTables.filter (fun t => (catalogue t).uniques.any fun u =>
         sameColumns u.columns ["id", "workspace_id"] && u.partialNullColumns.isEmpty &&
@@ -154,7 +154,7 @@ per workspace and address, at most one run per workspace and start idempotency k
 are outside the index), at most one continuation per paused run (runs that continue nothing are
 outside the index), and at most one live agent team per workspace and name (a deleted team is outside
 the index, so its name is free again). -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/agents.ts#agents")
   (ts := "packages/core/src/db/schema/files.ts#files")
   (ts := "packages/core/src/db/schema/invitations.ts#invitations")
@@ -179,7 +179,7 @@ theorem the_partial_unique_keys_are_builtin_agents_file_objects_pending_invitati
 
 /-- Runs carry no `agent_id`: a run's agent is its session's (the only run parent is the session,
 through `runs_session_workspace_fk`, which cascades). -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/runs.ts#runs_session_workspace_fk")]
 theorem runs_reach_their_agent_through_the_session :
     (catalogue .runs).hasColumn "agent_id" = false ∧
@@ -193,7 +193,7 @@ theorem runs_reach_their_agent_through_the_session :
 `workspace_principals_source_xor` check accepts a membership principal with only a membership, and
 an API-key principal with only a key, and refuses a principal with both sources, with none, or
 with the source that does not match its kind. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]
 theorem principal_has_the_source_its_kind_names :
     (catalogue .workspacePrincipals).check? "workspace_principals_source_xor" =
@@ -213,7 +213,7 @@ theorem principal_has_the_source_its_kind_names :
 /-- The partial unique key `invitations_workspace_email_pending_key`: two pending invitations to
 one address in one workspace violate it, while an accepted or revoked invitation does not count,
 so it may coexist with a pending one to the same address. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/invitations.ts#invitations_workspace_email_pending_key")]
 theorem pending_invitations_are_unique_per_address :
     let key := (catalogue .invitations).unique? "invitations_workspace_email_pending_key"

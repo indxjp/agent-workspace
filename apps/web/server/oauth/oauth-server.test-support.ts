@@ -14,7 +14,7 @@ import {
 import { resetOAuthLimits } from './limits';
 import { fakeTokens, type Row } from './oauth-server.tokens.test-support';
 import { BUILDER_RESOURCE_PATH } from './resource';
-import type { OAuthAuditEvent, OAuthClient } from './runtime';
+import type { OAuthAuditEvent, OAuthClient } from './wiring';
 import { mintClientSecret } from './tokens';
 
 export const ORIGIN = 'https://aw.example';

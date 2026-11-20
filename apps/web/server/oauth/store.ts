@@ -17,7 +17,7 @@ import type {
 import { ownershipOf } from '../agents/run-ownership';
 import { decide } from '../rbac/decide';
 import { a2aResourcePath, BUILDER_RESOURCE_PATH, mcpResourcePath } from './resource';
-import type { OAuthRuntime } from './runtime';
+import type { OAuthRuntime } from './wiring';
 
 /** An endpoint client row as the token endpoint authenticates it. */
 export type { OAuthClientRecord };

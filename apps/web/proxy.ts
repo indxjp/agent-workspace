@@ -3,30 +3,31 @@ import { CONTRACTS_VERSION_HEADER } from '@indx-workspace/contracts';
 import { FEATURE_PROBLEM_CODES, type FeatureProblemCode } from '@indx-workspace/contracts/features';
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { isAgentEndpointRoute } from './server/auth/agent-endpoint-routes';
+import {
+  isSurfacePath,
+  setHeaders,
+  storeCors,
+  storeFacts,
+  storePreflight,
+  surfacePolicy,
+  surfacePreflight,
+  visitorPreflight,
+} from './proxy-cors';
+import {
+  isApiPath,
+  isAuthExemptPage,
+  passesAfterApiKeyGate,
+  passesBeforeApiKeyGate,
+  visitorRouteMethod,
+} from './proxy-routes';
+import { verifyRequestSession } from './proxy-session';
 import { isApiKeyRoute, matchApiRoute } from './server/auth/api-key-routes';
-import { isAppBackendRoute } from './server/auth/app-backend-routes';
-import { isOAuthRoute } from './server/auth/oauth-routes';
 import { checkRequestOrigin } from './server/auth/origin';
 import { classifyPath, enforcementFor } from './server/auth/paths';
-import { sessionCookieName, readSessionSecret, verifySessionToken } from './server/auth/session';
-import {
-  readStoreOrigin,
-  storeOriginFor,
-  storePreflightAllowed,
-  storePreflightHeaders,
-  storeRouteKind,
-  storeResponseHeaders,
-} from './server/auth/store-origin';
-import { isCliTokenRoutePath } from './server/cli-auth/token-routes';
+import { storeOriginFor } from './server/auth/store-origin';
 import { readDeploymentFeatures } from './server/features/deployment';
 import { routeFeatureOf } from './server/features/route-feature';
-import {
-  preflightSurfaceSession,
-  preflightVisitorRun,
-  surfacePagePolicy,
-  visitorRunResponseHeaders,
-} from './server/surfaces/public/handlers';
+import { visitorRunResponseHeaders } from './server/surfaces/public/handlers';
 import {
   negotiateContractsVersion,
   servedContractsHeaders,
@@ -50,154 +51,6 @@ function deny(status: number, code: string, message: string, reason: string): Ne
 }
 
 const UNAUTHENTICATED_MESSAGE = 'Sign in, or present a valid API key, to use this API.';
-
-/**
- * Page-surface paths that must stay reachable with no session: the sign-in screen itself (or
- * redirecting it to itself would loop), and the first-run setup wizard, which by definition runs
- * before any administrator — and therefore any session — exists.
- */
-const PAGE_AUTH_EXEMPT_PREFIXES = ['/signin', '/setup'];
-
-function isAuthExemptPage(pathname: string): boolean {
-  return PAGE_AUTH_EXEMPT_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
-
-/**
- * Issue #236 (SDK-04, S-1): a browser token's credential shape only, scoped by prefix AND by the
- * exact path shapes §3.1's grammar admits — reading a run or its events, and starting a run in a
- * session. Issue #539 (S2-05c) adds a third shape, rating a run (`POST /api/runs/:id/feedback`),
- * whose session row identity the handler checks. Issue #251 adds the two presign shapes
- * (`POST /api/files/:id/(upload|download)-urls`), whose `.attachments/<sessionId>/` prefix the
- * handler checks. This is not the authorisation decision:
- * `decide()`'s scope grammar (`apps/web/server/rbac/decide.ts`) still refuses a token whose scope
- * does not reach the row a matched path names, and the route still verifies the bearer itself. A
- * too-wide match here would let an unverified bearer past the edge for a shape `decide()` was never
- * asked about; pinned by `proxy.test.ts`.
- */
-function isBrowserTokenExemptRoute(request: NextRequest, authorization: string | null): boolean {
-  const bearer = authorization === null ? null : /^Bearer[ ]([^ ]+)$/iu.exec(authorization.trim());
-  if (!bearer?.[1]?.startsWith('awt_live_')) return false;
-  return visitorRouteMethod(request.nextUrl.pathname) === request.method;
-}
-
-/**
- * The method of the browser-token path shape `pathname` is, or `null`: the one list both the
- * browser-token exemption above and the visitor run routes' CORS (issue #680) read, so they cannot
- * drift.
- */
-function visitorRouteMethod(pathname: string): 'GET' | 'POST' | null {
-  if (/^\/api\/runs\/[^/]+(\/events)?$/u.test(pathname)) return 'GET';
-  if (
-    /^\/api\/agents\/[^/]+\/runs$/u.test(pathname) ||
-    /^\/api\/runs\/[^/]+\/feedback$/u.test(pathname) ||
-    // Issue #251 (SDK-19, N-4): a session token mints presigned URLs for its own session's files.
-    /^\/api\/files\/[^/]+\/(upload|download)-urls$/u.test(pathname) ||
-    // Issue #1308 (P7-2): a session token uploads one file into its own session.
-    /^\/api\/sessions\/[^/]+\/attachments$/u.test(pathname)
-  ) {
-    return 'POST';
-  }
-  return null;
-}
-
-/**
- * Issue #242 (SDK-10, S-22): `aw login`'s three pre-authentication steps — start the device
- * authorization, render the approval page (which answers "sign in first" itself when there is no
- * session), and poll for the token. Exact by method and path; the approval `POST` is not here, so
- * it keeps this gate's session and same-origin checks.
- */
-function isCliSignInRoute(request: NextRequest): boolean {
-  const { pathname } = request.nextUrl;
-  return (
-    (request.method === 'POST' &&
-      (pathname === '/api/auth/cli-device' || pathname === '/api/auth/cli-token')) ||
-    (request.method === 'GET' && pathname === '/api/auth/cli-verify')
-  );
-}
-
-/**
- * Issue #242 (SDK-10, S-22): the credential shape of the token `aw login` holds, admitted only on
- * the person-facing routes the CLI calls with it — who am I, my workspaces, my workspace's
- * invitations and sharing policy, sign-out and workspace switch. The route verifies the token and
- * re-reads the Membership behind it; a bearer header is never sent by a browser on its own, so
- * these need no origin check.
- */
-function isCliTokenRoute(request: NextRequest, authorization: string | null): boolean {
-  const bearer = authorization === null ? null : /^Bearer[ ]([^ ]+)$/iu.exec(authorization.trim());
-  if (!bearer?.[1]?.startsWith('awu_live_')) return false;
-  return isCliTokenRoutePath(request.nextUrl.pathname);
-}
-
-/**
- * ADR-0161 D9: the credential shape of an access token from `POST /api/auth/token-exchange`,
- * admitted only on the `app-backend` grammar's routes (`server/auth/app-backend-routes.ts`). The
- * route resolves it, refuses one whose client is not an `app-backend` client, and `decide()`
- * narrows it to the client's bound agents; a bearer header is never sent by a browser on its own,
- * so these need no origin check.
- */
-function isAppBackendTokenRoute(request: NextRequest, authorization: string | null): boolean {
-  const bearer = authorization === null ? null : /^Bearer[ ]([^ ]+)$/iu.exec(authorization.trim());
-  if (!bearer?.[1]?.startsWith('awo_live_')) return false;
-  return isAppBackendRoute(request.method, request.nextUrl.pathname);
-}
-
-/**
- * ADR-0144: Microsoft Graph and Zoom call a fixed URL with no session and no header, so the secret
- * in the path is the whole authentication, checked by the route. Exact by method and shape.
- */
-function isTriggerFire(request: NextRequest): boolean {
-  return (
-    request.method === 'POST' &&
-    /^\/api\/triggers\/[^/]+\/fire\/[^/]+$/u.test(request.nextUrl.pathname)
-  );
-}
-
-/**
- * Issue #1846: the `aw-control` door takes a run token, which no other route does. It verifies the
- * token itself and refuses a cookie or an API key, so the edge lets exactly this method and path by.
- */
-function isBuilderMcpRoute({ method, nextUrl }: NextRequest): boolean {
-  return method === 'POST' && nextUrl.pathname === '/api/builder/mcp';
-}
-
-/**
- * Issue #1517 (ADR-0104 acceptance decision 4): a team lead run's member endpoint takes the lead
- * run's own run token, as the runner's session seam does. The route verifies the token again and
- * admits it only for the run its path names, so the edge lets exactly this method and shape by.
- */
-function isTeamMemberMcpRoute({ method, nextUrl }: NextRequest): boolean {
-  return method === 'POST' && /^\/api\/runs\/[^/]+\/members\/mcp$/u.test(nextUrl.pathname);
-}
-
-/** The routes that carry their own credential and check it themselves, so they need no session. */
-function authenticatesItself(request: NextRequest): boolean {
-  const { method, nextUrl } = request;
-  return (
-    isBuilderMcpRoute(request) ||
-    isTeamMemberMcpRoute(request) ||
-    isAgentEndpointRoute(method, nextUrl.pathname) ||
-    isOAuthRoute(method, nextUrl.pathname) ||
-    isTriggerFire(request)
-  );
-}
-
-/**
- * The runner mirrors durable transcripts with the signed, registered token carried by its one
- * RunRequest. The route adapter verifies it again and binds path/body to its run and session.
- * Issue #242 (SDK-10, S-22) review round 1: never the token `aw login` holds, which ADR-0083
- * admits only on the person-facing routes (`server/cli-auth/token-routes.ts`); the session seam
- * refuses one again.
- */
-function isRunnerSessionRoute(request: NextRequest, authorization: string | null): boolean {
-  return (
-    request.nextUrl.pathname.startsWith('/api/sessions') &&
-    authorization !== null &&
-    authorization.startsWith('Bearer ') &&
-    !authorization.startsWith('Bearer awu_live_')
-  );
-}
 
 /**
  * What the edge answers a workspace API key (`Bearer ak_live_…`), or `null` for no key or a path
@@ -237,82 +90,6 @@ function gateApiKey(request: NextRequest, authorization: string | null): NextRes
   return null;
 }
 
-/** The routes reached before any session or credential exists, each exact by method and path. */
-function isPreAuthenticationRoute(request: NextRequest): boolean {
-  // Setup detection and submission are the only pre-authentication control-plane endpoints.
-  if (
-    (request.method === 'GET' && request.nextUrl.pathname === '/api/setup/runtime-detect') ||
-    (request.method === 'POST' && request.nextUrl.pathname === '/api/setup')
-  ) {
-    return true;
-  }
-  // Issue #118's OIDC sign-in exchange. Reaching any of these three is the point of not having a
-  // session yet — `/api/auth/login` starts a transaction, `/api/auth/callback` is the identity
-  // provider's own `form_post` back to this application, and `/api/auth/workspace` may run with
-  // only the short-lived selection cookie `/api/auth/callback` minted, never a tenant session.
-  // Each of the three does its own origin check where a state-changing method needs one — see
-  // `apps/web/app/api/auth/{callback,workspace}/route.ts` — because exemption from this gate is
-  // also exemption from the `checkRequestOrigin` call below.
-  if (
-    (request.method === 'GET' &&
-      (request.nextUrl.pathname === '/api/auth/login' ||
-        request.nextUrl.pathname === '/api/auth/workspace')) ||
-    (request.method === 'POST' &&
-      (request.nextUrl.pathname === '/api/auth/callback' ||
-        request.nextUrl.pathname === '/api/auth/workspace'))
-  ) {
-    return true;
-  }
-  // ADR-0161 D3: an app backend exchanges a person's ID token. The handler authenticates the
-  // endpoint client with its secret and verifies the ID token; no session exists or is wanted.
-  if (request.method === 'POST' && request.nextUrl.pathname === '/api/auth/token-exchange') {
-    return true;
-  }
-  // Spec §21, "Guest": email-link sign-in. Issuing a link and opening one both happen before any
-  // session exists. Each handler does its own same-origin check and per-client rate limits.
-  if (
-    request.method === 'POST' &&
-    (request.nextUrl.pathname === '/api/auth/email-link' ||
-      request.nextUrl.pathname === '/api/auth/email-link/verify')
-  ) {
-    return true;
-  }
-  // The Agent Store's lead form and the privacy facts its notice page states: neither has a session.
-  // The lead form does its own same-origin check, challenge and per-client limit.
-  if (
-    (request.method === 'POST' && request.nextUrl.pathname === '/api/store/leads') ||
-    (request.method === 'GET' && request.nextUrl.pathname === '/api/store/privacy')
-  ) {
-    return true;
-  }
-  // The Agent Store's maintenance list (`GET /api/store/demos`) is public: the store's cards read it
-  // with no session. The demo operator routes are called by the deployment's own steps with
-  // `Authorization: Bearer $AW_DEMO_OPERATOR_TOKEN`, which each route checks itself and which answers
-  // 404 where the token is unset (`server/demo/operator.ts`). Exact by method and path.
-  if (
-    (request.method === 'GET' &&
-      (request.nextUrl.pathname === '/api/store/demos' ||
-        request.nextUrl.pathname === '/api/demo/readiness' ||
-        request.nextUrl.pathname === '/api/demo/templates')) ||
-    (request.method === 'PUT' &&
-      /^\/api\/demo\/(?:templates|maintenance|verification)\/[^/]+$/u.test(
-        request.nextUrl.pathname,
-      ))
-  ) {
-    return true;
-  }
-  // Issue #121's one pre-membership operation. This exemption is exact by method and path: the
-  // acceptance handler verifies the dedicated invitation-identity cookie and same-origin request
-  // itself. No other invitation route can bypass the ordinary tenant-session gate.
-  if (
-    request.method === 'POST' &&
-    /^\/api\/invitations\/[^/]+\/accept$/u.test(request.nextUrl.pathname)
-  ) {
-    return true;
-  }
-  return false;
-}
-
 // The page surface is never denied (W1-CP-06), but an unauthenticated visit to it is not sent
 // straight through either, now that `/signin` exists: a session is checked here too, and a
 // missing or invalid one redirects to the sign-in screen instead of rendering a shell whose
@@ -320,48 +97,37 @@ function isPreAuthenticationRoute(request: NextRequest): boolean {
 // they are exactly the pages a session-less visitor must be able to reach.
 async function signInRedirect(request: NextRequest): Promise<NextResponse | null> {
   if (isAuthExemptPage(request.nextUrl.pathname)) return null;
-  // Read live here; the routes read the copy `register()` installed at start-up. They agree in
-  // production. Under `next dev` a `.env` edit reaches only this read, so a change to SESSION_SECRET
-  // or AW_INSTANCE_ID needs a dev-server restart (CONTRIBUTING.md, "Development setup").
-  const pageSecret = readSessionSecret(process.env);
-  const pageSession = pageSecret.ok
-    ? await verifySessionToken(
-        request.cookies.get(sessionCookieName(process.env))?.value,
-        pageSecret.secret,
-      )
-    : { ok: false as const };
-  if (!pageSession.ok) {
-    // The absolute argument is required here and does NOT reach the client as written, which is
-    // why this site is not repaired the way the three in `app/api/auth/callback/route.ts` were
-    // (issue #201, and
-    // `docs/adr/W9-R9b-relative-location-closes-the-class-and-the-proxy-site-is-owned-by-next.md`).
-    //
-    // A proxy response is post-processed by Next before it is sent. In `next@16.3.4`,
-    // `dist/server/web/adapter.js:394-396` replaces this `Location` with
-    // `getRelativeURL(redirectURL, requestURL)` — the URL minus its origin — whenever the two
-    // hosts match, and they match *by construction*: the adapter builds `requestURL` from the
-    // same `request.url` this line does. So the header on the wire is already `/signin`, with no
-    // origin for a client to resolve against the wrong one. That rewrite is itself inside the
-    // `!process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard at `:393`, so the relative wire
-    // header holds only while that flag is unset — nothing here sets it, and no test covers it.
-    //
-    // Setting a relative `Location` here instead would not survive: the same adapter passes it to
-    // `new NextURL(location, { forceLocale, headers, nextConfig })` at `:384`, whose second
-    // argument has no `pathname` key and is therefore read as options, not as a base — so
-    // `dist/server/web/next-url.js:16-22` evaluates `new URL('/signin', undefined)` and throws.
-    // That is a 500 on every unauthenticated page visit, the most-travelled path in the
-    // application, and `:384` sits above the `__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard, so no
-    // flag avoids it. Both halves are pinned by tests rather than by this comment — the wire
-    // header by `tests/auth.test.ts`'s live `next dev` probe of an unauthenticated `GET /`, and
-    // the `NextURL` contract by `apps/web/proxy.test.ts` — so a Next upgrade that changes either
-    // fails a check instead of a user's session.
-    //
-    // Deriving the target from `Host` / `X-Forwarded-Host` is refused for the same reason it is
-    // in the callback route: both are caller-supplied, and that trades this defect for an open
-    // redirect.
-    return NextResponse.redirect(new URL('/signin', request.url));
-  }
-  return null;
+  const pageSession = await verifyRequestSession(request);
+  if (pageSession.ok) return null;
+  // The absolute argument is required here and does NOT reach the client as written, which is
+  // why this site is not repaired the way the three in `app/api/auth/callback/route.ts` were
+  // (issue #201, and
+  // `docs/adr/W9-R9b-relative-location-closes-the-class-and-the-proxy-site-is-owned-by-next.md`).
+  //
+  // A proxy response is post-processed by Next before it is sent. In `next@16.3.4`,
+  // `dist/server/web/adapter.js:394-396` replaces this `Location` with
+  // `getRelativeURL(redirectURL, requestURL)` — the URL minus its origin — whenever the two
+  // hosts match, and they match *by construction*: the adapter builds `requestURL` from the
+  // same `request.url` this line does. So the header on the wire is already `/signin`, with no
+  // origin for a client to resolve against the wrong one. That rewrite is itself inside the
+  // `!process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard at `:393`, so the relative wire
+  // header holds only while that flag is unset — nothing here sets it, and no test covers it.
+  //
+  // Setting a relative `Location` here instead would not survive: the same adapter passes it to
+  // `new NextURL(location, { forceLocale, headers, nextConfig })` at `:384`, whose second
+  // argument has no `pathname` key and is therefore read as options, not as a base — so
+  // `dist/server/web/next-url.js:16-22` evaluates `new URL('/signin', undefined)` and throws.
+  // That is a 500 on every unauthenticated page visit, the most-travelled path in the
+  // application, and `:384` sits above the `__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard, so no
+  // flag avoids it. Both halves are pinned by tests rather than by this comment — the wire
+  // header by `tests/auth.test.ts`'s live `next dev` probe of an unauthenticated `GET /`, and
+  // the `NextURL` contract by `apps/web/proxy.test.ts` — so a Next upgrade that changes either
+  // fails a check instead of a user's session.
+  //
+  // Deriving the target from `Host` / `X-Forwarded-Host` is refused for the same reason it is
+  // in the callback route: both are caller-supplied, and that trades this defect for an open
+  // redirect.
+  return NextResponse.redirect(new URL('/signin', request.url));
 }
 
 const FEATURE_DISABLED = 'feature_disabled' satisfies FeatureProblemCode;
@@ -396,64 +162,13 @@ function gateFeature(request: NextRequest): NextResponse | null {
   );
 }
 
-async function gateRequest(request: NextRequest): Promise<NextResponse> {
-  const featureAnswer = gateFeature(request);
-  if (featureAnswer !== null) return featureAnswer;
-  if (isPreAuthenticationRoute(request)) return NextResponse.next();
-  const authorization = request.headers.get('authorization');
-  if (isRunnerSessionRoute(request, authorization)) {
-    return NextResponse.next();
+/** Refuse a request whose session does not verify, or whose write comes from another origin. */
+async function gateSession(request: NextRequest): Promise<NextResponse | null> {
+  const result = await verifyRequestSession(request);
+  if (!result.ok) {
+    const reason = result.code;
+    return deny(401, 'unauthenticated', UNAUTHENTICATED_MESSAGE, reason);
   }
-  // ADR-0135: a published agent's A2A endpoint authenticates its own caller (an API key only).
-  // ADR-0134 part 3: the OAuth server's token, revoke, authorize and metadata routes.
-  // ADR-0144: a trigger's fire URL, whose secret the route checks.
-  if (authenticatesItself(request)) return NextResponse.next();
-  const apiKeyAnswer = gateApiKey(request, authorization);
-  if (apiKeyAnswer !== null) return apiKeyAnswer;
-  if (isBrowserTokenExemptRoute(request, authorization)) {
-    return NextResponse.next();
-  }
-  if (isCliSignInRoute(request) || isCliTokenRoute(request, authorization)) {
-    return NextResponse.next();
-  }
-  if (isAppBackendTokenRoute(request, authorization)) return NextResponse.next();
-  // ADR-0120 clause 7: Vercel Cron sends no session, only `Authorization: Bearer $CRON_SECRET`, which
-  // the route checks itself and which answers 404 where `CRON_SECRET` is unset. Exact by method and path.
-  // ADR-0144 D5: the schedule pass is called the same way, and so is the storage cleanup (#1674).
-  if (
-    request.method === 'GET' &&
-    (request.nextUrl.pathname === '/api/cron/retention' ||
-      request.nextUrl.pathname === '/api/cron/triggers' ||
-      request.nextUrl.pathname === '/api/cron/storage-cleanup')
-  ) {
-    return NextResponse.next();
-  }
-  // Issue #1562: the readiness probe. A kubelet sends no credential; the route reveals only whether
-  // the deployment is ready and, if not, which variable is wrong. Exact by method and path.
-  if (request.method === 'GET' && request.nextUrl.pathname === '/api/readyz') {
-    return NextResponse.next();
-  }
-  const verdict = classifyPath(request.nextUrl.pathname);
-  const enforcement = enforcementFor(verdict.surface);
-
-  if (enforcement === 'allow' && verdict.surface === 'page') {
-    const redirect = await signInRedirect(request);
-    if (redirect !== null) return redirect;
-  }
-
-  if (enforcement === 'allow') return NextResponse.next();
-
-  // Read live, as in `signInRedirect` above: restart `next dev` after changing it in `.env`.
-  const secret = readSessionSecret(process.env);
-  if (!secret.ok) {
-    return deny(401, 'unauthenticated', UNAUTHENTICATED_MESSAGE, 'server_not_configured');
-  }
-  const result = await verifySessionToken(
-    request.cookies.get(sessionCookieName(process.env))?.value,
-    secret.secret,
-  );
-  if (!result.ok) return deny(401, 'unauthenticated', UNAUTHENTICATED_MESSAGE, result.code);
-
   const store = storeOriginFor(storeFacts(request, result.claims.via ?? null));
   const origin = checkRequestOrigin({
     method: request.method,
@@ -463,112 +178,58 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
     forwardedHost: request.headers.get('x-forwarded-host'),
     ...(store === null ? {} : { allowedOrigins: [store] }),
   });
-  if (!origin.ok) {
-    console.warn(`[auth] cross-origin write refused: ${origin.reason}`);
-    return deny(
-      403,
-      'cross_origin',
-      'This write must come from the application origin.',
-      'cross_origin',
-    );
+  if (origin.ok) return null;
+  console.warn(`[auth] cross-origin write refused: ${origin.reason}`);
+  return deny(
+    403,
+    'cross_origin',
+    'This write must come from the application origin.',
+    'cross_origin',
+  );
+}
+
+/** The answer of a page-surface request that needs no further check, or `null` to continue. */
+async function gatePageOrAllowed(request: NextRequest): Promise<NextResponse | null> {
+  const verdict = classifyPath(request.nextUrl.pathname);
+  const enforcement = enforcementFor(verdict.surface);
+  if (enforcement !== 'allow') return null;
+  if (verdict.surface === 'page') {
+    const redirect = await signInRedirect(request);
+    if (redirect !== null) return redirect;
   }
   return NextResponse.next();
 }
 
-/** What {@link storeOriginFor} needs of a request, with the session mark the caller verified. */
-function storeFacts(request: NextRequest, via: 'email_link' | null) {
-  return {
-    origin: request.headers.get('origin'),
-    baseUrl: readStoreOrigin(process.env),
-    method: request.method,
-    pathname: request.nextUrl.pathname,
-    via,
-  };
+async function gateRequest(request: NextRequest): Promise<NextResponse> {
+  const featureAnswer = gateFeature(request);
+  if (featureAnswer !== null) return featureAnswer;
+  const authorization = request.headers.get('authorization');
+  if (passesBeforeApiKeyGate(request, authorization)) return NextResponse.next();
+  const apiKeyAnswer = gateApiKey(request, authorization);
+  if (apiKeyAnswer !== null) return apiKeyAnswer;
+  if (passesAfterApiKeyGate(request, authorization)) return NextResponse.next();
+  const allowed = await gatePageOrAllowed(request);
+  if (allowed !== null) return allowed;
+  return (await gateSession(request)) ?? NextResponse.next();
 }
 
-/**
- * The CORS headers the Agent Store's origin gets on this answer, or `null`. The guest-session
- * routes grant only to a verified email-link session, so the cookie is read here too.
- */
-async function storeCors(request: NextRequest): Promise<Readonly<Record<string, string>> | null> {
-  // Cheap guards first: a request from another origin, or to a route that is not the store's, never
-  // pays for a second session verification (`gateRequest` already did one).
-  const store = readStoreOrigin(process.env);
-  if (store === null || request.headers.get('origin')?.trim() !== store) return null;
-  const kind = storeRouteKind(request.method, request.nextUrl.pathname);
-  if (kind === null) return null;
-  // Only the guest-session set grants on a verified email-link session; the pre-session set needs none.
-  let via: 'email_link' | null = null;
-  if (kind === 'guest-session') {
-    const secret = readSessionSecret(process.env);
-    const session = secret.ok
-      ? await verifySessionToken(
-          request.cookies.get(sessionCookieName(process.env))?.value,
-          secret.secret,
-        )
-      : { ok: false as const };
-    via = session.ok ? (session.claims.via ?? null) : null;
-    // A signed-out visitor (no session that verifies, no credential header) only ever gets the
-    // gate's `401`, which holds no data. The store's page must be able to read it to say "sign in",
-    // so that refusal carries the CORS grant too. A session that verifies but is not an email-link
-    // one still gets none, so the store origin never reads a member's answer.
-    if (!session.ok && request.headers.get('authorization') === null) {
-      return storeResponseHeaders(store);
-    }
-  }
-  const origin = storeOriginFor(storeFacts(request, via));
-  return origin === null ? null : storeResponseHeaders(origin);
-}
-
-function isApiPath(pathname: string): boolean {
-  return pathname === '/api' || pathname.startsWith('/api/');
-}
-
-/**
- * ADR-0105 slice 1, S1-17 (#455): the hosted surface page `GET /p/s/<name>` and everything below
- * it — its session bootstrap `POST /p/s/<name>/sessions` included — may be framed by this origin
- * only, except the page itself, which a surface's `allowedOrigins` may also frame (issue #622).
- * Matched case-sensitively, as `server/auth/paths.ts` classifies `/p`: `/P/s/x` is not a surface
- * path. A `/p/:token` share is not under `/p/s` and keeps its own headers.
- */
-function isSurfacePath(pathname: string): boolean {
-  return pathname === '/p/s' || pathname.startsWith('/p/s/');
-}
-
-const SURFACE_FRAME_ANCESTORS = "frame-ancestors 'self'";
-
-/** The `<name>` of a `/p/s/<name>` path followed by exactly `suffix`, or `null`. */
-function surfaceNameOf(pathname: string, suffix: '' | '/sessions'): string | null {
-  const match = /^\/p\/s\/([^/]+)(\/sessions)?$/u.exec(pathname);
-  if (match?.[1] === undefined || (match[2] ?? '') !== suffix) return null;
-  return match[1];
-}
-
-/**
- * Issue #622: the CORS preflight of a surface's session bootstrap. With the run routes a visitor
- * token may call ({@link proxy}, issue #680) it is the control plane's only cross-origin surface.
- * Answered here, before any route, so no route file exports `OPTIONS`.
- */
-async function surfacePreflight(request: NextRequest): Promise<NextResponse | null> {
-  if (request.method !== 'OPTIONS') return null;
-  const name = surfaceNameOf(request.nextUrl.pathname, '/sessions');
-  if (name === null) return null;
-  const headers = await preflightSurfaceSession(name, request.headers);
-  return new NextResponse(null, {
-    status: 204,
-    headers: { ...headers, 'content-security-policy': SURFACE_FRAME_ANCESTORS },
+/** The `426` a client the control plane no longer serves gets, or `null`. */
+function contractsVersionRefusal(request: NextRequest): NextResponse | null {
+  const negotiation = negotiateContractsVersion(request.headers.get(CONTRACTS_VERSION_HEADER));
+  if (negotiation.kind !== 'refused') return null;
+  return NextResponse.json(negotiation.body, {
+    status: negotiation.status,
+    headers: { 'cache-control': 'no-store', ...negotiation.headers },
   });
 }
 
-/** The CSP of a `/p/s/**` answer: the page's from its surface (#622), `'self'` for the rest. */
-async function surfacePolicy(request: NextRequest): Promise<string> {
-  const name = request.method === 'GET' ? surfaceNameOf(request.nextUrl.pathname, '') : null;
-  return name === null ? SURFACE_FRAME_ANCESTORS : surfacePagePolicy(name);
-}
-
-function withServedContracts(response: NextResponse): NextResponse {
-  for (const [name, value] of Object.entries(servedContractsHeaders())) {
-    response.headers.set(name, value);
+/** A page request: surface preflight first, then the gate, with the surface's framing policy. */
+async function proxyPage(request: NextRequest): Promise<NextResponse> {
+  const preflight = await surfacePreflight(request);
+  if (preflight !== null) return preflight;
+  const response = await gateRequest(request);
+  if (isSurfacePath(request.nextUrl.pathname)) {
+    response.headers.set('content-security-policy', await surfacePolicy(request));
   }
   return response;
 }
@@ -585,53 +246,16 @@ function withServedContracts(response: NextResponse): NextResponse {
  * refusals included — and no other `/api/**` path does.
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-  if (!isApiPath(request.nextUrl.pathname)) {
-    const preflight = await surfacePreflight(request);
-    if (preflight !== null) return preflight;
-    const response = await gateRequest(request);
-    if (isSurfacePath(request.nextUrl.pathname)) {
-      response.headers.set('content-security-policy', await surfacePolicy(request));
-    }
-    return response;
-  }
-  const asked = request.headers.get('access-control-request-method');
-  if (
-    request.method === 'OPTIONS' &&
-    storePreflightAllowed(
-      request.headers.get('origin'),
-      readStoreOrigin(process.env),
-      asked,
-      request.nextUrl.pathname,
-    )
-  ) {
-    return new NextResponse(null, {
-      status: 204,
-      headers: storePreflightHeaders(request.headers.get('origin')?.trim() ?? '', asked ?? ''),
-    });
-  }
+  if (!isApiPath(request.nextUrl.pathname)) return proxyPage(request);
   const visitorMethod = visitorRouteMethod(request.nextUrl.pathname);
-  if (visitorMethod !== null && request.method === 'OPTIONS') {
-    return new NextResponse(null, {
-      status: 204,
-      headers: await preflightVisitorRun(visitorMethod, request.headers),
-    });
-  }
-  const negotiation = negotiateContractsVersion(request.headers.get(CONTRACTS_VERSION_HEADER));
-  const response =
-    negotiation.kind === 'refused'
-      ? NextResponse.json(negotiation.body, {
-          status: negotiation.status,
-          headers: { 'cache-control': 'no-store', ...negotiation.headers },
-        })
-      : await gateRequest(request);
+  const preflight = storePreflight(request) ?? (await visitorPreflight(request, visitorMethod));
+  if (preflight !== null) return preflight;
+  const response = contractsVersionRefusal(request) ?? (await gateRequest(request));
   if (visitorMethod !== null) {
-    for (const [name, value] of Object.entries(await visitorRunResponseHeaders(request.headers))) {
-      response.headers.set(name, value);
-    }
+    setHeaders(response, await visitorRunResponseHeaders(request.headers));
   }
   const storeHeaders = await storeCors(request);
-  if (storeHeaders !== null) {
-    for (const [name, value] of Object.entries(storeHeaders)) response.headers.set(name, value);
-  }
-  return withServedContracts(response);
+  if (storeHeaders !== null) setHeaders(response, storeHeaders);
+  setHeaders(response, servedContractsHeaders());
+  return response;
 }

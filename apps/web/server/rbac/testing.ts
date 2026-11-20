@@ -3,7 +3,7 @@
  *
  * It is not a mock of the routes. It installs a real {@link RbacRuntime} — a real in-memory
  * directory, and an `identify` that builds a real {@link Principal} out of claims that a real
- * `mintSessionToken` / `verifySessionToken` round trip produced — and then calls the exported
+ * `mintSignInSessionToken` / `verifySignInSessionToken` round trip produced — and then calls the exported
  * `GET`/`POST`/`PATCH`/`DELETE` of `apps/web/app/api/**` with real `Request` objects. Everything
  * between the request and the store is the code that ships.
  *
@@ -35,10 +35,10 @@
  * that never called `authorise` at all would also satisfy.
  */
 import {
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
-  type VerifiedSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+  type VerifiedSignInSessionClaims,
 } from '../auth/session';
 
 import type { DirectoryRoot } from './directory';
@@ -118,13 +118,16 @@ export interface RbacHarness {
   teardown(): void;
 }
 
-/** Mint and verify, which is the only way to obtain `VerifiedSessionClaims`. */
+/** Mint and verify, which is the only way to obtain `VerifiedSignInSessionClaims`. */
 async function verifiedClaims(
   email: string,
   workspaceSlug: string,
-): Promise<VerifiedSessionClaims> {
-  const token = await mintSessionToken(newSessionClaims(email, workspaceSlug), TEST_SESSION_SECRET);
-  const result = await verifySessionToken(token, TEST_SESSION_SECRET);
+): Promise<VerifiedSignInSessionClaims> {
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims(email, workspaceSlug),
+    TEST_SESSION_SECRET,
+  );
+  const result = await verifySignInSessionToken(token, TEST_SESSION_SECRET);
   if (!result.ok) throw new Error(`the harness could not verify its own token: ${result.reason}`);
   return result.claims;
 }

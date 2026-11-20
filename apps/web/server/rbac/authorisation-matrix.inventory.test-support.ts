@@ -48,7 +48,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
 });
 
 function readsEveryTrackedDeclarationFileDerivedTwiceTracked() {
-  // The same double derivation `tests/route-inventory.test.ts` performs, and for the same
+  // The same double derivation `tests/route-inventory.policy-check.ts` performs, and for the same
   // reason: the failure this catches is the enumerating call itself going narrow, which would
   // satisfy every assertion below by having nothing left to check (ADR-0027 §1).
   const files = readDeclarationFiles(ROUTE_DECLARATIONS, 'routes');

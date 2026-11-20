@@ -14,7 +14,7 @@ consequences follow, each forcing a decision this ADR records.
 
 ## Decision 1 — `:id` is a base64url encoding of the workspace-relative path
 
-`tests/route-inventory.test.ts`'s shape rule requires `/api/<resource>/:id` — one dynamic segment.
+`tests/route-inventory.policy-check.ts`'s shape rule requires `/api/<resource>/:id` — one dynamic segment.
 A file's natural identifier, its path (`contracts/agreement.pdf`), has a `/` in it and is not that
 shape. With no `files` table repository in this task's `Owns` to hand out a database-assigned id
 instead, the id is derived from the path: `Buffer.from(path, 'utf8').toString('base64url')`.

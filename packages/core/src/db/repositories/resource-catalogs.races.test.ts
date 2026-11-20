@@ -1,411 +1,294 @@
-import {
-  holdTransactionLock,
-  lockWaiters,
-  expectWaitsFor,
-  expectRunsBeside,
-} from './catalog-locks.test-support.js';
-import crypto from 'node:crypto';
-
-import { and, eq, sql } from 'drizzle-orm';
-import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { closePool, connect } from '../client.js';
-import { files } from '../schema/files.js';
-import { memberships } from '../schema/memberships.js';
-import { users } from '../schema/users.js';
-import { workspacePrincipals } from '../schema/workspace-principals.js';
-import { workspaces } from '../schema/workspaces.js';
+import { holdTransactionLock, lockWaiters } from './catalog-locks.test-support.js';
+import { CatalogPathTakenError } from './resource-catalogs.js';
 import {
-  CatalogPathTakenError,
-  createDatabaseResourceCatalogRepositoryProvider,
-  type ResourceCatalogRepository,
-} from './resource-catalogs.js';
-import { createDatabaseWorkspaceScopeResolver } from './scope.js';
+  closeRaceHarness,
+  createRaceHarness,
+  pathLock,
+  RACE_CONNECTIONS,
+  RACE_SETUP_TIMEOUT_MS,
+  reserveInput,
+  rowsAt,
+  rowsFor,
+  seedFile,
+  type RaceHarness,
+} from './resource-catalogs.races.test-support.js';
 import { postgresViolations } from './violations.js';
-import {
-  closeIsolatedTestResources,
-  createIsolatedTestDatabase,
-  type IsolatedTestDatabase,
-} from './testing.js';
-import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
-/** Pool size of the racing connection; the isolated database's own pool holds only four. */
-const RACE_CONNECTIONS = 10;
+const CONCURRENT_RESERVES = 20;
+
+async function reserveConcurrently(h: RaceHarness, path: string, count: number) {
+  return Promise.all(Array.from({ length: count }, () => h.catalog.reserve(path, reserveInput(h))));
+}
+
+async function expectOneReserveWins(h: RaceHarness) {
+  const outcomes = await reserveConcurrently(h, 'reserve-race/a.bin', CONCURRENT_RESERVES);
+
+  const winners = outcomes.filter((outcome) => outcome.kind === 'reserved');
+  expect(winners).toHaveLength(1);
+  expect(outcomes.filter((outcome) => outcome.kind === 'taken')).toHaveLength(19);
+  const winnerId = winners[0]?.row.id;
+  expect(new Set(outcomes.map((outcome) => outcome.row.id))).toEqual(new Set([winnerId]));
+
+  const rows = await rowsAt(h, 'reserve-race/a.bin');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ id: winnerId, status: 'pending' });
+  expect(await rowsAt(h, 'reserve-race')).toHaveLength(1);
+}
+
+async function expectSkillRevisionsNumbered(h: RaceHarness) {
+  const { catalog } = h;
+  await catalog.putSkill({
+    name: 'raced',
+    skillMd: '# raced',
+    enabled: true,
+    ownerPrincipalId: h.principalId,
+    createdBy: h.userId,
+  });
+  const published = await Promise.all(
+    Array.from({ length: 10 }, () =>
+      catalog.publishSkillRevision('raced', {
+        fileCount: 1,
+        write: () => Promise.resolve(undefined),
+      }),
+    ),
+  );
+
+  const expected = Array.from({ length: 10 }, (_, index) => index + 1);
+  expect(published.map((revision) => revision?.number).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual(
+    expected,
+  );
+  const listed = await catalog.listSkillRevisions('raced');
+  expect(listed.map((revision) => revision.number).sort((a, b) => a - b)).toEqual(expected);
+}
+
+/** Queue a confirm and a remove behind one held path lock, in the order `first` names. */
+async function queueConfirmAndRemove(
+  h: RaceHarness,
+  path: string,
+  row: Parameters<RaceHarness['catalog']['confirm']>[0],
+  first: 'confirm' | 'remove',
+) {
+  const { catalog, isolated } = h;
+  const release = await holdTransactionLock(isolated.db, pathLock(h, path));
+  const confirm = () => catalog.confirm(row, { sizeBytes: 2, contentType: null });
+  const remove = () => catalog.remove(path);
+  let confirming: ReturnType<typeof confirm>;
+  let removing: ReturnType<typeof remove>;
+  try {
+    if (first === 'confirm') {
+      confirming = confirm();
+      await lockWaiters(isolated.db, { count: 1, settled: confirming });
+      removing = remove();
+    } else {
+      removing = remove();
+      await lockWaiters(isolated.db, { count: 1, settled: removing });
+      confirming = confirm();
+    }
+    await lockWaiters(isolated.db, { count: 2, settled: Promise.race([confirming, removing]) });
+  } finally {
+    await release();
+  }
+  return Promise.all([confirming, removing]);
+}
+
+async function expectConfirmRemoveHasOneWinner(h: RaceHarness) {
+  for (const first of ['confirm', 'remove'] as const) {
+    const path = `confirm-race/${first}-first.bin`;
+    const outcome = await h.catalog.reserve(path, reserveInput(h));
+    expect(outcome.kind).toBe('reserved');
+
+    // Both writers queue behind the held path lock in a known order, then run one after the other.
+    const [confirmed, removed] = await queueConfirmAndRemove(h, path, outcome.row, first);
+
+    if (first === 'confirm') {
+      expect(confirmed?.row).toMatchObject({ id: outcome.row.id, status: 'ready' });
+    } else {
+      expect(confirmed).toBeNull();
+    }
+    expect(removed.map((row) => row.id)).toEqual([outcome.row.id]);
+    const rows = await rowsFor(h, path);
+    expect(rows.map((row) => [row.id, row.status])).toEqual([[outcome.row.id, 'deleting']]);
+    expect(await rowsAt(h, path)).toEqual([]);
+  }
+}
+
+async function expectOneRenameWins(h: RaceHarness) {
+  const sources = Array.from({ length: 10 }, (_, index) => `rename-race/from-${index}.bin`);
+  const seeded = new Map<string, string>();
+  for (const path of sources) {
+    seeded.set(path, (await seedFile(h, path)).id);
+  }
+
+  const settled = await Promise.allSettled(
+    sources.map((path) => h.catalog.rename(path, 'rename-race/to.bin')),
+  );
+
+  const won = sources.filter((_, index) => {
+    const result = settled[index];
+    return result?.status === 'fulfilled' && result.value.rows === 1;
+  });
+  expect(won).toHaveLength(1);
+  const rows = await rowsAt(h, 'rename-race/to.bin');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.id).toBe(seeded.get(won[0] ?? ''));
+}
+
+async function expectOneWinnerPerReserveRound(h: RaceHarness) {
+  const { catalog } = h;
+  const path = 'round-race/a.bin';
+  for (let round = 0; round < 20; round += 1) {
+    const outcomes = await reserveConcurrently(h, path, CONCURRENT_RESERVES);
+    const winners = outcomes.filter((outcome) => outcome.kind === 'reserved');
+    expect(winners).toHaveLength(1);
+    expect(new Set(outcomes.map((outcome) => outcome.row.id)).size).toBe(1);
+    expect(await rowsAt(h, path)).toHaveLength(1);
+
+    const winner = winners[0]?.row;
+    if (winner === undefined) throw new Error('no reserve won');
+    const ready = await catalog.confirm(winner, { sizeBytes: 1, contentType: null });
+    expect(ready).toMatchObject({ row: { status: 'ready' } });
+    const removed = await catalog.remove(path);
+    expect(removed.map((row) => row.id)).toEqual([winner.id]);
+    for (const row of removed) await catalog.forget(row);
+    expect(await rowsAt(h, path)).toEqual([]);
+  }
+}
+
+async function expectMixedRenamesNeverDeadlock(h: RaceHarness) {
+  const indexes = Array.from({ length: 20 }, (_, index) => index);
+  for (const index of indexes) {
+    await seedFile(h, `mix-a/d/f${index}.bin`);
+    await seedFile(h, `mix-b/d/f${index}.bin`);
+  }
+
+  const settled = await Promise.allSettled(
+    indexes.map((index) => {
+      const [from, to] = index % 4 < 2 ? ['mix-a', 'mix-b'] : ['mix-b', 'mix-a'];
+      if (index % 2 === 0) return h.catalog.rename(`${from}/d`, `${to}/d${index}`);
+      const target = `${to}/f${index}.bin`;
+      return h.catalog.rename(`${from}/d/f${index}.bin`, target);
+    }),
+  );
+
+  // A loser is fine, whether the clash check or the unique key caught it; a deadlock (40P01) or
+  // any other failure is not.
+  for (const result of settled) {
+    if (result.status === 'fulfilled') continue;
+    if (result.reason instanceof CatalogPathTakenError) continue;
+    expect([...postgresViolations(result.reason)].map((violation) => violation.code)).toContain(
+      '23505',
+    );
+  }
+}
+
+async function expectReplacementsLeaveOneReadyRow(h: RaceHarness) {
+  const path = 'replace-race/a.bin';
+  const first = await seedFile(h, path);
+
+  const confirmed = await Promise.all(
+    Array.from({ length: 10 }, async () => {
+      const reserved = await h.catalog.reserve(path, reserveInput(h));
+      if (reserved.kind !== 'reserved') return null;
+      return h.catalog.confirm(reserved.row, { sizeBytes: 2, contentType: null });
+    }),
+  );
+
+  const swaps = confirmed.flatMap((outcome) => (outcome === null ? [] : [outcome]));
+  expect(swaps.length).toBeGreaterThan(0);
+  expect(swaps.every((swap) => swap.replaced !== undefined)).toBe(true);
+  const rows = await rowsFor(h, path);
+  expect(rows.filter((row) => row.status === 'ready')).toHaveLength(1);
+  expect(rows.filter((row) => row.status === 'pending')).toEqual([]);
+  expect(rows.filter((row) => row.status === 'deleting')).toHaveLength(swaps.length);
+  expect(await rowsAt(h, path)).toHaveLength(1);
+  expect(rows.map((row) => row.id)).toContain(first.id);
+}
+
+async function expectConcurrentReplacementsGiveOnePendingWinner(h: RaceHarness) {
+  const path = 'replace-reserve-race/a.bin';
+  await seedFile(h, path);
+
+  const outcomes = await reserveConcurrently(h, path, CONCURRENT_RESERVES);
+
+  expect(outcomes.filter((outcome) => outcome.kind === 'reserved')).toHaveLength(1);
+  expect(new Set(outcomes.map((outcome) => outcome.row.id)).size).toBe(1);
+  expect((await rowsFor(h, path)).map((row) => row.status).sort()).toEqual(['pending', 'ready']);
+}
+
+async function expectConcurrentCreateSkillGivesOneRow(h: RaceHarness) {
+  const input = {
+    name: 'create-race',
+    skillMd: '# race',
+    enabled: true,
+    ownerPrincipalId: h.principalId,
+  };
+  const outcomes = await Promise.all(
+    Array.from({ length: RACE_CONNECTIONS }, () => h.catalog.createSkill(input)),
+  );
+
+  expect(outcomes.filter((outcome) => outcome !== null)).toHaveLength(1);
+  expect(
+    (await h.catalog.listSkills()).filter((skill) => skill.name === 'create-race'),
+  ).toHaveLength(1);
+}
+
 // The storage design, §07: what memory cannot prove is one winner per path when many requests
 // arrive at once, so these cases run on PostgreSQL only.
 describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests', () => {
-  let isolated: IsolatedTestDatabase;
-  let racePool: pg.Pool;
-  let catalog: ResourceCatalogRepository;
-  let workspaceId: string;
-  let userId: string;
-  let principalId: string;
+  let h: RaceHarness;
 
   beforeAll(async () => {
-    isolated = await createIsolatedTestDatabase('aw_resource_catalog_races');
-    const { db } = isolated;
-    workspaceId = crypto.randomUUID();
-    userId = crypto.randomUUID();
-    const membershipId = crypto.randomUUID();
-    principalId = crypto.randomUUID();
-    await db.insert(workspaces).values({ id: workspaceId, slug: 'races', name: 'races' });
-    await db
-      .insert(users)
-      .values({ id: userId, email: `${userId}@example.test`, name: 'Race owner' });
-    await db.transaction(async (tx) => {
-      await tx.insert(memberships).values({ id: membershipId, workspaceId, userId, role: 'owner' });
-      await tx
-        .insert(workspacePrincipals)
-        .values({ id: principalId, workspaceId, kind: 'membership', membershipId });
-    });
-    const scope = await createDatabaseWorkspaceScopeResolver(db).forWorkspaceId(workspaceId);
-    if (scope === null) throw new Error('race workspace scope did not resolve');
+    h = await createRaceHarness('aw_resource_catalog_races');
+  }, RACE_SETUP_TIMEOUT_MS);
 
-    const raced = connect({ url: isolated.url, maxConnections: RACE_CONNECTIONS });
-    racePool = raced.pool;
-    catalog = createDatabaseResourceCatalogRepositoryProvider(raced.db).forScope(scope);
-  }, 180_000);
-
-  afterAll(async () => closeIsolatedTestResources(isolated, { close: () => closePool(racePool) }));
-
-  const rowsAt = (path: string) =>
-    isolated.db
-      .select()
-      .from(files)
-      .where(and(eq(files.workspaceId, workspaceId), eq(files.path, path)));
-
-  /** Every row standing for `path`, whether at the path itself or waiting at a side path. */
-  const rowsFor = (path: string) =>
-    isolated.db
-      .select()
-      .from(files)
-      .where(
-        and(
-          eq(files.workspaceId, workspaceId),
-          sql`coalesce(${files.targetPath}, ${files.path}) = ${path}`,
-        ),
-      );
-
-  const putInput = (path: string, sizeBytes: number) => ({
-    path,
-    kind: 'file' as const,
-    storageKey: path,
-    sizeBytes,
-    contentType: null,
-    ownerPrincipalId: principalId,
-    createdBy: userId,
-  });
+  afterAll(async () => closeRaceHarness(h));
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 concurrent reserves of one path give one winner and 19 taken', async () => {
-    const input = { ownerPrincipalId: principalId, sizeBytes: 1, contentType: null };
-    const outcomes = await Promise.all(
-      Array.from({ length: 20 }, () =>
-        catalog.reserve('reserve-race/a.bin', { ...input, objectId: crypto.randomUUID() }),
-      ),
-    );
-
-    const winners = outcomes.filter((outcome) => outcome.kind === 'reserved');
-    expect(winners).toHaveLength(1);
-    expect(outcomes.filter((outcome) => outcome.kind === 'taken')).toHaveLength(19);
-    const winnerId = winners[0]?.row.id;
-    expect(new Set(outcomes.map((outcome) => outcome.row.id))).toEqual(new Set([winnerId]));
-
-    const rows = await rowsAt('reserve-race/a.bin');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ id: winnerId, status: 'pending' });
-    expect(await rowsAt('reserve-race')).toHaveLength(1);
+    await expectOneReserveWins(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 10 concurrent publishes of one skill are numbered 1 to 10', async () => {
-    await catalog.putSkill({
-      name: 'raced',
-      skillMd: '# raced',
-      enabled: true,
-      ownerPrincipalId: principalId,
-      createdBy: userId,
-    });
-    const published = await Promise.all(
-      Array.from({ length: 10 }, () =>
-        catalog.publishSkillRevision('raced', {
-          fileCount: 1,
-          write: () => Promise.resolve(undefined),
-        }),
-      ),
-    );
-
-    const expected = Array.from({ length: 10 }, (_, index) => index + 1);
-    expect(
-      published.map((revision) => revision?.number).sort((a, b) => (a ?? 0) - (b ?? 0)),
-    ).toEqual(expected);
-    const listed = await catalog.listSkillRevisions('raced');
-    expect(listed.map((revision) => revision.number).sort((a, b) => a - b)).toEqual(expected);
+    await expectSkillRevisionsNumbered(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] a confirm racing a remove has one winner, whichever reaches the path lock first', async () => {
-    const input = { ownerPrincipalId: principalId, sizeBytes: 1, contentType: null };
-    for (const first of ['confirm', 'remove'] as const) {
-      const path = `confirm-race/${first}-first.bin`;
-      const outcome = await catalog.reserve(path, { ...input, objectId: crypto.randomUUID() });
-      expect(outcome.kind).toBe('reserved');
-
-      // Both writers queue behind the held path lock in a known order, then run one after the other.
-      const release = await holdTransactionLock(isolated.db, pathLock(path));
-      const confirm = () => catalog.confirm(outcome.row, { sizeBytes: 2, contentType: null });
-      const remove = () => catalog.remove(path);
-      let confirming: ReturnType<typeof confirm>;
-      let removing: ReturnType<typeof remove>;
-      try {
-        if (first === 'confirm') {
-          confirming = confirm();
-          await lockWaiters(isolated.db, { count: 1, settled: confirming });
-          removing = remove();
-        } else {
-          removing = remove();
-          await lockWaiters(isolated.db, { count: 1, settled: removing });
-          confirming = confirm();
-        }
-        await lockWaiters(isolated.db, { count: 2, settled: Promise.race([confirming, removing]) });
-      } finally {
-        await release();
-      }
-      const [confirmed, removed] = await Promise.all([confirming, removing]);
-
-      if (first === 'confirm') {
-        expect(confirmed?.row).toMatchObject({ id: outcome.row.id, status: 'ready' });
-      } else {
-        expect(confirmed).toBeNull();
-      }
-      expect(removed.map((row) => row.id)).toEqual([outcome.row.id]);
-      const rows = await rowsFor(path);
-      expect(rows.map((row) => [row.id, row.status])).toEqual([[outcome.row.id, 'deleting']]);
-      expect(await rowsAt(path)).toEqual([]);
-    }
+    await expectConfirmRemoveHasOneWinner(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 10 concurrent renames onto one path: exactly one wins', async () => {
-    const sources = Array.from({ length: 10 }, (_, index) => `rename-race/from-${index}.bin`);
-    const seeded = new Map<string, string>();
-    for (const path of sources) {
-      seeded.set(path, (await seedCatalogFile(catalog, putInput(path, 1))).id);
-    }
-
-    const settled = await Promise.allSettled(
-      sources.map((path) => catalog.rename(path, 'rename-race/to.bin')),
-    );
-
-    const won = sources.filter((_, index) => {
-      const result = settled[index];
-      return result?.status === 'fulfilled' && result.value.rows === 1;
-    });
-    expect(won).toHaveLength(1);
-    const rows = await rowsAt('rename-race/to.bin');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe(seeded.get(won[0] ?? ''));
+    await expectOneRenameWins(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 rounds of 20 concurrent reserves of one path: exactly one wins per round', async () => {
-    const input = { ownerPrincipalId: principalId, sizeBytes: 1, contentType: null };
-    const path = 'round-race/a.bin';
-    for (let round = 0; round < 20; round += 1) {
-      const outcomes = await Promise.all(
-        Array.from({ length: 20 }, () =>
-          catalog.reserve(path, { ...input, objectId: crypto.randomUUID() }),
-        ),
-      );
-      const winners = outcomes.filter((outcome) => outcome.kind === 'reserved');
-      expect(winners).toHaveLength(1);
-      expect(new Set(outcomes.map((outcome) => outcome.row.id)).size).toBe(1);
-      expect(await rowsAt(path)).toHaveLength(1);
-
-      const winner = winners[0]?.row;
-      if (winner === undefined) throw new Error('no reserve won');
-      const ready = await catalog.confirm(winner, { sizeBytes: 1, contentType: null });
-      expect(ready).toMatchObject({ row: { status: 'ready' } });
-      const removed = await catalog.remove(path);
-      expect(removed.map((row) => row.id)).toEqual([winner.id]);
-      for (const row of removed) await catalog.forget(row);
-      expect(await rowsAt(path)).toEqual([]);
-    }
-  });
-
-  it('the lock barrier fails with a clear message when no session ever waits', async () => {
-    const never = new Promise<never>(() => undefined);
-    await expect(lockWaiters(isolated.db, { count: 1, settled: never, polls: 3 })).rejects.toThrow(
-      'no session waited for an advisory lock',
-    );
-  });
-
-  const pathLock = (path: string) =>
-    sql`select pg_advisory_xact_lock(hashtextextended(${workspaceId}::text || ':' || ${path}, 0))`;
-
-  // @story US-STO-14
-  it('[US-STO-14][contract][sdk] a file write waits for the lock of the path it writes', async () => {
-    await expectWaitsFor(isolated.db, pathLock('lock-wait/a.bin'), () =>
-      seedCatalogFile(catalog, putInput('lock-wait/a.bin', 1)),
-    );
-    expect(await rowsAt('lock-wait/a.bin')).toHaveLength(1);
-  });
-
-  // @story US-STO-14
-  it('[US-STO-14][contract][sdk] a rename waits for a single-path writer of its workspace', async () => {
-    await seedCatalogFile(catalog, putInput('lock-wait/from.bin', 1));
-    await expectWaitsFor(
-      isolated.db,
-      sql`select pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`,
-      () => catalog.rename('lock-wait/from.bin', 'lock-wait/to.bin'),
-    );
-    expect(await rowsAt('lock-wait/to.bin')).toHaveLength(1);
-  });
-
-  // @story US-STO-14
-  it('[US-STO-14][contract][sdk] a single-path writer waits for a prefix writer of its workspace', async () => {
-    await expectWaitsFor(
-      isolated.db,
-      sql`select pg_advisory_xact_lock(hashtextextended(${workspaceId}::text, 0))`,
-      () => seedCatalogFile(catalog, putInput('workspace-wait/a.bin', 1)),
-    );
+    await expectOneWinnerPerReserveRound(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 mixed file and folder renames never deadlock', async () => {
-    const indexes = Array.from({ length: 20 }, (_, index) => index);
-    for (const index of indexes) {
-      await seedCatalogFile(catalog, putInput(`mix-a/d/f${index}.bin`, 1));
-      await seedCatalogFile(catalog, putInput(`mix-b/d/f${index}.bin`, 1));
-    }
-
-    const settled = await Promise.allSettled(
-      indexes.map((index) => {
-        const [from, to] = index % 4 < 2 ? ['mix-a', 'mix-b'] : ['mix-b', 'mix-a'];
-        if (index % 2 === 0) return catalog.rename(`${from}/d`, `${to}/d${index}`);
-        const target = `${to}/f${index}.bin`;
-        return catalog.rename(`${from}/d/f${index}.bin`, target);
-      }),
-    );
-
-    // A loser is fine, whether the clash check or the unique key caught it; a deadlock (40P01) or
-    // any other failure is not.
-    for (const result of settled) {
-      if (result.status === 'fulfilled') continue;
-      if (result.reason instanceof CatalogPathTakenError) continue;
-      expect([...postgresViolations(result.reason)].map((violation) => violation.code)).toContain(
-        '23505',
-      );
-    }
-  });
-
-  const replacing = (objectId = crypto.randomUUID()) => ({
-    ownerPrincipalId: principalId,
-    sizeBytes: 1,
-    contentType: null,
-    objectId,
+    await expectMixedRenamesNeverDeadlock(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] concurrent replacements of one file leave one ready row and the rest deleting', async () => {
-    const path = 'replace-race/a.bin';
-    const first = await seedCatalogFile(catalog, putInput(path, 1));
-
-    const confirmed = await Promise.all(
-      Array.from({ length: 10 }, async () => {
-        const reserved = await catalog.reserve(path, replacing());
-        if (reserved.kind !== 'reserved') return null;
-        return catalog.confirm(reserved.row, { sizeBytes: 2, contentType: null });
-      }),
-    );
-
-    const swaps = confirmed.flatMap((outcome) => (outcome === null ? [] : [outcome]));
-    expect(swaps.length).toBeGreaterThan(0);
-    expect(swaps.every((swap) => swap.replaced !== undefined)).toBe(true);
-    const rows = await rowsFor(path);
-    expect(rows.filter((row) => row.status === 'ready')).toHaveLength(1);
-    expect(rows.filter((row) => row.status === 'pending')).toEqual([]);
-    expect(rows.filter((row) => row.status === 'deleting')).toHaveLength(swaps.length);
-    expect(await rowsAt(path)).toHaveLength(1);
-    expect(rows.map((row) => row.id)).toContain(first.id);
+    await expectReplacementsLeaveOneReadyRow(h);
   });
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 concurrent replacements of one ready file give one pending winner', async () => {
-    const path = 'replace-reserve-race/a.bin';
-    await seedCatalogFile(catalog, putInput(path, 1));
-
-    const outcomes = await Promise.all(
-      Array.from({ length: 20 }, () => catalog.reserve(path, replacing())),
-    );
-
-    expect(outcomes.filter((outcome) => outcome.kind === 'reserved')).toHaveLength(1);
-    expect(new Set(outcomes.map((outcome) => outcome.row.id)).size).toBe(1);
-    expect((await rowsFor(path)).map((row) => row.status).sort()).toEqual(['pending', 'ready']);
-  });
-
-  // @story US-STO-14
-  it('[US-STO-14][contract][sdk] reserve, confirm and forget wait for the lock of the path they write', async () => {
-    const path = 'lock-proof/a.bin';
-    await seedCatalogFile(catalog, putInput(path, 1));
-    await expectWaitsFor(isolated.db, pathLock(path), () => catalog.reserve(path, replacing()));
-    const [pending] = (await rowsFor(path)).filter((row) => row.status === 'pending');
-    if (pending === undefined) throw new Error('the reserve did not land');
-
-    await expectWaitsFor(isolated.db, pathLock(path), () =>
-      catalog.confirm(pending, { sizeBytes: 2, contentType: null }),
-    );
-    expect((await rowsFor(path)).filter((row) => row.status === 'deleting')).toHaveLength(1);
-
-    const other = 'lock-proof/b.bin';
-    await seedCatalogFile(catalog, putInput(other, 1));
-    const reserved = await catalog.reserve(other, replacing());
-    await expectWaitsFor(isolated.db, pathLock(other), () => catalog.forget(reserved.row));
-    expect((await rowsFor(other)).map((row) => row.status)).toEqual(['ready']);
-  });
-
-  // @story US-STO-04
-  it('[US-STO-04][contract][sdk] removing one file waits for its path lock but runs beside other single-path writers', async () => {
-    const path = 'lock-proof/remove.bin';
-    await seedCatalogFile(catalog, putInput(path, 1));
-    await expectWaitsFor(isolated.db, pathLock(path), () => catalog.remove(path));
-    expect((await rowsFor(path)).map((row) => row.status)).toEqual(['deleting']);
-
-    // A shared workspace lock is what every single-path writer holds, so a one-file remove takes
-    // it too and does not wait; only a prefix writer would.
-    const other = 'lock-proof/remove-beside.bin';
-    await seedCatalogFile(catalog, putInput(other, 1));
-    const shared = sql`select pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`;
-    await expectRunsBeside(isolated.db, shared, () => catalog.remove(other));
-    expect((await rowsFor(other)).map((row) => row.status)).toEqual(['deleting']);
-  });
-
-  // @story US-STO-04
-  it('[US-STO-04][contract][sdk] removing a folder waits for a single-path writer of its workspace', async () => {
-    await seedCatalogFile(catalog, putInput('lock-proof/dir/a.bin', 1));
-    const shared = sql`select pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`;
-    await expectWaitsFor(isolated.db, shared, () => catalog.remove('lock-proof/dir'));
-    expect((await rowsFor('lock-proof/dir/a.bin')).map((row) => row.status)).toEqual(['deleting']);
+    await expectConcurrentReplacementsGiveOnePendingWinner(h);
   });
 
   // @story US-STO-08
   it('[US-STO-08][contract][sdk] 10 concurrent createSkill calls for one name give one row and 9 nulls', async () => {
-    const input = {
-      name: 'create-race',
-      skillMd: '# race',
-      enabled: true,
-      ownerPrincipalId: principalId,
-    };
-    const outcomes = await Promise.all(
-      Array.from({ length: RACE_CONNECTIONS }, () => catalog.createSkill(input)),
-    );
-
-    expect(outcomes.filter((outcome) => outcome !== null)).toHaveLength(1);
-    expect(
-      (await catalog.listSkills()).filter((skill) => skill.name === 'create-race'),
-    ).toHaveLength(1);
+    await expectConcurrentCreateSkillGivesOneRow(h);
   });
 });

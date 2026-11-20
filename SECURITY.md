@@ -31,4 +31,4 @@ registries). Report those to the provider concerned.
 ## Hardening guidance
 
 For the threat model and the controls a deployment should apply, read
-[`docs/spec.md`](docs/spec.md) and [`docs/deploy/single-vm.md`](docs/deploy/single-vm.md).
+[`docs/spec.md`](docs/spec.md) and [`docs/40-operate/deploy/single-vm.md`](docs/40-operate/deploy/single-vm.md).

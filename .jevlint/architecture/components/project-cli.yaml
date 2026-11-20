@@ -1,0 +1,18 @@
+id: project-cli
+title: Project CLI and generator
+summary: >
+  The project CLI and npm create: generates a deployment project from one validated profile, starts it with Compose, probes buckets and databases, and deploys through a step runner over external tools.
+layer: delivery
+paths:
+  - "packages/cli/**"
+  - "packages/create/**"
+key_files:
+  - { path: packages/cli/src/validate.ts, role: "bucket and database probes (the S3 and GCS exception)" }
+  - { path: packages/cli/src/profile.ts, role: "DeploymentProfile: cloud, storage, runtime, identity" }
+  - { path: packages/cli/src/deploy/steps.ts, role: "DeployContext and runStep" }
+interface: [DeploymentProfile, DeployContext, runStep]
+depends_on: [sdk, contracts]
+uses: [s3, gcs, postgres]
+rules: []
+checklist: []
+status: current

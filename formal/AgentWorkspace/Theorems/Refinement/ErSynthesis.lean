@@ -130,7 +130,7 @@ private theorem column_cases {c : String} {ten : Tenancy} (h : ten.column? = som
 
 /-- The target classifies every table as today's schema does: the same tenant root, the same two
 global identity tables, the same 30 tenant-scoped tables. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#the-target-er-model")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenancy_classes_are_unchanged (t : TableName) :
     (Target.schema t).tenancy = (catalogue t).tenancy := by
@@ -138,8 +138,8 @@ theorem tenancy_classes_are_unchanged (t : TableName) :
 
 /-- Every tenancy constraint of today's schema has an image in the target with the same tenancy
 class: no reference to the tenant root and no tenant-paired or sibling-paired reference is lost. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/00-orchestrator-prompt.md#61-tiers")
-  (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/00-orchestrator-prompt.md#61-tiers")
+  (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem every_tenancy_constraint_is_kept (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) (hten : isTenancyConstraint catalogue t fk = true) :
@@ -154,7 +154,7 @@ theorem every_tenancy_constraint_is_kept (t : TableName) (fk : ForeignKey)
 
 /-- Every foreign key of today's schema, tenancy constraint or reference to a global table, has
 its image among the target's keys. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem every_key_has_an_image (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) : fkImage t fk ∈ (Target.schema t).foreignKeys := by
@@ -165,7 +165,7 @@ theorem every_key_has_an_image (t : TableName) (fk : ForeignKey)
 
 /-- Every key the target adds (no key of today's schema maps onto it) is itself a tenancy
 constraint: the target only tightens tenancy. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#the-target-er-model")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem added_keys_are_tenancy_constraints :
     (allTables.all fun t => (Target.schema t).foreignKeys.all fun fk' =>
@@ -174,7 +174,7 @@ theorem added_keys_are_tenancy_constraints :
 
 /-- The target has no unpaired reference and no undeclared `*_id` column, so today's tenancy test
 rules 2 and 3 hold of it as they do of today's schema. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem target_keeps_the_tenancy_rules :
     pairingComplete catalogue = true ∧ pairingComplete Target.schema = true ∧
@@ -183,7 +183,7 @@ theorem target_keeps_the_tenancy_rules :
 
 /-- The refinement map keeps every row in its workspace: the tenant of each row of the target
 state, in order, is the tenant of the row of today's state it comes from. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#workspace-and-principal")]
 theorem refinement_keeps_every_row_in_its_workspace (st : State) (t : TableName) :
     (toTarget st t).map (tenantOf Target.schema t) = (st t).map (tenantOf catalogue t) := by
@@ -196,7 +196,7 @@ theorem refinement_keeps_every_row_in_its_workspace (st : State) (t : TableName)
   | some c => simp only [Option.bind_some]; exact mapRow_get st t r (column_cases hc)
 
 /-- The refinement map keeps every row's identity: the `id`s of each table, in order, are today's. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 theorem refinement_keeps_row_ids (st : State) (t : TableName) :
     (toTarget st t).map (·.get "id") = (st t).map (·.get "id") := by
   simp only [toTarget, List.map_map]
@@ -207,7 +207,7 @@ theorem refinement_keeps_row_ids (st : State) (t : TableName) :
 /-- The target changes exactly six keys of today's schema: the grant key (member → principal),
 the two connector keys (column rename), the two composite `SET NULL` keys (now `NO ACTION`
 beside a sibling) and the share owner key (publisher → owner). -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/schema/agent-grants.ts#agentGrants")]
 theorem keys_diverge_exactly_at :
     changedKeys =
@@ -220,7 +220,7 @@ theorem keys_diverge_exactly_at :
 
 /-- The target adds exactly nine keys: the inviter's principal (paired and sibling), the model
 connection's credential, the two `SET NULL` siblings and one subject key per subject type. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")]
 theorem keys_added_exactly_at :
     addedKeys =
@@ -238,8 +238,8 @@ theorem keys_added_exactly_at :
 `connector_id` for `mcp_server_id` on the two connector links, the inviter's principal, the model
 connection's credential, and on shares the owner and the four typed subject columns for the
 publisher and the untyped subject id. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem columns_diverge_exactly_at :
     columnChanges =
       [(.agentGrants, ["principal_id"], ["user_id"]),
@@ -254,7 +254,7 @@ theorem columns_diverge_exactly_at :
 /-- The target adds and drops exactly these checks: the model pair on agents, the ledger's provider
 set, the transcript key, the SDK session id, three share checks (subject, mode, budget) for the
 blank-subject-id check, and the principal kind and source checks respelled with `api-key`. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]
 theorem checks_diverge_exactly_at :
     checkChanges =
@@ -270,7 +270,7 @@ theorem checks_diverge_exactly_at :
 
 /-- The target renames exactly the three connector tables, so that "connector" is the concept's
 one name. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 theorem table_names_diverge_exactly_at :
     allTables.filter (fun t => Target.tableName t != t.toWire) =
@@ -278,7 +278,7 @@ theorem table_names_diverge_exactly_at :
 
 /-- Today exactly two keys carry an `ON DELETE SET NULL` that cannot execute (it would null the
 `NOT NULL` `workspace_id` too); the target has none. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/schema/projects.ts#projects")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem set_null_diverges_exactly_at :
@@ -297,7 +297,7 @@ theorem value_gate_diverges_exactly_at :
 
 /-- Every owned resource names its owner `owner_principal_id` in the target; today exactly one
 table, `shares`, names it otherwise. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")]
 theorem owner_columns_diverge_exactly_at :
     allTables.filter (fun t => Current.ownerColumn? t != Target.ownerColumn? t) = [.shares] ∧
@@ -308,8 +308,8 @@ theorem owner_columns_diverge_exactly_at :
 
 /-- The witness state of today's schema is consistent, and so is its image: the refinement map
 takes a well-formed database of today onto a well-formed target database. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem refinement_holds_on_the_witness :
     Current.consistent Current.Witness.state = true ∧
       Target.consistent (toTarget Current.Witness.state) = true ∧
@@ -317,7 +317,7 @@ theorem refinement_holds_on_the_witness :
 
 /-- Every one-cell divergence is admitted today and breaks exactly its named constraints in the
 target. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 theorem every_divergence_cell_is_exact :
     (Divergence.cells.all fun (_, st, vs) => Current.consistent st &&
       !Target.consistent (toTarget st) && Target.violations (toTarget st) == vs) = true := by
@@ -340,7 +340,7 @@ local macro "divergence_cell_mem" : tactic =>
 /-- An API key with no principal is a consistent state today; the target requires one principal
 per membership and per API key (RF-101). -/
 @[aw_spec (tier := T4)
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]
 theorem diverges_at_a_source_without_principal :
     Current.consistent Divergence.keyWithoutPrincipal = true ∧
@@ -361,7 +361,7 @@ theorem diverges_at_a_grant_without_principal :
 
 /-- A runtime profile naming a plain secret as its runtime connection is consistent today; the
 target types the reference (RF-204). -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")]
 theorem diverges_at_an_untyped_runtime_connection :
     Current.consistent Divergence.plainSecretAsRuntimeConnection = true ∧
@@ -371,7 +371,7 @@ theorem diverges_at_an_untyped_runtime_connection :
 
 /-- An agent with a model and no model connection is consistent today; the target enforces the
 documented pair. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem diverges_at_a_model_without_connection :
     Current.consistent Divergence.modelWithoutConnection = true ∧
@@ -381,7 +381,7 @@ theorem diverges_at_a_model_without_connection :
 /-- A session whose SDK session id is not its own id is consistent today although the launch path
 never records one (it refuses any reported id other than the session id); the target makes that
 rule a check. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/units/concept-work.md#findings")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/units/concept-work.md#findings")
   (ts := "apps/web/server/composition/session-launch.ts#recordReportedSessionIdentity")]
 theorem diverges_at_a_foreign_sdk_session_id :
     Current.consistent Divergence.foreignSdkSessionId = true ∧
@@ -390,7 +390,7 @@ theorem diverges_at_a_foreign_sdk_session_id :
 
 /-- A transcript stored under a key other than its workspace id is consistent today; the target
 checks that the key is the workspace. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")
   (ts := "packages/contracts/src/sessions.ts#projectKey")]
 theorem diverges_at_a_transcript_under_another_key :
     Current.consistent Divergence.transcriptUnderAnotherKey = true ∧
@@ -452,7 +452,7 @@ theorem diverges_at_a_budget_on_a_definition_share :
 
 /-- A ledger row whose provider is outside `MODEL_PROVIDERS` is consistent today; the target closes
 the set as `runs.provider` already is. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "packages/core/src/db/schema/run-usage-records.ts#runUsageRecords")]
 theorem diverges_at_an_unknown_ledger_provider :
     Current.consistent Divergence.unknownLedgerProvider = true ∧
@@ -462,7 +462,7 @@ theorem diverges_at_an_unknown_ledger_provider :
 
 /-- Deleting an agent that is a project's default is refused today (the composite `SET NULL` nulls
 `projects.workspace_id`), while the target clears the default and stays consistent. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")
   (ts := "packages/core/src/db/schema/projects.ts#projects")]
 theorem deleting_a_default_agent_diverges :
     Current.consistent DeleteWitness.state = true ∧
@@ -486,7 +486,7 @@ theorem target_identity_survives_an_email_change (st : State) (c : ClaimsTarget)
 open Target.Resolution in
 /-- Today, a browser session keyed by email stops resolving once the user's email changes, although
 the user, the membership and the principal are unchanged. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/auth/session.ts#SessionClaims")
+@[aw_spec (tier := T4) (ts := "apps/web/server/auth/session.ts#SignInSessionClaims")
   (ts := "packages/core/src/db/repositories/root.ts#resolveMembership")]
 theorem current_identity_breaks_on_an_email_change :
     resolveCurrent Current.Witness.state ⟨"ada@example.com", "one", "owner"⟩ = some ("p1", "owner") ∧
@@ -508,7 +508,7 @@ theorem resolution_by_id_refines_resolution_by_email (st : State) (c : ClaimsCur
 open Target.Resolution in
 /-- Today's session verification accepts only the role claim `owner`, so the claim carries no
 information and the target drops it without losing anything. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/auth/session.ts#SessionClaims")
+@[aw_spec (tier := T4) (ts := "apps/web/server/auth/session.ts#SignInSessionClaims")
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#three-separate-questions-three-separate-mechanisms")]
 theorem role_claim_carries_no_information (c : ClaimsCurrent) (h : verifyCurrent c = true) :
     c.role = "owner" := by
@@ -560,7 +560,7 @@ theorem target_refuses_a_subject_in_another_column :
 
 /-- The target closes the ledger's provider column over exactly the value list today's schema
 already enforces on `runs.provider` (`MODEL_PROVIDERS`), on the same column. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "packages/contracts/src/runs.ts#MODEL_PROVIDERS")
   (ts := "packages/core/src/db/schema/runs.ts#runs_provider_valid")]
 theorem ledger_providers_are_the_run_providers :
@@ -572,7 +572,7 @@ theorem ledger_providers_are_the_run_providers :
 
 /-- Every provider today's `runs.provider` accepts is accepted on a ledger row of the target: the
 target witness with its ledger row's provider set to any of them breaks no constraint. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "packages/contracts/src/runs.ts#MODEL_PROVIDERS")]
 theorem every_run_provider_is_a_valid_ledger_provider :
     (((catalogue .runs).oneOfCheck? "runs_provider_valid").map (·.2) |>.getD []).all

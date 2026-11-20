@@ -130,6 +130,6 @@ publicUrl: ''
 # Ingress rule and its NetworkPolicies. `aw deploy` writes this list from
 # `environments.production.apps`: `name`, a digest-pinned `image`, the `host` its Ingress rule
 # serves and the PostgreSQL `schema` (`app_<name>`) the app's own role owns. Each app reads the
-# operator-created Secret `agent-workspace-app-<name>` (docs/deploy/kubernetes.md, Apps) and needs
+# operator-created Secret `agent-workspace-app-<name>` (docs/40-operate/deploy/kubernetes.md, Apps) and needs
 # `publicUrl`, which it calls the platform at. `replicas` defaults to 1.
 apps: []

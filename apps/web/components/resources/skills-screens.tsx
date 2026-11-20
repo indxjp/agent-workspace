@@ -22,6 +22,8 @@ import {
 } from './resource-screen-state';
 import { BUTTON, CARD, INPUT } from './resource-styles';
 import { updateSkillSource } from './skill-source';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { skillsStrings, type SkillsStrings } from './skills-messages';
 
 export { updateSkillSource };
 
@@ -43,7 +45,15 @@ function skillFields(form: FormData): { description: string; instructions: strin
   };
 }
 
-function SkillRow({ name, enabled }: { name: string; enabled: boolean }) {
+function SkillRow({
+  name,
+  enabled,
+  strings,
+}: {
+  name: string;
+  enabled: boolean;
+  strings: SkillsStrings;
+}) {
   return (
     <div className="flex items-center gap-3 border-b border-border py-3 last:border-0">
       <Link
@@ -52,12 +62,13 @@ function SkillRow({ name, enabled }: { name: string; enabled: boolean }) {
       >
         {name}
       </Link>
-      <span className="text-xs text-muted">{enabled ? 'Enabled' : 'Disabled'}</span>
+      <span className="text-xs text-muted">{enabled ? strings.enabled : strings.disabled}</span>
     </div>
   );
 }
 
-export function SkillsScreen() {
+export function SkillsScreen({ locale = 'en' }: { readonly locale?: VersionsLocale }) {
+  const strings = skillsStrings(locale);
   const state = useJson(loadSkills);
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -71,12 +82,12 @@ export function SkillsScreen() {
     await state.reload();
   };
   return (
-    <>
-      {title('Skills', 'Create and manage private workspace skills.')}
+    <div lang={locale}>
+      {title(strings.title, strings.intro)}
       <Status problem={state.problem} />
       {state.loading ? (
         <p className="mb-4 text-sm text-muted" role="status">
-          Loading skills…
+          {strings.loading}
         </p>
       ) : null}
       <form
@@ -90,27 +101,37 @@ export function SkillsScreen() {
           placeholder="skill-name"
           required
         />
-        <input className={INPUT} name="description" placeholder="What this skill does" required />
+        <input
+          className={INPUT}
+          name="description"
+          placeholder={strings.descriptionPlaceholder}
+          required
+        />
         <textarea
           className={INPUT}
           name="instructions"
-          placeholder="Instructions"
+          placeholder={strings.instructionsPlaceholder}
           required
           rows={4}
         />
         <button className={BUTTON} type="submit">
-          Create skill
+          {strings.createSkill}
         </button>
       </form>
       <div className={CARD}>
         {rowsWithStrings(state.value, 'skills', 'name').map((skill) => (
-          <SkillRow enabled={skill['enabled'] !== false} key={skill.name} name={skill.name} />
+          <SkillRow
+            enabled={skill['enabled'] !== false}
+            key={skill.name}
+            name={skill.name}
+            strings={strings}
+          />
         ))}
         {state.value !== null && rows(state.value, 'skills').length === 0 ? (
-          <p className="text-sm text-muted">No skills yet.</p>
+          <p className="text-sm text-muted">{strings.empty}</p>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
 

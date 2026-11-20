@@ -13,6 +13,7 @@ import { attempt, tail } from './lane-commands.mjs';
 import {
   withProductionApps,
   standInImage,
+  standInPlatformImages,
   composeAppsProblem,
   helmAppsProblem,
 } from './lane-deploy-checks.mjs';
@@ -21,6 +22,7 @@ import { appImage } from './lane-build-image.mjs';
 export {
   withProductionApps,
   standInImage,
+  standInPlatformImages,
   composeAppsProblem,
   helmAppsProblem,
 } from './lane-deploy-checks.mjs';
@@ -58,6 +60,8 @@ function preparePlanProject({ id, copy, image }, { work, target }) {
  * file `aw deploy` rendered (`compose.apps.yaml`, or the Helm values), or the reason it has none.
  * The Kubernetes plan runs with a `helm` that answers every call and does nothing (shortcut: the
  * lane checks the values `aw deploy` writes and installs no chart; upgrade when it has a cluster).
+ * The platform images are {@link standInPlatformImages}, so a plan never needs this version's
+ * images to be published.
  *
  * @param {{ id: string, copy: string, image: string, env: NodeJS.ProcessEnv, work: string, target: 'single-vm' | 'kubernetes' }} options
  */
@@ -69,7 +73,12 @@ export function renderedPlan({ id, copy, image, env, work, target }) {
   const aw = path.join(copy, 'node_modules/@indx-workspace/aw/dist/index.js');
   const planned = attempt(process.execPath, [aw, 'deploy', 'production'], {
     cwd: project,
-    env: { ...env, HOME: home, PATH: `${bin}${path.delimiter}${env['PATH'] ?? ''}` },
+    env: {
+      ...env,
+      ...standInPlatformImages(),
+      HOME: home,
+      PATH: `${bin}${path.delimiter}${env['PATH'] ?? ''}`,
+    },
     timeoutMs: 300_000,
   });
   // A plan with changes exits 3 (ADR-0094); 0 is a plan without.

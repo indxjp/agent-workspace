@@ -290,7 +290,7 @@ opaque to the platform and reported for support rather than compared.
 The body of `GET /api/engines` (ENG-02c): every engine this deployment registers, in the
 catalogue's order.
 
-Enveloped rather than a bare array, as §4 of `docs/sdk/04-api-specification.md` requires of every
+Enveloped rather than a bare array, as §4 of `docs/10-product/sdk/04-api-specification.md` requires of every
 list route, so a later release can add a sibling field without changing the body's JSON type.
 The SDK's `engines.list()` unwraps it, so a caller sees the array either way.
 

@@ -6,7 +6,7 @@ import { type ModelDiscovery } from '../models/discovery';
 import { readVertexDefaults } from '../models/vertex-defaults';
 import type { WorkspaceModelsStore } from '../models/store';
 import { RUNTIME_MANAGER_FORBIDDEN, setupSecretsOf, setupStepFailure } from '../setup/failure';
-import type { SetupInput, SetupResult } from '../setup/runtime';
+import type { SetupInput, SetupResult } from '../setup/wiring';
 import { runtimeNetworkPolicyRefusal } from './config';
 import { setupConnectionCandidate, type SetupConnectionCandidate } from './setup-persist';
 import {

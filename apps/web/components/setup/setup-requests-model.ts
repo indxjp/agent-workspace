@@ -9,7 +9,7 @@ import { z } from 'zod';
 /*
  * W3-7 (#1356): how the first-run wizard reads its two answers. The calls themselves stay raw
  * `fetch` in setup-wizard.tsx, under its existing budget and suppression entries: `POST
- * /api/setup` is out of the SDK's scope permanently (docs/sdk/04-api-specification.md §1, a
+ * /api/setup` is out of the SDK's scope permanently (docs/10-product/sdk/04-api-specification.md §1, a
  * browser journey), and `GET /api/setup/runtime-detect` gets an SDK method only after it moves to
  * `/api/runtimes/detect` (S-9, unit 9 #241). Both are pre-auth and only the wizard calls them, so
  * a published SDK method for either would be speculative.

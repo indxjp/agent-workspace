@@ -10,7 +10,7 @@ Scope: `packages/core/src/db/schema/{secrets,model-connections,runtime-profiles}
 A secrets row is a plain secret, a model connection's credential or a runtime connection, and only
 its name says which (`MODEL_CONNECTION_<ID>`, `RUNTIME_CONNECTION__<DRIVER>__<LABEL>`).
 `runtime_profiles.runtime_connection_id` can name any secret of the workspace (configuration
-finding 3; `docs/sdk/04-api-specification.md` §5.5: "_the convention is a naming one until RF-204
+finding 3; `docs/10-product/sdk/04-api-specification.md` §5.5: "_the convention is a naming one until RF-204
 replaces it with typed foreign keys_"), and a model connection's credential has no key at all
 (configuration finding 8). `diverges_at_an_untyped_runtime_connection` exhibits a profile naming a
 plain secret.

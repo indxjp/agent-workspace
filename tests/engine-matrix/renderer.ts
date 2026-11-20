@@ -1,5 +1,5 @@
 /**
- * `docs/engine-matrix.md`, rendered from what each adapter declares and what the conformance kit
+ * `docs/30-reference/matrices/engine-matrix.md`, rendered from what each adapter declares and what the conformance kit
  * observes (ENG-04, #303).
  *
  * Written next to `tests/driver-matrix/` and for the same reason that exists: a capability table
@@ -254,7 +254,7 @@ export async function renderEngineMatrix(): Promise<string> {
   );
   if (missing.length > 0) {
     throw new Error(
-      `docs/engine-matrix.md would omit ${missing.join(', ')}: add a row to tests/engine-matrix/renderer.ts.`,
+      `docs/30-reference/matrices/engine-matrix.md would omit ${missing.join(', ')}: add a row to tests/engine-matrix/renderer.ts.`,
     );
   }
 

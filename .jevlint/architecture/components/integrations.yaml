@@ -1,0 +1,26 @@
+id: integrations
+title: Integrations and model connections
+summary: >
+  How a workspace meets the outside: MCP connectors, model connections, the A2A endpoint, endpoint clients, the tool endpoint the gateway forwards to, triggers and webhooks.
+layer: application
+paths:
+  - "apps/web/server/a2a/**"
+  - "apps/web/server/connectors/**"
+  - "apps/web/server/endpoint-clients/**"
+  - "apps/web/server/endpoints/**"
+  - "apps/web/server/gateway/**"
+  - "apps/web/server/integrations/**"
+  - "apps/web/server/models/**"
+  - "apps/web/server/tool-endpoint/**"
+  - "apps/web/server/triggers/**"
+  - "apps/web/server/webhooks/**"
+key_files:
+  - { path: apps/web/server/a2a/dispatch.ts, role: "A2A endpoint: API key or OAuth token, then a run" }
+  - { path: apps/web/server/connectors/wiring.ts, role: "connector domain wiring and credential replacement" }
+  - { path: apps/web/server/triggers/fire.ts, role: "fire(): a trigger secret starts a run for its owner" }
+interface: [fire, deliver]
+depends_on: [identity, storage-sharing, execution, composition, server-kernel, persistence, gateway, contracts]
+uses: []
+rules: []
+checklist: []
+status: current

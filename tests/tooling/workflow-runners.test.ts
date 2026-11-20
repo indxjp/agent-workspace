@@ -66,6 +66,28 @@ describe('workflow validator', () => {
     );
   });
 
+  // The storage load test's scope lives in scripts/ci/load-scope.mjs, which also counts the backend
+  // SDK bumps (packages/core/package.json, pnpm-lock.yaml); an inline grep would drop them.
+  it('rejects a storage load step that decides its scope without load-scope.mjs', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+    const scope = 'answer="$(node scripts/ci/load-scope.mjs "$DIFF_BASE")"';
+    expect(ci).toContain(scope);
+    workflows.set(
+      '.github/workflows/ci.yml',
+      ci.replace(scope, 'answer="applies=$(git diff --name-only | grep -cq storage/)"'),
+    );
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('heavy-checks must include'),
+    );
+  });
+
   // The first MS-A2 runs-on is release-checks' (fast-checks left the pool, Amendment 2026-11-05). Each job names its INDXDev runner and the
   // GitHub-hosted fallback the public export and forks run on (ADR-0053, Amendment 2026-10-26).
   const msA2 = `\${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}`;

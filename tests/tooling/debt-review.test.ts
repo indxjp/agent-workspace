@@ -140,7 +140,7 @@ describe('debt-review', () => {
 
   it('documents every JSON baseline it measures', () => {
     const script = readFileSync('scripts/ci/debt-review.mjs', 'utf8');
-    const doc = readFileSync('docs/operations/debt-review.md', 'utf8');
+    const doc = readFileSync('docs/40-operate/operations/debt-review.md', 'utf8');
     const measured = [...script.matchAll(/\bjson\('([^']+)'\)/gu)].map((match) => match[1]);
     expect(measured).toContain('tests/fitness/storage-limits-allowlist.json');
     expect(measured.filter((file) => !doc.includes(`\`${file ?? ''}\``))).toEqual([]);

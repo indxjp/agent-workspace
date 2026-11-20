@@ -43,7 +43,7 @@ open AgentWorkspace
 /-- The runtime drivers (`runtimeProfileDrivers`, `RUNTIME_DRIVERS`), in spec §14.2 order. -/
 @[aw_spec (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfileDrivers")
   (ts := "packages/contracts/src/runtimes.ts#RUNTIME_DRIVERS")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 inductive Driver where
   | local
   | sandboxRuntime
@@ -159,14 +159,14 @@ def int4Min : Int := -2147483648
 /-- `RUNTIME_PROFILE_BOUNDS.cpu`: greater than zero; fractions are allowed. -/
 @[aw_spec (ts := "packages/contracts/src/runtimes.ts#RUNTIME_PROFILE_BOUNDS")
   (ts := "packages/run-protocol/src/schemas.ts#RuntimeProfile")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def cpuAccepted (d : Decimal) : Bool := d.isPositive
 
 /-- `RUNTIME_PROFILE_BOUNDS` for `memoryMb`, `diskMb`, `timeoutSeconds` and `idleTimeoutSeconds`:
 a whole number in `[1, MAX_SAFE_INTEGER]`. -/
 @[aw_spec (ts := "packages/contracts/src/runtimes.ts#RUNTIME_PROFILE_BOUNDS")
   (ts := "packages/run-protocol/src/schemas.ts#RuntimeProfile")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def sizeAccepted (d : Decimal) : Bool :=
   d.isInteger && decide (1 ≤ d.toInt) && decide (d.toInt ≤ maxSafeInteger)
 
@@ -236,7 +236,7 @@ def createAccepts (keys : List String) : Bool :=
 /-- The fields `PATCH /api/runtime-profiles/:id` accepts: `UpdateRuntimeProfileInput` is
 `CreateRuntimeProfileInput.partial()`, so every creatable field and nothing else. -/
 @[aw_spec (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def updateFields : List String := createFields
 
 /-- The profile fields that may be absent (`null` on the resource): every creatable field the create
@@ -260,20 +260,20 @@ is refused for every field except where `null` is itself a value (`nullAsValueFi
 nullable field can be changed but not cleared. -/
 @[aw_spec (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")
   (ts := "apps/web/server/runtimes/contract.ts#parseUpdateRuntimeProfilePatch")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def patchAcceptsCurrent (body : List (String × PatchValue)) : Bool :=
   body.all fun (k, v) => updateFields.contains k && (v == .value || nullAsValueFields.contains k)
 
 /-- The fields roadmap S-19 lets a `PATCH` clear: "the nullable sizing fields and
 `runtimeConnectionId`", read as the sizing and timeout members. Whether `allowedDomains`,
 `persistPaths` and `driverConfig` are meant too the row does not say. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#8-server-changes-this-specification-requires")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#8-server-changes-this-specification-requires")]
 def s19ClearableFields : List String :=
   ["runtimeConnectionId", "cpu", "memoryMb", "diskMb", "timeoutSeconds", "idleTimeoutSeconds"]
 
 /-- The documented target (roadmap S-19): `null` clears a field S-19 names; every other field still
 cannot be cleared, and a field whose `null` is a value accepts it as today. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#8-server-changes-this-specification-requires")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#8-server-changes-this-specification-requires")]
 def patchAcceptsTarget (body : List (String × PatchValue)) : Bool :=
   body.all fun (k, v) =>
     updateFields.contains k &&
@@ -291,7 +291,7 @@ def isRegexLineTerminator (c : Char) : Bool :=
 /-- `/^.+@sha256:[0-9a-f]{64}$/u`: a non-empty single-line reference, then `@sha256:`, then exactly
 64 lower-case hexadecimal digits at the very end. -/
 @[aw_spec (ts := "apps/web/server/runtimes/contract.ts#parseCreateRuntimeProfileInput")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def isSha256Pinned (s : String) : Bool :=
   let cs := s.toList
   let n := cs.length
@@ -312,7 +312,7 @@ inductive Image where
 `sha256`-pinned, anything else is refused. The driver is an argument because the error message
 speaks of "non-local runtime profiles"; the rule does not read it. -/
 @[aw_spec (ts := "apps/web/server/runtimes/contract.ts#parseCreateRuntimeProfileInput")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def createImageAccepted (_driver : Driver) : Image → Bool
   | .absent => true
   | .text s => isSha256Pinned s
@@ -329,7 +329,7 @@ def resourceFields : List String :=
 
 /-- The field names of `RuntimeConnectionResourceSchema`: no endpoint, no credential. -/
 @[aw_spec (ts := "packages/contracts/src/runtimes.ts#RuntimeConnectionResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def connectionResourceFields : List String := ["id", "name", "driver", "createdAt"]
 
 /-- The fields `POST /api/runtime-connections` takes; `endpoint` and `credential` are sealed. -/
@@ -338,7 +338,7 @@ def connectionCreateFields : List String := ["name", "driver", "endpoint", "cred
 
 /-- The fields `POST /api/runtime-connections` requires: all four. -/
 @[aw_spec (ts := "apps/web/server/runtimes/connections.ts#parseCreateRuntimeConnectionInput")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def connectionCreateRequiredFields : List String := ["name", "driver", "endpoint", "credential"]
 
 /-- `parseCreateRuntimeConnectionInput` over the keys of a body (each present value valid): it
@@ -385,7 +385,7 @@ def isLabel : List Char → Bool
 /-- `encodeSecretName(driver, label)`: `RUNTIME_CONNECTION__<DRIVER>__<LABEL>`, or `none` when the
 encoded label does not start with a letter or the name exceeds 128 characters. -/
 @[aw_spec (ts := "apps/web/server/runtimes/connections.ts#encodeSecretName")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def encodeSecretName (driver label : String) : Option String :=
   let l := encodeSegment label.toList
   if !isLabel l then none

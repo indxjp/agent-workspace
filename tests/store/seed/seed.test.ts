@@ -36,23 +36,54 @@ describe('the seed of every live entry', () => {
     expect(entries.every((entry) => entry.status === 'live')).toBe(true);
   });
 
-  it('carries records for five entries: crm-sales, quotation, service-desk, team-chat, wiki', () => {
+  it('carries records for the five entries with a records folder and the three whose gallery fixtures a read tool answers from', () => {
     const withRecords = entries
       .filter((entry) => buildSeed(entry).records.length > 0)
       .map((entry) => entry.slug)
       .sort();
-    expect(withRecords).toEqual(['crm-sales', 'quotation', 'service-desk', 'team-chat', 'wiki']);
+    expect(withRecords).toEqual([
+      'crm-sales',
+      'meeting-minutes',
+      'quality-defect',
+      'quotation',
+      'ringi-review',
+      'service-desk',
+      'team-chat',
+      'wiki',
+    ]);
   });
 
-  it('carries records exactly for the entries whose catalog names a records folder', () => {
+  it("carries a records folder's sets in both languages, and a gallery fixture's in Japanese", () => {
     for (const entry of entries) {
       const seed = buildSeed(entry);
-      expect(seed.records.length > 0, entry.slug).toBe(entry.demo.records !== undefined);
-      // Both languages, the same resources in each.
       const byLang = (lang: string) =>
         seed.records.filter((set) => set.lang === lang).map((set) => set.resource);
-      expect(byLang('ja').sort(), entry.slug).toEqual(byLang('en').sort());
+      if (entry.demo.records === undefined) expect(byLang('en'), entry.slug).toEqual([]);
+      else expect(byLang('ja').sort(), entry.slug).toEqual(byLang('en').sort());
     }
+  });
+
+  it("declares an openapiTool's admitted operations, and makes each of its writes wait for approval as its connector would", () => {
+    const bySlug = new Map(entries.map((entry) => [entry.slug, buildSeed(entry)] as const));
+    const qms = bySlug.get('quality-defect')?.connectors.find((c) => c.name === 'qms');
+    expect(qms).toEqual({
+      name: 'qms',
+      reads: ['searchDefects', 'causeStats', 'getDefect'],
+      writes: ['createCase'],
+    });
+    // The workflow document declares approveRequest and rejectRequest; allow does not admit them.
+    const workflow = bySlug.get('ringi-review')?.connectors.find((c) => c.name === 'workflow');
+    expect(workflow).toEqual({ name: 'workflow', reads: [], writes: ['postComment'] });
+    const gates = (slug: string) => {
+      const policy = bySlug.get(slug)?.definition.policy;
+      return policy !== undefined && 'tools' in policy ? policy.requireApproval : undefined;
+    };
+    expect(gates('quotation')).toEqual(['mcp__erp__createQuote']);
+    expect(gates('ringi-review')).toEqual(['mcp__workflow__postComment']);
+    expect(gates('maintenance')).toEqual(['mcp__maintenance__logResolution']);
+    // A gallery agent's own gate is kept beside them; an app's writes are not gated.
+    expect(gates('cad-drafting')).toEqual(['Write']);
+    expect(gates('crm-sales')).toBeUndefined();
   });
 
   it('carries exactly the files and record sets the nightly sample check expects', () => {

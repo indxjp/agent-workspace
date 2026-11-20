@@ -13,7 +13,7 @@
 import { readOidcConfiguration, type DiscoverableOidcConfiguration } from './auth/oidc.ts';
 import {
   cookieInstanceId,
-  DEFAULT_SESSION_COOKIE_NAME,
+  DEFAULT_SIGN_IN_SESSION_COOKIE_NAME,
   MIN_BOOTSTRAP_PASSWORD_LENGTH,
   MIN_SESSION_SECRET_LENGTH,
   readBootstrapAdmin,
@@ -165,7 +165,7 @@ export function installedScopedCookieName(base: string): string {
 
 /** The session cookie's name for this deployment. */
 export function installedSessionCookieName(): string {
-  return installedScopedCookieName(DEFAULT_SESSION_COOKIE_NAME);
+  return installedScopedCookieName(DEFAULT_SIGN_IN_SESSION_COOKIE_NAME);
 }
 
 /** The OIDC client, or `null`; a partial client throws the same error it always did. */

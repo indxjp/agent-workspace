@@ -1,0 +1,11 @@
+id: start-run
+title: Start a run from the control plane
+trigger: "POST /api/agents/:id/runs"
+steps:
+  - { from: web-routes, to: execution, verb: "calls startRun", returns: "201 with the run" }
+  - { from: execution, to: composition, verb: "reads the run domain" }
+  - { from: execution, to: identity, verb: "authorises the principal" }
+  - { from: execution, to: storage-sharing, verb: "grants file references", optional: true }
+  - { from: execution, to: persistence, verb: "inserts the queued run" }
+  - { from: execution, to: run-contract, verb: "builds the RunRequest" }
+  - { from: execution, to: runtime-drivers, verb: "names the launch target" }

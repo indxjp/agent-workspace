@@ -23,7 +23,7 @@ import { GET as getAuditEvents } from '../app/api/audit-events/route';
 import { GET as getMetrics } from '../app/api/metrics/route';
 import { keysetPageOf } from './pagination/testing';
 import { installRbacHarness, TEST_WORKSPACE_ID } from './rbac/testing';
-import { recentRunTelemetry, recordRunTelemetry } from './telemetry/runtime';
+import { recentRunTelemetry, recordRunTelemetry } from './telemetry/wiring';
 import { clearApplicationContext } from './application-context';
 import { installTestDomains } from './application-context-fixtures';
 import { listWorkspaceFeatures } from './workspaces/features';

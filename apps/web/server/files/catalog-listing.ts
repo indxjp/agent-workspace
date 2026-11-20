@@ -1,5 +1,5 @@
 import { listCatalogFiles, type CatalogFile } from '../storage/store';
-import type { FilesRuntime } from './runtime';
+import type { FilesRuntime } from './wiring';
 
 /**
  * Every catalog row of one workspace, for a page that must name files by id (the home chat's

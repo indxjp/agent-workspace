@@ -43,7 +43,7 @@ def maxChildren : Nat := 16
 /-- One run as the tree sees it: its id, its workspace, the lead run that started it (`none` for a
 root) and its own settled cost. -/
 @[aw_spec (doc := "docs/adr/0104-a-team-is-a-resource.md#acceptance-u42a-2026-10-31")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 structure RunNode where
   id : RunId
   workspace : WorkspaceId
@@ -71,7 +71,7 @@ def childrenOf (t : List RunNode) (r : RunId) : List RunNode :=
 /-- The rolled-up cost of the tree of `root`: the sum of the costs of the nodes whose root it is,
 read at query time. -/
 @[aw_spec (doc := "docs/adr/0104-a-team-is-a-resource.md#acceptance-u42a-2026-10-31")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 def treeCost (t : List RunNode) (root : RunNode) : Nat :=
   ((t.filter (fun n => rootOf t n == root)).map RunNode.cost).sum
 

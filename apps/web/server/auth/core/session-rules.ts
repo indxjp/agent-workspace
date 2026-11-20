@@ -9,13 +9,13 @@
  */
 
 /** Absolute lifetime. Not a sliding window: a session ends twelve hours after it began. */
-export const SESSION_TTL_SECONDS = 12 * 60 * 60;
+export const SIGN_IN_SESSION_TTL_SECONDS = 12 * 60 * 60;
 
 /** The one way a session is marked: it came from an email link. */
-export type SessionVia = 'email_link';
+export type SignInSessionVia = 'email_link';
 
 /** The claims a Wave 1 session carries. Four roles arrive in W2-CP-06; this wave mints one. */
-export interface SessionClaims {
+export interface SignInSessionClaims {
   /** The bootstrap administrator's email address, lower-cased. */
   readonly sub: string;
   /** Workspace slug — the tenant this session is scoped to (spec §25). */
@@ -31,9 +31,9 @@ export interface SessionClaims {
    * How the session was obtained, when that limits what it may do: `'email_link'` marks a guest
    * session minted by the email-link sign-in (`email-link/service.ts`), which is bound to its one
    * demo workspace and can never be switched to another. Absent on every other session. Only
-   * {@link emailLinkSessionClaimsAt} writes it.
+   * {@link emailLinkSignInSessionClaimsAt} writes it.
    */
-  readonly via?: SessionVia;
+  readonly via?: SignInSessionVia;
   /** Issued at, seconds since the epoch. */
   readonly iat: number;
   /** Expires at, seconds since the epoch. */
@@ -41,19 +41,23 @@ export interface SessionClaims {
 }
 
 /** Build the claims for a new session at `nowMs`. */
-export function sessionClaimsAt(
+export function signInSessionClaimsAt(
   sub: string,
   ws: string,
   nowMs: number,
-  ttlSeconds: number = SESSION_TTL_SECONDS,
-): SessionClaims {
+  ttlSeconds: number = SIGN_IN_SESSION_TTL_SECONDS,
+): SignInSessionClaims {
   const iat = Math.floor(nowMs / 1000);
   return { sub, ws, role: 'owner', iat, exp: iat + ttlSeconds };
 }
 
-/** The claims for a new email-link session at `nowMs`: {@link sessionClaimsAt}, marked. */
-export function emailLinkSessionClaimsAt(sub: string, ws: string, nowMs: number): SessionClaims {
-  const { role, iat, exp } = sessionClaimsAt(sub, ws, nowMs);
+/** The claims for a new email-link session at `nowMs`: {@link signInSessionClaimsAt}, marked. */
+export function emailLinkSignInSessionClaimsAt(
+  sub: string,
+  ws: string,
+  nowMs: number,
+): SignInSessionClaims {
+  const { role, iat, exp } = signInSessionClaimsAt(sub, ws, nowMs);
   return { sub, ws, ...(role === undefined ? {} : { role }), via: 'email_link', iat, exp };
 }
 
@@ -67,10 +71,11 @@ export type ClaimsRefusal = {
  * The claims a decoded payload carries, or why it is malformed. Checks in a fixed order, each
  * naming what it refused; a field that passes has the type and range the claims promise.
  */
-export function parseSessionClaims(
+export function parseSignInSessionClaims(
   parsed: unknown,
 ):
-  { readonly ok: true; readonly claims: SessionClaims } | ({ readonly ok: false } & ClaimsRefusal) {
+  | { readonly ok: true; readonly claims: SignInSessionClaims }
+  | ({ readonly ok: false } & ClaimsRefusal) {
   const malformed = (reason: string) => ({
     ok: false as const,
     code: 'malformed_session' as const,
@@ -116,10 +121,13 @@ export function parseSessionClaims(
  * Whether well-formed claims still hold at `nowMs`: expiry first, then a lifetime longer than this
  * build issues. `null` when the session is current.
  */
-export function sessionTimeRefusal(claims: SessionClaims, nowMs: number): ClaimsRefusal | null {
+export function signInSessionTimeRefusal(
+  claims: SignInSessionClaims,
+  nowMs: number,
+): ClaimsRefusal | null {
   // The fields were parsed and type-checked, so this comparison cannot be `NaN < now`.
   if (claims.exp * 1000 <= nowMs) return { code: 'expired_session', reason: 'session expired' };
-  if (claims.exp - claims.iat > SESSION_TTL_SECONDS) {
+  if (claims.exp - claims.iat > SIGN_IN_SESSION_TTL_SECONDS) {
     return {
       code: 'malformed_session',
       reason: 'session lifetime exceeds the maximum this build issues',
@@ -137,7 +145,7 @@ export function sessionTimeRefusal(claims: SessionClaims, nowMs: number): Claims
  * served over plain HTTP on any other host cannot hold a session, and that is the intended
  * answer rather than an oversight. See docs/adr/W1-CP-06-the-session-cookie-is-always-secure.md.
  */
-export interface SessionCookie {
+export interface SignInSessionCookie {
   readonly name: string;
   readonly value: string;
   readonly httpOnly: true;
@@ -148,11 +156,11 @@ export interface SessionCookie {
 }
 
 /** `name` is the deployment's session cookie name; the caller passes it, never a default. */
-export function sessionCookie(
+export function signInSessionCookie(
   token: string,
   name: string,
-  maxAgeSeconds: number = SESSION_TTL_SECONDS,
-): SessionCookie {
+  maxAgeSeconds: number = SIGN_IN_SESSION_TTL_SECONDS,
+): SignInSessionCookie {
   return {
     name,
     value: token,
@@ -165,6 +173,6 @@ export function sessionCookie(
 }
 
 /** The same cookie with an immediate expiry — sign-out. */
-export function clearedSessionCookie(name: string): SessionCookie {
-  return { ...sessionCookie('', name), value: '', maxAge: 0 };
+export function clearedSignInSessionCookie(name: string): SignInSessionCookie {
+  return { ...signInSessionCookie('', name), value: '', maxAge: 0 };
 }

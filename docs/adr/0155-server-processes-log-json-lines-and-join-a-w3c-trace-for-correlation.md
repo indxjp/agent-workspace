@@ -5,7 +5,7 @@ Date: 2026-10-19
 Decided by: engineering audit task W2-10 (finding F-04, #1356); records what #1474 and #1475 landed
 Amended: 2026-10-19, owner decision D10: the runner and the gateway export OpenTelemetry spans (see "Amendment D10")
 Scope: `packages/core/src/telemetry/**`, `apps/runner/src/{index,server,run-handler}.ts`, `packages/gateway/src/{index,server,router,vercel-function}.ts`, `apps/web/server/telemetry/**`, `apps/web/server/composition/wiring/run-launcher.ts`, the `no-console` block in `eslint.config.mjs`
-Related: [ADR-0144](0144-inbound-triggers-start-runs-from-a-webhook-or-a-schedule.md) (the trigger secret is redacted from spans); [the operations runbook](../operations/runbook.md) "Telemetry, retention, and privacy"
+Related: [ADR-0144](0144-inbound-triggers-start-runs-from-a-webhook-or-a-schedule.md) (the trigger secret is redacted from spans); [the operations runbook](../40-operate/operations/runbook.md) "Telemetry, retention, and privacy"
 
 ## Context
 

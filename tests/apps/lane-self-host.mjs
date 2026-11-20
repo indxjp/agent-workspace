@@ -13,6 +13,7 @@ export { laneRegistry } from './lane-registry.mjs';
 export {
   withProductionApps,
   standInImage,
+  standInPlatformImages,
   composeAppsProblem,
   helmAppsProblem,
   renderedPlan,

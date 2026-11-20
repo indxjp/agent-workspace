@@ -37,6 +37,8 @@ export interface ShellStrings {
   readonly recentChats: string;
   readonly untitledChat: string;
   readonly seeAllChats: string;
+  /** The line under the workspace's name at the top of the sidebar. */
+  readonly selfHosted: string;
 }
 
 const EN: ShellStrings = {
@@ -54,6 +56,7 @@ const EN: ShellStrings = {
   recentChats: 'Recent chats',
   untitledChat: 'Untitled chat',
   seeAllChats: 'See all',
+  selfHosted: 'Self-hosted',
 };
 
 const JA: ShellStrings = {
@@ -71,6 +74,7 @@ const JA: ShellStrings = {
   recentChats: '最近のチャット',
   untitledChat: '無題のチャット',
   seeAllChats: 'すべて表示',
+  selfHosted: 'セルフホスト',
 };
 
 /** Each navigation entry in Japanese; a `Record` over `NavId`, so a new entry fails typecheck here. */

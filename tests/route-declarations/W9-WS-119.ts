@@ -4,7 +4,7 @@
  *
  * None of these four is printed by spec §34's "Examples:" list, so each carries a `mandate` under
  * [ADR-0026](../../docs/adr/0026-section-34-is-a-shape-rule-and-an-extra-route-cites-its-mandate.md)
- * decision 2, checked against `docs/spec.md`'s own headings by `tests/route-inventory.test.ts` so
+ * decision 2, checked against `docs/spec.md`'s own headings by `tests/route-inventory.policy-check.ts` so
  * the citation cannot be invented.
  *
  * Each `because` is one quoted string, not a concatenated one: `tests/inventory-support.ts`'s

@@ -18,7 +18,7 @@ construction does not make the physical `Owns globs:` line cover that file. The 
 therefore cannot accept the complete minimum implementation as written.
 
 This is a false ownership premise in the card, not a reason to weaken or edit
-`tests/route-inventory.test.ts`, which remains nobody-owned.
+`tests/route-inventory.policy-check.ts`, which remains nobody-owned.
 
 ## Decision
 
@@ -46,4 +46,4 @@ tasks remain disjoint.
   lifecycle refinement; they do not invent archive/restore prose in another specification section.
 - The implementer must prove the declaration is load-bearing: removing one lifecycle declaration
   while its tracked route remains must make the named route-inventory test fail.
-- `tests/route-inventory.test.ts` remains an integration-level gate and is not changed.
+- `tests/route-inventory.policy-check.ts` remains an integration-level gate and is not changed.

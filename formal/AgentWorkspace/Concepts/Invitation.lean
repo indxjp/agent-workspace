@@ -5,7 +5,7 @@ import AgentWorkspace.Concepts.Membership
 
 An **invitation** is an offer of one role in one workspace to one email address, redeemed with a
 single-use, expiring secret (`packages/core/src/db/schema/invitations.ts`). Accepting it creates a
-membership (`docs/sdk/04-api-specification.md` §2: `Invitation(email, Role, token shown once) ─▶
+membership (`docs/10-product/sdk/04-api-specification.md` §2: `Invitation(email, Role, token shown once) ─▶
 Membership`). The row stores only `token_hash`; the wire resource (`InvitationResourceSchema`) has
 no token and no hash.
 
@@ -30,7 +30,7 @@ def tokenMaxLength : Nat := 4096
 /-- An invitation, with every column of `invitations`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/invitations.ts#invitations")
   (ts := "packages/contracts/src/invitations.ts#InvitationResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Invitation where
   id : InvitationId
   workspace : WorkspaceId
@@ -57,7 +57,7 @@ def Invitation.valid (i : Invitation) : Bool :=
 /-- The four states a client shows, in the order the contract lists them. -/
 @[aw_spec (ts := "apps/web/components/team/invitations-model.ts#InvitationState")
   (ts := "packages/contracts/src/invitations.ts#InvitationResourceSchema")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 inductive InvitationState where
   | pending
   | expired

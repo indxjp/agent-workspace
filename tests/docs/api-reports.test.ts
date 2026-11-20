@@ -1,29 +1,97 @@
-import { spawnSync } from 'node:child_process';
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+/**
+ * The comparison `generate-api-reports.mjs --check` runs (`pnpm docs:check`): a committed API
+ * report that differs from the rendered one is named, and so is one that is missing or left over.
+ * Tested on small trees: rendering the real reports emits five packages' declarations and runs API
+ * Extractor over every subpath, which `pnpm docs:check` already does on every change.
+ */
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-const root = path.resolve(import.meta.dirname, '../..');
-let fixture: string | undefined;
+import { staleReports } from '../../scripts/docs/lib/api-reports-compare.mjs';
 
-afterAll(async () => {
-  if (fixture) await rm(fixture, { recursive: true, force: true });
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe('generate-api-reports --check', () => {
-  it('fails, naming the file, when a committed report is altered', async () => {
-    fixture = await mkdtemp(path.join(tmpdir(), 'agent-workspace-api-reports-'));
-    await cp(path.join(root, 'docs/sdk/api'), fixture, { recursive: true });
-    const tampered = path.join(fixture, 'sdk/define.api.md');
-    await writeFile(tampered, (await readFile(tampered, 'utf8')).replace('export ', 'export  '));
-    const result = spawnSync(
-      process.execPath,
-      ['scripts/docs/generate-api-reports.mjs', '--check', `--reports=${fixture}`],
-      { cwd: root, encoding: 'utf8' },
-    );
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('docs/sdk/api/sdk/define.api.md');
-  }, 240_000);
+async function tree(files: Readonly<Record<string, string>>): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), 'agent-workspace-api-reports-'));
+  roots.push(root);
+  for (const [file, content] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), content);
+  }
+  return root;
+}
+
+const REPORT =
+  '## API Report File for "@indx-workspace/sdk"\n\nexport function defineAgent(): void;\n';
+
+const compare = async (
+  rendered: Readonly<Record<string, string>>,
+  committed: Readonly<Record<string, string>>,
+  normalise: (text: string) => string = (text) => text,
+) =>
+  await staleReports({
+    rendered: await tree(rendered),
+    committed: await tree(committed),
+    normalise,
+    label: 'docs/10-product/sdk/api',
+  });
+
+describe('generate-api-reports --check compares the rendered reports with the committed ones', () => {
+  it('is clean when every committed report matches its rendering', async () => {
+    const reports = { 'sdk/define.api.md': REPORT, 'contracts/index.api.md': 'x\n' };
+    expect(await compare(reports, reports)).toEqual([]);
+  });
+
+  it('names a committed report that was altered, by its repository path', async () => {
+    expect(
+      await compare(
+        { 'sdk/define.api.md': REPORT, 'contracts/index.api.md': 'x\n' },
+        {
+          'sdk/define.api.md': REPORT.replace('export ', 'export  '),
+          'contracts/index.api.md': 'x\n',
+        },
+      ),
+    ).toEqual(['docs/10-product/sdk/api/sdk/define.api.md']);
+  });
+
+  it('names a report the source now renders that is not committed, and one it no longer renders', async () => {
+    expect(
+      await compare(
+        { 'sdk/define.api.md': REPORT, 'sdk/tools-host.api.md': 'new\n' },
+        { 'sdk/define.api.md': REPORT, 'sdk/removed.api.md': 'old\n' },
+      ),
+    ).toEqual([
+      'docs/10-product/sdk/api/sdk/removed.api.md',
+      'docs/10-product/sdk/api/sdk/tools-host.api.md',
+    ]);
+  });
+
+  it('compares the normalised rendering, never the raw one', async () => {
+    const crlf = REPORT.replaceAll('\n', '\r\n');
+    const lf = (text: string) => text.replaceAll('\r\n', '\n');
+    expect(
+      await compare({ 'sdk/define.api.md': crlf }, { 'sdk/define.api.md': REPORT }, lf),
+    ).toEqual([]);
+    expect(await compare({ 'sdk/define.api.md': crlf }, { 'sdk/define.api.md': REPORT })).toEqual([
+      'docs/10-product/sdk/api/sdk/define.api.md',
+    ]);
+  });
+
+  it('treats a missing committed directory as no reports at all', async () => {
+    expect(
+      await staleReports({
+        rendered: await tree({ 'sdk/define.api.md': REPORT }),
+        committed: path.join(await tree({}), 'absent'),
+        normalise: (text) => text,
+        label: 'docs/10-product/sdk/api',
+      }),
+    ).toEqual(['docs/10-product/sdk/api/sdk/define.api.md']);
+  });
 });

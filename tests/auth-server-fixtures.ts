@@ -100,10 +100,10 @@ export const UNREGISTERED_ROUTE_CANARY = 'w1cp06-canary-never-visible-unauthenti
 
 const UNREGISTERED_ROUTE_SOURCE = `import { NextResponse } from 'next/server';
 
-import { requireWorkspaceScope } from '@/server/auth';
+import { requireCallerWorkspace } from '@/server/auth';
 
 export async function GET(): Promise<NextResponse> {
-  const scope = await requireWorkspaceScope();
+  const scope = await requireCallerWorkspace();
   return NextResponse.json({ canary: '${UNREGISTERED_ROUTE_CANARY}', scope });
 }
 

@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-10-18
 Decided by: Owner (engineering-audit owner decision D2, finding F-21)
-Scope: `apps/web/server/rbac/permissions.ts`, `formal/AgentWorkspace/Authz/**`, spec §21, `docs/sdk/04-api-specification.md` §3.3; extends ADR-0116
+Scope: `apps/web/server/rbac/permissions.ts`, `formal/AgentWorkspace/Authz/**`, spec §21, `docs/10-product/sdk/04-api-specification.md` §3.3; extends ADR-0116
 
 ## Context
 

@@ -2,10 +2,14 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { RUNTIME_DRIVERS } from '../../contracts/runtimes';
+import { RUNTIME_DRIVERS, runtimeDisabledReason } from '../../contracts/runtimes';
 
 import { RUNTIME_OPTIONS, SWITCH_COMPARISON } from './model';
-import { runtimesStrings, type RuntimesStrings } from './runtimes-messages';
+import {
+  registeredRuntimeReason,
+  runtimesStrings,
+  type RuntimesStrings,
+} from './runtimes-messages';
 import { RuntimesScreen, type RuntimeScreenEntry } from './runtimes-screen';
 
 // UX-15 in #2086: the Runtimes screen in the reader's language.
@@ -124,5 +128,72 @@ describe('the Runtimes screen', () => {
       expect(html).toContain(line.replaceAll('"', '&quot;'));
     expect(html).toContain('<b>disabled with the reason</b>, never hidden.');
     expect(html).toMatch(/<button[^>]*>Test Runtime<\/button>/u);
+  });
+});
+
+describe("a registered runtime's disabled reason (N-4 of the 18 Nov re-test)", () => {
+  const combinations = [
+    { connectionExists: false, imageReachable: false },
+    { connectionExists: false, imageReachable: true },
+    { connectionExists: true, imageReachable: false },
+  ];
+
+  it('is the registry wording for an English reader, word for word', () => {
+    expect(runtimeDisabledReason({ connectionExists: false, imageReachable: false })).toBe(
+      'No runtime connection is configured. The runtime image is not reachable.',
+    );
+    expect(runtimeDisabledReason({ connectionExists: true, imageReachable: true })).toBeNull();
+    for (const flags of combinations) {
+      const reason = runtimeDisabledReason(flags);
+      expect(registeredRuntimeReason({ ...flags, reason }, 'en')).toBe(reason);
+    }
+  });
+
+  it('is said in Japanese for a Japanese reader, from the same two flags', () => {
+    expect(
+      registeredRuntimeReason(
+        {
+          connectionExists: false,
+          imageReachable: false,
+          reason: runtimeDisabledReason({ connectionExists: false, imageReachable: false }),
+        },
+        'ja',
+      ),
+    ).toBe('ランタイム接続が設定されていません。ランタイムのイメージにアクセスできません。');
+    expect(
+      registeredRuntimeReason(
+        {
+          connectionExists: true,
+          imageReachable: false,
+          reason: runtimeDisabledReason({ connectionExists: true, imageReachable: false }),
+        },
+        'ja',
+      ),
+    ).toBe('ランタイムのイメージにアクセスできません。');
+  });
+
+  it('is shown as it came when the registry did not word it from the flags', () => {
+    const entry = { connectionExists: true, imageReachable: true, reason: 'Pool is draining.' };
+    expect(registeredRuntimeReason(entry, 'ja')).toBe('Pool is draining.');
+    expect(registeredRuntimeReason({ ...entry, reason: null }, 'ja')).toBeNull();
+  });
+
+  it('a Japanese reader sees no English registry reason on the screen', () => {
+    for (const flags of combinations) {
+      const reason = runtimeDisabledReason(flags);
+      const html = renderToStaticMarkup(
+        createElement(RuntimesScreen, {
+          entries: [{ ...DOCKER, ...flags, state: 'disabled', reason }],
+          locale: 'ja',
+        }),
+      );
+      expect(html).not.toContain('No runtime connection is configured.');
+      expect(html).not.toContain('The runtime image is not reachable.');
+      expect(html).toContain(
+        flags.connectionExists
+          ? 'ランタイムのイメージにアクセスできません。'
+          : 'ランタイム接続が設定されていません。',
+      );
+    }
   });
 });

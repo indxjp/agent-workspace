@@ -67,7 +67,7 @@ private theorem secondsTail_facts (rest : List Char) (h : secondsTail rest = tru
 /-- An instant `IsoDateTimeSchema` accepts is written in UTC: it ends in `Z`, and every character
 is a digit or one of `- T : . Z`, so no `+hh:mm` or `-hh:mm` offset and no lower-case designator
 can appear. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/identifiers.ts#IsoDateTimeSchema")]
 theorem iso_date_time_is_utc (s : String) (h : isIsoDateTime s = true) :
     s.toList.getLast? = some 'Z' ∧
@@ -143,7 +143,7 @@ private theorem bare_shape {j : JValue} {b : ApiProblemBareCode}
 carry the deprecated `detail` beside `message`, never instead of it), and the bare envelope's
 `error` is a string. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
-  (doc := "docs/sdk/04-api-specification.md#4-conventions")
+  (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")
   (ts := "packages/contracts/src/problem.ts#ApiProblemDetailSchema")
   (ts := "packages/contracts/src/problem.ts#ApiProblemBareCodeSchema")]
@@ -271,7 +271,7 @@ theorem common_codes_match_errors_guide :
   decide +kernel
 
 /-- Every shared code travels under a failure status SPEC §4 lists. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#COMMON_PROBLEM_CODES")]
 theorem common_code_statuses_are_documented (c : CommonProblemCode) :
     documentedFailureStatus c.status = true := by

@@ -112,7 +112,7 @@ in its management API lets one allocation ask for another. The `aca-sessions` dr
 takes the pool's single `engine` (`ACA_SESSION_POOL_ENGINE`, default `claude-agent-sdk`) instead of
 a map, and refuses a run for any other engine before an allocation is made. A deployment offering
 two engines over ACA provisions two pools and two runner managers. This is recorded as a per-driver
-gap in `docs/runtime-driver-matrix.md`, as the issue's stop condition asks, rather than a redesign
+gap in `docs/30-reference/matrices/runtime-driver-matrix.md`, as the issue's stop condition asks, rather than a redesign
 of pooling.
 
 ### D7 — Upgrade path and the development default
@@ -124,7 +124,7 @@ of pooling.
   (`compose.yaml`, the CLI's compose template, the Helm chart, the GCP Terraform modules) passes it
   to the web process. A deployment that manages its own environment adds the variable to the web
   process before upgrading, or every engine reports `installed: false` and every run answers
-  `422 engine_not_installed`; `docs/deploy/engine-images.md` has the step.
+  `422 engine_not_installed`; `docs/40-operate/deploy/engine-images.md` has the step.
 - The runner manager is **not** independently upgradable: its allocation body now requires
   `engine`, which a control plane from the previous release does not send. ADR-0069's
   single-revision cutover already covers this — the previous revision of `web`, `gateway` and the

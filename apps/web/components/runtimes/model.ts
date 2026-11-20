@@ -172,7 +172,7 @@ export async function testSelectedRuntime(
 
 /**
  * `POST /api/runtimes/test` stays a raw request until S-4 gives it the standard envelope and the
- * SDK a method for it (docs/sdk/07-structure-map.md, unit 9).
+ * SDK a method for it (docs/10-product/sdk/07-structure-map.md, unit 9).
  */
 export async function testRuntime(
   request: typeof fetch,

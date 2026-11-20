@@ -31,7 +31,7 @@ open AgentWorkspace.Contracts.Identifiers AgentWorkspace.Contracts.Problem
 
 /-- Every id of the documented v4 form gets through today's two exported gates unchanged:
 `UuidSchema` parses the JSON string to itself and `isUuid` accepts it. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/identifiers.ts#UuidSchema")
   (ts := "packages/contracts/src/identifiers.ts#isUuid")]
 theorem uuid_v4_target_refines_current (s : String) (h : isUuidV4Target s = true) :
@@ -45,7 +45,7 @@ example : uuidCodec.decode (.str "123e4567-e89b-42d3-a456-426614174000") =
 
 /-- Today's rule and the documented v4 rule diverge: the nil UUID, a v7 id and a v1 id are
 accepted today although none is v4, and an upper-case v4 id is accepted by both. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/identifiers.ts#UUID_PATTERN")]
 theorem uuid_current_diverges_from_v4_target :
     isUuidCurrent "00000000-0000-0000-0000-000000000000" = true ∧
@@ -59,7 +59,7 @@ theorem uuid_current_diverges_from_v4_target :
 
 /-- The v4 target reads the variant nibble too: an id with version `4` but a variant nibble outside
 `8`–`b` (here `c`, the reserved Microsoft variant) is accepted today and is not v4 text. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/identifiers.ts#UUID_PATTERN")]
 theorem uuid_current_accepts_a_non_rfc_variant :
     isUuidCurrent "123e4567-e89b-42d3-c456-426614174000" = true ∧
@@ -69,7 +69,7 @@ theorem uuid_current_accepts_a_non_rfc_variant :
 
 /-- One id has two accepted spellings: the lower- and upper-case forms are both accepted, are
 different strings, and name the same UUID. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
   (ts := "packages/contracts/src/identifiers.ts#isUuid")]
 theorem uuid_accepts_two_spellings_of_one_id :
     isUuidCurrent "123e4567-e89b-12d3-a456-426614174000" = true ∧
@@ -83,7 +83,7 @@ theorem uuid_accepts_two_spellings_of_one_id :
 
 /-- The target refines today's reader: every body the single-envelope target reads, today's
 `readProblem` reads to the same problem. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
   (ts := "packages/sdk/src/http.ts#readProblem")]
 theorem normalise_target_refines_current (j : JValue) (b : ApiProblemBody)
@@ -97,7 +97,7 @@ example : normaliseCurrent (apiProblemCodec.encode ⟨⟨"x", "y", none, none⟩
 /-- Today's reader and the single-envelope target give different answers on exactly the bodies
 that parse as the RBAC `detail` envelope or the bare-code envelope; on every other body, standard
 envelopes and refused bodies alike, the two agree. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
   (ts := "packages/sdk/src/http.ts#readProblem")]
 theorem normalise_current_differs_from_target_iff (j : JValue) :
@@ -120,7 +120,7 @@ example : normaliseCurrent (.obj [("error", .str "invalid_limit")]) ≠
 
 /-- Today's reader and the target diverge exactly on the two legacy spellings: the RBAC `detail`
 envelope and the bare-code envelope are read today and refused by the target. -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
   (ts := "packages/sdk/src/http.ts#readProblem")]
 theorem normalise_current_diverges_on_legacy_spellings :
@@ -136,7 +136,7 @@ theorem normalise_current_diverges_on_legacy_spellings :
 
 /-- The shared whitespace predicate is the one `ModelConnection` and `Connector` each define, on
 every character. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem text_whitespace_is_the_phase1_whitespace (c : Char) :
     Text.isJsWhitespace c = Concepts.ModelConnection.isJsTrimmed c ∧
@@ -158,14 +158,14 @@ private theorem sum_units_eq_foldr :
     split <;> split <;> omega
 
 /-- The shared UTF-16 length is `Agent.utf16Length` on every string. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#MAX_PROMPT_CHARS")]
 theorem text_utf16_length_is_the_agent_length (s : String) :
     Text.utf16Length s = Concepts.Agent.utf16Length s :=
   sum_units_eq_foldr s.toList
 
 /-- The shared `trim` is `Agent.jsTrim` on every string. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/domains/d1-runs.md#contracts")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem text_trim_is_the_agent_trim (s : String) : Text.jsTrim s = Concepts.Agent.jsTrim s := by
   have h : Text.isJsWhitespace = Concepts.Connector.isJsWhitespace :=

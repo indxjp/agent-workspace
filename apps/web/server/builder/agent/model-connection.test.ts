@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DefinitionReferences, ResolveDefinitionOutcome } from '../../agent-versions/store';
-import { setupConnectionName } from '../../setup/runtime';
+import { setupConnectionName } from '../../setup/wiring';
 import { resolveBuilderDefinition } from './model-connection';
 
 const SETUP_ID = 'connection-of-setup';

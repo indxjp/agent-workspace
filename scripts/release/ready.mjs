@@ -62,7 +62,9 @@ function requireApproval(value, label) {
  */
 export async function checkReleaseReadiness(root, options = {}) {
   const absoluteRoot = path.resolve(root);
-  const status = await readJson(path.join(absoluteRoot, 'docs', 'capabilities', 'status.json'));
+  const status = await readJson(
+    path.join(absoluteRoot, 'docs', '30-reference', 'capabilities', 'status.json'),
+  );
   if (status.schemaVersion !== 2 || status.canonical !== true) {
     fail('READINESS_STATUS_SCHEMA_INVALID', 'expected canonical schemaVersion 2');
   }

@@ -1,5 +1,5 @@
 import type { RuntimeProfileStoreProvider } from '../execution';
-import type { AgentsRuntime } from './runtime';
+import type { AgentsRuntime } from './wiring';
 
 export interface RuntimeSwitchActor {
   readonly principalId: string;

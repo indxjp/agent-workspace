@@ -41,7 +41,7 @@ theorem expiry_wires : WireEnum.wires Expiry = ["24 h", "7 days", "30 days", "ne
   decide +kernel
 
 /-- The derived share states are spelled `live, revoked, suspended, stopped, expired`. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#2-state-machines")]
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 theorem share_state_wires :
     WireEnum.wires ShareState = ["live", "revoked", "suspended", "stopped", "expired"] := by
   decide +kernel
@@ -93,7 +93,7 @@ theorem share_run_charge_cells_are_the_columns (c : ShareRunCharge) :
 /-- The column names of the three cluster tables have no duplicate, so a typed row's cells are a
 function of the column name. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem cluster_column_names_are_distinct :
     (catalogue .shares).columnNames.Nodup ∧ (catalogue .shareViews).columnNames.Nodup ∧
       (catalogue .shareRunCharges).columnNames.Nodup := by decide +kernel
@@ -111,7 +111,7 @@ theorem cluster_foreign_keys_are_the_catalogue's :
 /-- The tenancy classes of the nine keys: three root references, the global `created_by → users`
 reference, and five tenant-paired keys; none is unpaired or merely sibling-paired. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem cluster_foreign_key_classes :
     foreignKeys.map (fun p => classify catalogue p.1 p.2) =
       [.rootReference, .globalReference, .tenantPaired, .tenantPaired, .rootReference,

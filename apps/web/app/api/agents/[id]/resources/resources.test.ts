@@ -12,7 +12,7 @@ import { clearApplicationContext } from '../../../../../server/application-conte
 import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import type { AgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
 

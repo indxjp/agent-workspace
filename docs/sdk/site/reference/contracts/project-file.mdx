@@ -3,7 +3,7 @@ title: "project-file"
 description: "The @indx-workspace/contracts/project-file exports, sorted alphabetically."
 ---
 
-<Note>This page is generated from `packages/contracts/src/project-file.ts`, `packages/contracts/src/project-platforms.ts`, `packages/contracts/src/url-credential.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+<Note>This page is generated from `packages/contracts/src/project-file-deploy.ts`, `packages/contracts/src/project-file-environments.ts`, `packages/contracts/src/project-file-resources.ts`, `packages/contracts/src/project-file-shared.ts`, `packages/contracts/src/project-file.ts`, `packages/contracts/src/project-platforms.ts`, `packages/contracts/src/url-credential.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
 ## appSchemaName
 
@@ -467,7 +467,7 @@ Value: `2_048`
 ## PROJECT_WEB_SETTINGS
 
 The web settings a `gcp-cloudrun` project file may set on the web service, by name: documented
-settings (`docs/operations/settings.md`) that hold no secret. A closed list, so a project file
+settings (`docs/40-operate/operations/settings.md`) that hold no secret. A closed list, so a project file
 cannot reach a setting the deployment itself owns (the database, the keys, the runtime).
 
 - `'AW_DEPLOYMENT_DEFAULT_MODELS'`

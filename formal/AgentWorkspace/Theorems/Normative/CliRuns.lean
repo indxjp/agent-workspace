@@ -5,7 +5,7 @@ namespace AgentWorkspace.Theorems.Normative.CliRuns
 open AgentWorkspace AgentWorkspace.Cli.Runs
 
 /-- Each run command delegates to the corresponding SDK operation. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#7-cli--aw")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#7-cli--aw")
   (ts := "packages/aw/src/commands/runs.ts#runCommands")]
 theorem every_command_routes_to_sdk :
     sdkCall .start = .start ∧ sdkCall .get = .get ∧ sdkCall .list = .list ∧

@@ -1,0 +1,110 @@
+version: 1
+name: agent-workspace
+compiled_at: d07c017e56c6d9cc9cb9aac6096c6dd93264d688
+description: >
+  Agent Workspace is a self-hostable platform for running AI agents for a team. The Next.js
+  control plane (apps/web) holds workspaces, agents, sessions, files and runs, and launches each
+  run on the runner (apps/runner), which places it in a sandbox through a runtime driver and
+  executes it with one engine adapter (Claude Agent SDK, OpenAI Agents, Mastra or pi). Model calls
+  go through the gateway, which swaps a short-lived run identity for the stored credential.
+  Published packages (contracts, sdk, react, app, aw, cli) let browsers, the aw command line and
+  customer apps reach the same /api/** contracts. Wire schemas sit at the bottom and depend on
+  nothing; only packages/core talks to PostgreSQL and object storage.
+layers: [bundle, delivery, application, kernel, client, adapters, contracts]
+ignore:
+  - "**/*.spec.ts"
+  - "**/*.test.mjs"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.test-support.ts"
+  - "**/*.test-support.tsx"
+  - "**/test-support.ts"
+  - "**/*.contract.ts"
+  - "**/*.contract-*.ts"
+  - "**/*.conformance.ts"
+  - "**/conformance.ts"
+  - "**/*.acceptance.ts"
+  - "**/*.vitest.config.mjs"
+  - "**/*-fixtures.ts"
+  - "**/*-fixture.ts"
+  - "**/fixtures/**"
+  - "**/acceptance/**"
+  - "**/vitest.config.mjs"
+  - "**/vitest.setup.ts"
+  - "packages/*/src/testing/**"
+  - "packages/core/src/storage/contract*.ts"
+  - "apps/web/server/telemetry/capture-log.ts"
+  - "apps/web/server/builder/agent/evals/*.mjs"
+  - "apps/web/server/builder/transport/e2e/**"
+  - "apps/web/app/api/model-connections/[id]/test/**"
+  - "apps/web/app/api/storage-connections/[id]/test/**"
+  - "packages/skills-office/**"
+  - "packages/schemas/**"
+  - "tests/**"
+  - "examples/**"
+  - "scripts/**"
+  - "internal/**"
+  - "infra/**"
+  - "docs/**"
+  - "sites/**"
+  - "ui/**"
+  - ".claude/**"
+  - "*.config.mjs"
+  - "*.config.ts"
+externals:
+  - { id: postgres, title: PostgreSQL, packages: ["pg", "embedded-postgres"] }
+  - { id: drizzle, title: Drizzle ORM, packages: ["drizzle-orm", "drizzle-orm/*"] }
+  - { id: s3, title: Amazon S3, packages: ["@aws-sdk/*"] }
+  - { id: gcs, title: Google Cloud Storage, packages: ["@google-cloud/storage"] }
+  - { id: azure_blob, title: Azure Blob Storage, packages: ["@azure/storage-blob"] }
+  - { id: claude_agent_sdk, title: Claude Agent SDK, packages: ["@anthropic-ai/claude-agent-sdk"] }
+  - { id: openai_agents, title: OpenAI Agents SDK, packages: ["@openai/agents", "@openai/agents-extensions"] }
+  - { id: mastra, title: Mastra, packages: ["@mastra/*"] }
+  - { id: pi_agent, title: pi coding agent, packages: ["@earendil-works/pi-coding-agent"] }
+  - { id: ai_sdk, title: AI SDK providers, packages: ["@ai-sdk/*"] }
+  - { id: kubernetes, title: Kubernetes API, packages: ["@kubernetes/client-node"] }
+  - { id: google_auth, title: Google Cloud auth, packages: ["google-auth-library"] }
+  - { id: opentelemetry, title: OpenTelemetry, packages: ["@opentelemetry/*"] }
+  - { id: mcp, title: Model Context Protocol SDK, packages: ["@modelcontextprotocol/sdk", "@modelcontextprotocol/sdk/*"] }
+  - { id: oidc, title: OIDC and JWT libraries, packages: ["jose", "openid-client"] }
+  - { id: nextjs, title: Next.js, packages: ["next", "next/*"] }
+  - { id: react, title: React, packages: ["react", "react-dom", "react/*", "react-dom/*"] }
+  - { id: zod, title: Zod, packages: ["zod", "zod/*"] }
+  - { id: vitest, title: Vitest, packages: ["vitest", "vitest/*"] }
+rules:
+  - { id: layers-point-down, kind: layers }
+  - { id: no-component-cycles, kind: no-cycles }
+  - { id: only-persistence-and-app-kit-use-drizzle, kind: only, externals: [drizzle], components: [persistence, app-kit] }
+  - { id: only-the-storage-boundary-imports-s3, kind: only, externals: [s3], components: [persistence, project-cli] }
+  - { id: only-the-storage-boundary-imports-gcs, kind: only, externals: [gcs], components: [persistence, project-cli] }
+  - { id: only-persistence-imports-azure-blob, kind: only, externals: [azure_blob], components: [persistence] }
+  - { id: engine-sdks-stay-in-their-adapters, kind: only, externals: [claude_agent_sdk, openai_agents, mastra, pi_agent, ai_sdk], components: [engine-adapters] }
+  - { id: only-runtime-drivers-call-kubernetes, kind: only, externals: [kubernetes], components: [runtime-drivers] }
+  - { id: only-identity-verifies-oidc, kind: only, externals: [oidc], components: [identity] }
+  - { id: production-does-not-import-vitest, kind: forbid, packages: ["vitest", "vitest/*"] }
+  - id: wire-packages-stay-framework-free
+    kind: forbid
+    from: [contracts, sdk, platforms, run-contract, runtime-drivers]
+    packages: ["next", "next/*", "react", "react-dom", "drizzle-orm", "drizzle-orm/*", "pg"]
+checklist:
+  - id: only-stores-name-persistence
+    text: >
+      In apps/web/server, only a domain's store.ts (and composition/) imports
+      @agent-workspace/core/db; any other file reaches the database through its domain's store.
+  - id: domain-core-is-pure
+    text: >
+      A file under a domain's core/ folder imports only that core/, @indx-workspace/contracts and
+      zod, and takes time, ids, environment and I/O as arguments.
+  - id: routes-are-thin
+    text: >
+      A route handler parses its input, calls one service or domain function and answers through
+      apps/web/server/http/route.ts or the domain's http helpers; it holds no business rule.
+  - id: expected-failures-are-typed
+    text: >
+      An expected failure is answered with a stable error code from packages/contracts; an
+      unexpected one stays 5xx, keeps its cause for the log and never returns a raw SQL, provider,
+      file-system or credential-bearing message.
+  - id: environment-read-at-entry
+    text: >
+      process.env is read only in a composition root or a process entry point and passed on as
+      typed values.

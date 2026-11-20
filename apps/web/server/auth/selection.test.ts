@@ -46,7 +46,7 @@ describe('the post-callback workspace-selection token', () => {
     // A selection token is not a `session.ts` token structurally: the version tag this module
     // writes is `awsel1`, never `aw1`. This is what stops a selection cookie being replayed
     // where a tenant session is expected, or the reverse — proved here by breaking it: if the
-    // version tag were EVER made to match, this assertion would need `verifySessionToken` to
+    // version tag were EVER made to match, this assertion would need `verifySignInSessionToken` to
     // reject it for some other reason, and none exists once the tag matches.
     const token = await mintSelectionToken('user-1', 'multi@example.test', SECRET);
     expect(token.startsWith('awsel1.')).toBe(true);

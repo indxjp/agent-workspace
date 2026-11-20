@@ -3,8 +3,8 @@ import Tools.Environment
 /-!
 `lake exe catalogue [out.json [Module …]]` — the machine-readable catalogue of every `@[aw_spec]`
 declaration: name, module, kind, tier, citations, docstring and statement. The Node renderer
-(`scripts/formal/generate.mjs`) turns it into `docs/formal/catalogue.md` and
-`docs/formal/traceability.md`.
+(`scripts/formal/generate.mjs`) turns it into `docs/20-design/formal/catalogue.md` and
+`docs/20-design/formal/traceability.md`.
 -/
 
 open Lean AgentWorkspace.Trace

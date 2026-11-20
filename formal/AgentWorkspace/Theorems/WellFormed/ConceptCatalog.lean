@@ -185,7 +185,7 @@ theorem every_cluster_check_is_modelled :
 /-- The cluster has 62 foreign keys, and each targets an exact key of its parent (the primary
 key or a total unique key, column for column), so a child row can name at most one parent. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem every_cluster_reference_targets_an_exact_key :
     clusterForeignKeys.length = 62 ∧
       (clusterForeignKeys.all fun (_, fk) => targetIsExactKey catalogue fk) = true := by
@@ -202,7 +202,7 @@ theorem cluster_constraints_are_satisfiable :
 
 /-- Every foreign key of the cluster is exercised by the sample state: some row holds a non-`NULL`
 key and has its parent. -/
-@[aw_spec (tier := T0) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (tier := T0) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem sample_exercises_every_reference :
     (clusterForeignKeys.all fun (t, fk) => (Sample.pairOf Sample.state t fk).isSome) = true := by
   decide +kernel

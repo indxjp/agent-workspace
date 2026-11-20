@@ -15,6 +15,10 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import { testTitles } from './source-lexer.mts';
+
+export { stripComments, testTitles } from './source-lexer.mts';
+
 export type Entry = 'web' | 'sdk' | 'cli' | 'run' | 'chat';
 export type TestType = 'unit' | 'contract' | 'api' | 'browser' | 'load' | 'two-server';
 
@@ -100,11 +104,6 @@ const CODE_TAG = /@story (US-(?:STO|BLD)-\d+)/g;
 // What a story tag was meant to be: anything left of these once the well-formed tags are gone is malformed.
 const TEST_TAG_CANDIDATE = /\[?\b(?:US-)?(?:STO|BLD)-[^\s'"`]*/gi;
 const CODE_TAG_CANDIDATE = /@story\b[ \t]*\S*/gi;
-// A test, suite or step call, not a method such as `regex.test(...)`; `.each(...)` / `.for(...)` take the title in the call after theirs.
-const TEST_CALL = /(?<![\w$.])(?:it|test|describe)((?:\s*\.\s*[A-Za-z]+)*)\s*\(/g;
-const QUOTES = new Set(["'", '"', '`']);
-// After one of these (or at the start), a `/` begins a regular expression, not a division.
-const BEFORE_REGEX = new Set(['', '(', ',', '=', ':', '[', '!', '&', '|', '?', '{', '}', ';']);
 // Its in-memory fixtures hold deliberately malformed and covering tags.
 const SELF_TEST = 'tests/tooling/stories-check.test.ts';
 
@@ -116,185 +115,59 @@ function accepted(story: string, entry: Entry): readonly TestType[] {
   return CELL_OVERRIDES[`${story}:${entry}`] ?? ACCEPTS[entry];
 }
 
-const isSpace = (c: string): boolean => c === ' ' || c === '\n' || c === '\t' || c === '\r';
-
-/**
- * `text` with every comment blanked (newlines kept) and its strings and regular expressions left
- * as they are, so a commented-out test earns no coverage. A lexer, not a parser: a regular
- * expression after a keyword reads as a division, which can misread the rest of its line.
- */
-export function stripComments(text: string): string {
-  const out = text.split('');
-  const blank = (from: number, to: number): void => {
-    for (let k = from; k < to; k += 1) if (out[k] !== '\n') out[k] = ' ';
-  };
-  // A string from its opening quote; a template's `${…}` is code. Returns the index after it.
-  function literal(start: number): number {
-    const quote = text[start];
-    let k = start + 1;
-    while (k < text.length) {
-      const c = text[k];
-      if (c === '\\') k += 2;
-      else if (c === quote) return k + 1;
-      else if (c === '\n' && quote !== '`') return k;
-      else if (quote === '`' && c === '$' && text[k + 1] === '{') k = code(k + 2, true);
-      else k += 1;
-    }
-    return k;
-  }
-  function regex(start: number): number {
-    let inClass = false;
-    let k = start + 1;
-    while (k < text.length) {
-      const c = text[k];
-      if (c === '\\') k += 2;
-      else if (c === '\n') return k;
-      else {
-        if (c === '[') inClass = true;
-        else if (c === ']') inClass = false;
-        else if (c === '/' && !inClass) return k + 1;
-        k += 1;
-      }
-    }
-    return k;
-  }
-  // Code from `start`; inside a template's `${`, it ends after the matching `}`.
-  function code(start: number, inTemplate: boolean): number {
-    let depth = 0;
-    let previous = '';
-    let k = start;
-    while (k < text.length) {
-      const c = text[k] ?? '';
-      const next = text[k + 1];
-      if (c === '/' && (next === '/' || next === '*')) {
-        const close = next === '/' ? text.indexOf('\n', k) : text.indexOf('*/', k + 2);
-        const end = close === -1 ? text.length : next === '/' ? close : close + 2;
-        blank(k, end);
-        k = end;
-        continue;
-      }
-      if (QUOTES.has(c)) {
-        k = literal(k);
-        previous = c;
-        continue;
-      }
-      if (c === '/' && BEFORE_REGEX.has(previous)) {
-        k = regex(k);
-        previous = c;
-        continue;
-      }
-      if (c === '{') depth += 1;
-      else if (c === '}') {
-        if (inTemplate && depth === 0) return k + 1;
-        depth -= 1;
-      }
-      if (!isSpace(c)) previous = c;
-      k += 1;
-    }
-    return k;
-  }
-  code(0, false);
-  return out.join('');
+/** What one scan collects: errors, `// @story` locations, and the files covering each cell+type. */
+interface Collected {
+  errors: StoryError[];
+  codeTags: Record<string, string[]>;
+  hits: Map<string, Set<string>>;
 }
 
-/** The string literal opening at `start` and the index after it, or `null`. */
-function readLiteral(text: string, start: number): { value: string; end: number } | null {
-  const quote = text[start] ?? '';
-  if (!QUOTES.has(quote)) return null;
-  for (let k = start + 1; k < text.length; k += 1) {
-    if (text[k] === '\\') k += 1;
-    else if (text[k] === quote) return { value: text.slice(start + 1, k), end: k + 1 };
-  }
-  return null;
+/** Why a well-formed test tag does not name a cell of the matrix, or `undefined` when it does. */
+function tagProblem(story: string, type: string, entry: string): string | undefined {
+  const cells = MATRIX[story];
+  if (!cells) return `unknown story ${story}`;
+  if (!isTestType(type)) return `unknown test type ${type}`;
+  if (!isEntry(entry)) return `unknown entry ${entry}`;
+  if (!cells.includes(entry)) return `${story} has no ${entry} cell in design §07`;
+  return undefined;
 }
 
-/** The index of the `)` closing the `(` at `open`, or -1. */
-function closingParen(text: string, open: number): number {
-  let depth = 0;
-  let k = open;
-  while (k < text.length) {
-    const c = text[k] ?? '';
-    if (QUOTES.has(c)) {
-      k = readLiteral(text, k)?.end ?? text.length;
+function collectTestFile(file: string, text: string, into: Collected): void {
+  const titles = testTitles(text);
+  for (const title of titles) {
+    for (const m of title.replace(TEST_TAG, ' ').matchAll(TEST_TAG_CANDIDATE)) {
+      into.errors.push({ file, tag: m[0], message: 'malformed story tag' });
+    }
+  }
+  for (const m of titles.join('\n').matchAll(TEST_TAG)) {
+    const [tag, story = '', type = '', entry = ''] = m;
+    const problem = tagProblem(story, type, entry);
+    if (problem) {
+      into.errors.push({ file, tag, message: problem });
       continue;
     }
-    if (c === '(') depth += 1;
-    else if (c === ')' && --depth === 0) return k;
-    k += 1;
+    const key = `${story}:${entry}:${type}`;
+    into.hits.set(key, (into.hits.get(key) ?? new Set()).add(file));
   }
-  return -1;
 }
 
-/** The titles of the test, suite and step calls in `text`: their first string argument. */
-export function testTitles(text: string): string[] {
-  const source = stripComments(text);
-  const titles: string[] = [];
-  const nextCall = /\s*\(/y;
-  for (const m of source.matchAll(TEST_CALL)) {
-    let at = (m.index ?? 0) + m[0].length;
-    if (/\.\s*(?:each|for)\b/.test(m[1] ?? '')) {
-      const close = closingParen(source, at - 1);
-      nextCall.lastIndex = close + 1;
-      const call = close === -1 ? null : nextCall.exec(source);
-      if (call === null) continue;
-      at = close + 1 + call[0].length;
-    }
-    while (isSpace(source[at] ?? '')) at += 1;
-    const title = readLiteral(source, at);
-    if (title !== null) titles.push(title.value);
+function collectProductionFile(file: string, text: string, into: Collected): void {
+  for (const m of text.replace(CODE_TAG, ' ').matchAll(CODE_TAG_CANDIDATE)) {
+    into.errors.push({ file, tag: m[0], message: 'malformed story tag' });
   }
-  return titles;
+  for (const m of text.matchAll(CODE_TAG)) {
+    const [tag, story = ''] = m;
+    if (!MATRIX[story]) {
+      into.errors.push({ file, tag, message: `unknown story ${story}` });
+      continue;
+    }
+    (into.codeTags[story] ??= []).push(file);
+  }
 }
 
-/** Pure: path → source text in, report out. */
-export function scan(files: ReadonlyMap<string, string>): Report {
-  const errors: StoryError[] = [];
-  const codeTags: Record<string, string[]> = {};
-  const hits = new Map<string, Set<string>>();
-
-  for (const [file, text] of files) {
-    if (TEST_FILE.test(file)) {
-      const titles = testTitles(text);
-      for (const title of titles) {
-        for (const m of title.replace(TEST_TAG, ' ').matchAll(TEST_TAG_CANDIDATE)) {
-          errors.push({ file, tag: m[0], message: 'malformed story tag' });
-        }
-      }
-      for (const m of titles.join('\n').matchAll(TEST_TAG)) {
-        const [tag, story = '', type = '', entry = ''] = m;
-        const cells = MATRIX[story];
-        const problem = !cells
-          ? `unknown story ${story}`
-          : !isTestType(type)
-            ? `unknown test type ${type}`
-            : !isEntry(entry)
-              ? `unknown entry ${entry}`
-              : !cells.includes(entry)
-                ? `${story} has no ${entry} cell in design §07`
-                : undefined;
-        if (problem) {
-          errors.push({ file, tag, message: problem });
-          continue;
-        }
-        const key = `${story}:${entry}:${type}`;
-        hits.set(key, (hits.get(key) ?? new Set()).add(file));
-      }
-    } else if (PRODUCTION_FILE.test(file)) {
-      for (const m of text.replace(CODE_TAG, ' ').matchAll(CODE_TAG_CANDIDATE)) {
-        errors.push({ file, tag: m[0], message: 'malformed story tag' });
-      }
-      for (const m of text.matchAll(CODE_TAG)) {
-        const [tag, story = ''] = m;
-        if (!MATRIX[story]) {
-          errors.push({ file, tag, message: `unknown story ${story}` });
-          continue;
-        }
-        (codeTags[story] ??= []).push(file);
-      }
-    }
-  }
-
-  const cells: Cell[] = Object.entries(MATRIX).flatMap(([story, entries]) =>
+/** Every matrix cell with the test type that covers it, or the first accepted type for a gap. */
+function coverageCells(hits: ReadonlyMap<string, ReadonlySet<string>>): Cell[] {
+  return Object.entries(MATRIX).flatMap(([story, entries]) =>
     entries.map((entry): Cell => {
       const types = accepted(story, entry);
       const type = types.find((t) => hits.has(`${story}:${entry}:${t}`)) ?? types[0] ?? 'api';
@@ -302,7 +175,20 @@ export function scan(files: ReadonlyMap<string, string>): Report {
       return { story, entry, covered: by.length > 0, type, by };
     }),
   );
-  return { cells, errors, codeTags };
+}
+
+/** Pure: path → source text in, report out. */
+export function scan(files: ReadonlyMap<string, string>): Report {
+  const collected: Collected = { errors: [], codeTags: {}, hits: new Map() };
+  for (const [file, text] of files) {
+    if (TEST_FILE.test(file)) collectTestFile(file, text, collected);
+    else if (PRODUCTION_FILE.test(file)) collectProductionFile(file, text, collected);
+  }
+  return {
+    cells: coverageCells(collected.hits),
+    errors: collected.errors,
+    codeTags: collected.codeTags,
+  };
 }
 
 /** The §07 table: errors, one row per story, then the gap summary. */
@@ -391,10 +277,17 @@ export function renderLost(lost: readonly Cell[], base: string): string {
 const USAGE =
   'usage: node scripts/stories/check.mts [--report | --base <ref>] [--require-complete] [--json]';
 
-function main(): number {
-  let values;
+interface Options {
+  report?: boolean;
+  base?: string;
+  'require-complete'?: boolean;
+  json?: boolean;
+}
+
+/** The parsed options, or `null` when the arguments are invalid. */
+function parseOptions(): Options | null {
   try {
-    ({ values } = parseArgs({
+    const { values } = parseArgs({
       args: process.argv.slice(2),
       options: {
         report: { type: 'boolean' },
@@ -403,46 +296,56 @@ function main(): number {
         json: { type: 'boolean' },
       },
       strict: true,
-    }));
+    });
+    return values.report && values.base !== undefined ? null : values;
   } catch {
-    console.error(USAGE);
-    return 2;
+    return null;
   }
-  if (values.report && values.base !== undefined) {
-    console.error(USAGE);
-    return 2;
-  }
+}
 
-  let base = values.base;
-  if (base === undefined && !values.report) {
-    base = 'origin/main';
-    try {
-      git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`]);
-    } catch {
-      console.error(`stories:check: ${base} not found, reporting only (fetch it to compare)`);
-      base = undefined;
-    }
+/** The ref to compare against: `--base`, else `origin/main` when it exists, else report-only. */
+function resolveBase(values: Options): string | undefined {
+  if (values.base !== undefined || values.report) return values.base;
+  const base = 'origin/main';
+  try {
+    git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`]);
+    return base;
+  } catch {
+    console.error(`stories:check: ${base} not found, reporting only (fetch it to compare)`);
+    return undefined;
   }
+}
+
+/** Failure text goes to stderr under `--json`, so stdout stays one JSON document. */
+function printFailure(text: string, json: boolean | undefined): void {
+  if (json) console.error(text);
+  else console.log(text);
+}
+
+function main(): number {
+  const values = parseOptions();
+  if (values === null) {
+    console.error(USAGE);
+    return 2;
+  }
+  const base = resolveBase(values);
 
   const report = scan(readHead());
   console.log(values.json ? JSON.stringify(report) : render(report));
   let failed = report.errors.length > 0;
-  if (values['require-complete']) {
-    const incomplete = incompleteCells(report);
-    if (incomplete.length > 0) {
-      const text = incomplete.map((c) => `incomplete: ${c.story} ${c.entry}:${c.type}`).join('\n');
-      if (values.json) console.error(text);
-      else console.log(text);
-      failed = true;
-    }
+  const incomplete = values['require-complete'] ? incompleteCells(report) : [];
+  if (incomplete.length > 0) {
+    printFailure(
+      incomplete.map((c) => `incomplete: ${c.story} ${c.entry}:${c.type}`).join('\n'),
+      values.json,
+    );
+    failed = true;
   }
   if (base !== undefined) {
     const mergeBase = git(['merge-base', base, 'HEAD']).toString('utf8').trim();
     const lost = lostCells(scan(readTree(mergeBase)), report);
     if (lost.length > 0) {
-      const text = renderLost(lost, mergeBase.slice(0, 12));
-      if (values.json) console.error(text);
-      else console.log(text);
+      printFailure(renderLost(lost, mergeBase.slice(0, 12)), values.json);
       failed = true;
     }
   }

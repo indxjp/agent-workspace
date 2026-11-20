@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-10-31
 Decided by: SDK-18-a (issue #250, Agent Portal Phase 1) implementing agent
-Scope: the N-3 row of `docs/sdk/04-api-specification.md` §8 and its §5.17; the `webhooks` resource
+Scope: the N-3 row of `docs/10-product/sdk/04-api-specification.md` §8 and its §5.17; the `webhooks` resource
 that later #250 units build in `packages/contracts/src/webhooks.ts`, `packages/core/src/db/schema/**`
 and `packages/core/src/db/repositories/{runs,webhooks}.ts`, `apps/web/server/webhooks/**`,
 `apps/web/app/api/webhooks/**`, `apps/web/server/rbac/permissions.ts`,

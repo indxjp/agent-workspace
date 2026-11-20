@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Classify installed dependencies against the SPDX policy. Any denied or unreviewed package fails.
 // Usage: node scripts/check-licenses.mjs [--dev | --engine <id> | --self-test]
-// Policy decisions and exception requirements: docs/dependency-policy.md.
+// Policy decisions and exception requirements: docs/30-reference/policies/dependency-policy.md.
 
 import console from 'node:console';
 import process from 'node:process';
@@ -104,7 +104,7 @@ function gateMode(scope, engine) {
     console.error(
       `\nLicence policy: FAIL (${denied.length} denied, ${review.length} to review) [${scope}].`,
     );
-    console.error('See docs/dependency-policy.md.');
+    console.error('See docs/30-reference/policies/dependency-policy.md.');
     return 1;
   }
   console.log(`Licence policy: PASS (${scope}).`);

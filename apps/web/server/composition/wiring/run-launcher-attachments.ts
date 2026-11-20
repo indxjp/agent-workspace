@@ -3,7 +3,7 @@ import { MAX_UPLOAD_BYTES } from '@indx-workspace/contracts/files';
 import type { ModelProvider } from '@indx-workspace/contracts/runs';
 
 import { runStartRefusalError } from '../../compose/run-preflight';
-import type { FilesRuntime } from '../../files/runtime';
+import type { FilesRuntime } from '../../files/wiring';
 import type { ResolvedModelConnection } from '../../models/store';
 import type { LaunchContext } from '../../runs/environment';
 import { atStep } from '../../runs/failures';

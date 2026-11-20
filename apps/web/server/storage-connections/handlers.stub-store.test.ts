@@ -26,7 +26,7 @@ import { PROBE_TIMEOUT_MS } from '../models/probe';
 import { Principal } from '../rbac/principal';
 import { log } from '../telemetry/logger';
 import { browseStorageConnection, testStorageConnection } from './handlers';
-import type { StorageConnectionsRuntime } from './runtime';
+import type { StorageConnectionsRuntime } from './wiring';
 import { createRepositoryStorageConnectionsStoreProvider } from './store';
 
 const injected = vi.hoisted(() => ({

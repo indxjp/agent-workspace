@@ -17,6 +17,8 @@ type VerificationDocument = Readonly<{
 
 export interface RuntimeVerificationCache {
   wasVerified(driverId: string, configurationKey: string, now?: Date): boolean;
+  /** The driver's pass for `configurationKey` while it is current, or `null`. */
+  current(driverId: string, configurationKey: string, now?: Date): VerificationRecord | null;
   /** A pass was ever recorded for the driver, whatever its configuration or expiry (BH061-002). */
   hasPassed(driverId: string): boolean;
   record(
@@ -70,16 +72,24 @@ export async function loadRuntimeVerificationCache(
   let document = await readDocument(file);
   let pending = Promise.resolve();
   let warnedReadOnly = false;
+  const current = (
+    driverId: string,
+    configurationKey: string,
+    now = new Date(),
+  ): VerificationRecord | null => {
+    const record = document.drivers[driverId];
+    return record !== undefined &&
+      record.configurationKey === configurationKey &&
+      Number.isFinite(Date.parse(record.verifiedAt)) &&
+      Date.parse(record.expiresAt) > now.getTime()
+      ? record
+      : null;
+  };
   return {
-    wasVerified(driverId, configurationKey, now = new Date()) {
-      const record = document.drivers[driverId];
-      return (
-        record !== undefined &&
-        record.configurationKey === configurationKey &&
-        Number.isFinite(Date.parse(record.verifiedAt)) &&
-        Date.parse(record.expiresAt) > now.getTime()
-      );
+    wasVerified(driverId, configurationKey, now) {
+      return current(driverId, configurationKey, now) !== null;
     },
+    current,
     hasPassed(driverId) {
       return document.drivers[driverId] !== undefined;
     },

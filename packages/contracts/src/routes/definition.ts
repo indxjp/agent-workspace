@@ -70,7 +70,13 @@ export interface ApiRoute {
    * added without saying which switch turns it off.
    */
   readonly feature: RouteFeature;
+  /**
+   * One short line: the developer site names the route's API page after it, so a long summary
+   * makes a file name the docs build cannot write. Detail goes in `description`.
+   */
   readonly summary: string;
+  /** The rules and refusals of the route beyond its summary; absent when the summary says it all. */
+  readonly description?: string;
   /** Absent when the request carries no body. */
   readonly request?: ApiBody;
   /** Request headers this route reads beyond the shared ones; absent when it reads none. */

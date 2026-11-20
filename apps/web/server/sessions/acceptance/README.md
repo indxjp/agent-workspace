@@ -108,7 +108,7 @@ Proven, by executed output:
   the runner's (`apps/runner/src/index.ts`).
 - **Next.js.** The handlers are driven through a plain `node:http` server that makes the same calls
   the App Router files make. The route files themselves are covered by `../routes.test.ts` and by
-  `tests/route-inventory.test.ts`, not by this run.
+  `tests/route-inventory.policy-check.ts`, not by this run.
 - **A second machine.** One host, one operating system. R-01 flags multi-host resume as _documented,
   not probed_; this run makes it _probed on one host_, which is a mechanism established and not a
   platform contract.

@@ -24,7 +24,7 @@ import {
   type ObjectStore,
 } from '@agent-workspace/core/storage';
 
-import type { AuditRuntime } from '../audit/runtime';
+import type { AuditRuntime } from '../audit/wiring';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
 import { redactingExporter } from '../telemetry/redact-span';

@@ -38,7 +38,7 @@ import {
 } from '../storage/objects';
 import { isUnderAllowedPrefix } from './prefixes';
 import { log } from '../telemetry/logger';
-import type { StorageConnections, StorageConnectionsRuntime } from './runtime';
+import type { StorageConnections, StorageConnectionsRuntime } from './wiring';
 import { credentialTarget } from './store';
 import type { WorkspaceStorageConnectionsStore } from './store';
 

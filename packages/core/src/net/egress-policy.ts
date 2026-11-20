@@ -13,7 +13,7 @@
  * separate "metadata address" list is needed once those two ranges are covered), IPv6 unique-local
  * and link-local, `::1`, and the IPv4-mapped IPv6 spelling of any of those. HTTPS is required
  * unless the target is a loopback address reached under a local (non-production) deployment
- * posture (`docs/operations/W9-PROV-127-egress-policy.md` documents the exact variables; contract
+ * posture (`docs/40-operate/operations/W9-PROV-127-egress-policy.md` documents the exact variables; contract
  * C2 adds `AW_DEPLOYMENT_POSTURE`), which is what lets the fixture
  * servers this package's own tests spin up on `127.0.0.1` keep working. Redirects are refused,
  * not followed — `guardedFetch` always requests with `redirect: 'error'` — so a compromised or
@@ -34,7 +34,7 @@ import { isIP } from 'node:net';
 
 import { readDeploymentPosture } from '../posture.js';
 
-/** The exact environment variable name `docs/operations/W9-PROV-127-egress-policy.md` documents. */
+/** The exact environment variable name `docs/40-operate/operations/W9-PROV-127-egress-policy.md` documents. */
 export const EGRESS_ALLOW_HOSTS_ENV = 'EGRESS_ALLOW_HOSTS';
 
 export type EgressPolicyConfig = {

@@ -3,7 +3,7 @@ import AgentWorkspace.Er.Current.Configuration
 /-!
 T5 — properties of the specification itself: where the documents, the contracts and the schema of
 the configuration cluster disagree, and where one concept is stored as another. Each theorem pins
-one finding of `docs/formal/units/concept-configuration.md`.
+one finding of `docs/20-design/formal/units/concept-configuration.md`.
 -/
 
 namespace AgentWorkspace.Theorems.Meta.ConceptConfiguration
@@ -17,7 +17,7 @@ open AgentWorkspace.Er.Current.Configuration
 `integer`, which cannot store it. -/
 @[aw_spec (tier := T5) (ts := "packages/contracts/src/runtimes.ts#RUNTIME_PROFILE_BOUNDS")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem contract_cpu_fraction_is_not_storable :
     RuntimeProfile.cpuAccepted ⟨5, 1⟩ = true ∧
       RuntimeProfile.integerColumnAccepts ⟨5, 1⟩ = false ∧
@@ -27,7 +27,7 @@ theorem contract_cpu_fraction_is_not_storable :
 four columns are PostgreSQL `integer`s: `2^31` passes the contract and overflows the column. -/
 @[aw_spec (tier := T5) (ts := "packages/contracts/src/runtimes.ts#RUNTIME_PROFILE_BOUNDS")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem contract_size_bound_exceeds_the_integer_column :
     RuntimeProfile.sizeAccepted ⟨2147483648, 0⟩ = true ∧
       RuntimeProfile.integerColumnAccepts ⟨2147483648, 0⟩ = false ∧
@@ -40,7 +40,7 @@ theorem contract_size_bound_exceeds_the_integer_column :
 `runtime_profiles_name_not_blank` refuses: the create route passes it to the database, and the
 repository does not classify that violation. -/
 @[aw_spec (tier := T5) (ts := "packages/run-protocol/src/schemas.ts#RuntimeProfile")
-  (ts := "packages/core/src/db/repositories/runtime-profiles.ts#classifyWriteFailure")]
+  (ts := "packages/core/src/db/repositories/runtime-profiles-rows.ts#classifyWriteFailure")]
 theorem blank_profile_name_passes_the_contract_but_not_the_check :
     RuntimeProfile.nameAcceptedByContract "   " = true ∧ Secret.sqlNotBlank "   " = false ∧
       RuntimeProfile.nameAcceptedByContract "\t" = true ∧ Secret.sqlNotBlank "\t" = true := by
@@ -51,7 +51,7 @@ theorem blank_profile_name_passes_the_contract_but_not_the_check :
 /-- The secrets route accepts the names reserved for model-connection credentials and runtime
 connections, including the forged runtime-connection name the code comment measures: the
 reservation is a naming convention only. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "apps/web/server/secrets/contract.ts#parseSecretName")
   (ts := "apps/web/server/runtimes/connections.ts#decodeDriver")]
 theorem reserved_names_are_ordinary_secret_names :
@@ -74,14 +74,14 @@ theorem decoded_driver_may_be_outside_the_catalogue :
 /-- The label encoding is not injective: two different display names of one driver encode to the
 same stored name, so the second is a name conflict. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/runtimes/connections.ts#encodeSegment")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem connection_label_encoding_collides :
     RuntimeProfile.encodeSecretName "docker" "primary host" =
         RuntimeProfile.encodeSecretName "docker" "PRIMARY_HOST" ∧
       (RuntimeProfile.encodeSecretName "docker" "primary host").isSome = true := by decide +kernel
 
 /-- A runtime connection has no table and no identifier kind of its own: it is a `secrets` row. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "apps/web/server/runtimes/connections.ts#createSecretsRuntimeConnectionStoreProvider")]
 theorem runtime_connections_have_no_table :
     ((WireEnum.all : List TableName).all (fun t => TableName.toWire t != "runtime_connections") &&
@@ -91,7 +91,7 @@ theorem runtime_connections_have_no_table :
 /-- No foreign key joins `model_connections` and `secrets` in either direction: a connection's
 credential is found by the name `MODEL_CONNECTION_<id>` alone. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/models/store.ts#modelConnectionSecretName")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem model_connection_credential_has_no_foreign_key :
     (catalogue .modelConnections).foreignKeys.all (·.refTable != .secrets) &&
       (catalogue .secrets).foreignKeys.all (·.refTable != .modelConnections) = true := by decide +kernel
@@ -115,7 +115,7 @@ theorem set_null_alone_breaks_the_default_model_pair :
 which is what deleting its connection leaves behind, although the specification says a model
 choice is never one without the other. -/
 @[aw_spec (tier := T5)
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem agent_model_may_outlive_its_connection :
     let orphan := Witness.agent.nullify ["model_connection_id"]
@@ -140,7 +140,7 @@ theorem model_connection_name_has_no_database_check :
 
 /-- Of the configuration resources, only the runtime profile carries its `workspaceId` on the wire;
 the model-connection, secret and runtime-connection resources do not. -/
-@[aw_spec (tier := T5) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T5) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/contracts/src/runtimes.ts#RuntimeProfileResourceSchema")]
 theorem only_the_profile_resource_carries_workspace_id :
     RuntimeProfile.resourceFields.contains "workspaceId" &&
@@ -153,7 +153,7 @@ theorem only_the_profile_resource_carries_workspace_id :
 refused. -/
 @[aw_spec (tier := T5) (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
-  (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#55-secrets--awsecrets")]
 theorem secret_references_disagree_on_delete :
     (inbound catalogue .secrets).map (fun (t, fk) => (t, fk.onDelete)) =
         [(.mcpServers, .restrict), (.runtimeProfiles, .setNull), (.runtimeProfiles, .noAction)] ∧
@@ -165,7 +165,7 @@ theorem secret_references_disagree_on_delete :
 non-ASCII label (`straße`, `ıd`, `ﬁle`) the model's name differs from the one JavaScript's
 Unicode-aware `toUpperCase` makes the code store, and none of them is an ASCII label. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/runtimes/connections.ts#encodeSegment")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem connection_encoding_model_is_ascii_only :
     RuntimeProfile.jsUpperCaseDivergences.all (fun (l, ts) =>
       !RuntimeProfile.isAsciiLabel l && RuntimeProfile.encodeSecretName "docker" l != ts) = true ∧
@@ -181,7 +181,7 @@ key. -/
 @[aw_spec (tier := T5)
   (ts := "apps/web/server/runtimes/connections.ts#parseCreateRuntimeConnectionInput")
   (ts := "apps/web/server/secrets/contract.ts#parseCreateSecretBody")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem runtime_connection_create_ignores_unknown_fields :
     RuntimeProfile.connectionCreateAccepts
         (RuntimeProfile.connectionCreateFields ++ ["bogus"]) = true ∧
@@ -196,7 +196,7 @@ theorem runtime_connection_create_ignores_unknown_fields :
 refused exactly like a `docker` one, although the error says "non-local runtime profiles". -/
 @[aw_spec (tier := T5)
   (ts := "apps/web/server/runtimes/contract.ts#parseCreateRuntimeProfileInput")
-  (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 theorem image_rule_ignores_the_driver (d e : RuntimeProfile.Driver) (i : RuntimeProfile.Image) :
     RuntimeProfile.createImageAccepted d i = RuntimeProfile.createImageAccepted e i := by
   cases i <;> rfl

@@ -1,6 +1,6 @@
 /**
  * R3: the store says when the example apps' browser journeys run, and says it as ci.yml has it. The
- * decision (not a per-PR gate) is in the product spec, whose wording `tests/internal-docs-truth.test.ts`
+ * decision (not a per-PR gate) is in the product spec, whose wording `tests/docs-truth/internal.docs-check.ts`
  * checks against the triggers pinned here; this test pins the workflow and the store's own text.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';

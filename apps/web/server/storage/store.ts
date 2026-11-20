@@ -7,23 +7,25 @@
  * It also holds the skills object provider (`SkillObjects`, `createRepositorySkillsStoreProvider`):
  * the storage design §07 rule 3 seam the skills domain uses instead of the core storage barrel.
  */
+import type {
+  ResourceCatalogRepository,
+  ResourceCatalogRepositoryProvider,
+  SessionStateRepository,
+  StorageMigrationRunRepository,
+  WorkspaceScopeResolver,
+} from '@agent-workspace/core/db';
 import {
   CatalogPathPendingError,
   CatalogPathTakenError,
   UnknownWorkspaceError,
-  type ResourceCatalogRepository,
-  type ResourceCatalogRepositoryProvider,
-  type SessionStateRepository,
-  type StorageMigrationRunRepository,
-  type WorkspaceScopeResolver,
-} from '@agent-workspace/core/db';
+} from '@agent-workspace/core/db-model';
 import type {
   ObjectListEntry,
   ObjectStore,
   ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 
-export { listCatalogFiles } from '@agent-workspace/core/db';
+export { listCatalogFiles } from '@agent-workspace/core/db-model';
 
 export type { CatalogFile, CatalogPort, CatalogSkill, LockOutcome } from '@agent-workspace/core/db';
 

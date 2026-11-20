@@ -95,7 +95,7 @@ spec:
             # named `OBJECT_STORAGE_*` there, but `apps/web/server/composition/storage.ts` builds
             # its S3 client from the `AWS_*` names, so only the two keys are translated here — an
             # `envFrom` alone would deliver a key nothing reads, and an operator who filled it in
-            # exactly as `docs/deploy/kubernetes.md` instructs would get 503 from every
+            # exactly as `docs/40-operate/deploy/kubernetes.md` instructs would get 503 from every
             # /api/files* route. `optional: true` is what keeps an IAM or workload-identity
             # install — which leaves both keys out of the Secret — starting: the S3 client then
             # signs with the identity the pod already has.

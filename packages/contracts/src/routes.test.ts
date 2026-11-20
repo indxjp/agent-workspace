@@ -67,3 +67,24 @@ describe('route request headers', () => {
     }
   });
 });
+
+describe('route summaries', () => {
+  // The developer site's `mint export` names each HTTP API page after its summary (a slug plus
+  // `.mdx`): a file name longer than 255 bytes fails the docs build with ENAMETOOLONG, and a `?`
+  // or `#` cuts the page's URL short, so the page 404s and the export fails.
+  const MAX_SUMMARY_BYTES = 200;
+
+  it('keeps every summary short enough to name its API page', () => {
+    const long = API_ROUTES.filter(
+      ({ summary }) => new TextEncoder().encode(summary).length > MAX_SUMMARY_BYTES,
+    ).map(({ operationId }) => operationId);
+    expect(long).toEqual([]);
+  });
+
+  it('keeps ? and # out of every summary, so its API page URL stays whole', () => {
+    const unsafe = API_ROUTES.filter(({ summary }) => /[?#]/u.test(summary)).map(
+      ({ operationId }) => operationId,
+    );
+    expect(unsafe).toEqual([]);
+  });
+});

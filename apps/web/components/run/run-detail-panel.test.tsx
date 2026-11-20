@@ -53,12 +53,18 @@ describe('RunDetailPanel', () => {
 
   it('keeps every detail definition list stackable instead of fixing a mobile-width label column', async () => {
     const { readFile } = await import('node:fs/promises');
-    const [detailSource, liveSource] = await Promise.all([
-      readFile(new URL('./run-detail-panel.tsx', import.meta.url), 'utf8'),
-      readFile(new URL('./run-view.tsx', import.meta.url), 'utf8'),
+    const detailFiles = ['run-detail-parts', 'run-detail-sections', 'run-team-card'];
+    const liveFiles = ['run-view.tsx', 'run-view-styles.ts', 'run-rail.tsx'];
+    const [detailSources, liveSources] = await Promise.all([
+      Promise.all(
+        detailFiles.map((name) => readFile(new URL(`./${name}.tsx`, import.meta.url), 'utf8')),
+      ),
+      Promise.all(liveFiles.map((name) => readFile(new URL(`./${name}`, import.meta.url), 'utf8'))),
     ]);
+    const liveSource = liveSources.join('\n');
+    const detailSource = detailSources.join('\n');
     expect(`${detailSource}\n${liveSource}`).not.toMatch(/grid-cols-\[\d+px_1fr\]/u);
-    expect(detailSource.match(/className=\{DETAIL_KV\}/gu)).toHaveLength(4);
+    expect(detailSource.match(/className=\{DETAIL_KV\}/gu)).toHaveLength(3); // overview, the shared usage/runtime section, the team row
     expect(detailSource).toContain('sm:grid-cols-[140px_minmax(0,1fr)]');
     expect(liveSource).toContain('sm:grid-cols-[150px_minmax(0,1fr)]');
     expect(liveSource).toContain('sm:grid-cols-[105px_minmax(0,1fr)]');

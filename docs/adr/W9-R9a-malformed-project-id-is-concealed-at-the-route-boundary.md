@@ -136,7 +136,7 @@ something to assert over.
 - `apps/web/server/projects/http.ts` exports one more symbol. `knip` is satisfied because
   `lifecycle.ts` imports it.
 - No migration, no schema change, no contract or type change, no new dependency, no route added, so
-  `tests/route-inventory.test.ts` and the closed-world route declaration are unaffected.
+  `tests/route-inventory.policy-check.ts` and the closed-world route declaration are unaffected.
 - Rollback is a revert: the guard is additive and stateless, and nothing persists differently.
 - Residual risk, declared and not hidden: the three enumerated sites remain defective after this
   change.

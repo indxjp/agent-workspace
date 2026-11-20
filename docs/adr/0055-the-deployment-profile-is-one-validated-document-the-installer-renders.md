@@ -4,7 +4,7 @@ Status: accepted
 Superseded in part by: ADR-0060 (`azblob://`), ADR-0061 (`key-vault`) and ADR-0089 (the document format)
 Date: 2026-09-21
 Decided by: the Owner
-Scope: `packages/cli/`, the rendered `.env` / Compose / Helm / Terraform artefacts, `infra/helm/agent-workspace/templates/services.yaml`, `infra/helm/agent-workspace/templates/deployments.yaml`, `infra/helm/agent-workspace/values.yaml`, `infra/helm/agent-workspace/values.schema.json`, `infra/tests/contracts.test.mjs`, `docs/deploy/`
+Scope: `packages/cli/`, the rendered `.env` / Compose / Helm / Terraform artefacts, `infra/helm/agent-workspace/templates/services.yaml`, `infra/helm/agent-workspace/templates/deployments.yaml`, `infra/helm/agent-workspace/values.yaml`, `infra/helm/agent-workspace/values.schema.json`, `infra/tests/contracts.test.mjs`, `docs/40-operate/deploy/`
 
 ## Context
 
@@ -260,7 +260,7 @@ partial by accident, and `profile-document.test.ts` pins one refusal per constru
   `infra/terraform/gcp-cloudrun/main.tf` already performed that translation; the chart did not, so
   it does it too — each Deployment sets the two `AWS_*` names from the object-store Secret's
   `OBJECT_STORAGE_*` keys with `valueFrom.secretKeyRef` and `optional: true`. Keeping the profile's
-  own names canonical is what makes the rendered file, `docs/deploy/kubernetes.md` and
+  own names canonical is what makes the rendered file, `docs/40-operate/deploy/kubernetes.md` and
   `.env.example` agree; `optional: true` is what keeps an IAM or workload-identity install, which
   supplies neither key, starting. `infra/tests/contracts.test.mjs` holds the mapping against the
   key set the renderer emits.

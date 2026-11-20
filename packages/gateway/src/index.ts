@@ -5,60 +5,30 @@
  */
 import { pathToFileURL } from 'node:url';
 
-import { openDatabaseRoot } from '@agent-workspace/core/db';
-import { createSecretsService, type SecretsService } from '@agent-workspace/core/secrets';
 import { createJsonLogger } from '@agent-workspace/core/telemetry';
 import { startTracing } from '@agent-workspace/core/tracing';
 import {
-  GATEWAY_AW_CONTROL_PATH,
   GATEWAY_TOOL_ROUTE,
   GATEWAY_TOOL_SANDBOX_ROUTE,
-  parseGatewayToolPath,
 } from '@indx-workspace/contracts/tool-connectors';
 
+import type { GatewayApplicationDependencies } from './application-dependencies.js';
+import { createAuthenticatedGateway, firstRefusalOf, type GatewayAdmission } from './auth.js';
 import {
-  createAuthenticatedGateway,
-  firstRefusalOf,
-  type GatewayAdmission,
-  type GatewayRunResolver,
-  type UsageRecorder,
-} from './auth.js';
-import { createDailyCostAdmission } from './daily-cost.js';
-import {
-  createDatabaseDailyCostLedger,
-  createDatabaseGatewayRunResolver,
-  createDatabaseUsageRecorder,
-} from './database.js';
-import { createRunCeilingAdmission } from './run-ceiling.js';
-import {
-  createProviderRegistry,
-  createScriptedModels,
-  type ProviderRegistryOptions,
-} from './providers/registry.js';
+  createDatabaseApplicationDependencies,
+  openGatewayStores,
+} from './database-dependencies.js';
+import { createProviderRegistry } from './providers/registry.js';
 import { createRouter, ROUTES } from './router.js';
-import { createGatewayServer, requestLogger } from './server.js';
+import { createGatewayServer } from './server.js';
 import {
   createEndpointGrantCodec,
   GATEWAY_TOOL_SANDBOX_ENDPOINT_ROUTE,
 } from './tokens/endpoint-grant.js';
 import { createRunTokenCodec } from './tokens/run-token.js';
-import {
-  createDatabaseAwControlResolver,
-  handleAwControlRequest,
-  type AwControlResolver,
-} from './tools/aw-control.js';
-import { createDatabaseToolResolver, type ToolConnectorResolver } from './tools/authorize.js';
-import { handleToolRequest } from './tools/endpoint.js';
-import { createPostgresExecutor, type PostgresToolExecutor } from './tools/postgres.js';
-import {
-  createDatabaseToolSandboxResolver,
-  handleEndpointToolSandboxRequest,
-  handleToolSandboxRequest,
-  type ToolSandboxResolver,
-} from './tools/sandbox.js';
-import { loggedFetch } from './upstream-log.js';
+import { createPostgresExecutor } from './tools/postgres.js';
 import { createGoogleAdcTokenSource } from './providers/google-adc-token.js';
-import { createGoogleIdTokenSource } from './providers/google-id-token.js';
+import { createToolRouteDispatcher } from './tool-routes.js';
 import {
   readGatewayServerSettings,
   readGatewaySettings,
@@ -97,43 +67,11 @@ export type {
 export type { ToolConnectorResolver } from './tools/authorize.js';
 export type { ToolSandboxResolver } from './tools/sandbox.js';
 
+export type { GatewayApplicationDependencies } from './application-dependencies.js';
+
 export const PACKAGE_NAME = '@agent-workspace/gateway';
 
 const log = createJsonLogger({ service: 'gateway' });
-
-export type GatewayApplicationDependencies = {
-  readonly resolver: GatewayRunResolver;
-  readonly tokenSecret: string;
-  readonly providers?: ProviderRegistryOptions;
-  readonly usage?: UsageRecorder;
-  /** `request` is the one whose usage failed to settle, for its trace id. */
-  readonly onUsageError?: (error: unknown, request: Request) => void;
-  /** Refuses a model call of a run that has spent its spend ceiling (ADR-0162); asked first. */
-  readonly runCeiling?: GatewayAdmission;
-  /** Refuses a model call over the workspace's daily cost cap; without it no call is gated. */
-  readonly dailyCost?: GatewayAdmission;
-  /** Serves `POST /v1/tools/:connectorId/mcp`. Without it that path is an unknown route. */
-  readonly tools?: ToolConnectorResolver;
-  /** Serves `POST /v1/tool-sandbox/mcp` and `POST /v1/tool-sandbox/endpoint/mcp`. Without it those paths are unknown routes. */
-  readonly toolSandbox?: ToolSandboxResolver;
-  /** Replaces the global `fetch` the tool sandbox route forwards with. */
-  readonly toolSandboxFetch?: typeof fetch;
-  /** The runner manager's token, for a tool sandbox the manager serves (ADR-0132). */
-  readonly runnerManagerToken?: string;
-  /** Mints the Google ID token a Cloud Run tool sandbox (`*.run.app`) requires; see `GATEWAY_TOOL_SANDBOX_AUTH`. */
-  readonly toolSandboxIdToken?: (audience: string) => Promise<string>;
-  /** Runs `postgres` tool calls and owns their pools; one is created when this is omitted. */
-  readonly postgres?: PostgresToolExecutor;
-  /**
-   * The control plane's origin, set at deploy time and parsed by `parseControlPlaneOrigin`. Without
-   * it, or without `awControl`, every `POST /v1/tools/aw-control/mcp` is refused.
-   */
-  readonly controlPlaneOrigin?: string;
-  /** Authorises a run token for `aw-control`, on every request. */
-  readonly awControl?: AwControlResolver;
-  /** Replaces the global `fetch` the `aw-control` route forwards with. */
-  readonly awControlFetch?: typeof fetch;
-};
 
 /** The application's public routes, spec §9's block: the model routes, then the tool, tool-sandbox and endpoint tool-sandbox routes. */
 const GATEWAY_ROUTES: readonly GatewayRoute[] = [
@@ -164,8 +102,13 @@ export function createGatewayApplication(
       ),
     ),
   );
-  const { tools, toolSandbox } = dependencies;
-  const postgres = dependencies.postgres ?? createPostgresExecutor();
+  const dispatchToolRoute = createToolRouteDispatcher({
+    dependencies,
+    router,
+    tokens,
+    grants,
+    postgres: dependencies.postgres ?? createPostgresExecutor(),
+  });
   return {
     routes: GATEWAY_ROUTES,
     fetch(request) {
@@ -175,64 +118,8 @@ export function createGatewayApplication(
       if (request.method === 'GET' && pathname === '/health') {
         return router.fetch(request);
       }
-      // The tool route is dispatched before the model boundary, so it never resolves the model
-      // key and is never metered (ADR-0113 C16).
-      if (pathname === GATEWAY_TOOL_SANDBOX_ROUTE.path) {
-        return toolSandbox === undefined
-          ? router.fetch(request)
-          : handleToolSandboxRequest(request, {
-              tokens,
-              sandbox: toolSandbox,
-              tokenSecret: dependencies.tokenSecret,
-              ...(dependencies.runnerManagerToken === undefined
-                ? {}
-                : { managerToken: dependencies.runnerManagerToken }),
-              ...(dependencies.toolSandboxFetch === undefined
-                ? {}
-                : { fetch: dependencies.toolSandboxFetch }),
-              ...(dependencies.toolSandboxIdToken === undefined
-                ? {}
-                : { serverlessIdToken: dependencies.toolSandboxIdToken }),
-            });
-      }
-      if (pathname === GATEWAY_TOOL_SANDBOX_ENDPOINT_ROUTE.path) {
-        return toolSandbox === undefined
-          ? router.fetch(request)
-          : handleEndpointToolSandboxRequest(request, {
-              grants,
-              tokenSecret: dependencies.tokenSecret,
-              ...(dependencies.runnerManagerToken === undefined
-                ? {}
-                : { managerToken: dependencies.runnerManagerToken }),
-              ...(dependencies.toolSandboxFetch === undefined
-                ? {}
-                : { fetch: dependencies.toolSandboxFetch }),
-              ...(dependencies.toolSandboxIdToken === undefined
-                ? {}
-                : { serverlessIdToken: dependencies.toolSandboxIdToken }),
-            });
-      }
-      // Before the connector route: `aw-control` is the platform's, so no workspace connector can
-      // ever receive its calls, whatever it is named.
-      if (pathname === GATEWAY_AW_CONTROL_PATH) {
-        return handleAwControlRequest(request, {
-          tokens,
-          ...(dependencies.controlPlaneOrigin === undefined
-            ? {}
-            : { origin: dependencies.controlPlaneOrigin }),
-          ...(dependencies.awControl === undefined ? {} : { runs: dependencies.awControl }),
-          ...(dependencies.awControlFetch === undefined
-            ? {}
-            : { fetch: dependencies.awControlFetch }),
-        });
-      }
-      const connectorId = parseGatewayToolPath(pathname);
-      if (connectorId !== null) {
-        return tools === undefined
-          ? router.fetch(request)
-          : handleToolRequest(request, connectorId, { tokens, tools, postgres });
-      }
-      return authenticated.fetch(request);
+      const toolResponse = dispatchToolRoute(request, pathname);
+      return toolResponse ?? authenticated.fetch(request);
     },
   };
 }
@@ -285,64 +172,14 @@ async function createGatewayFromSettings(
   env: Readonly<Record<string, string | undefined>>,
   tokens: TokenSource | undefined,
 ): Promise<GatewayFromEnvironment> {
-  const {
-    tokenSecret,
-    pricing,
-    toolSandboxAuth,
-    controlPlaneOrigin,
-    runnerManagerToken,
-    vertexProjectId,
-    scriptedModelsDir,
-  } = settings;
-  const scripted =
-    scriptedModelsDir === undefined ? null : createScriptedModels({ dir: scriptedModelsDir });
-  const database = await openDatabaseRoot(env);
-  let secrets: SecretsService;
-  try {
-    secrets = await createSecretsService(env);
-  } catch (error) {
-    await database.close();
-    throw error;
-  }
-  const postgres = createPostgresExecutor();
-  const ledger = createDatabaseDailyCostLedger(database);
-  const application = createGatewayApplication({
-    ...(toolSandboxAuth === undefined ? {} : { toolSandboxIdToken: createGoogleIdTokenSource() }),
-    ...(runnerManagerToken === undefined ? {} : { runnerManagerToken }),
-    ...(controlPlaneOrigin === undefined ? {} : { controlPlaneOrigin }),
-    resolver: createDatabaseGatewayRunResolver(
-      database,
-      secrets,
-      tokens === undefined || vertexProjectId === undefined
-        ? undefined
-        : { tokens, projectId: vertexProjectId },
-    ),
-    providers: { fetch: loggedFetch(log), scripted },
-    tools: createDatabaseToolResolver(database, secrets),
-    toolSandbox: createDatabaseToolSandboxResolver(database),
-    awControl: createDatabaseAwControlResolver(database),
-    postgres,
-    tokenSecret,
-    usage: createDatabaseUsageRecorder(database, pricing),
-    runCeiling: createRunCeilingAdmission(ledger, {
-      onError(error, context) {
-        log.error('run spend ceiling admission failed', { error, ...context });
-      },
-    }),
-    dailyCost: createDailyCostAdmission(ledger, {
-      now: () => new Date(),
-      onError(error, context) {
-        log.error('daily cost admission failed', { error, ...context });
-      },
-    }),
-    onUsageError(error, request) {
-      requestLogger(log, request).error('usage settlement failed', { error });
-    },
-  });
+  const stores = await openGatewayStores(env);
+  const application = createGatewayApplication(
+    createDatabaseApplicationDependencies({ settings, tokens, log, ...stores }),
+  );
   return {
     application,
     close: async () => {
-      await Promise.all([database.close(), secrets.close(), postgres.close()]);
+      await Promise.all([stores.database.close(), stores.secrets.close(), stores.postgres.close()]);
     },
   };
 }

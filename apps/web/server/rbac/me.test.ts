@@ -16,10 +16,10 @@ import type { FeatureId } from '@indx-workspace/contracts/features';
 import { describe, expect, it } from 'vitest';
 
 import {
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
-  type VerifiedSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+  type VerifiedSignInSessionClaims,
 } from '../auth/session';
 
 import { readMe } from './me';
@@ -38,10 +38,10 @@ const WORKSPACE = { id: 'ws-acme-id', slug: 'acme' } as const;
 const SESSION_EMAIL = 'member@example.test';
 const API_KEY_ID = 'ac6cbf4f-9b2e-4a14-9b6a-6a0cf1aa4f39';
 
-/** Mint and verify, which is the only way to obtain `VerifiedSessionClaims`. */
-async function claimsFor(email: string, slug: string): Promise<VerifiedSessionClaims> {
-  const token = await mintSessionToken(newSessionClaims(email, slug), SECRET);
-  const verified = await verifySessionToken(token, SECRET);
+/** Mint and verify, which is the only way to obtain `VerifiedSignInSessionClaims`. */
+async function claimsFor(email: string, slug: string): Promise<VerifiedSignInSessionClaims> {
+  const token = await mintSignInSessionToken(newSignInSessionClaims(email, slug), SECRET);
+  const verified = await verifySignInSessionToken(token, SECRET);
   if (!verified.ok)
     throw new Error(`the fixture could not verify its own token: ${verified.reason}`);
   return verified.claims;
@@ -68,7 +68,7 @@ function apiKeyPrincipal(): Principal {
   });
 }
 
-/** The seven fields the contract publishes, in the order `docs/sdk/04-api-specification.md` §5.2 prints them. */
+/** The seven fields the contract publishes, in the order `docs/10-product/sdk/04-api-specification.md` §5.2 prints them. */
 const WIRE_FIELDS = ['principalId', 'kind', 'role', 'workspaceId', 'userId', 'label', 'features'];
 
 const FEATURES: readonly FeatureId[] = ['chat', 'runs'];

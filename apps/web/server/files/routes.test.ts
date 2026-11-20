@@ -2,7 +2,7 @@
  * The files route handlers, imported as Next.js will import them and driven with real `Request`
  * objects. Mirrors `apps/web/server/agents/routes.test.ts`'s shape — see that file's header for
  * why a header-driven test resolver is the strongest position to give an attacker, and what this
- * file cannot exercise (Next.js's own routing — `tests/route-inventory.test.ts` covers that).
+ * file cannot exercise (Next.js's own routing — `tests/route-inventory.policy-check.ts` covers that).
  *
  * The shared harness is `routes.test-support.ts`; the topic suites beside this file are
  * `reserved-prefix`, `verification`, `ownership`, `ownership.postgres`, `no-byte-reads`, `pending`

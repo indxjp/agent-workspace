@@ -11,7 +11,7 @@ Two rules apply to this task and they point in opposite directions.
 
 - **Spec §40, restated in this task's brief**: *"anything cryptographic here uses a mature library.
   Do not hand-roll session signing, password hashing or CSRF protection."*
-  `docs/dependency-policy.md` §1 repeats it: cryptography is one of the five categories where a
+  `docs/30-reference/policies/dependency-policy.md` §1 repeats it: cryptography is one of the five categories where a
   mature library is *mandatory*, not merely permitted.
 - **[ADR-0009](0009-pnpm-lock-ownership-exception.md)**: `pnpm-lock.yaml` is owned by the wave's
   first task. *"A later task in the same wave that needs a new dependency escalates rather than

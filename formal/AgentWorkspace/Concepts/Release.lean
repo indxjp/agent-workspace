@@ -6,7 +6,7 @@ import AgentWorkspace.Prelude.Ids
 The one place in the developer journey where several writers act on shared state: `aw push` and a
 UI edit add versions, `point`, `promote` and `rollback` move an environment's pointer, a
 conversation pins the version it started on, and `aw eval` records a score. This module is the one
-model of that state machine (issue #614, `docs/formal/domains/release.md`); 80-07, 80-08 and 80-12
+model of that state machine (issue #614, `docs/20-design/formal/domains/release.md`); 80-07, 80-08 and 80-12
 refine it rather than adding a model each.
 
 It is new behaviour, so it has a target only: there is no `…Current` to relate it to.
@@ -35,7 +35,7 @@ namespace AgentWorkspace.Concepts.Release
 open AgentWorkspace
 
 /-- An environment: a name, and one pointer per agent. -/
-@[aw_spec (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 inductive Env where
   | «local»
   | production
@@ -70,7 +70,7 @@ structure Version where
   deriving DecidableEq, Repr, Inhabited
 
 /-- The release state. -/
-@[aw_spec (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 structure Release where
   /-- Every version of each agent, oldest first. Only `push` appends; nothing removes. -/
   versions : AgentId → List Version
@@ -82,7 +82,7 @@ structure Release where
   sessions : SessionId → Option (AgentId × VersionNo)
 
 /-- Why a step is refused. The codes are the problem codes 80-07, 80-08 and 80-12 return. -/
-@[aw_spec (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 inductive Problem where
   | versionNotFound
   | noPointer
@@ -102,7 +102,7 @@ def Problem.toWire : Problem → String
   | .sessionAlreadyStarted => "session_already_started"
 
 /-- An operation on the release state. A UI edit is a `push`: it saves a new version. -/
-@[aw_spec (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 inductive Op where
   | push (agent : AgentId) (body : String)
   | point (agent : AgentId) (env : Env) (v : VersionNo)
@@ -141,7 +141,7 @@ end Release
 /-- The promotion gate: a pure decision over the bar and a version's score, `none` when it passes.
 With no bar, promotion needs no evaluation. With a bar, a version with no score is not evaluated,
 and one scored below the bar fails the gate. -/
-@[aw_spec (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 def gate : (bar : Option Score) → (score : Option Score) → Option Problem
   | none, _ => none
   | some _, none => some .promotionNotEvaluated
@@ -158,7 +158,7 @@ def Op.addsVersionTo : Op → AgentId → Bool
 
 open Release in
 /-- One step of the release state machine, with the gate's bar as a parameter (`none`: no bar set). -/
-@[aw_spec (doc := "docs/formal/domains/release.md#the-release-model")]
+@[aw_spec (doc := "docs/20-design/formal/domains/release.md#the-release-model")]
 def step (bar : Option Score) (r : Release) : Op → Except Problem Release
   | .push a body =>
     .ok { r with versions := fun b =>

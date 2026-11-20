@@ -25,7 +25,7 @@ import {
 import { systemClock, type Clock } from '../clock';
 import { toWebhookEvent } from './payload';
 import { nextAttemptAt, WEBHOOK_MAX_ATTEMPTS } from './retry-policy';
-import type { ClaimedWebhookDelivery, WebhookDeliverySources } from './runtime';
+import type { ClaimedWebhookDelivery, WebhookDeliverySources } from './wiring';
 import { webhookHeaders } from './signature';
 
 const LEASE_NAME = 'webhook-delivery';

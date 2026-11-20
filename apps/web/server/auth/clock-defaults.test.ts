@@ -13,11 +13,11 @@ import {
 } from './invitation-identity.ts';
 import { mintSelectionToken, SELECTION_TTL_SECONDS, verifySelectionToken } from './selection.ts';
 import {
-  mintSessionToken,
-  newSessionClaims,
-  SESSION_TTL_SECONDS,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  SIGN_IN_SESSION_TTL_SECONDS,
   signInWith,
-  verifySessionToken,
+  verifySignInSessionToken,
 } from './session.ts';
 
 const SECRET = 'a-secure-test-secret-with-at-least-32-characters';
@@ -40,23 +40,26 @@ afterEach(() => {
 });
 
 describe('session: an omitted nowMs is the current time', () => {
-  it('newSessionClaims issues the claims now', () => {
-    const claims = newSessionClaims('admin@example.com', 'default');
+  it('newSignInSessionClaims issues the claims now', () => {
+    const claims = newSignInSessionClaims('admin@example.com', 'default');
     expect(claims.iat).toBe(NOW_SECONDS);
-    expect(claims.exp).toBe(NOW_SECONDS + SESSION_TTL_SECONDS);
+    expect(claims.exp).toBe(NOW_SECONDS + SIGN_IN_SESSION_TTL_SECONDS);
   });
 
-  it('verifySessionToken accepts a token minted now and refuses one minted a lifetime ago', async () => {
-    const fresh = await mintSessionToken(
-      newSessionClaims('a@example.com', 'default', NOW_MS),
+  it('verifySignInSessionToken accepts a token minted now and refuses one minted a lifetime ago', async () => {
+    const fresh = await mintSignInSessionToken(
+      newSignInSessionClaims('a@example.com', 'default', NOW_MS),
       SECRET,
     );
-    expect((await verifySessionToken(fresh, SECRET)).ok).toBe(true);
+    expect((await verifySignInSessionToken(fresh, SECRET)).ok).toBe(true);
 
-    const oldMs = NOW_MS - (SESSION_TTL_SECONDS + 60) * 1000;
-    const old = await mintSessionToken(newSessionClaims('a@example.com', 'default', oldMs), SECRET);
-    expect((await verifySessionToken(old, SECRET, oldMs)).ok).toBe(true);
-    expect(await verifySessionToken(old, SECRET)).toMatchObject({
+    const oldMs = NOW_MS - (SIGN_IN_SESSION_TTL_SECONDS + 60) * 1000;
+    const old = await mintSignInSessionToken(
+      newSignInSessionClaims('a@example.com', 'default', oldMs),
+      SECRET,
+    );
+    expect((await verifySignInSessionToken(old, SECRET, oldMs)).ok).toBe(true);
+    expect(await verifySignInSessionToken(old, SECRET)).toMatchObject({
       ok: false,
       code: 'expired_session',
     });

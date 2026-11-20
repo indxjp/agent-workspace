@@ -1,6 +1,6 @@
 /** `/api/skills*` over its own private object-store root (spec §7, W2-CP-04). */
 import { log } from '../telemetry/logger';
-import type { Skills } from '../skills/runtime';
+import type { Skills } from '../skills/wiring';
 import type { StorageService } from '../storage/service';
 import { startSkillsAdopt } from './storage-jobs';
 import { describePlace, logAreaNotOpened, openArea, storageReadinessFailure } from './storage-open';

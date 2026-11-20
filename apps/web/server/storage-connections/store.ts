@@ -1,80 +1,42 @@
-import {
-  StorageConnectionCredentialSchema,
-  type StorageConnectionCredential,
-  type StorageConnectionResource,
+import type {
+  StorageConnectionCredential,
+  StorageConnectionResource,
 } from '@indx-workspace/contracts/storage-connections';
 import type {
   StorageConnectionRecord,
   StorageConnectionRepository,
   StorageConnectionRepositoryProvider,
   UpdateStorageConnectionRecordInput,
-  WorkspaceScope,
   WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
-import { parseStorageUrl } from '@indx-workspace/contracts/storage-url';
-import { z } from 'zod';
 
-import { STORAGE_CONNECTION_SECRET_PREFIX, storageConnectionIdOf } from '../secrets';
+import {
+  bindBareCredential,
+  credentialNames,
+  findSecret,
+  removeConnectionSecret,
+  storageConnectionSecretName,
+  writeCredential,
+  type SecretsContext,
+  type CredentialWrite,
+} from './connection-secrets';
+import {
+  boundCredential,
+  credentialTarget,
+  sealedCredential,
+  storedCredential,
+} from './credential-codec';
+import { storageConnectionIdOf } from '../secrets';
 import { log } from '../telemetry/logger';
 
-// @story US-STO-12
-export function storageConnectionSecretName(id: string): string {
-  return `${STORAGE_CONNECTION_SECRET_PREFIX}${id.replace(/-/g, '').toUpperCase()}`;
-}
+export { storageConnectionSecretName } from './connection-secrets';
+export { boundCredential, credentialTarget };
 
-/** Where a URL's credential is sent: everything the URL names but its prefix. */
-export function credentialTarget(url: string): string | null {
-  const parsed = parseStorageUrl(url);
-  return parsed.ok ? JSON.stringify({ ...parsed.location, prefix: '' }) : null;
-}
-
-// The stored secret is the credential sealed with the target it was supplied for, so a reader can
-// never pair it with another endpoint. A secret written before this binding is the bare credential.
-const BoundCredentialSchema = z
-  .object({ target: z.string(), credential: StorageConnectionCredentialSchema })
-  .strict();
-
-type StoredCredential = {
-  readonly target: string | null;
-  readonly credential: StorageConnectionCredential;
+/** Everything one workspace's connection operations act on. */
+type ConnectionContext = SecretsContext & {
+  readonly repository: StorageConnectionRepository;
 };
-
-function storedCredential(value: Buffer | undefined): StoredCredential | null {
-  if (value === undefined) return null;
-  let json: unknown;
-  try {
-    json = JSON.parse(value.toString('utf8'));
-  } catch {
-    return null;
-  }
-  const bound = BoundCredentialSchema.safeParse(json);
-  if (bound.success) return bound.data;
-  const bare = StorageConnectionCredentialSchema.safeParse(json);
-  return bare.success ? { target: null, credential: bare.data } : null;
-}
-
-/**
- * The credential in a stored secret, only when it was bound to `url`'s target: `null` for a secret
- * bound to another target, a bare (pre-binding) credential, a value that is no credential, or a URL
- * naming no target. Nothing here quotes the stored value.
- */
-export function boundCredential(
-  value: Buffer | undefined,
-  url: string,
-): StorageConnectionCredential | null {
-  const stored = storedCredential(value);
-  const target = credentialTarget(url);
-  return stored !== null && stored.target !== null && target !== null && stored.target === target
-    ? stored.credential
-    : null;
-}
-
-function sealedCredential(url: string, credential: StorageConnectionCredential): Buffer {
-  // An unparseable URL binds to '', which no URL's target equals: the secret then fails closed.
-  const target = credentialTarget(url) ?? '';
-  return Buffer.from(JSON.stringify({ target, credential }), 'utf8');
-}
 
 type NewStorageConnection = {
   readonly name: string;
@@ -176,59 +138,189 @@ function toResource(
   };
 }
 
-async function credentialNames(secrets: SecretsService, scope: WorkspaceScope) {
-  return new Set((await secrets.list(scope)).map((secret) => secret.name));
+async function listConnections(ctx: ConnectionContext) {
+  const [records, names] = await Promise.all([ctx.repository.list(), credentialNames(ctx)]);
+  return records.map((record) =>
+    toResource(record, names.has(storageConnectionSecretName(record.id))),
+  );
 }
 
-async function findSecret(secrets: SecretsService, scope: WorkspaceScope, id: string) {
-  const name = storageConnectionSecretName(id);
-  return (await secrets.list(scope)).find((secret) => secret.name === name);
+async function listGrantTargets(ctx: ConnectionContext, names: readonly string[]) {
+  return (await ctx.repository.listByNames(names)).map(
+    ({ id, name, allowedPrefixes, writeAllowed }) => ({
+      id,
+      name,
+      allowedPrefixes: [...allowedPrefixes],
+      writeAllowed,
+    }),
+  );
+}
+
+async function getConnection(ctx: ConnectionContext, id: string) {
+  const record = await ctx.repository.get(id);
+  if (record === null) return null;
+  const names = await credentialNames(ctx);
+  return toResource(record, names.has(storageConnectionSecretName(id)));
+}
+
+async function readCredential(ctx: ConnectionContext, id: string, url: string) {
+  const secret = await ctx.secrets.resolveByName(ctx.scope, storageConnectionSecretName(id));
+  const stored = storedCredential(secret?.value);
+  if (stored === null || stored.target !== null) return boundCredential(secret?.value, url);
+  // A bare secret predates the binding. It counts as bound to the row as it is now, and
+  // only when that row still has the snapshot's target. Nothing is written back: 0.6.11
+  // reads only the bare form. `update` binds it to the old target before it moves the row;
+  // a move by an older revision is why the self-hosting guide says to drain them first.
+  const target = credentialTarget(url);
+  const row = await ctx.repository.get(id);
+  if (row === null || target === null || credentialTarget(row.url) !== target) return null;
+  return stored.credential;
+}
+
+/** Seal the new connection's secret; `null` when the connection stores none. */
+async function createFreshSecret(
+  { secrets, scope }: ConnectionContext,
+  id: string,
+  input: NewStorageConnection,
+): Promise<string | null> {
+  // A `file` connection has nothing to authenticate with, so it stores no secret.
+  const credential = input.provider === 'file' ? undefined : input.credential;
+  if (credential === undefined) return null;
+  const sealed = await secrets.create(scope, {
+    name: storageConnectionSecretName(id),
+    value: sealedCredential(input.url, credential),
+  });
+  if (sealed.kind !== 'created') {
+    throw new Error(`fresh storage-connection secret was refused: ${sealed.kind}`);
+  }
+  return sealed.secret.id;
+}
+
+async function createConnection(
+  ctx: ConnectionContext,
+  input: NewStorageConnection,
+): Promise<CreateStorageConnectionResult> {
+  const id = crypto.randomUUID();
+  const secretId = await createFreshSecret(ctx, id, input);
+  // The secret may now exist with no row pointing at it: undo it on every path out that
+  // does not finish the pair. A failed undo reaches the caller: it leaves an orphan secret,
+  // never a lost row.
+  const undo = async () => {
+    if (secretId !== null) await ctx.secrets.delete(ctx.scope, secretId);
+  };
+  try {
+    const outcome = await ctx.repository.create({
+      id,
+      name: input.name,
+      provider: input.provider,
+      url: input.url,
+      allowedPrefixes: input.allowedPrefixes,
+      writeAllowed: input.writeAllowed,
+    });
+    if (outcome.kind === 'name-conflict') {
+      await undo();
+      return { kind: 'name-conflict' };
+    }
+    return { kind: 'created', connection: toResource(outcome.connection, secretId !== null) };
+  } catch (error) {
+    try {
+      await undo();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        'the storage connection was not created and its secret could not be removed',
+        { cause: cleanup },
+      );
+    }
+    throw error;
+  }
 }
 
 /**
- * Store `credential`, bound to `url`, as the connection's secret, replacing the one it had. With
- * `onlyOver`, the write happens only while the stored value is still exactly those bytes, read
- * again just before the write: `skipped` when another writer has replaced it since.
+ * The target checks that run before an update changes anything: a row another writer has moved
+ * since the caller's snapshot is refused, and a bare secret is bound to the old target before the
+ * row moves away from it. `null` when the update may proceed.
  */
-async function writeCredential(
-  secrets: SecretsService,
-  scope: WorkspaceScope,
-  id: string,
-  url: string,
-  credential: StorageConnectionCredential,
-  onlyOver?: Buffer,
-): Promise<'written' | 'skipped'> {
-  const value = sealedCredential(url, credential);
-  const existing = await findSecret(secrets, scope, id);
-  if (onlyOver !== undefined) {
-    const current = await secrets.resolveByName(scope, storageConnectionSecretName(id));
-    if (existing === undefined || current === null || !current.value.equals(onlyOver)) {
-      return 'skipped';
-    }
+async function guardUpdate(
+  ctx: ConnectionContext,
+  before: StorageConnectionRecord,
+  update: { id: string; snapshotUrl: string; patch: UpdateStorageConnectionRecordInput },
+  hasCredential: boolean,
+): Promise<TargetChanged | null> {
+  const { patch, snapshotUrl } = update;
+  // The caller judged the credential and the move against `snapshotUrl`.
+  const guarded = hasCredential || patch.url !== undefined;
+  if (guarded && credentialTarget(before.url) !== credentialTarget(snapshotUrl)) {
+    return { kind: 'target-changed' };
   }
-  const sealed =
-    existing === undefined
-      ? await secrets.create(scope, { name: storageConnectionSecretName(id), value })
-      : await secrets.replace(scope, existing.id, value);
-  if (sealed.kind !== 'created' && sealed.kind !== 'replaced') {
-    throw new Error(`the storage-connection secret was refused: ${sealed.kind}`);
+  if (patch.url !== undefined && credentialTarget(before.url) !== credentialTarget(patch.url)) {
+    // A bare secret would follow the row to its new target: bind it to the old one first.
+    await bindBareCredential(ctx, update.id, before.url);
   }
-  return 'written';
+  return null;
 }
 
-/** Bind a pre-binding (bare) secret to `url`, so a later change of the row's target cannot carry it. */
-async function bindBareCredential(
-  secrets: SecretsService,
-  scope: WorkspaceScope,
-  id: string,
-  url: string,
-): Promise<void> {
-  const secret = await secrets.resolveByName(scope, storageConnectionSecretName(id));
-  const stored = storedCredential(secret?.value);
-  // Only over the same bare bytes: a rotation since the read above is never undone.
-  if (secret !== null && stored !== null && stored.target === null) {
-    await writeCredential(secrets, scope, id, url, stored.credential, secret.value);
+/**
+ * Replace the secret after the row changed, bound to the URL the caller judged it for, never to
+ * the row read back. The row is read again just before the write: a move by another writer since
+ * the check keeps that writer's secret. A move that lands after this read can only leave a secret
+ * bound to another target, which every reader refuses. A failed write deletes nothing, for the
+ * same reason.
+ */
+async function replaceCredentialAfterUpdate(
+  ctx: ConnectionContext,
+  write: CredentialWrite,
+): Promise<{ readonly kind: 'not-found' } | TargetChanged | null> {
+  const latest = await ctx.repository.get(write.id);
+  if (latest === null) return { kind: 'not-found' };
+  if (credentialTarget(latest.url) !== credentialTarget(write.url)) {
+    return { kind: 'target-changed' };
   }
+  await writeCredential(ctx, write);
+  return null;
+}
+
+async function updateConnection(
+  ctx: ConnectionContext,
+  id: string,
+  snapshotUrl: string,
+  patch: UpdateStorageConnectionRecordInput,
+  credential: StorageConnectionCredential | undefined,
+): Promise<UpdateStorageConnectionResult> {
+  const before = await ctx.repository.get(id);
+  if (before === null) return { kind: 'not-found' };
+  const refused = await guardUpdate(
+    ctx,
+    before,
+    { id, snapshotUrl, patch },
+    credential !== undefined,
+  );
+  if (refused !== null) return refused;
+  const outcome = await ctx.repository.update(id, patch);
+  if (outcome.kind !== 'updated') return outcome;
+  if (credential !== undefined) {
+    const url = patch.url ?? snapshotUrl;
+    const failed = await replaceCredentialAfterUpdate(ctx, { id, url, credential });
+    if (failed !== null) return failed;
+  }
+  const secret = await findSecret(ctx, id);
+  return { kind: 'updated', connection: toResource(outcome.connection, secret !== undefined) };
+}
+
+async function rotateConnection(
+  ctx: ConnectionContext,
+  id: string,
+  snapshotUrl: string,
+  credential: StorageConnectionCredential,
+): Promise<RotateStorageConnectionResult> {
+  const record = await ctx.repository.get(id);
+  if (record === null) return { kind: 'not-found' };
+  // Bound to the snapshot the caller judged it against; a row moved since keeps its secret.
+  if (credentialTarget(record.url) !== credentialTarget(snapshotUrl)) {
+    return { kind: 'target-changed' };
+  }
+  await writeCredential(ctx, { id, url: snapshotUrl, credential });
+  return { kind: 'changed', connection: toResource(record, true) };
 }
 
 /**
@@ -243,11 +335,7 @@ export const ORPHAN_CONNECTION_SECRET_GRACE_MS = 10 * 60 * 1000;
  * {@link ORPHAN_CONNECTION_SECRET_GRACE_MS}: what a failed secret delete after a connection
  * DELETE left behind. Best effort: a failure is logged and retried by the next delete.
  */
-async function removeOrphanSecrets(
-  secrets: SecretsService,
-  scope: WorkspaceScope,
-  repository: StorageConnectionRepository,
-): Promise<void> {
+async function removeOrphanSecrets({ secrets, scope, repository }: ConnectionContext) {
   try {
     const [stored, rows] = await Promise.all([secrets.list(scope), repository.list()]);
     const owned = new Set(rows.map((row) => row.id));
@@ -270,198 +358,56 @@ async function removeOrphanSecrets(
   }
 }
 
+async function removeConnection(
+  ctx: ConnectionContext,
+  id: string,
+): Promise<ChangeStorageConnectionResult> {
+  // Row first, so a failure never leaves a row without its secret; a failed secret delete
+  // leaves an orphan no connection names and no reader can pair with a URL. The next
+  // connection delete reconciles it, and `DELETE /api/secrets/:id` can clear it too.
+  const record = await ctx.repository.delete(id);
+  if (record === null) return { kind: 'not-found' };
+  await removeConnectionSecret(ctx, id);
+  await removeOrphanSecrets(ctx);
+  return { kind: 'changed', connection: toResource(record, false) };
+}
+
+function workspaceStore(
+  access: () => Promise<ConnectionContext>,
+): WorkspaceStorageConnectionsStore {
+  return {
+    list: async () => listConnections(await access()),
+    listByNames: async (names) => listGrantTargets(await access(), names),
+    get: async (id) => getConnection(await access(), id),
+    credential: async (id, url) => readCredential(await access(), id, url),
+    create: async (input) => createConnection(await access(), input),
+    update: async (id, snapshotUrl, patch, credential) =>
+      updateConnection(await access(), id, snapshotUrl, patch, credential),
+    rotate: async (id, snapshotUrl, credential) =>
+      rotateConnection(await access(), id, snapshotUrl, credential),
+    remove: async (id) => removeConnection(await access(), id),
+  };
+}
+
 export function createRepositoryStorageConnectionsStoreProvider(
   dependencies: RepositoryStorageConnectionsDependencies,
 ): StorageConnectionsStoreProvider {
   return {
     forWorkspace(workspaceId) {
-      let pending: Promise<{
-        scope: WorkspaceScope;
-        repository: StorageConnectionRepository;
-      }> | null = null;
+      let pending: Promise<ConnectionContext> | null = null;
       const access = async () => {
         pending ??= (async () => {
           const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
           if (scope === null) throw new Error(`unknown workspace ${workspaceId}`);
-          return { scope, repository: dependencies.repositories.forScope(scope) };
+          return {
+            secrets: dependencies.secrets,
+            scope,
+            repository: dependencies.repositories.forScope(scope),
+          };
         })();
         return pending;
       };
-
-      return {
-        async list() {
-          const { repository, scope } = await access();
-          const [records, names] = await Promise.all([
-            repository.list(),
-            credentialNames(dependencies.secrets, scope),
-          ]);
-          return records.map((record) =>
-            toResource(record, names.has(storageConnectionSecretName(record.id))),
-          );
-        },
-        async listByNames(names) {
-          const { repository } = await access();
-          return (await repository.listByNames(names)).map(
-            ({ id, name, allowedPrefixes, writeAllowed }) => ({
-              id,
-              name,
-              allowedPrefixes: [...allowedPrefixes],
-              writeAllowed,
-            }),
-          );
-        },
-        async get(id) {
-          const { repository, scope } = await access();
-          const record = await repository.get(id);
-          if (record === null) return null;
-          const names = await credentialNames(dependencies.secrets, scope);
-          return toResource(record, names.has(storageConnectionSecretName(id)));
-        },
-        async credential(id, url) {
-          const { repository, scope } = await access();
-          const name = storageConnectionSecretName(id);
-          const secret = await dependencies.secrets.resolveByName(scope, name);
-          const stored = storedCredential(secret?.value);
-          if (stored === null || stored.target !== null) return boundCredential(secret?.value, url);
-          // A bare secret predates the binding. It counts as bound to the row as it is now, and
-          // only when that row still has the snapshot's target. Nothing is written back: 0.6.11
-          // reads only the bare form. `update` binds it to the old target before it moves the row;
-          // a move by an older revision is why the self-hosting guide says to drain them first.
-          const target = credentialTarget(url);
-          const row = await repository.get(id);
-          if (row === null || target === null || credentialTarget(row.url) !== target) return null;
-          return stored.credential;
-        },
-        async create(input) {
-          const { repository, scope } = await access();
-          const id = crypto.randomUUID();
-          // A `file` connection has nothing to authenticate with, so it stores no secret.
-          const credential = input.provider === 'file' ? undefined : input.credential;
-          let secretId: string | null = null;
-          if (credential !== undefined) {
-            const sealed = await dependencies.secrets.create(scope, {
-              name: storageConnectionSecretName(id),
-              value: sealedCredential(input.url, credential),
-            });
-            if (sealed.kind !== 'created') {
-              throw new Error(`fresh storage-connection secret was refused: ${sealed.kind}`);
-            }
-            secretId = sealed.secret.id;
-          }
-          // The secret may now exist with no row pointing at it: undo it on every path out that
-          // does not finish the pair. A failed undo reaches the caller: it leaves an orphan secret,
-          // never a lost row.
-          const undo = async () => {
-            if (secretId !== null) await dependencies.secrets.delete(scope, secretId);
-          };
-          try {
-            const outcome = await repository.create({
-              id,
-              name: input.name,
-              provider: input.provider,
-              url: input.url,
-              allowedPrefixes: input.allowedPrefixes,
-              writeAllowed: input.writeAllowed,
-            });
-            if (outcome.kind === 'name-conflict') {
-              await undo();
-              return { kind: 'name-conflict' };
-            }
-            return {
-              kind: 'created',
-              connection: toResource(outcome.connection, secretId !== null),
-            };
-          } catch (error) {
-            try {
-              await undo();
-            } catch (cleanup) {
-              throw new AggregateError(
-                [error, cleanup],
-                'the storage connection was not created and its secret could not be removed',
-                { cause: cleanup },
-              );
-            }
-            throw error;
-          }
-        },
-        async update(id, snapshotUrl, patch, credential) {
-          const { repository, scope } = await access();
-          const before = await repository.get(id);
-          if (before === null) return { kind: 'not-found' };
-          // The caller judged the credential and the move against `snapshotUrl`. A row another
-          // writer has moved since is refused before anything changes.
-          const guarded = credential !== undefined || patch.url !== undefined;
-          if (guarded && credentialTarget(before.url) !== credentialTarget(snapshotUrl)) {
-            return { kind: 'target-changed' };
-          }
-          if (
-            patch.url !== undefined &&
-            credentialTarget(before.url) !== credentialTarget(patch.url)
-          ) {
-            // A bare secret would follow the row to its new target: bind it to the old one first.
-            await bindBareCredential(dependencies.secrets, scope, id, before.url);
-          }
-          const outcome = await repository.update(id, patch);
-          if (outcome.kind !== 'updated') return outcome;
-          if (credential !== undefined) {
-            // Bound to the URL the caller judged it for, never to the row read back. The row is
-            // read again just before the write: a move by another writer since the check above
-            // keeps that writer's secret. A move that lands after this read can only leave a
-            // secret bound to another target, which every reader refuses. A failed write deletes
-            // nothing, for the same reason.
-            const boundUrl = patch.url ?? snapshotUrl;
-            const latest = await repository.get(id);
-            if (latest === null) return { kind: 'not-found' };
-            if (credentialTarget(latest.url) !== credentialTarget(boundUrl)) {
-              return { kind: 'target-changed' };
-            }
-            await writeCredential(dependencies.secrets, scope, id, boundUrl, credential);
-          }
-          const secret = await findSecret(dependencies.secrets, scope, id);
-          return {
-            kind: 'updated',
-            connection: toResource(outcome.connection, secret !== undefined),
-          };
-        },
-        async rotate(id, snapshotUrl, credential) {
-          const { repository, scope } = await access();
-          const record = await repository.get(id);
-          if (record === null) return { kind: 'not-found' };
-          // Bound to the snapshot the caller judged it against; a row moved since keeps its secret.
-          if (credentialTarget(record.url) !== credentialTarget(snapshotUrl)) {
-            return { kind: 'target-changed' };
-          }
-          await writeCredential(dependencies.secrets, scope, id, snapshotUrl, credential);
-          return { kind: 'changed', connection: toResource(record, true) };
-        },
-        async remove(id) {
-          const { repository, scope } = await access();
-          // Row first, so a failure never leaves a row without its secret; a failed secret delete
-          // leaves an orphan no connection names and no reader can pair with a URL. The next
-          // connection delete reconciles it, and `DELETE /api/secrets/:id` can clear it too.
-          const record = await repository.delete(id);
-          if (record === null) return { kind: 'not-found' };
-          try {
-            const secret = await findSecret(dependencies.secrets, scope, id);
-            if (secret !== undefined) {
-              const outcome = await dependencies.secrets.delete(scope, secret.id);
-              if (outcome.kind !== 'deleted') {
-                log.error(
-                  '[storage-connections] the secret of a deleted connection was not removed',
-                  { connectionId: id, outcome: outcome.kind },
-                );
-              }
-            }
-          } catch (error) {
-            log.error('[storage-connections] the secret of a deleted connection was not removed', {
-              connectionId: id,
-              error,
-            });
-          }
-          await removeOrphanSecrets(dependencies.secrets, scope, repository);
-          return { kind: 'changed', connection: toResource(record, false) };
-        },
-      };
+      return workspaceStore(access);
     },
   };
 }

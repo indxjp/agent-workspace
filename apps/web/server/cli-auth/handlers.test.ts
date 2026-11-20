@@ -11,12 +11,16 @@ import {
 } from '@indx-workspace/contracts/cli-auth';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from '../auth/session';
 import { hashCliTokenSecret, parsePresentedCliToken } from '../rbac/cli-token';
 import type { DirectoryRoot, UserMembershipSummary } from '../rbac/directory';
 import { Principal } from '../rbac/principal';
 import { createMemoryDirectory } from '../rbac/memory-directory';
-import type { WorkspaceRepositoryPort } from '../workspaces/runtime';
+import type { WorkspaceRepositoryPort } from '../workspaces/wiring';
 import { mintDeviceCode, normaliseUserCode, verifyDeviceCode } from './device-code';
 import {
   cliPollMemorySize,
@@ -43,8 +47,11 @@ const PRINCIPAL_ID = '77777777-7777-4777-8777-777777777777';
 
 /** A browser-session principal for Ada in Acme: mint and verify, the only way to get claims. */
 async function browserSessionPrincipal(): Promise<Principal> {
-  const token = await mintSessionToken(newSessionClaims('ada@example.com', 'acme'), SECRET);
-  const verified = await verifySessionToken(token, SECRET);
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims('ada@example.com', 'acme'),
+    SECRET,
+  );
+  const verified = await verifySignInSessionToken(token, SECRET);
   if (!verified.ok) throw new Error(`the fixture could not verify its token: ${verified.reason}`);
   const built = Principal.fromSession(
     verified.claims,

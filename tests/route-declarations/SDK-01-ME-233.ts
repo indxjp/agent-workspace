@@ -3,13 +3,13 @@
  *
  * Spec §34's "Examples:" list does not print it, so it carries a `mandate` under
  * [ADR-0026](../../docs/adr/0026-section-34-is-a-shape-rule-and-an-extra-route-cites-its-mandate.md)
- * decision 2, checked against `docs/spec.md`'s own headings by `tests/route-inventory.test.ts` so
+ * decision 2, checked against `docs/spec.md`'s own headings by `tests/route-inventory.policy-check.ts` so
  * the citation cannot be invented. §21 is the section: it is what makes a workspace-local identity
  * with one of four roles a thing at all, and the role this route reports is the one §21's
  * permission split is applied to on every other request.
  *
  * `me` is singular where §34's shape rule wants a plural resource, which is why
- * `tests/route-inventory.test.ts`'s `routeShape` carries a named exception for this one literal
+ * `tests/route-inventory.policy-check.ts`'s `routeShape` carries a named exception for this one literal
  * path — see that function for the reasoning, and the two exceptions of the same form that
  * preceded it.
  *

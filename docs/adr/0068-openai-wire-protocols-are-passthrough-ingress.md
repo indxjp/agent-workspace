@@ -6,7 +6,7 @@ Decided by: the Owner (agent-engines programme, tracker #299, unit ENG-05 #304)
 Scope: `docs/spec.md` §9; `packages/gateway/src/{router,types,auth}.ts`,
 `packages/gateway/src/providers/{openai,azure-openai,openai-compatible,passthrough}.ts`,
 `packages/gateway/src/usage/`; `packages/core/src/db/schema/run-usage-records.ts`;
-`migrations/0023_*`; `docs/compatibility/openai-ingress.md`;
+`migrations/0023_*`; `docs/30-reference/compatibility/openai-ingress.md`;
 `formal/AgentWorkspace/Behaviour/GatewayIngress.lean`
 
 ## Context
@@ -310,9 +310,9 @@ count that was never read is itself a fabricated count.
   capability that would execute or persist outside the sandbox, and each is refused or overwritten
   before anything leaves the process. An engine that needs conversation continuity sends the context
   it needs with the request, which is what `session_transcripts` holds.
-- `docs/compatibility/openai-ingress.md` states the ingress × upstream matrix and says, in those
+- `docs/30-reference/compatibility/openai-ingress.md` states the ingress × upstream matrix and says, in those
   words, that its fixtures are hand-authored from the published event schemas. No live `openai` or
-  `azure-openai` credential exists in this repository — `docs/compatibility/providers.md` already
+  `azure-openai` credential exists in this repository — `docs/30-reference/compatibility/providers.md` already
   records both as out of tested scope under D-03 — so what is measured is the gateway's own half of
   each combination, never whether a particular upstream accepts the relayed body.
 - The whole rule is modelled and proved in Lean as the `gateway-ingress` family; the new column is

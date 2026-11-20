@@ -10,9 +10,9 @@
 import { expect } from '@playwright/test';
 
 import {
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
 } from '../../apps/web/server/auth/session.ts';
 
 /**
@@ -124,7 +124,7 @@ export async function signInAsBootstrapAdmin(page, credentials) {
  * but a session's role is read from the directory on every request, so a member provisioned through
  * `POST /api/users` is signed in with the session the server would have issued: the Owner's cookie
  * (name, attributes and workspace) with a token minted for `email` by the server's own
- * `mintSessionToken`, under the deployment's `SESSION_SECRET`. A missing secret fails the caller's
+ * `mintSignInSessionToken`, under the deployment's `SESSION_SECRET`. A missing secret fails the caller's
  * test rather than skipping it. The caller closes the context.
  */
 export async function newMemberContext(browser, ownerPage, email, options = {}) {
@@ -134,9 +134,12 @@ export async function newMemberContext(browser, ownerPage, email, options = {}) 
     cookie.name.startsWith('__Host-aw_session'),
   );
   expect(owner, 'the Owner page must be signed in').toBeDefined();
-  const verified = await verifySessionToken(owner.value, secret);
+  const verified = await verifySignInSessionToken(owner.value, secret);
   expect(verified.ok, 'the Owner session must verify under SESSION_SECRET').toBe(true);
-  const token = await mintSessionToken(newSessionClaims(email, verified.claims.ws), secret);
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims(email, verified.claims.ws),
+    secret,
+  );
   const context = await browser.newContext(options);
   await context.addCookies([{ ...owner, value: token }]);
   return context;

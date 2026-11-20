@@ -29,7 +29,7 @@ import { renderVercelProject } from '../render/vercel.ts';
 export const REQUESTED_TARGETS = ['helm', 'terraform', 'vercel', 'cloudflare'] as const;
 export type RequestedTarget = (typeof REQUESTED_TARGETS)[number];
 
-/** The chart's release name and namespace, as `docs/deploy/kubernetes.md` installs it. */
+/** The chart's release name and namespace, as `docs/40-operate/deploy/kubernetes.md` installs it. */
 export const HELM_RELEASE = 'agent-workspace';
 
 export type DeployTarget =

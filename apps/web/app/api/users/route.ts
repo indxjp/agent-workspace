@@ -21,7 +21,7 @@ import { createUser, listUsers } from '../../../server/rbac/handlers';
 import { readJsonBody } from '../../../server/http/result';
 import { authorise, toResponse } from '../../../server/rbac/http';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`): every route runs on the
 // Node runtime and none is prerendered. Correct here independently of the gate — these handlers
 // read the session cookie through `authorise`.
 export const dynamic = 'force-dynamic';

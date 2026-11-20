@@ -12,7 +12,7 @@ import { readConnectorBody, withWorkspaceStore } from '../../../server/connector
 import { apiResultResponse } from '../../../server/http/json-transport';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`): every route runs on the
 // Node runtime and is never prerendered. These handlers read the session cookie through
 // `withWorkspaceStore`, so prerendering is never correct, and `edge` cannot hold what the runtime
 // wiring needs — `pg` and `node:crypto`, neither available there.

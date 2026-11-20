@@ -13,7 +13,7 @@ where authorized"*, and its acceptance criteria include *"A detail page explains
 authorized agent/project/session context"* and *"Filters and pagination preserve URL state"*.
 
 The obvious reading is a new route, `apps/web/app/(shell)/runs/[id]/page.tsx`. This repository makes
-that more expensive than it looks. `tests/screen-inventory.test.ts` enforces §9.1's
+that more expensive than it looks. `tests/screen-inventory.policy-check.ts` enforces §9.1's
 *"screens = `ui/*.html`"* gate as a two-way correspondence:
 
 - every shipped page file must be named by a declaration under `tests/screen-declarations/`, whose
@@ -59,7 +59,7 @@ together, with exactly one new mockup `ui/workspaces.html` and one declaration
 
 ## Consequences
 
-- Five UX tasks write no mockup and no screen declaration, so `tests/screen-inventory.test.ts` stays
+- Five UX tasks write no mockup and no screen declaration, so `tests/screen-inventory.policy-check.ts` stays
   green on their branches without any of them touching a file the gate derives its partition from.
 - The Runs route carries list and detail. At narrow widths the panel becomes a full-width view of the
   same route, which is the ordinary responsive treatment and is covered by the accessibility spec.
@@ -75,7 +75,7 @@ together, with exactly one new mockup `ui/workspaces.html` and one declaration
 artefact and W9-UI-136's subject is not design. It also adds a second mockup describing a run, next to
 `ui/run.html`, which invites the two to drift.
 
-**Re-declare `ui/run.html` for the new page.** `tests/screen-inventory.test.ts` fails a mockup declared
+**Re-declare `ui/run.html` for the new page.** `tests/screen-inventory.policy-check.ts` fails a mockup declared
 twice, by design, and naming both pages in W2-INT-00's declaration file would have W9-UI-136 write
 outside its own globs.
 
@@ -83,6 +83,6 @@ outside its own globs.
 
 ## Related
 
-- `tests/screen-inventory.test.ts` and `tests/screen-declarations/` — the gate this decision is shaped
+- `tests/screen-inventory.policy-check.ts` and `tests/screen-declarations/` — the gate this decision is shaped
   by; [ADR-0025](0025-the-route-inventory-is-partitioned-by-owner.md) is the partition rule it follows.
 - The development plan §9.1 — *"spec-inventory tests … screens = `ui/*.html`"*.

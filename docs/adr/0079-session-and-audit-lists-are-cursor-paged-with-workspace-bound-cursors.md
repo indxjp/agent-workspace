@@ -9,7 +9,7 @@ Scope: `packages/contracts/src/{sessions,observability}.ts`;
 `apps/web/server/pagination/**`; `apps/web/server/sessions/api.ts`; `apps/web/server/audit/api.ts`;
 `packages/sdk/src/pagination.ts`, `packages/sdk/src/resources/{sessions,observability}.ts`;
 `packages/aw/src/commands/{sessions,observability}.ts`; `formal/AgentWorkspace/Contracts/Sessions.lean`;
-spec `docs/sdk/04-api-specification.md` §4 and §8 row S-5
+spec `docs/10-product/sdk/04-api-specification.md` §4 and §8 row S-5
 
 ## Context
 

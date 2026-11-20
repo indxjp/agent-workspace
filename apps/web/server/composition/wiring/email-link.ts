@@ -8,7 +8,7 @@ import { createLeadStore, type StoreLeadRepository } from '../../demo/adapters/l
 import { createDemoProvisioner } from '../../demo/provision/binder';
 import type { DemoRuntimeDriver, DemoTemplates } from '../../demo/provision/ports';
 import { createDemoTemplates } from '../../demo/provision/template-copy';
-import type { FilesRuntime } from '../../files/runtime';
+import type { FilesRuntime } from '../../files/wiring';
 import { createGuestWorkspaceBinder } from '../../email-link/adapters/guest-workspace/production';
 import {
   createEmailLinkService,
@@ -18,10 +18,13 @@ import type { EmailLinkRuntime } from '../../email-link/transport/routes';
 import { randomIds } from '../../ids';
 import type { ModelsStoreProvider } from '../../models/store';
 import type { DirectoryRoot } from '../../rbac/directory';
-import { enforceableNetworkPoliciesFromRegistry } from '../../runtimes/registry';
+import {
+  currentWebRuntimeRegistry,
+  enforceableNetworkPoliciesFromRegistry,
+} from '../../runtimes/registry';
 import type { RuntimeProfileStoreProvider } from '../../runtimes/store';
 import type { WebSettings } from '../../settings';
-import type { Skills } from '../../skills/runtime';
+import type { Skills } from '../../skills/wiring';
 import { skillCatalogOf } from '../../skills/store';
 import { createWorkspaceSkills, type WorkspaceSkills } from '../../skills/workspace-skills';
 import { runnerManagerDriverId } from '../config';
@@ -83,6 +86,18 @@ export async function demoDriverEnforcesNoNetwork(driver: DemoRuntimeDriver): Pr
 }
 
 /**
+ * Give a demo or verification workspace the Test Runtime pass its runs need, through the installed
+ * runtime registry (`WebRuntimeRegistry.provide`). With no registry there is nothing to verify
+ * against, and a run is refused as it would be anyway.
+ */
+export async function demoRuntimeVerifier(
+  workspaceId: string,
+  driver: DemoRuntimeDriver,
+): Promise<void> {
+  await currentWebRuntimeRegistry()?.provide?.(driver, { workspaceId });
+}
+
+/**
  * The skills domain as the demo handles it (`skills/workspace-skills.ts`): the skills routes' own
  * sequence over the deployment's skills storage and catalog. `null` while the skills domain is not
  * serving or has no catalog.
@@ -139,6 +154,7 @@ export function demoTemplatesOf(
       runtimeDriver: domains.runtimeDriver ?? null,
       anthropicApiKey,
       enforcesNoNetwork: demoDriverEnforcesNoNetwork,
+      verifyRuntime: demoRuntimeVerifier,
     },
   });
 }

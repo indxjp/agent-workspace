@@ -1,7 +1,7 @@
 /**
  * W1-CP-05 · agent CRUD · spec §34, the five agent routes and no more.
  *
- * Converted out of `tests/route-inventory.test.ts`'s `EXPECTED_ROUTES` array by W2-INT-00, which is
+ * Converted out of `tests/route-inventory.policy-check.ts`'s `EXPECTED_ROUTES` array by W2-INT-00, which is
  * [ADR-0025](../../docs/adr/0025-the-route-inventory-is-partitioned-by-owner.md) §4: the partition
  * is first exercised by the two tasks it was built for, because *"a partition scheme first exercised
  * by the tasks it was built for has been tested by nobody"*.

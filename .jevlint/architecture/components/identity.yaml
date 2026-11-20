@@ -1,0 +1,28 @@
+id: identity
+title: Identity, access and secrets
+summary: >
+  Who the caller is and what they may do: sign-in sessions, OIDC, API keys, CLI and OAuth tokens, email-link guests, invitations, workspaces, RBAC (pure rules in rbac/core) and the secrets context.
+layer: application
+paths:
+  - "apps/web/server/auth/**"
+  - "apps/web/server/cli-auth/**"
+  - "apps/web/server/email-link/**"
+  - "apps/web/server/identity/**"
+  - "apps/web/server/invitations/**"
+  - "apps/web/server/oauth/**"
+  - "apps/web/server/rbac/**"
+  - "apps/web/server/setup/**"
+  - "apps/web/server/team/**"
+  - "apps/web/server/tokens/**"
+  - "apps/web/server/workspaces/**"
+  - "apps/web/server/secrets/**"
+key_files:
+  - { path: apps/web/server/identity/index.ts, role: "the context's public entry for other contexts" }
+  - { path: apps/web/server/rbac/decide.ts, role: "decide(): classifies the path and asks the pure rules in rbac/core" }
+  - { path: apps/web/server/rbac/principal.ts, role: "Principal: the resolved caller every domain receives" }
+interface: [Principal, decide, authorise, requireSignInSession]
+depends_on: [composition, server-kernel, web-ui, persistence, contracts]
+uses: [oidc, nextjs]
+rules: []
+checklist: []
+status: current

@@ -26,7 +26,7 @@ import {
   configureWebRuntimeRegistry,
   type WebRuntimeRegistry,
 } from '../runtimes/registry';
-import type { SetupInput, SetupResult, SetupRuntime } from '../setup/runtime';
+import type { SetupInput, SetupResult, SetupRuntime } from '../setup/wiring';
 import { installSetupApi } from './setup';
 import { GOOD_KEY, GOOD_KEY_2, probes } from './setup-provider.test-support';
 export const E2B_KEY = 'e2b_setup_827_first_key';

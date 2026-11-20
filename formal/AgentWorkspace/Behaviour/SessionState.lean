@@ -20,7 +20,7 @@ Three things the model deliberately does **not** know, because the platform does
 
 ## Current and Target
 
-`docs/formal/README.md` asks that where today's code and the target differ both are modelled and
+`docs/20-design/formal/README.md` asks that where today's code and the target differ both are modelled and
 related. They differ in one place — **where a Claude transcript lives** — and section 5 models both:
 `legacyLoad` is what `session_messages` answered before this unit (an append-only delivery log
 folded on read) and `migrated` is what migration 0027 writes into `session_state_entries`. The T4

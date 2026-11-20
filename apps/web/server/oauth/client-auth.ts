@@ -23,7 +23,7 @@ import {
   recordOAuthAuthFailure,
 } from './limits';
 import { publicOrigin } from './resource';
-import type { OAuthClient, OAuthRuntime } from './runtime';
+import type { OAuthClient, OAuthRuntime } from './wiring';
 import { clientSecretDigest } from './tokens';
 
 export type ClientAuthentication =

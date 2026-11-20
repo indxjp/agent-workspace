@@ -361,7 +361,7 @@ describe('the workflow that runs the claims', () => {
     ]) {
       expect(scope.test(file), file).toBe(true);
     }
-    expect(scope.test('docs/operations/ci.md')).toBe(false);
+    expect(scope.test('docs/40-operate/operations/ci.md')).toBe(false);
     expect(scope.test('CHANGELOG.md')).toBe(false);
   });
 

@@ -41,24 +41,35 @@ import {
   type ResourceLoader,
 } from '@earendil-works/pi-coding-agent';
 
-import { credentialRejectedError, isGatewayTokenRefusal } from '@agent-workspace/engine';
-
 import {
   PI_GATEWAY_API_KEY_PLACEHOLDER,
   PI_GATEWAY_PROVIDER,
   PI_DEFAULT_ANTHROPIC_MODEL,
   type PiCompiled,
 } from './compile.js';
-import { addPiUsage, type PiEvent, type PiUsage } from './frames.js';
+import { addPiUsage, type PiEvent } from './frames.js';
 import { resolvedPathVerdict } from './guard.js';
 import {
-  forkPiStream,
-  piFileEntries,
-  type PiFileEntry,
-  type PiSessionMirror,
-  type PiStreamVerdict,
-} from './session.js';
+  eventQueue,
+  failureSlot,
+  initialLines,
+  isRecord,
+  sessionMirroring,
+  stopReasonOf,
+  type PiRunDeps,
+  type PiRunState,
+} from './boundary-run.js';
+import { piFileEntries, type PiFileEntry } from './session.js';
 import { piToolCallVerdict } from './workspace.js';
+
+export type { PiRunDeps } from './boundary-run.js';
+
+/** How a run is started. A parameter of the engine so the conformance kit can replay events. */
+export type PiRunStarter = (
+  compiled: PiCompiled,
+  prompt: string,
+  deps: PiRunDeps,
+) => AsyncIterable<PiEvent>;
 
 /** The pinned pi version. `engine.test.ts` holds it to this package's manifest. */
 export const PI_CODING_AGENT_VERSION = '1.4.0';
@@ -91,20 +102,6 @@ export function piRunSettings(): PiRunSettings {
 }
 
 type PiModel = NonNullable<CreateAgentSessionOptions['model']>;
-/**
- * The failure a run ends with when the model call came back `401` or `403` from the provider
- * (issue #690), or `null` for any other error. pi reports a failed call as one string, the status
- * then the body (`401 {...}`), so the status is read from its start. The adapter never holds the
- * model key, so this is the first moment it can see the key is wrong. A gateway refusal of the run
- * token carries a `token_*` code (`packages/gateway/src/auth.ts`) and is left alone, so nobody is
- * told to replace a good key. No key and no provider text reaches the message.
- */
-function rejectedKeyFailure(errorMessage: string): Error | null {
-  const status = /^(401|403)(?![0-9])/u.exec(errorMessage)?.[1];
-  return status === undefined || isGatewayTokenRefusal(errorMessage)
-    ? null
-    : credentialRejectedError(status);
-}
 
 type PiCredentialStore = NonNullable<CreateModelRuntimeOptions['credentials']>;
 
@@ -122,58 +119,6 @@ const NO_STORED_CREDENTIALS: PiCredentialStore = {
     ),
   delete: () => Promise.resolve(),
 };
-
-/** What a run needs from the engine around it. */
-export type PiRunDeps = {
-  /** The stream this run's session is mirrored into, or `null` without a session store. */
-  readonly mirror: PiSessionMirror | null;
-  /** The parent of a fork, read from the store; `null` unless the run is a fork with a store. */
-  readonly loadParent: (() => Promise<PiStreamVerdict | null>) | null;
-  readonly signal: AbortSignal;
-};
-
-/** How a run is started. A parameter of the engine so the conformance kit can replay events. */
-export type PiRunStarter = (
-  compiled: PiCompiled,
-  prompt: string,
-  deps: PiRunDeps,
-) => AsyncIterable<PiEvent>;
-
-/** The session lines a run starts from: none, the resumed stream, or a copy of the parent. */
-async function initialLines(compiled: PiCompiled, deps: PiRunDeps): Promise<PiFileEntry[]> {
-  const { session } = compiled;
-  if (session.mode === 'fresh') return [];
-  if (session.mode === 'resume') {
-    if (deps.mirror === null) {
-      throw new Error(
-        `pi session ${session.engineSessionId} can only be resumed from the session store, and this run has none; refusing to start a new conversation in its place.`,
-      );
-    }
-    const loaded = await deps.mirror.load();
-    if (loaded === null) {
-      throw new Error(`the session store holds no pi session ${session.engineSessionId}.`);
-    }
-    if (!loaded.ok) throw new Error(loaded.reason);
-    return [...loaded.entries];
-  }
-  const parentId = session.parentSessionId ?? '';
-  if (deps.loadParent === null) {
-    throw new Error(
-      `pi session ${parentId} can only be forked from the session store, and this run has none.`,
-    );
-  }
-  const parent = await deps.loadParent();
-  if (parent === null) throw new Error(`the session store holds no pi session ${parentId}.`);
-  if (!parent.ok) throw new Error(parent.reason);
-  return [
-    ...forkPiStream(parent.entries, {
-      engineSessionId: session.engineSessionId,
-      parentSessionId: parentId,
-      cwd: compiled.workspace.cwd,
-      timestamp: new Date().toISOString(),
-    }),
-  ];
-}
 
 /**
  * The model, as data: pi's catalogue entry for the named Anthropic model (or its default's, for a
@@ -226,57 +171,15 @@ function pinnedResourceLoader(compiled: PiCompiled): ResourceLoader {
   };
 }
 
-/** A queue the session's synchronous listener pushes into and the generator drains. */
-function eventQueue(): {
-  push(event: unknown): void;
-  close(): void;
-  next(): Promise<{ done: true } | { done: false; value: unknown }>;
-} {
-  const items: unknown[] = [];
-  let closed = false;
-  let wake: (() => void) | null = null;
-  return {
-    push(event) {
-      items.push(event);
-      wake?.();
-    },
-    close() {
-      closed = true;
-      wake?.();
-    },
-    async next() {
-      for (;;) {
-        if (items.length > 0) return { done: false, value: items.shift() };
-        if (closed) return { done: true };
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-        });
-        wake = null;
-      }
-    },
-  };
-}
+type PiSession = Awaited<ReturnType<typeof createAgentSession>>['session'];
+type PiSessionEvent = Parameters<Parameters<PiSession['subscribe']>[0]>[0];
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Run one compiled agent on pi, yielding plain events and, last, `run_completed`.
- *
- * `max_turns` (the `turn_end` count reached with work still to do) and `cancelled` (the caller's
- * interrupt) each end the run through `session.abort()` and a terminal event; a spend ceiling is
- * the gateway's (ADR-0162), whose refused call arrives here as a failed model call; a model call that failed is re-thrown, so the runner
- * reports it as the run's error rather than as a turn that ended normally. A stop whose
- * `session.abort()` rejects fails the run the same way, since pi never confirmed it.
- */
-export async function* startPiRun(
+/** The in-memory pi session a run drives, seeded from `lines` the way pi imports a session file. */
+async function createRunSession(
   compiled: PiCompiled,
-  prompt: string,
-  deps: PiRunDeps,
-): AsyncGenerator<PiEvent, void, void> {
-  const { workspace, agent, limits } = compiled;
-  const lines = await initialLines(compiled, deps);
+  lines: readonly PiFileEntry[],
+): Promise<{ session: PiSession; sessionManager: SessionManager }> {
+  const { workspace, agent } = compiled;
   // Imported the way pi imports a session file: as JSONL, through pi's own parser.
   const sessionManager = SessionManager.inMemory(
     workspace.cwd,
@@ -316,8 +219,17 @@ export async function* startPiRun(
         ]
       : [],
   });
+  return { session, sessionManager };
+}
 
-  // The platform's guard runs before pi's own hook (which forwards to extensions; there are none).
+/**
+ * Wraps pi-agent-core's tool hooks. The platform's guard runs before pi's own `beforeToolCall`
+ * (which forwards to extensions; there are none). maxTurns: the tools of the last allowed turn
+ * finish, and pi-agent-core's `terminate` hint ends the run after that batch, so no request for a
+ * turn past the limit is ever sent.
+ */
+function installToolHooks(session: PiSession, compiled: PiCompiled, state: PiRunState): void {
+  const { workspace, agent, limits } = compiled;
   const piHook = session.agent.beforeToolCall;
   session.agent.beforeToolCall = async (context, signal) => {
     const verdict = piToolCallVerdict(workspace, agent.tools, context.toolCall.name, context.args);
@@ -328,73 +240,78 @@ export async function* startPiRun(
     }
     return piHook === undefined ? undefined : piHook(context, signal);
   };
-  // maxTurns: the tools of the last allowed turn finish, and pi-agent-core's `terminate` hint ends
-  // the run after that batch, so no request for a turn past the limit is ever sent.
   const piAfter = session.agent.afterToolCall;
   session.agent.afterToolCall = async (context, signal) => {
     const answered = piAfter === undefined ? undefined : await piAfter(context, signal);
     const lastTurn = limits.maxTurns !== null && state.turns + 1 >= limits.maxTurns;
     return lastTurn ? { ...answered, terminate: true } : answered;
   };
+}
 
-  const queue = eventQueue();
+/** Folds one session event into the run's state; `onTurnEnd` mirrors the session after each turn. */
+function observeEvent(
+  state: PiRunState,
+  event: PiSessionEvent,
+  maxTurns: number | null,
+  onTurnEnd: () => void,
+): void {
+  if (event.type === 'message_end' && event.message.role === 'assistant') {
+    state.lastAssistant = isRecord(event.message) ? event.message : null;
+    state.usage = addPiUsage(state.usage, state.lastAssistant?.['usage']);
+  }
+  if (event.type !== 'turn_end') return;
+  state.turns += 1;
+  onTurnEnd();
+  // The last allowed turn ran tools, so pi would have asked the model again: the `terminate`
+  // hint ended the run instead, and that is a max_turns stop.
+  const continues = event.toolResults.length > 0;
+  if (maxTurns !== null && state.turns >= maxTurns && continues) state.limit ??= 'max_turns';
+}
+
+/**
+ * Run one compiled agent on pi, yielding plain events and, last, `run_completed`.
+ *
+ * `max_turns` (the `turn_end` count reached with work still to do) and `cancelled` (the caller's
+ * interrupt) each end the run through `session.abort()` and a terminal event; a spend ceiling is
+ * the gateway's (ADR-0162), whose refused call arrives here as a failed model call; a model call that failed is re-thrown, so the runner
+ * reports it as the run's error rather than as a turn that ended normally. A stop whose
+ * `session.abort()` rejects fails the run the same way, since pi never confirmed it.
+ */
+export async function* startPiRun(
+  compiled: PiCompiled,
+  prompt: string,
+  deps: PiRunDeps,
+): AsyncGenerator<PiEvent, void, void> {
+  const lines = await initialLines(compiled, deps);
+  const { session, sessionManager } = await createRunSession(compiled, lines);
   // Written by the session listener, read after the stream drains: an object, so the reads are not
   // narrowed to the initial values by a control-flow analysis that cannot see the listener.
-  const state: {
-    turns: number;
-    usage: PiUsage | null;
-    limit: 'max_turns' | null;
-    lastAssistant: Readonly<Record<string, unknown>> | null;
-  } = { turns: 0, usage: null, limit: null, lastAssistant: null };
-  let mirrored: Promise<void> = Promise.resolve();
-  let mirrorFailure: unknown = null;
-  const mirror = (): void => {
-    if (deps.mirror === null) return;
-    const target = deps.mirror;
-    const file = piFileEntries(sessionManager.getHeader(), sessionManager.getEntries());
-    mirrored = mirrored
-      .then(() => target.persist(file))
-      .catch((error: unknown) => {
-        mirrorFailure ??= error;
-      });
-  };
+  const state: PiRunState = { turns: 0, usage: null, limit: null, lastAssistant: null };
+  installToolHooks(session, compiled, state);
+
+  const queue = eventQueue();
+  const mirroring = sessionMirroring(deps.mirror, () =>
+    piFileEntries(sessionManager.getHeader(), sessionManager.getEntries()),
+  );
   // Every abort is awaited after the drain: one pi could not confirm fails the run, like a refused
   // session-store write, rather than reporting a stop that may not have happened.
-  const aborts: Promise<void>[] = [];
-  let abortFailure: unknown = null;
-  const abortSession = (): void => {
-    aborts.push(
-      session.abort().catch((error: unknown) => {
-        abortFailure ??= error;
-      }),
-    );
+  const aborts = failureSlot();
+  const pendingAborts: Promise<void>[] = [];
+  const onAbort = (): void => {
+    pendingAborts.push(aborts.track(session.abort()));
   };
   const unsubscribe = session.subscribe((event) => {
     queue.push(event);
-    if (event.type === 'message_end' && event.message.role === 'assistant') {
-      state.lastAssistant = isRecord(event.message) ? event.message : null;
-      state.usage = addPiUsage(state.usage, state.lastAssistant?.['usage']);
-    }
-    if (event.type === 'turn_end') {
-      state.turns += 1;
-      mirror();
-      // The last allowed turn ran tools, so pi would have asked the model again: the `terminate`
-      // hint below ended the run instead, and that is a max_turns stop.
-      const continues = event.toolResults.length > 0;
-      if (limits.maxTurns !== null && state.turns >= limits.maxTurns && continues) {
-        state.limit ??= 'max_turns';
-      }
-    }
+    observeEvent(state, event, compiled.limits.maxTurns, mirroring.persist);
   });
-  const onAbort = abortSession;
   if (deps.signal.aborted) onAbort();
   else deps.signal.addEventListener('abort', onAbort, { once: true });
 
-  let failure: unknown = null;
+  let promptFailure: unknown = null;
   const running = session
     .prompt(prompt)
     .catch((error: unknown) => {
-      failure = error;
+      promptFailure = error;
     })
     .finally(() => {
       queue.close();
@@ -407,40 +324,11 @@ export async function* startPiRun(
       yield { kind: 'pi', event: item.value };
     }
     await running;
-    mirror();
-    await mirrored;
-    if (mirrorFailure !== null) {
-      throw mirrorFailure instanceof Error
-        ? mirrorFailure
-        : new Error('the session store refused a write with a non-Error value.');
-    }
-    await Promise.all(aborts);
-    if (abortFailure !== null) {
-      throw abortFailure instanceof Error
-        ? abortFailure
-        : new Error('pi refused an abort with a non-Error value.');
-    }
-
-    let stopReason: 'end_turn' | 'max_turns' | 'cancelled';
-    if (state.limit !== null) stopReason = state.limit;
-    else if (deps.signal.aborted) stopReason = 'cancelled';
-    else {
-      if (failure !== null) {
-        throw failure instanceof Error
-          ? failure
-          : new Error("pi's prompt failed with a non-Error value.");
-      }
-      const ended = state.lastAssistant;
-      if (ended?.['stopReason'] === 'error') {
-        const message = ended['errorMessage'];
-        const rejected = typeof message === 'string' ? rejectedKeyFailure(message) : null;
-        if (rejected !== null) throw rejected;
-        throw new Error(
-          `pi's model call failed: ${typeof message === 'string' ? message : 'no reason given'}`,
-        );
-      }
-      stopReason = ended?.['stopReason'] === 'aborted' ? 'cancelled' : 'end_turn';
-    }
+    mirroring.persist();
+    await mirroring.settle();
+    await Promise.all(pendingAborts);
+    aborts.raise('pi refused an abort with a non-Error value.');
+    const stopReason = stopReasonOf(state, { cancelled: deps.signal.aborted, promptFailure });
     yield { kind: 'run_completed', stopReason, turns: state.turns, usage: state.usage };
   } finally {
     deps.signal.removeEventListener('abort', onAbort);

@@ -7,7 +7,7 @@
  * ## Where the routes come from
  *
  * The route list is `tests/route-declarations/**`, read through the same reader
- * `tests/route-inventory.test.ts` and `apps/web/server/rbac/authorisation-matrix.test.ts` use
+ * `tests/route-inventory.policy-check.ts` and `apps/web/server/rbac/authorisation-matrix.test.ts` use
  * ([ADR-0025](../../../docs/adr/0025-the-route-inventory-is-partitioned-by-owner.md)). The
  * inventory gate asserts that union **equals** the route handlers the tracked tree serves, so a
  * route cannot hide from this sweep by being undeclared, and a route added tomorrow is probed
@@ -81,9 +81,9 @@ import { proxy } from '../proxy';
 
 import {
   MIN_SESSION_SECRET_LENGTH,
-  sessionCookieName,
-  mintSessionToken,
-  newSessionClaims,
+  signInSessionCookieName,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
 } from './auth/session';
 import { installEmptyDeployment } from './empty-deployment-fixture';
 import {
@@ -248,7 +248,7 @@ describe('the sweep covers the whole declared API surface', () => {
     // The glob walks the working directory, so it may also see a route another test writes for
     // the length of its run (`tests/auth.test.ts` plants one under `app/api/w1cp06-unregistered/`)
     // and never commits. The committed tree is the route surface (the rule
-    // `tests/route-inventory.test.ts` states), so the glob must reach every tracked route file
+    // `tests/route-inventory.policy-check.ts` states), so the glob must reach every tracked route file
     // and an untracked extra is not part of the surface this sweep holds to anything.
     const globbed = new Set(Object.keys(ROUTE_MODULES));
     expect(
@@ -305,8 +305,8 @@ describe('the edge (apps/web/proxy.ts) refuses in the standard envelope', () => 
 
   beforeAll(async () => {
     process.env['SESSION_SECRET'] = SESSION_SECRET;
-    const token = await mintSessionToken(
-      newSessionClaims(OWNER.email, 'envelope-sweep'),
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims(OWNER.email, 'envelope-sweep'),
       SESSION_SECRET,
     );
     for (const route of apiRoutes) {
@@ -321,7 +321,7 @@ describe('the edge (apps/web/proxy.ts) refuses in the standard envelope', () => 
         probes.push([
           'a session, a cross-origin write',
           {
-            cookie: `${sessionCookieName(process.env)}=${token}`,
+            cookie: `${signInSessionCookieName(process.env)}=${token}`,
             origin: 'https://elsewhere.test',
           },
         ]);

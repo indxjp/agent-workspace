@@ -3,7 +3,7 @@
  * Next.js will import them and driven with real `Request` objects. Mirrors
  * `apps/web/server/agents/routes.test.ts`'s shape — see that file's header for why a header-driven
  * test resolver is the strongest position to give an attacker, and what these suites cannot
- * exercise (Next.js's own routing — `tests/route-inventory.test.ts` covers that).
+ * exercise (Next.js's own routing — `tests/route-inventory.policy-check.ts` covers that).
  */
 import { expect } from 'vitest';
 
@@ -22,7 +22,7 @@ import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import type { ResourceCatalogStoreProvider } from '../storage/store';
 import { createCatalogFilesWorld, type CatalogFilesWorld } from './catalog-runtime-fixtures';
 import { encodeFileId } from './file-id';
-import type { WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './wiring';
 
 export const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 export const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';

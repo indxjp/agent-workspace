@@ -10,15 +10,15 @@ import { NextResponse } from 'next/server';
 
 import {
   invitationIdentityCookieName,
-  sessionCookieName,
+  signInSessionCookieName,
   checkRequestOrigin,
   clearedInvitationIdentityCookie,
-  mintSessionToken,
-  newSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
   sessionSecret,
-  sessionCookie,
+  signInSessionCookie,
   verifyInvitationIdentityToken,
-  verifySessionToken,
+  verifySignInSessionToken,
 } from '../../../../../server/auth';
 import { cookieValue } from '../../../../../server/auth/cookies';
 import {
@@ -65,9 +65,9 @@ export async function POST(
   }
 
   const cookieHeader = request.headers.get('cookie');
-  const tenantSession = cookieValue(cookieHeader, sessionCookieName());
+  const tenantSession = cookieValue(cookieHeader, signInSessionCookieName());
   if (tenantSession !== undefined) {
-    const verifiedSession = await verifySessionToken(tenantSession, secret.secret);
+    const verifiedSession = await verifySignInSessionToken(tenantSession, secret.secret);
     if (verifiedSession.ok) {
       // A workspace-B session is not proof that this caller may name workspace A. Refuse before
       // reading the id/token so a real and a nonexistent invitation remain byte-identical.
@@ -113,11 +113,11 @@ export async function POST(
   );
   const response = responseFor(result);
   if (result.acceptedSession !== undefined) {
-    const session = await mintSessionToken(
-      newSessionClaims(result.acceptedSession.email, result.acceptedSession.workspaceSlug),
+    const session = await mintSignInSessionToken(
+      newSignInSessionClaims(result.acceptedSession.email, result.acceptedSession.workspaceSlug),
       secret.secret,
     );
-    response.cookies.set(sessionCookie(session));
+    response.cookies.set(signInSessionCookie(session));
   }
   if (result.clearInvitationIdentity === true) {
     response.cookies.set(clearedInvitationIdentityCookie());

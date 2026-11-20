@@ -76,7 +76,7 @@ def splitSubject (r : Row) : Row :=
 /-! ## The map -/
 
 /-- One row of table `t` of state `st`, as the target stores it. -/
-@[aw_spec (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 def mapRow (st : State) : TableName → Row → Row
   | .agentGrants, r =>
     setCell "user_id" none (setCell "principal_id"
@@ -92,11 +92,11 @@ def mapRow (st : State) : TableName → Row → Row
   | _, r => r
 
 /-- The refinement map: every row of today's state, as the target stores it. -/
-@[aw_spec (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 def toTarget (st : State) : State := fun t => (st t).map (mapRow st t)
 
 /-- The key of the target a foreign key of today's table `t` becomes. -/
-@[aw_spec (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 def fkImage (t : TableName) (fk : ForeignKey) : ForeignKey :=
   match t with
   | .agentGrants =>
@@ -242,7 +242,7 @@ def unknownLedgerProvider : State :=
   replace Current.Witness.state .runUsageRecords usage (setCell "provider" (some "mistral") usage)
 
 /-- Every one-cell divergence, with the names of the target constraints it breaks. -/
-@[aw_spec (doc := "docs/formal/concepts.md#current-to-target-mapping")]
+@[aw_spec (doc := "docs/20-design/formal/concepts.md#current-to-target-mapping")]
 def cells : List (String × State × List String) :=
   [("key-without-principal", keyWithoutPrincipal, ["every_source_has_a_principal"]),
    ("granted-member-without-principal", grantedMemberWithoutPrincipal,
@@ -294,7 +294,7 @@ def negativeSpend : State :=
 /-- One state per cluster that satisfies every constraint `Er.Core` gives a meaning to and breaks
 exactly one check only that cluster refines, with the check's table and name. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def cells : List (Current.Cluster × State × TableName × String) :=
   [(.identity, upperCaseEmail, .users, "users_email_lowercase"),
    (.catalog, blankAgentName, .agents, "agents_name_not_blank"),

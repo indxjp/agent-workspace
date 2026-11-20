@@ -23,7 +23,7 @@ namespace AgentWorkspace
 /-- The kinds of row an identifier can name: one per table whose primary key is `id uuid`.
 `connector` is the `mcp_servers` table; `principal` is `workspace_principals`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 inductive IdKind where
   | workspace | user | userIdentity | membership | principal | apiKey | invitation
   | browserToken | cliSession | agent | agentFile | agentGrant | agentConnector | agentSkill | agentStorageGrant

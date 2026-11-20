@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from '../../app/mcp/projects/[name]/route';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
-import type { EndpointClientAuditEvent, EndpointClientsRuntime } from '../endpoint-clients/runtime';
+import type { EndpointClientAuditEvent, EndpointClientsRuntime } from '../endpoint-clients/wiring';
 import { DomainError } from '../errors';
 import type { Ownership } from '../rbac/decide';
 import type { RunPrincipal } from '../runs/environment';

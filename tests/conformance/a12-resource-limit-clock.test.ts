@@ -16,13 +16,16 @@
  *
  * Each case below reproduces one cause deterministically against the real enforcing fixture, and
  * failed on the scenario as it stood before the fix. Only `Date` is faked; timers are always real,
- * because the fix's whole claim is about the order real timers fire in.
+ * because the fix's whole claim is about the order real timers fire in. They run on the fixture's
+ * compressed clock (timers.ts) — real Node timers, every delay ten times shorter — which the
+ * scenario and the fixture share, so the order is the same and a run waits a tenth as long.
  */
 import { performance } from 'node:perf_hooks';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runA12ConformanceSuite } from './harness.js';
+import { FIXTURE_TIME_COMPRESSION, FIXTURE_TIMERS } from './timers.js';
 import { a12Scenarios } from './scenarios.js';
 import {
   CONTAINER_FIXTURE_CAPABILITIES,
@@ -36,8 +39,11 @@ const SCENARIO_ID = 'enforce-resource-limits';
 /** How far each `Date.now()` call leaps ahead of the previous one in case (a). */
 const WALL_CLOCK_STEP_MS = 10_000;
 
-/** Longer than the scenario's whole budget (1 s ceiling + 1 s grace), so both timers are overdue. */
-const EVENT_LOOP_STALL_MS = 2_500;
+/**
+ * Longer than the scenario's whole budget (1 s ceiling + 1 s grace, on the compressed clock), so
+ * both timers are overdue when the loop comes back.
+ */
+const EVENT_LOOP_STALL_MS = 2_500 / FIXTURE_TIME_COMPRESSION;
 
 function busyWait(durationMs: number): void {
   const until = performance.now() + durationMs;
@@ -63,6 +69,7 @@ describe('A.12 enforce-resource-limits measures its budget on the monotonic time
       createContainerFixtureDriver(),
       CONTAINER_FIXTURE_CAPABILITIES,
       containerFixtureProbe,
+      { timers: FIXTURE_TIMERS },
     );
     const result = report.results.find((candidate) => candidate.id === SCENARIO_ID);
 
@@ -82,6 +89,7 @@ describe('A.12 enforce-resource-limits measures its budget on the monotonic time
     }, 50);
     try {
       const outcome = await scenario.run({
+        timers: FIXTURE_TIMERS,
         driver: createContainerFixtureDriver(),
         capabilities: CONTAINER_FIXTURE_CAPABILITIES,
         probe: containerFixtureProbe,
@@ -113,6 +121,7 @@ describe('A.12 enforce-resource-limits measures its budget on the monotonic time
       if (scenario === undefined) return;
 
       const outcome = await scenario.run({
+        timers: FIXTURE_TIMERS,
         driver: createContainerFixtureDriver(),
         capabilities: { ...CONTAINER_FIXTURE_CAPABILITIES, maxSessionSeconds: ceiling },
         probe: containerFixtureProbe,

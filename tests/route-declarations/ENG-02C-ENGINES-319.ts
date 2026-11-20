@@ -4,7 +4,7 @@
  *
  * Spec §34's "Examples:" list does not print it, so it carries a `mandate` under
  * [ADR-0026](../../docs/adr/0026-section-34-is-a-shape-rule-and-an-extra-route-cites-its-mandate.md)
- * decision 2, checked against `docs/spec.md`'s own headings by `tests/route-inventory.test.ts` so
+ * decision 2, checked against `docs/spec.md`'s own headings by `tests/route-inventory.policy-check.ts` so
  * the citation cannot be invented. §5 is the section: it is what makes the engine an extension
  * point behind one port rather than a fixed dependency, and a client that may pick an engine must
  * be able to read which ones this deployment installs.

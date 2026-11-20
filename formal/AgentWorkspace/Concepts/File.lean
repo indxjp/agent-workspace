@@ -29,7 +29,7 @@ open AgentWorkspace
 /-- `fileKinds` / `FILE_KINDS`: a node of the tree is one of exactly two things. -/
 @[aw_spec (ts := "packages/core/src/db/schema/files.ts#fileKinds")
   (ts := "packages/contracts/src/files.ts#FILE_KINDS")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 inductive FileKind where
   | file
   | folder
@@ -69,14 +69,14 @@ def segments (p : String) : List (List Char) := splitSlash p.toList
 /-- `files_path_shape`: `^[^/[:cntrl:]]+(/[^/[:cntrl:]]+)*$` — segments separated by single
 slashes, each non-empty and free of control characters, with no leading or trailing slash. -/
 @[aw_spec (ts := "packages/core/src/db/schema/files.ts#files")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 def pathShape (p : String) : Bool :=
   (segments p).all fun s => !s.isEmpty && s.all fun c => !isControl c
 
 /-- `files_path_no_dot_segments`: `path !~ '(^|/)[.][.]?(/|$)'` — no segment is `.` or `..`, the
 two ways a path escapes its own workspace prefix. -/
 @[aw_spec (ts := "packages/core/src/db/schema/files.ts#files")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 def noDotSegments (p : String) : Bool :=
   (segments p).all fun s => s != ['.'] && s != ['.', '.']
 
@@ -91,7 +91,7 @@ the same workspace, or `NULL` when an API-key principal created the row); `owner
 owning principal. -/
 @[aw_spec (ts := "packages/core/src/db/schema/files.ts#files")
   (ts := "packages/core/src/db/repositories/resource-catalogs.ts#CatalogFile")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 structure File where
   id : FileId
   workspace : WorkspaceId
@@ -128,7 +128,7 @@ def folderHasNoContent : Bool :=
 /-- Every `files` check holds on the row: the two path checks and the four content checks. The
 closed set `files_kind_valid` holds by the type of `kind`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/files.ts#files")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 def valid : Bool :=
   pathShape f.path && noDotSegments f.path && f.storageKeyIffFile && f.storageKeyNotBlank &&
     f.sizeNonNegative && f.folderHasNoContent
@@ -146,7 +146,7 @@ def dbColumns : List String :=
 /-- The keys of `FileResourceSchema`, in declaration order: no owner, no creator, and a
 modification time the table does not have (it comes from the object store). -/
 @[aw_spec (ts := "packages/contracts/src/files.ts#FileResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 def wireFields : List String := ["id", "path", "kind", "sizeBytes", "contentType", "lastModified"]
 
 /-! ## The subtree boundary and the catalog operations -/

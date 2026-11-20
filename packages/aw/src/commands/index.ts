@@ -1,5 +1,5 @@
 /**
- * The command tree — every ✅ row of `docs/sdk/04-api-specification.md` §5, and nothing else.
+ * The command tree — every ✅ row of `docs/10-product/sdk/04-api-specification.md` §5, and nothing else.
  * A row that waits for a server change has no command here rather than a stub, so `aw --help`
  * is an honest inventory of what the control plane can do today.
  *
@@ -73,7 +73,7 @@ export const COMMANDS: readonly Command[] = [
   ...feedbackCommands,
   // Issue #697 (FH-10): talk to an agent from the terminal.
   ...chatCommands,
-  // First, as `docs/sdk/04-api-specification.md` §7.2's tree prints it: the call that tells a
+  // First, as `docs/10-product/sdk/04-api-specification.md` §7.2's tree prints it: the call that tells a
   // freshly configured CLI which workspace and role its credential resolved to.
   ...meCommands,
   // Issue #242 (SDK-10, S-22): signing a person in, before the commands only a person may run.

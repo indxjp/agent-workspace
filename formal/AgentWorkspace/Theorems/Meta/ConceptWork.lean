@@ -3,7 +3,7 @@ import AgentWorkspace.Theorems.Normative.ConceptWork
 /-!
 T5 — properties of the specification itself: where the documents, the concepts and today's
 schema disagree, pinned so that fixing either side breaks a theorem by name. Each is a finding of
-`docs/formal/units/concept-work.md`.
+`docs/20-design/formal/units/concept-work.md`.
 
 * `runs_carry_no_owner_principal` — the API specification's §2 lists runs among the rows that
   carry `ownerPrincipalId`; `runs` has no such column (ownership is reached through the session).
@@ -35,7 +35,7 @@ open AgentWorkspace.Theorems.WellFormed.ConceptWork
 /-- Of the rows the API specification says carry `ownerPrincipalId` ("agents, skills, files,
 connectors, projects, sessions, runs, shares"), `runs` has no owner column: a run is owned through
 its session. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/runs.ts#runs")]
 theorem runs_carry_no_owner_principal :
     (catalogue .runs).hasColumn "owner_principal_id" = false ∧
@@ -110,7 +110,7 @@ theorem sdk_session_key_is_redundant_under_the_identity (rows : List Row)
 targets `sessions (id, workspace_id)`), while the transcript routes are keyed by the SDK's session
 id (`:engineSessionId`): only the identity invariant makes the two the same value. -/
 @[aw_spec (tier := T5)
-  (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")
+  (doc := "docs/10-product/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")
   (ts := "packages/core/src/db/schema/session-transcripts.ts#session_transcripts_session_workspace_fk")
   (ts := "apps/web/server/sessions/api.ts#engineSessionId")]
 theorem transcript_store_is_keyed_by_the_platform_id :
@@ -164,7 +164,7 @@ actor-principal key, while migration 0020 deploys `ON DELETE SET NULL (actor_pri
 (Drizzle's DSL cannot express a column-list `SET NULL`). -/
 @[aw_spec (tier := T5)
   (ts := "packages/core/src/db/schema/audit-events.ts#audit_events_actor_principal_workspace_fk")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem audit_actor_key_is_recorded_as_no_action :
     (catalogue .auditEvents).foreignKeySignature? "audit_events_actor_principal_workspace_fk" =
       some (["workspace_id", "actor_principal_id"], .workspacePrincipals, ["workspace_id", "id"],

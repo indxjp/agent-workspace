@@ -12,7 +12,7 @@
  *
  * `apps/web/formal/engine-images.test.ts` replays the control plane's half (decision D-012). A
  * disagreement is a failing test, and the fix is never to edit a vector
- * (`docs/formal/00-orchestrator-prompt.md` §10).
+ * (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import { createDockerDriver, type DockerCommand } from '@agent-workspace/runtime/driver/docker';
 import {

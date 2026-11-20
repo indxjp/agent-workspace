@@ -10,7 +10,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('../../server/auth', () => ({
-  getSession: () => Promise.resolve(null),
+  getSignInSession: () => Promise.resolve(null),
 }));
 
 const filesOn = vi.hoisted(() => ({ value: true }));

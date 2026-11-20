@@ -15,7 +15,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('../../server/auth', () => ({
-  getSession: () => Promise.resolve(null),
+  getSignInSession: () => Promise.resolve(null),
 }));
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';

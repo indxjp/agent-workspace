@@ -17,14 +17,14 @@ import {
   createAgentRunResourceLoader,
   type RunStorageConnections,
 } from '../../compose/resource-loader';
-import type { Connectors } from '../../connectors/runtime';
-import type { Files } from '../../files/runtime';
+import type { Connectors } from '../../connectors/wiring';
+import type { Files } from '../../files/wiring';
 import type { LaunchContext, SessionRef } from '../../runs/environment';
-import type { Skills } from '../../skills/runtime';
+import type { Skills } from '../../skills/wiring';
 import type {
   StorageConnections,
   StorageConnectionsRuntime,
-} from '../../storage-connections/runtime';
+} from '../../storage-connections/wiring';
 import { log } from '../../telemetry/logger';
 import { sessionForLaunch } from '../session-launch';
 import type { AgentsWiring } from './agents';

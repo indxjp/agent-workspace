@@ -19,7 +19,7 @@ import { GET as LIST, POST as CREATE } from '../../app/api/webhooks/route';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
-import type { WebhookRecord, WebhooksRuntime } from './runtime';
+import type { WebhookRecord, WebhooksRuntime } from './wiring';
 
 const owner = { email: 'owner@example.com' };
 const admin = { email: 'admin@example.com' };

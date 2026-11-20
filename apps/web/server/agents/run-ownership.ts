@@ -16,7 +16,7 @@
  * The fix that stays inside this task's globs is to keep the comparison itself here — a single,
  * narrow, exported function — and change `runs/api.ts` at the one line that calls it, declared as
  * an out-of-bounds touch on this task's PR (see `docs/adr/W9-AUTH-117-*.md`). Everything the
- * function needs is already reachable through `apps/web/server/agents/runtime.ts`'s existing,
+ * function needs is already reachable through `apps/web/server/agents/wiring.ts`'s existing,
  * already-wired registry — no new composition-root call for the "own" half, and the "permitted"
  * half degrades to "not granted" rather than a 503 when `agentGrants` is not wired (this task's
  * declared gap for that composition line, same ADR).

@@ -46,7 +46,7 @@ private theorem kind_bne :
 passes every non-closed-set check of the table. On a row of kind `mcp` the five per-kind checks
 of ADR-0113 C15 hold, and the seven MCP checks they guard read as before the tool kinds. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 theorem connector_invariant_is_the_row_checks (c : Connector.Connector) (ts : String) :
     (connectorChecks.all fun n => clusterCheckHolds n (connectorRow c ts)) = c.valid := by
   obtain ⟨id, ws, name, tr, cmd, args, url, auth, sec, en, cb, own⟩ := c
@@ -78,7 +78,7 @@ theorem tool_connector_invariant_is_the_row_checks (t : Connector.ToolConnector)
 /-- The skill concept refines `skills`: a skill is valid exactly when its row passes
 `skills_name_shape` and `skills_skill_md_not_blank`. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/skills.ts#skills")
-  (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")]
 theorem skill_invariant_is_the_row_checks (s : Skill.Skill) (ts : String) :
     (["skills_name_shape", "skills_skill_md_not_blank"].all fun n =>
       clusterCheckHolds n (skillRow s ts)) = s.valid := by
@@ -89,7 +89,7 @@ theorem skill_invariant_is_the_row_checks (s : Skill.Skill) (ts : String) :
 /-- The file concept refines `files` on its path and object key: the two path checks and the two
 storage-key checks of a file's row are exactly the concept's. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/files.ts#files")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 theorem file_path_and_key_invariants_are_the_row_checks (f : File.File) (ts : String) :
     (["files_path_shape", "files_path_no_dot_segments", "files_storage_key_iff_file",
         "files_storage_key_not_blank"].all fun n => clusterCheckHolds n (fileRow f ts)) =
@@ -172,7 +172,7 @@ private theorem int_toString_eq_zero (n : Int) : (n.repr == "0") = (n == 0) := b
 /-- The agent concept refines `agents`: an agent is valid exactly when its row passes
 `agents_name_not_blank`, the table's one check that is not a key. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/agents.ts#agents")
-  (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")]
 theorem agent_invariant_is_the_row_checks (a : Agent.Agent) (ts : String) :
     (agentChecks.all fun n => clusterCheckHolds n (agentRow a ts)) = a.valid := by
   obtain ⟨id, ws, name, instr, mc, model, rp, perms, pol, cb, own⟩ := a
@@ -182,7 +182,7 @@ theorem agent_invariant_is_the_row_checks (a : Agent.Agent) (ts : String) :
 /-- The file concept refines `files`: a file is valid exactly when its row passes all six
 non-closed-set checks of the table, the size ones read on the decimal text of the `bigint`. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/files.ts#files")
-  (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")]
 theorem file_invariant_is_the_row_checks (f : File.File) (ts : String) :
     (fileChecks.all fun n => clusterCheckHolds n (fileRow f ts)) = f.valid := by
   obtain ⟨id, ws, path, kind, key, size, ct, cb, own⟩ := f
@@ -196,7 +196,7 @@ theorem file_invariant_is_the_row_checks (f : File.File) (ts : String) :
 
 /-- Today's single agent state is the target's `active` state, so every current agent is a
 target agent; `archived` is the one state the target adds (RF-201). -/
-@[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")
+@[aw_spec (tier := T4) (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem current_agent_states_embed_in_the_target :
     (∀ s : Agent.StateCurrent, s.toTarget = .active) ∧

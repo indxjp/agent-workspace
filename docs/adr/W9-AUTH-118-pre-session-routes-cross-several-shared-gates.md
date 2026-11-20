@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-11
 Decided by: W9-AUTH-118 implementing agent
-Scope: `apps/web/proxy.ts`, `tests/route-inventory.test.ts`, `tests/auth.test.ts`, `tests/no-route-answers-503.test.ts` — none of which is on this task's `Owns globs:` line
+Scope: `apps/web/proxy.ts`, `tests/route-inventory.policy-check.ts`, `tests/auth.test.ts`, `tests/no-route-answers-503.test.ts` — none of which is on this task's `Owns globs:` line
 
 ## Context
 
@@ -16,7 +16,7 @@ routes, and none of them is on this task's `Owns globs:` line:
 - `apps/web/proxy.ts` gates every `/api/**` request behind a valid session cookie, with a narrow,
   named exemption list — currently exactly `/api/setup` and `/api/setup/runtime-detect` — added by
   a prior task (W7-UI-04) in the same position this task is now in.
-- `tests/route-inventory.test.ts`'s `routeShape` requires a dynamic `:id` immediately after the
+- `tests/route-inventory.policy-check.ts`'s `routeShape` requires a dynamic `:id` immediately after the
   resource segment for any second path component; `/api/auth/login`, `/api/auth/callback` and
   `/api/auth/workspace` are literal second segments with no id, exactly the shape `/api/setup/*`
   already carries a named exception for.
@@ -45,7 +45,7 @@ is that pattern applied a second time, not a new one invented.
    beside the `/api/setup` one, with a comment naming why (each route does its own origin check
    where the method is unsafe, because exemption from this gate is exemption from its
    `checkRequestOrigin` call too).
-2. **`tests/route-inventory.test.ts`**: add a second named, narrow exception in `routeShape` for
+2. **`tests/route-inventory.policy-check.ts`**: add a second named, narrow exception in `routeShape` for
    exactly these three paths (`/api/auth/login`, `/api/auth/callback`, `/api/auth/workspace`),
    explicitly not generalising the shape rule.
 3. **`tests/auth.test.ts`**: extend the GET/POST exemption sets the same way `/api/setup*` already
@@ -67,7 +67,7 @@ is that pattern applied a second time, not a new one invented.
    merely tolerated: `apps/web/app/api/auth/login/login.test.ts`'s "answers 502, not a crash" case
    fails if the `try`/`catch` around `beginOidcLogin` is removed.
 6. **`GET /api/auth/workspace` is a `route.ts` that returns HTML, not a `page.tsx`.** The minimal
-   selection step the card calls for therefore never enters `tests/screen-inventory.test.ts`'s
+   selection step the card calls for therefore never enters `tests/screen-inventory.policy-check.ts`'s
    world at all (that gate reads `page.*` files exclusively) and needs no `ui/*.html` mockup and no
    `tests/screen-declarations/**` entry — both of which are also outside this task's Owns globs, and
    for which no workspace-directory-or-switcher mockup exists yet (`#120`, W9-UI-120, owns

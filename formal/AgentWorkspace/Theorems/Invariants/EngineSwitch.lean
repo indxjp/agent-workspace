@@ -36,7 +36,7 @@ private theorem withheld_in_result {a : ClaudeArm} {existing w : List Key} {t : 
 
 /-- The switch never widens the tool plan: every tool the OpenAI Agents adapter offers under the
 translated arm is one whose capability the old Claude arm allowed. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#engine-switch")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#engine-switch")
   (ts := "packages/contracts/src/agents.ts#translatePolicyForEngineSwitch")
   (ts := "packages/contracts/src/agents.ts#policyNarrowedPermissions")
   (ts := "packages/engine-openai-agents/src/tools.ts#openAiAgentsToolPlan")]
@@ -54,7 +54,7 @@ theorem the_switch_never_widens_the_tool_plan (a : ClaudeArm) (existing w : List
 
 /-- A translation succeeds exactly when no denial of the old arm is untranslatable, and a refusal
 names exactly those denials — so an MCP or glob denial is never silently dropped. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#engine-switch")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#engine-switch")
   (ts := "packages/contracts/src/agents.ts#translatePolicyForEngineSwitch")
   (ts := "apps/web/server/agents/policy.ts#carryEngineSwitch")]
 theorem the_switch_refuses_exactly_what_it_cannot_express (a : ClaudeArm) (existing : List Key) :
@@ -80,7 +80,7 @@ theorem the_switch_refuses_exactly_what_it_cannot_express (a : ClaudeArm) (exist
       exact ⟨rfl, fun he => by simp_all⟩
 
 /-- The narrowing never turns the network switch on. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#engine-switch")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#engine-switch")
   (ts := "packages/contracts/src/agents.ts#policyNarrowedPermissions")]
 theorem the_narrowing_never_opens_the_network (p : Permissions) (w : List Key) :
     (narrow p w).unrestrictedNetwork = true → p.unrestrictedNetwork = true := by
@@ -110,7 +110,7 @@ private theorem foldl_adds (ks : List Key) (acc : List String) (k : Key) (hk : k
 
 /-- The reverse switch denies every Claude tool of every switch the `openai-agents` arm withheld,
 and keeps every denial the new body already had. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-openai-agents.md#engine-switch")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-openai-agents.md#engine-switch")
   (ts := "packages/contracts/src/agents.ts#translatePolicyForEngineSwitch")]
 theorem the_reverse_switch_denies_every_withheld_tool (withheld : List Key) (deny : List String) :
     (∀ k ∈ withheld, ∀ n ∈ claudeTools k, n ∈ reverseDeny withheld deny) ∧

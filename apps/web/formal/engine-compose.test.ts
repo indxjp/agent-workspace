@@ -6,7 +6,7 @@
  * exists, whether the agent's engine speaks a dialect the gateway serves for its model
  * connection's provider — and compares it to what `formal/Vectors/EngineCompose.lean` says it
  * must answer. A disagreement is a failing test, and the fix is never to edit a vector
- * (`docs/formal/00-orchestrator-prompt.md` §10).
+ * (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  *
  * The vectors cover both directions of the T1 theorem, because only one of them is interesting
  * on today's catalogue: every provider serves `anthropic-messages`, so the one engine this

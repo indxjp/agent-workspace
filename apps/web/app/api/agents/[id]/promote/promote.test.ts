@@ -14,7 +14,7 @@ import { POST as promote } from './route';
 import { POST as rollback } from '../rollback/route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import type { AgentRecord } from '../../../../../server/agents/contract';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
 import {

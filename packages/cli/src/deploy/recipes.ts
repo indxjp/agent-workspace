@@ -63,7 +63,7 @@ const TLS_PROXY_MARKER = '# aw deploy: web is reached only through the TLS proxy
 
 /**
  * Web is published on loopback only, and the one proxy in front of it — Caddy, terminating TLS
- * for the environment's `url` (docs/deploy/single-vm.md) — is trusted for `X-Forwarded-For`.
+ * for the environment's `url` (docs/40-operate/deploy/single-vm.md) — is trusted for `X-Forwarded-For`.
  */
 function behindTlsProxy(env: string): string {
   const kept = env
@@ -191,7 +191,7 @@ function gcpAppCredentialSteps(apps: Readonly<Record<string, ProductionApp>>): r
     ? []
     : [
         ...missing,
-        "next: create the app's workspace and Admin API key after the Owner signs in, store the key in Secret Manager, set environments.production.apps.<name>.workspaceId / apiKeySecret / connectorId, and run aw deploy production --yes again (docs/deploy/gcp-cloudrun.md#connecting-an-app-to-its-workspace)",
+        "next: create the app's workspace and Admin API key after the Owner signs in, store the key in Secret Manager, set environments.production.apps.<name>.workspaceId / apiKeySecret / connectorId, and run aw deploy production --yes again (docs/40-operate/deploy/gcp-cloudrun.md#connecting-an-app-to-its-workspace)",
       ];
 }
 
@@ -208,7 +208,7 @@ function gcpAppSignInSteps(
       return `next: register ${new URL(app.url).origin}/api/sign-in/callback as a redirect URI of client ${app.signIn.oidcClientId} at ${oidcIssuer}`;
     }
     const missing = oidcIssuer === null ? 'gcp.oidc and its signIn are' : 'its signIn is';
-    return `gap: app ${name} answers sign_in_not_configured until ${missing} set (environments.production.apps.${name}.signIn; docs/deploy/gcp-cloudrun.md#signing-people-in-to-an-app)`;
+    return `gap: app ${name} answers sign_in_not_configured until ${missing} set (environments.production.apps.${name}.signIn; docs/40-operate/deploy/gcp-cloudrun.md#signing-people-in-to-an-app)`;
   });
 }
 
@@ -228,7 +228,7 @@ function singleVmAppSteps(
     return [
       `next: caddy reverse-proxy --from ${new URL(app.url).host} --to 127.0.0.1:${String(port)}`,
       `next: set AW_APP_${envName}_API_KEY (an Admin API key), AW_APP_${envName}_WORKSPACE_ID and, after registering the connector, AW_APP_${envName}_CONNECTOR_ID in ${envFile}, then aw deploy production --yes`,
-      `next: store ${identitySecret}'s value as the workspace secret ${workspaceSecret} (aw secrets create --name ${workspaceSecret} --value-stdin), then register connector ${name} → ${new URL(app.url).origin}/api/mcp with identity: { secret: ${workspaceSecret} } (aw connectors create --file …; docs/deploy/single-vm.md#apps)`,
+      `next: store ${identitySecret}'s value as the workspace secret ${workspaceSecret} (aw secrets create --name ${workspaceSecret} --value-stdin), then register connector ${name} → ${new URL(app.url).origin}/api/mcp with identity: { secret: ${workspaceSecret} } (aw connectors create --file …; docs/40-operate/deploy/single-vm.md#apps)`,
     ];
   });
 }
@@ -320,7 +320,7 @@ export const DEPLOY_RECIPES: Readonly<Record<ProjectDeployTarget, DeployRecipe>>
       // Each app's role, schema and Secret are the operator's, as the platform's Secrets are.
       ...composeApps(apps).map(
         ({ name }) =>
-          `next: create Secret agent-workspace-app-${name} (docs/deploy/kubernetes.md#apps)`,
+          `next: create Secret agent-workspace-app-${name} (docs/40-operate/deploy/kubernetes.md#apps)`,
       ),
     ],
   },

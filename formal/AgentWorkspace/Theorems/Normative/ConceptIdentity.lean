@@ -32,7 +32,7 @@ theorem every_membership_and_api_key_carries_one_role :
 
 /-- "A principal is … a membership … or an API key … Never a bare user": a principal row has no
 `user_id` column, its kind is one of the two sources, and every source is one of the two kinds. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")]
 theorem principal_is_a_membership_or_an_api_key_never_a_bare_user :
     (catalogue .workspacePrincipals).hasColumn "user_id" = false ∧
@@ -84,7 +84,7 @@ example : ((fromApiKey ⟨"p", "k", "w", .viewer, "CI", none⟩).me.kind = .apiK
 … — belongs on `memberships`": `users` has neither `workspace_id` nor `role`, `memberships` has
 both. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/users.ts#users")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 theorem the_role_is_on_the_membership_not_the_user :
     (catalogue .users).hasColumn "workspace_id" = false ∧ (catalogue .users).hasColumn "role" = false ∧
       (catalogue .memberships).isNotNull "workspace_id" = true ∧
@@ -92,7 +92,7 @@ theorem the_role_is_on_the_membership_not_the_user :
 
 /-- "Every resource below belongs to exactly one [workspace]": each tenant-scoped identity table
 has exactly one reference to `workspaces`, over a `NOT NULL` `workspace_id`. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#11-vocabulary")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem identity_rows_belong_to_exactly_one_workspace :
     [TableName.memberships, .workspacePrincipals, .apiKeys, .invitations, .browserTokens,
@@ -130,7 +130,7 @@ theorem an_oidc_subject_binds_exactly_one_user :
 /-- "The source pair is tenant-paired … Deleting a membership cascades its principal row away":
 both source keys of `workspace_principals` are `ON DELETE CASCADE` (a removed membership's
 principal is deleted, not revoked). -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#2-state-machines")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#2-state-machines")
   (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_membership_workspace_fk")]
 theorem principal_sources_cascade :
     (catalogue .workspacePrincipals).foreignKeySignature?
@@ -202,7 +202,7 @@ example : ∀ m1 ∈ Invariants.ConceptIdentity.Witness.state .memberships,
 browser-token hashes: neither unique key includes `workspace_id`. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/api-keys.ts#api_keys_key_hash_key")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_hash_key")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 theorem credential_hashes_are_globally_unique :
     (catalogue .apiKeys).uniqueSignature? "api_keys_key_hash_key" = some (["key_hash"], .index, [], []) ∧
       (catalogue .browserTokens).uniqueSignature? "browser_tokens_hash_key" =
@@ -224,7 +224,7 @@ theorem credentials_never_appear_in_resources :
 /-- "The minting principal's role is re-read from the directory on every request, never carried in
 the token": a browser-token row has no role column, and names its minter by a `NOT NULL`
 principal id. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#mintedByPrincipalId")]
 theorem browser_token_carries_no_role :
     (catalogue .browserTokens).hasColumn "role" = false ∧
@@ -233,7 +233,7 @@ theorem browser_token_carries_no_role :
 /-- "Attenuation, not a fourth identity": a browser-token principal is its minter's identity —
 the same principal, kind, workspace, user and key — with `via = browser-token` and the scope
 attached. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/principal.ts#fromBrowserToken")]
 theorem browser_token_is_attenuation_not_a_fourth_identity (m : Actor) (s : Scope) :
     (fromBrowserToken m s).principalId = m.principalId ∧ (fromBrowserToken m s).kind = m.kind ∧
@@ -254,7 +254,7 @@ theorem browser_token_is_scoped_to_exactly_one_run_or_session (t : BrowserToken)
 
 /-- "`60 ≤ ttlSeconds ≤ 3600`, default `300`": the mint request admits exactly the TTLs in the
 closed interval, and the default is inside it. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/contracts/src/tokens.ts#MintTokenRequestSchema")]
 theorem token_ttl_is_bounded (ttl : Nat) :
     (ttlAccepted ttl = true ↔ 60 ≤ ttl ∧ ttl ≤ 3600) ∧ ttlAccepted defaultTtlSeconds = true ∧
@@ -267,7 +267,7 @@ theorem token_ttl_is_bounded (ttl : Nat) :
 /-- An API key's state follows `revoked > expired > active`, and an expiry that has exactly
 arrived is expired (`expires_at > now` is what admits a key). -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 theorem api_key_state_precedence (k : ApiKey) (now : Instant) :
     (k.revokedAt.isSome = true → k.stateAt now = .revoked) ∧
       (k.revokedAt = none → k.expiresAt = some now → k.stateAt now = .expired) := by
@@ -336,7 +336,7 @@ theorem workspace_default_model_is_one_pair (w : Workspace) :
   cases dm <;> cases arch <;> rfl
 
 /-- The two states of a workspace are `active` (no archive stamp) and `archived`. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#2-state-machines")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#2-state-machines")
   (ts := "packages/core/src/db/schema/workspaces.ts#archivedAt")]
 theorem workspace_is_archived_iff_stamped (w : Workspace) :
     w.state = .archived ↔ w.archivedAt.isSome = true := by
@@ -353,8 +353,8 @@ def sampleBearer (pfx : String) (idLen secLen : Nat) : String :=
 /-- "`Authorization: Bearer ak_live_<22>_<43>`" and "`awt_live_<22>_<43>`": the key grammar is
 the prefix `ak_live_`, a 22-character public half and a 43-character secret half; the browser-token
 grammar is the same with the prefix `awt_live_`; and each accepts exactly those half lengths. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#31-credentials")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/contracts/src/api-keys.ts#API_KEY_PATTERN")
   (ts := "packages/contracts/src/tokens.ts#BROWSER_TOKEN_PATTERN")]
 theorem presented_bearers_follow_the_credential_table :
@@ -372,7 +372,7 @@ theorem presented_bearers_follow_the_credential_table :
 /-- "The same anchored fixed-length grammar as `ak_live_` — a 22-character public half and a
 43-character secret half": a browser token's halves have exactly an API key's lengths, and only the
 prefix differs. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/contracts/src/tokens.ts#BROWSER_TOKEN_ID_LENGTH")
   (ts := "packages/contracts/src/tokens.ts#BROWSER_TOKEN_SECRET_LENGTH")]
 theorem browser_token_grammar_is_the_api_key_grammar :
@@ -383,7 +383,7 @@ theorem browser_token_grammar_is_the_api_key_grammar :
 /-- §3.1.1 "Revocation": a browser token stops authenticating when its `expiresAt` passes, when its
 scoped run reaches `cancelled`, `completed` or `failed`, when its scoped session is archived, or when
 its minting principal is revoked. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")]
 theorem browser_token_revocation (t : BrowserToken) (target : Option ScopedRow) (m : Principal)
     (src : SourceRow) (now : Instant) :
@@ -436,7 +436,7 @@ private def nKeyPrincipal (rev : Option Instant) : Principal :=
 
 /-- "Revoking an API key sets `api_keys.revoked_at` and `workspace_principals.revoked_at`": a key
 whose principal row is revoked is not admitted, however live the key row itself is. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#2-state-machines")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#2-state-machines")
   (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")]
 theorem revoked_principal_never_admits_its_api_key (k : ApiKey) (p : Principal) (now : Instant)
     (h : p.active = false) : apiKeyAdmitted k p now = false := by
@@ -465,7 +465,7 @@ gone, or its minting key revoked or expired — is not admitted, whatever the to
 say. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/directory.ts#principalById")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem browser_token_dies_with_its_minter (t : BrowserToken) (target : Option ScopedRow)
     (m : Principal) (src : SourceRow) (now : Instant) (h : principalResolves m src now = false) :
     browserTokenAdmitted t target m src now = false := by
@@ -484,7 +484,7 @@ example : browserTokenAdmitted nRunToken (some (.run ⟨"r"⟩ .running)) (nKeyP
 minted is no longer admitted, whatever the principal row, the token row and the scope say. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/directory.ts#principalById")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
-  (doc := "docs/formal/inventory.md#2-state-machines")]
+  (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 theorem removed_membership_no_longer_resolves (p : Principal) (now : Instant) :
     principalResolves p (.membership false) now = false ∧
       ∀ (t : BrowserToken) (target : Option ScopedRow),
@@ -497,7 +497,7 @@ theorem removed_membership_no_longer_resolves (p : Principal) (now : Instant) :
 /-- A key-minted principal resolves only through its own key row, and only while that key is live
 and the principal row active. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/directory.ts#principalById")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem api_key_minter_resolves_only_through_its_own_live_key (p : Principal) (k : ApiKey)
     (now : Instant) (target : Option ActsForRow)
     (h : principalResolves p (.apiKey (some k)) now target = true) :
@@ -535,7 +535,7 @@ example : principalResolves (member none) (.membership true) 100 = true :=
 
 /-- A browser token whose scoped run or session row is gone is not admitted. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem browser_token_without_its_scoped_row_is_refused (t : BrowserToken) (m : Principal)
     (src : SourceRow) (now : Instant) : browserTokenAdmitted t none m src now = false := by
   cases hs : t.scope <;> simp [browserTokenAdmitted, scopeOpen, hs]

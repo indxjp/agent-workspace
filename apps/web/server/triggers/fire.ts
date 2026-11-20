@@ -46,7 +46,7 @@ import { getRunApi } from '../runs/environment';
 import { renderRun } from '../runs/api';
 import { MAX_PROMPT_CHARS, startRunOnSession } from '../runs/service';
 import { domainProblem, servingTriggers } from './handlers';
-import type { TriggersRuntime } from './runtime';
+import type { TriggersRuntime } from './wiring';
 
 // Delivery: claim a firing under its idempotency key, apply the rate and concurrency limits and
 // start the run as the trigger's owner. Shared with the schedule pass, so both obey the same limits.

@@ -2,7 +2,7 @@
 Apps built with @indx-workspace/app (issue #1512, ADR-0103's production-apps amendment): one
 Deployment and one Service per `.Values.apps` entry. An app is not the platform: it reads only its
 own operator-created Secret `agent-workspace-app-<name>` (its own database role's DATABASE_URL, its
-identity secret, its API key, workspace id and connector id; docs/deploy/kubernetes.md), never the
+identity secret, its API key, workspace id and connector id; docs/40-operate/deploy/kubernetes.md), never the
 platform's Secrets, and it runs under the namespace's default ServiceAccount with no token mounted,
 not the platform's annotatable workload-identity one.
 */}}

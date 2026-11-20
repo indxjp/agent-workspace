@@ -44,7 +44,7 @@ open AgentWorkspace
 /-- The SQL column types the schema uses, as Drizzle's `getSQLType()` and `drizzle-kit` spell
 them. -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-reference-cases.test-support.ts#sqlType")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 inductive SqlType where
   | uuid
   | text
@@ -152,7 +152,7 @@ instance : WireEnum OnDelete where
 /-- How a table relates to the tenant: it is the tenant root, a global identity table exempt
 from tenant scoping, or scoped by a `workspace_id` column. -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 inductive Tenancy where
   | root
   | global
@@ -185,7 +185,7 @@ instance : WireEnum Tenancy where
 
 /-- Every table of the schema, in the order the schema barrel re-exports their modules. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 inductive TableName where
   | agentFiles
   | agentGrants
@@ -572,8 +572,8 @@ abbrev Schema := TableName → TableSpec
 the latest snapshot (`Er.Snapshot.file`) renders it. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def catalogue : Schema
   | .agentFiles => {
     table := .agentFiles, source := "agent-files.ts", tsExport := "agentFiles", tenancy := .scoped
@@ -2258,7 +2258,7 @@ def siblingCovers (S : Schema) (t : TableName) (fk : ForeignKey) : Bool :=
 /-- The tenancy bucket of a foreign key of table `t`. -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#workspaceSelfPairingFault")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def classify (S : Schema) (t : TableName) (fk : ForeignKey) : FkClass :=
   match (S fk.refTable).tenancy with
   | .global => if fk.columns.contains "workspace_id" then .unpaired else .globalReference
@@ -2303,7 +2303,7 @@ Weaker than the test: the test also requires `workspace_id` to lead an index. Th
 reference is a separate schema fact (`every_root_reference_cascades`), not part of the rule. -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def tenancyWellFormed (S : Schema) (t : TableName) : Bool :=
   let s := S t
   match s.tenancy with
@@ -2355,7 +2355,7 @@ def TableSpec.mapForeignKey (s : TableSpec) (n : String) (f : ForeignKey → For
 /-- No foreign key of the schema is `unpaired`: every reference between two tenant-carrying tables
 is tenant-paired by itself or by a sibling (the rule `tenancy.test.ts` enforces). -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def pairingComplete (S : Schema) : Bool :=
   allTables.all fun t => (S t).foreignKeys.all fun fk => classify S t fk != .unpaired
 
@@ -2366,7 +2366,7 @@ def isIdColumn (c : String) : Bool := "_id".toList.isSuffixOf c.toList
 /-- `NON_REFERENCE_ID_COLUMNS`: the `*_id` columns that refer to nothing in this schema, each with
 the SQL type the declaration pins. -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def nonReferenceIdColumns : List (TableName × String × SqlType) :=
   [(.runUsageRecords, "provider_response_id", .text), (.auditEvents, "subject_id", .text),
     (.secrets, "master_key_id", .text), (.sessions, "engine_session_id", .text),
@@ -2390,7 +2390,7 @@ def idColumnCovered (S : Schema) (decl : List (TableName × String × SqlType)) 
 declared type, and every declaration names an existing column. Without this, `pairingComplete`
 could be satisfied by deleting a foreign key. -/
 @[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def idColumnsCovered (S : Schema) (decl : List (TableName × String × SqlType)) : Bool :=
   (allTables.all fun t => (S t).columns.all (idColumnCovered S decl t)) &&
     decl.all fun d => (S d.1).hasColumn d.2.1
@@ -2461,7 +2461,7 @@ api_key_id is null) or (kind = 'api_key' and api_key_id is not null and membersh
 Under SQL's three-valued logic the expression is `NULL`, so the check passes, only when `kind` is
 `NULL` (which `kind NOT NULL` forbids separately). -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 def principalSourceXor (r : Row) : Bool :=
   match r.get "kind" with
   | none => true

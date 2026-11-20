@@ -1,0 +1,20 @@
+id: web-ui
+title: Browser screens
+summary: >
+  Browser screens under components/, each calling the SDK through its *-model.ts and browserClient(), plus the apps/web/contracts re-exports that browser and server share. Never imports server or persistence code.
+layer: client
+paths:
+  - "apps/web/components/**"
+  - "apps/web/lib/**"
+  - "apps/web/contracts/**"
+key_files:
+  - { path: apps/web/lib/browser-client.ts, role: "the one way a screen reaches /api/**: the SDK with the session cookie" }
+  - { path: apps/web/contracts/agents.ts, role: "re-exports of the published agent schemas under the app's names (ADR-0052)" }
+  - { path: apps/web/components/composer/home-chat-controls.tsx, role: "home chat composer inputs, one of the HomeChat parts" }
+interface: [browserClient]
+depends_on: [sdk, react-chat, platforms, contracts]
+uses: [react, nextjs]
+rules: []
+checklist:
+  - { id: screens-call-the-sdk, text: "A screen reaches /api/** through its *-model.ts and browserClient(), never a raw fetch('/api...')." }
+status: current

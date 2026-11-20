@@ -57,7 +57,7 @@ private theorem id_identifies {S : Schema} {st : State} (hc : Er.Core.consistent
 /-- Whatever value a writer puts in the id column `c` of a tenant-paired reference, any row of the
 parent table carrying that id belongs to the writer's workspace: the database refuses every
 other state. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem forged_id_names_a_row_of_the_writers_workspace (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) {t : TableName} {fk : ForeignKey}
@@ -119,7 +119,7 @@ elab "aw_catalog_forgery_theorems" : command => do
       with that id is in the writer's workspace (through `{k.name}`)."
     elabCommand (← `(command|
       $doc:docComment
-      @[aw_spec (tier := $(mkIdent `T3)) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+      @[aw_spec (tier := $(mkIdent `T3)) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
         (ts := $(Syntax.mkStrLit (path ++ "#" ++ k.name)))]
       theorem $thm (st : AgentWorkspace.Er.Core.State)
           (hc : AgentWorkspace.Er.Current.Catalog.consistent st = true)
@@ -143,7 +143,7 @@ aw_catalog_forgery_theorems
 
 /-- The generated forgery theorems cover every assignment, grant, version, revision, project-link and
 owner reference to an id-keyed row: 29 references. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem forgery_theorems_cover_every_id_reference :
     (forgeableReferences.map fun (t, k, c) => (TableName.toWire t, c, TableName.toWire k.refTable)) =
@@ -213,7 +213,7 @@ private theorem mem_map_lower {l : List String} {x : String} (h : x ∈ l.map Gr
 /-- Whatever ids a caller sends, the grants body the schema admits is a list of distinct ids, each
 the lower-cased form of a canonical UUID the caller sent, as many as were sent: two spellings of
 one id never reach the repository as two rows. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")
   (ts := "packages/contracts/src/agents.ts#AgentGrantsSchema")]
 theorem grants_body_admits_only_distinct_uuids (ids l : List String)
     (h : Grant.grantsBody ids = some l) :
@@ -234,7 +234,7 @@ theorem grants_body_admits_only_distinct_uuids (ids l : List String)
   · cases h
 
 /-- Two spellings of one id that differ only in letter case are refused, not written twice. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#59-agents--awagents")
   (ts := "packages/contracts/src/agents.ts#AgentGrantsSchema")]
 theorem case_variant_duplicate_grant_ids_are_refused :
     Grant.grantsBody ["123E4567-E89B-12D3-A456-426614174000",
@@ -280,7 +280,7 @@ private theorem splitSlash_append_slash :
 
 /-- Whatever a caller puts before and after it, a path that contains a `..` segment is refused by
 `files_path_no_dot_segments`, whether the segment leads, trails or sits in the middle. -/
-@[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")
+@[aw_spec (tier := T3) (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")
   (ts := "packages/core/src/db/schema/files.ts#files")]
 theorem dot_dot_segment_is_refused_anywhere (pre suf : String) :
     File.noDotSegments (pre ++ "/../" ++ suf) = false ∧

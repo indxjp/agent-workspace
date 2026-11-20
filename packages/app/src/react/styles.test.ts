@@ -20,6 +20,7 @@ const sources = [
   './page-tree.tsx',
   './rich-text.tsx',
   './page-view.tsx',
+  './page-revisions.tsx',
 ].map(read);
 
 /** The custom properties `surfaceThemeStyle` may set, in any mode and density. */

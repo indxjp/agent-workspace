@@ -20,7 +20,7 @@
  * The upgrade runs the **same** function the runner does — `@agent-workspace/core`'s
  * `toAgentFrames`, the Claude boundary's mapping, which ENG-04 moves into the Claude adapter
  * package — over a classification re-derived from the stored message with `classifySdkEvent`. That
- * is what makes `docs/formal/domains/d1-runs.md`'s replay refinement hold: a legacy run and a fresh
+ * is what makes `docs/20-design/formal/domains/d1-runs.md`'s replay refinement hold: a legacy run and a fresh
  * run of the same messages yield the same frames, because they are literally the same two
  * functions, in the same order, over the same input.
  *

@@ -4,32 +4,39 @@ import { CI_WORKFLOW, requireIncludes, withJob } from './ci-text.mjs';
 
 // The two job-level gates of ci.yml's tiers (ci.yml, COST; ADR-0053, Amendment 2026-10-24): the
 // heavy tier runs nightly, on a dispatch, on a `ci:full` pull request (never on its `edited` runs,
-// which skip `build`) and as the release gate (`inputs.full`); `formal` and `image-scan` also run
-// in the merge queue, path-scoped.
+// which skip `build`) and as the release gate (`inputs.full`). Since ADR-0053 Amendment 2026-11-19c
+// (owner decision D2, plan A) that includes `formal` and `image-scan`: the merge queue runs the same
+// set as a pull request, and no job may gate itself back into it.
 const HEAVY_TIER_CONDITION =
   "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))";
-const QUEUE_TIER_CONDITION = `github.event_name == 'merge_group' || ${HEAVY_TIER_CONDITION}`;
 /** @param {string} text */
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 const SCOPE_APPLIES = "if: steps.scope.outputs.applies == 'true'";
 
 /**
- * The one job-level `if` allowed is a tier gate of ci.yml (COST): the heavy tier's, or for
- * `formal` the queue tier's. ci-success accepts the skip on a pull request, a push and in the
- * queue only.
+ * A job-level `if`, if any, is exactly ci.yml's heavy-tier gate (COST): nothing else may skip a
+ * required job, and no required job may gate itself back into the merge queue.
  * @param {string[]} failures @param {string} job @param {string} jobId
  */
-function checkNoJobLevelSkip(failures, job, jobId) {
-  const tier = jobId === 'formal' ? QUEUE_TIER_CONDITION : HEAVY_TIER_CONDITION;
-  const withoutQueueTier = job.replace(
-    new RegExp(`^ {4}if: >-\\r?\\n {6}${escapeRegExp(tier)}\\r?\\n`, 'mu'),
+function checkHeavyTierGateOnly(failures, job, jobId) {
+  const withoutTier = job.replace(
+    new RegExp(`^ {4}if: >-\\r?\\n {6}${escapeRegExp(HEAVY_TIER_CONDITION)}\\r?\\n`, 'mu'),
     '',
   );
-  if (/^ {4}(['"]?)if\1[ \t]*:/mu.test(withoutQueueTier)) {
+  if (/^ {4}(['"]?)if\1[ \t]*:/mu.test(withoutTier)) {
     failures.push(
       `${CI_WORKFLOW}: ${jobId} must not be skipped at job level; filter paths in a step`,
     );
   }
+}
+
+/**
+ * The one job-level `if` allowed is ci.yml's heavy-tier gate (COST). ci-success accepts the skip on
+ * a pull request, a push and in the queue only.
+ * @param {string[]} failures @param {string} job @param {string} jobId
+ */
+function checkNoJobLevelSkip(failures, job, jobId) {
+  checkHeavyTierGateOnly(failures, job, jobId);
   if (/^[ \t]*(?:-[ \t]+)?(['"]?)continue-on-error\1[ \t]*:/mu.test(job)) {
     failures.push(`${CI_WORKFLOW}: ${jobId} must not use continue-on-error`);
   }
@@ -124,8 +131,15 @@ const SCOPED_REQUIRED_JOBS = [
   {
     jobId: 'formal',
     commands: ['pnpm formal:build', 'pnpm formal:check'],
+    // Its scope is scripts/ci/formal-scope.mjs; the answer is used whole, so a failing script
+    // fails the step instead of answering false.
     also: (failures, job) =>
-      requireIncludes(failures, job, 'formal', ['sha256sum -c', 'tests/formal']),
+      requireIncludes(failures, job, 'formal', [
+        'sha256sum -c',
+        'tests/formal',
+        '          answer="$(node scripts/ci/formal-scope.mjs "$DIFF_BASE")"\n',
+        '          echo "$answer" >> "$GITHUB_OUTPUT"\n',
+      ]),
   },
   // The generated-project E2E (#398): a new user's whole flow against the change's own packages
   // and images.
@@ -169,4 +183,8 @@ export function validateScopedRequiredJobs(failures, ciSource) {
       also?.(failures, job);
     });
   }
+  // The trivy gate is required too, and heavy tier only: its job-level `if` is the heavy tier's.
+  withJob(failures, ciSource, 'image-scan', (job) => {
+    checkHeavyTierGateOnly(failures, job, 'image-scan');
+  });
 }

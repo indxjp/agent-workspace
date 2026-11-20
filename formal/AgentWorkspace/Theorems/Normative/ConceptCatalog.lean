@@ -15,7 +15,7 @@ open AgentWorkspace.Concepts
 /-- "`credential` is required iff `authType !== 'none'`": a valid connector row references a
 credential secret exactly when its authentication type is not `none`. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 theorem connector_credential_iff_auth_type_is_not_none (c : Connector.Connector)
     (h : c.valid = true) : c.credentialSecret.isSome = true ↔ c.authType ≠ .none := by
@@ -27,7 +27,7 @@ theorem connector_credential_iff_auth_type_is_not_none (c : Connector.Connector)
 /-- "`url` must start with `http(s)://` and only with `http`/`sse`": a valid connector has a URL
 exactly when its transport is remote, and every URL it has is absolute `http(s)`. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 theorem connector_url_only_for_remote_and_absolute (c : Connector.Connector)
     (h : c.valid = true) :
@@ -38,7 +38,7 @@ theorem connector_url_only_for_remote_and_absolute (c : Connector.Connector)
 
 /-- "`args` only with `stdio`": a valid connector with arguments is a `stdio` connector. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 theorem connector_args_only_for_stdio (c : Connector.Connector) (h : c.valid = true)
     (ha : c.args.isSome = true) : c.transport = .stdio := by
@@ -51,7 +51,7 @@ theorem connector_args_only_for_stdio (c : Connector.Connector) (h : c.valid = t
 /-- The one-of of `mcp_servers`: a valid connector has exactly one of a command and a URL, and
 which one is decided by the transport. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 theorem connector_has_exactly_one_of_command_and_url (c : Connector.Connector)
     (h : c.valid = true) :
@@ -66,7 +66,7 @@ theorem connector_has_exactly_one_of_command_and_url (c : Connector.Connector)
 differ only in which secret they reference, but both have one or both have none, render the same
 resource. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")]
 theorem connector_resource_reveals_only_that_a_credential_exists (c : Connector.Connector)
     (s s' : Option SecretId) (h : s.isSome = s'.isSome) :
@@ -77,7 +77,7 @@ theorem connector_resource_reveals_only_that_a_credential_exists (c : Connector.
 /-- A valid connector's resource says it has a credential exactly when its authentication type
 needs one. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")]
 theorem connector_has_credential_iff_it_needs_one (c : Connector.Connector) (h : c.valid = true) :
     c.toResource.hasCredential = c.authType.needsCredential := by
@@ -88,7 +88,7 @@ theorem connector_has_credential_iff_it_needs_one (c : Connector.Connector) (h :
 /-- "No field a credential value could occupy": `ConnectorResourceSchema` has no key that starts
 with `credential`, and carries `hasCredential` instead. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")]
 theorem connector_wire_carries_no_credential_field :
     (Connector.wireFields.all fun f => !"credential".toList.isPrefixOf f.toList) = true ∧
@@ -125,7 +125,7 @@ private def sseWithCommand : Connector.Body :=
 /-- "`authType` defaults to `none`": a create body with no `authType`, or with `null`, is parsed
 as `none`. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")]
 theorem absent_or_null_auth_type_is_none :
     ((Connector.parseBody (some stdioBody)).toOption.map (·.authType)) = some .none ∧
@@ -136,7 +136,7 @@ theorem absent_or_null_auth_type_is_none :
 /-- "`credential` is required iff `authType !== 'none'`" at the create route: a `bearer` body
 with no credential and a `none` body with one are both refused, naming the field. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")]
 theorem create_refuses_a_missing_or_a_superfluous_credential :
     Connector.parseBody (some bearerWithoutCredential) =
@@ -148,7 +148,7 @@ theorem create_refuses_a_missing_or_a_superfluous_credential :
 /-- "Only with `http`/`sse`" and "`args` only with `stdio`" at the create route: a `stdio` body
 with a URL and a remote body with a command and arguments are refused, naming each field. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")]
 theorem create_refuses_fields_of_the_other_transport :
     Connector.parseBody (some stdioWithUrl) =
@@ -206,7 +206,7 @@ theorem admit_tool_kind_defers (b : Connector.Body) (k : Connector.Kind) (hk : k
 
 /-- "Connectors (MCP servers)": a connector is exactly a row of `mcp_servers`. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")
   (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")]
 theorem connector_is_an_mcp_servers_row :
@@ -235,7 +235,7 @@ private theorem all_of_nameShape {n : String} (h : Skill.nameShape n = true) :
 /-- "A skill is addressed by `name` (1–64 chars, `^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`)": a
 valid name is one to 64 characters, each a lower-case letter, digit or hyphen, so it can never
 contain a `/`, a `.` or an upper-case letter and is always a single directory name. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#57-skills--awskills")
   (ts := "packages/contracts/src/skills.ts#SKILL_NAME_PATTERN")]
 theorem skill_name_is_a_bounded_directory_name (n : String) (h : Skill.nameShape n = true) :
     1 ≤ n.toList.length ∧ n.toList.length ≤ 64 ∧ '/' ∉ n.toList ∧ '.' ∉ n.toList ∧
@@ -276,7 +276,7 @@ theorem documented_skill_names :
 /-- "Paths are workspace-relative, forward-slash, no `..`": spec §16's own example path is
 admitted, and a leading slash, a trailing slash, an empty segment, a `.` or `..` segment and a
 control character are refused. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")
   (doc := "docs/spec.md#16-file-management")
   (ts := "packages/core/src/db/schema/files.ts#files")]
 theorem documented_file_paths :
@@ -289,7 +289,7 @@ theorem documented_file_paths :
   decide +kernel
 
 /-- An admitted path has no empty, `.` or `..` segment. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#56-files--awfiles")
   (ts := "packages/core/src/db/schema/files.ts#files")]
 theorem admitted_path_has_no_empty_or_dot_segment (p : String) (h : File.pathAdmitted p = true) :
     [] ∉ File.segments p ∧ ['.'] ∉ File.segments p ∧ ['.', '.'] ∉ File.segments p := by
@@ -373,7 +373,7 @@ theorem a_connectors_secret_cannot_be_deleted_under_it :
 /-- "Every row that can be own or other carries `ownerPrincipalId`; `createdBy` is legacy human
 attribution and may be `null`": on the four catalogued resource tables the owner is `NOT NULL`
 and the creator is nullable, and the agent and connector bodies carry both. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/contracts/src/agents.ts#AgentResourceSchema")
   (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")]
 theorem owner_is_required_and_creator_is_legacy :
@@ -388,7 +388,7 @@ theorem owner_is_required_and_creator_is_legacy :
 skill-revision pin, pointer-move mover, model-connection, runtime-profile, four creator,
 creator-agent, materialised-version and credential-secret keys are nullable; every other
 reference is mandatory. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem optional_references_of_the_catalog :
     (clusterForeignKeys.filter fun (t, k) => !isMandatory t k).map (·.2.name) =
@@ -431,7 +431,7 @@ theorem a_catalogued_skill_may_be_unassigned :
 /-- "`name` 1–200 code points": the connector name bound is `CONNECTOR_NAME_MAX_LENGTH`, 200, and
 the create pattern admits exactly one to 200 code points with no line terminator. -/
 @[aw_spec (tier := T1)
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")
   (ts := "packages/contracts/src/connectors.ts#CONNECTOR_NAME_MAX_LENGTH")]
 theorem connector_name_is_one_to_200_code_points :
     Connector.maxNameLength = 200 ∧
@@ -462,7 +462,7 @@ theorem catalog_name_bounds :
 with both, the error list is the name's errors, then the transport error, then the `authType`
 error, then the credential's errors (no transport-dependent errors are added). -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/connectors/contract.ts#parseCreateConnectorBody")
-  (doc := "docs/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#58-connectors-mcp-servers--awconnectors")]
 theorem transport_error_precedes_auth_type_error (b : Connector.Body)
     (ht : Connector.transportOf b.transport = none)
     (ha : Connector.authOf (Connector.authFieldOf b.authType) = none) :

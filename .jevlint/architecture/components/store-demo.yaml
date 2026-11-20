@@ -1,0 +1,17 @@
+id: store-demo
+title: Agent Store demo
+summary: >
+  The Agent Store's demo side: provisions a visitor's demo workspace from a seeded template, caps demo runs and daily spend, records leads and sweeps expired demos. Each store is a port with a PostgreSQL and a memory adapter.
+layer: application
+paths:
+  - "apps/web/server/demo/**"
+key_files:
+  - { path: apps/web/server/demo/provision/binder.ts, role: "createDemoProvisioner: binds a guest to a fresh demo workspace" }
+  - { path: apps/web/server/demo/caps/ports.ts, role: "DemoRunAdmissions and DemoSpend ports" }
+  - { path: apps/web/server/demo/sweep/ports.ts, role: "DemoSweepStore and DemoWorkspaceFiles ports" }
+interface: [createDemoProvisioner, createDemoTemplates]
+depends_on: [identity, storage-sharing, execution, integrations, agent-authoring, server-kernel, persistence, contracts]
+uses: []
+rules: []
+checklist: []
+status: current

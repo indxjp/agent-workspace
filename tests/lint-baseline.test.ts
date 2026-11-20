@@ -2,24 +2,15 @@ import { spawnSync } from 'node:child_process';
 import { globSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import {
-  CLOCK_CALLS_CEILING,
-  clockConfig,
-  measure as measureClockCalls,
-  verdict as clockVerdict,
-} from '../scripts/check-clock-ceiling.mjs';
+import { clockConfig, verdict as clockVerdict } from '../scripts/check-clock-ceiling.mjs';
 import { grown as clockGrown, parseCeiling } from '../scripts/clock-ceiling.mjs';
-import {
-  DURATION_CEILING,
-  durationConfig,
-  measure as measureDurations,
-  verdict as durationVerdict,
-} from '../scripts/check-duration-ceiling.mjs';
+import { durationConfig, verdict as durationVerdict } from '../scripts/check-duration-ceiling.mjs';
 import { grown as durationGrown } from '../scripts/duration-ceiling.mjs';
 import { verdict } from '../scripts/check-complexity-ceiling.mjs';
 
@@ -65,6 +56,7 @@ describe('the complexity ratchet', () => {
 /**
  * Refactoring plan §07: direct clock and random-id calls in server code can only go down. The
  * selectors are run on code planted at real paths, so the scope is exercised as CI applies it.
+ * The real tree's count against the ceiling is `pnpm clock:check` (check:fast, CI typecheck-lint).
  */
 describe('the clock ratchet', { timeout: 120_000 }, () => {
   const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: clockConfig() });
@@ -180,15 +172,12 @@ describe('the clock ratchet', { timeout: 120_000 }, () => {
   ])('leaves %s out, as the plan counts', async (file) => {
     expect(await counted('export const f = (): number => Date.now();\n', file)).toBe(0);
   });
-
-  it('matches the ceiling on the real tree', async () => {
-    expect((await measureClockCalls()).length).toBe(CLOCK_CALLS_CEILING);
-  });
 });
 
 /**
  * Refactoring part 03, step 8: a duration, size or limit of 1_000 or more gets a name, and the bare
- * ones left in server code can only go down. Planted at real paths, as for the clock.
+ * ones left in server code can only go down. Planted at real paths, as for the clock. The real
+ * tree's count against the ceiling is `pnpm durations:check` (check:fast, CI typecheck-lint).
  */
 describe('the duration ratchet', { timeout: 120_000 }, () => {
   const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: durationConfig() });
@@ -295,10 +284,6 @@ describe('the duration ratchet', { timeout: 120_000 }, () => {
       0,
     );
   });
-
-  it('matches the ceiling on the real tree', async () => {
-    expect((await measureDurations()).length).toBe(DURATION_CEILING);
-  });
 });
 
 describe('the ESLint rules', { timeout: 120_000 }, () => {
@@ -376,6 +361,8 @@ describe('the domain core globals ban', { timeout: 120_000 }, () => {
     return (report?.messages ?? []).map((m) => `${String(m.ruleId)}: ${m.message}`);
   };
   const configSchema = z.object({ rules: z.record(z.string(), z.unknown()).optional() });
+  // The rules that refuse a clock read in a core (the `refuses %s in a core` cases name them).
+  const CLOCK_RULES = ['no-restricted-properties', 'no-restricted-syntax', 'no-restricted-globals'];
   const appliesTo = async (file: string) =>
     'no-restricted-globals' in
     (configSchema.parse(await eslint.calculateConfigForFile(file)).rules ?? {});
@@ -535,11 +522,19 @@ describe('the domain core globals ban', { timeout: 120_000 }, () => {
       .filter((file) => !/\.(?:test|spec)\.ts$/.test(file))
       .sort();
     expect(cores).toContain('apps/web/server/shares/core/rules.ts');
+    // The cases above lint the clock reads at CORE_FILE and prove these rules, as configured there,
+    // refuse every one of them. A core file that resolves to the same configuration of the same
+    // rules refuses them too, so each file's resolved configuration is compared rather than each
+    // file type-checked and linted: the same verdict, without a type-aware lint per core file.
+    const clockRules = async (file: string) => {
+      const { rules = {} } = configSchema.parse(await eslint.calculateConfigForFile(file));
+      return CLOCK_RULES.map((rule) => [rule, rules[rule]]);
+    };
+    const refusing = await clockRules(CORE_FILE);
+    expect(refusing.every(([, setting]) => setting !== undefined)).toBe(true);
     const readsClock: string[] = [];
     for (const file of cores) {
-      if ((await lint('export const f = (): number => Date.now();\n', file)).length === 0) {
-        readsClock.push(file);
-      }
+      if (!isDeepStrictEqual(await clockRules(file), refusing)) readsClock.push(file);
     }
     // Part 05 of the refactoring plan emptied the list of core files allowed to read the clock.
     expect(readsClock).toStrictEqual([]);

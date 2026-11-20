@@ -19,6 +19,10 @@
       "types": "./src/db/repositories/unscoped.ts",
       "default": "./dist/db/repositories/unscoped.js"
     },
+    "./db-model": {
+      "types": "./src/db-model.ts",
+      "default": "./dist/db-model.js"
+    },
     "./auth": {
       "types": "./src/auth/index.ts",
       "default": "./dist/auth/index.js"

@@ -142,7 +142,7 @@ which the `agent.session` frame reports.
   `runtime.Dockerfile` needs no change.
 - The Lean model's third-party behaviour — requests only to the model's base URL, resources only
   through the loader, `beforeToolCall` before every tool, `terminate` honoured — is declared and
-  enforced by the boundary suite (`docs/formal/units/engine-pi.md`).
+  enforced by the boundary suite (`docs/20-design/formal/units/engine-pi.md`).
 
 ## Update 2026-10-05
 

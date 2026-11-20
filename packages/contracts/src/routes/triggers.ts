@@ -70,8 +70,9 @@ export const triggersRoutes: readonly ApiRoute[] = [
     operationId: 'triggers.fire',
     tag: 'triggers',
     feature: 'triggers',
-    summary:
-      'Fire a webhook trigger: the body is the {{body}} of its prompt and a run starts as the ' +
+    summary: 'Fire a webhook trigger',
+    description:
+      'The body is the {{body}} of its prompt and a run starts as the ' +
       'trigger owner in a new session (202). The URL secret is the authentication and travels in ' +
       'the path, so it can appear in access logs of a proxy or CDN: rotate it if one may have ' +
       'leaked. Every miss answers one 404 trigger_not_found. A Microsoft Graph validationToken ' +

@@ -12,7 +12,7 @@
  *
  * [ADR-0019](../../../../docs/adr/0019-repo-wide-gates-belong-to-the-integration-level.md) rules
  * that a test asserting a property of the whole repository is owned at the integration level. All
- * four assertions therefore now live in `tests/route-inventory.test.ts`, over the tracked tree,
+ * four assertions therefore now live in `tests/route-inventory.policy-check.ts`, over the tracked tree,
  * where the whole route surface is visible — the two whole-tree loops with their reasons intact, and
  * the two closed-world equalities as the stronger three-way comparison that file already makes
  * against spec §34 itself.
@@ -69,7 +69,7 @@ describe('the run endpoints these tasks own', () => {
 
   it('puts exactly one file under the agents tree, the one ADR-0013 assigns here', () => {
     // A containment claim about this task's own footprint, not a closed world over `app/api`:
-    // W1-CP-05 owns everything else beneath `agents/`, and `tests/route-inventory.test.ts` is
+    // W1-CP-05 owns everything else beneath `agents/`, and `tests/route-inventory.policy-check.ts` is
     // what asserts that nothing undeclared appears there.
     const mine = OWNED_ROUTES.map(([file]) => file).filter((file) => file.startsWith('agents/'));
     expect(mine).toEqual(['agents/[id]/runs/route.ts']);

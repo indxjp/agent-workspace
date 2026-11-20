@@ -31,7 +31,7 @@ namespace AgentWorkspace.Text
 def utf16Units (c : Char) : Nat := if c.toNat ≤ 0xFFFF then 1 else 2
 
 /-- `String.prototype.length`: the number of UTF-16 code units. -/
-@[aw_spec (doc := "docs/formal/domains/d1-runs.md#contracts")]
+@[aw_spec (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")]
 def utf16Length (s : String) : Nat := (s.toList.map utf16Units).sum
 
 /-- Zod's `.min(lo)` / `.max(hi)` on a string: the length in code units lies within the bounds. -/
@@ -60,7 +60,7 @@ def isWordChar (c : Char) : Bool := isAsciiAlnum c || c == '_'
 
 /-- The ECMAScript *WhiteSpace* and *LineTerminator* code points: what `trim` removes and what
 `\s` matches. -/
-@[aw_spec (doc := "docs/formal/domains/d1-runs.md#contracts")]
+@[aw_spec (doc := "docs/20-design/formal/domains/d1-runs.md#contracts")]
 def isJsWhitespace (c : Char) : Bool :=
   let n := c.toNat
   n == 0x09 || n == 0x0A || n == 0x0B || n == 0x0C || n == 0x0D || n == 0x20 || n == 0xA0 ||

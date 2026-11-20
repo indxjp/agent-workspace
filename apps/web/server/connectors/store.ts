@@ -14,16 +14,16 @@ import { createConnector, updateConnector } from './store-credential-writes';
  * Routes receive only their required capability; decrypted credentials never enter wire resources.
  */
 
-import {
-  UnknownWorkspaceError,
-  type CreateMcpServerOutcome as CoreCreateMcpServerOutcome,
-  type DeleteMcpServerOutcome as CoreDeleteMcpServerOutcome,
-  type McpServerRepositoryProvider as CoreMcpServerRepositoryProvider,
-  type McpAuthType,
-  type McpTransport,
-  type WorkspaceScope as CoreWorkspaceScope,
-  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import type {
+  CreateMcpServerOutcome as CoreCreateMcpServerOutcome,
+  DeleteMcpServerOutcome as CoreDeleteMcpServerOutcome,
+  McpServerRepositoryProvider as CoreMcpServerRepositoryProvider,
+  McpAuthType,
+  McpTransport,
+  WorkspaceScope as CoreWorkspaceScope,
+  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { UnknownWorkspaceError } from '@agent-workspace/core/db-model';
 import type { SecretsService as CoreSecretsService } from '@agent-workspace/core/secrets';
 import type { ConnectorIdentity } from '@indx-workspace/contracts/identity-assertion';
 

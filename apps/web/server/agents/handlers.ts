@@ -15,7 +15,7 @@
  *   PATCH  /api/agents/:id    {@link updateAgent}
  *   DELETE /api/agents/:id    {@link deleteAgent}
  *
- * There is no search, no bulk and no count operation, and `tests/route-inventory.test.ts` fails the
+ * There is no search, no bulk and no count operation, and `tests/route-inventory.policy-check.ts` fails the
  * build if one appears as a route.
  */
 import type { AgentListArchived } from '@indx-workspace/contracts/agents';

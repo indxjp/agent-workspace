@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { clearApplicationContext } from '../../application-context';
 import { installTestDomains } from '../../application-context-fixtures';
-import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/wiring';
 import { toResponse } from '../../rbac/http';
 import {
   createSurfaceSession,
@@ -19,7 +19,7 @@ import {
 import { serveWidgetLoader } from '../loader/handler';
 import type { WidgetLook } from '../loader/render';
 import { resetSurfaceLimits } from './limits';
-import type { ResolvedSurface } from './runtime';
+import type { ResolvedSurface } from './wiring';
 
 const LOCAL_ENV = { AW_LOCAL_SURFACE_SESSIONS: '1', HOST: '127.0.0.1' } as const;
 const SAME_ORIGIN = new Headers({

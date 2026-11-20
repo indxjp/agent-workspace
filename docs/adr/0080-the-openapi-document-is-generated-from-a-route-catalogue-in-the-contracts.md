@@ -5,7 +5,7 @@ Date: 2026-09-29
 Decided by: the implementer of SDK migration unit 13 (issue #245)
 Scope: `packages/contracts/src/routes.ts`; `scripts/docs/generate-openapi.mjs`;
 `docs/sdk/site/openapi.json`; `tests/docs/openapi.test.ts`; `package.json` (`docs:generate`,
-`docs:check`, three devDependencies); spec `docs/sdk/03-sdk-design.md` §3.7
+`docs:check`, three devDependencies); spec `docs/10-product/sdk/03-sdk-design.md` §3.7
 
 ## Context
 

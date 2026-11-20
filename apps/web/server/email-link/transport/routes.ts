@@ -18,7 +18,11 @@ import {
 } from '@indx-workspace/contracts/email-link';
 import { NextResponse } from 'next/server';
 
-import { mintSessionToken, newEmailLinkSessionClaims, sessionCookie } from '../../auth';
+import {
+  mintSignInSessionToken,
+  newEmailLinkSignInSessionClaims,
+  signInSessionCookie,
+} from '../../auth';
 import { crossOrigin } from '../../auth/cross-origin';
 import type { Clock } from '../../clock';
 import { formatIssues, noStoreResultResponse, problem, readJsonBody } from '../../http/result';
@@ -133,8 +137,8 @@ export async function verifyEmailLink(
   if (outcome.kind === 'refused') {
     return refusal(outcome.code, undefined, outcome.retryAfterSeconds);
   }
-  const token = await mintSessionToken(
-    newEmailLinkSessionClaims(
+  const token = await mintSignInSessionToken(
+    newEmailLinkSignInSessionClaims(
       outcome.email,
       outcome.binding.workspaceSlug,
       runtime.clock.now().getTime(),
@@ -145,6 +149,6 @@ export async function verifyEmailLink(
     status: 200,
     headers: { 'cache-control': 'no-store' },
   });
-  response.cookies.set(sessionCookie(token));
+  response.cookies.set(signInSessionCookie(token));
   return response;
 }

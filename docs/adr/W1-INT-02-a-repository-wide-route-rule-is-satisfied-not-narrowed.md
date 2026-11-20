@@ -4,7 +4,7 @@ Status: accepted
 Date: 2026-09-03
 Decided by: W1-INT-02 (Wave 1 invariants)
 Scope: `apps/web/app/api/agents/route.ts`, `apps/web/app/api/agents/[id]/route.ts`; the route-runtime
-invariant in `tests/route-inventory.test.ts`
+invariant in `tests/route-inventory.policy-check.ts`
 
 ## Context
 
@@ -22,7 +22,7 @@ it('runs every route on the Node runtime and never prerenders one', () => {
 
 On the Wave 1a union it failed, on `apps/web/app/api/agents/[id]/route.ts` — one of W1-CP-05's two
 agent route files, neither of which declares either export. [ADR-0019](0019-repo-wide-gates-belong-to-the-integration-level.md)
-moves the assertion to `tests/route-inventory.test.ts`, where the whole tree is visible. That relocates
+moves the assertion to `tests/route-inventory.policy-check.ts`, where the whole tree is visible. That relocates
 the gate; it does not answer the failure, because the failure is real. Two of the five route handlers
 this repository ships do not say what runtime they run on.
 
@@ -48,7 +48,7 @@ W1-INT-02's `Owns` line with this reason, under
 [ADR-0018](0018-the-declared-owns-line-is-the-ownership-boundary.md). Their author W1-CP-05 is frozen
 several branches below and its PR is open against a base this branch sits above, so there is no
 sibling this claim can collide with — the §2.3 disjointness condition holds. This is the same move
-ADR-0019 already makes for `tests/route-inventory.test.ts` and `tests/no-sdk-import.test.ts`: the
+ADR-0019 already makes for `tests/route-inventory.policy-check.ts` and `tests/no-sdk-import.test.ts`: the
 repair lands **above** the feature branches so that nothing below is rewritten and nothing is
 restacked.
 

@@ -48,6 +48,8 @@ import type {
 import type { RequestProblem } from '../agents/model';
 import type { ModelSelectionValue } from '../models/catalog';
 
+import { ENGLISH_PROJECTS_STRINGS, type ProjectsStrings } from './projects-messages';
+
 export type { RequestProblem };
 export type { ProjectArchiveCapability } from '../../contracts/projects';
 
@@ -283,13 +285,16 @@ export function parseProjectFilter(raw: string | null): ProjectFilter {
  * that person is looking for. Kept here rather than in the screen so it is assertable: the empty
  * state is reached only after a fetch resolves, which a static-markup render never does.
  */
-export function describeEmptyProjectList(filter: ProjectFilter): string {
+export function describeEmptyProjectList(
+  filter: ProjectFilter,
+  strings: ProjectsStrings = ENGLISH_PROJECTS_STRINGS,
+): string {
   switch (filter) {
     case 'archived':
-      return 'No archived projects.';
+      return strings.emptyArchived;
     case 'active':
     case 'all':
-      return 'No projects yet. Create one above.';
+      return strings.emptyActive;
     default: {
       const unreachable: never = filter;
       throw new Error(`unhandled project filter ${JSON.stringify(unreachable)}`);

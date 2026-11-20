@@ -1,6 +1,6 @@
 import { log } from '../telemetry/logger';
 import { redacted } from '@agent-workspace/core/telemetry';
-import type { SetupInput, SetupResult } from './runtime';
+import type { SetupInput, SetupResult } from './wiring';
 
 /** The part of first-run setup that threw; the public message names it and nothing else. */
 export type SetupStep = 'runtime test' | 'secrets store' | 'persistence' | 'setup';

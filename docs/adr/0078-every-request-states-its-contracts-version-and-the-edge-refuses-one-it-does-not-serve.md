@@ -5,8 +5,8 @@ Date: 2026-09-29
 Decided by: the implementer of SDK migration unit 12 (issue #244)
 Scope: `packages/contracts/src/version.ts`; `apps/web/server/versioning/contracts-version.ts`;
 `apps/web/proxy.ts`; `apps/web/lib/fetch-json.ts`; `packages/sdk/src/{http,errors,version}.ts`;
-`packages/aw/src/{version,output,main,args,help}.ts`; spec `docs/sdk/04-api-specification.md` §4,
-§7.3 and §8 row S-7; `docs/sdk/03-sdk-design.md` §3.3; the site's `concepts/public-surface.mdx`
+`packages/aw/src/{version,output,main,args,help}.ts`; spec `docs/10-product/sdk/04-api-specification.md` §4,
+§7.3 and §8 row S-7; `docs/10-product/sdk/03-sdk-design.md` §3.3; the site's `concepts/public-surface.mdx`
 
 ## Context
 
@@ -117,7 +117,7 @@ This rule supersedes ADR-0075 D1's one-release window for `detail`: the deprecat
 Each Consume package keeps a `CHANGELOG.md` with added, deprecated and removed per release. The
 written policy is the "Versions and deprecation" section of `docs/sdk/site/concepts/public-surface.mdx`,
 structured so the platform upgrade policy of the developer platform (slice 3f,
-`docs/upgrade-policy.md`) can link to it rather than restate it.
+`docs/30-reference/policies/upgrade-policy.md`) can link to it rather than restate it.
 
 ## Consequences
 

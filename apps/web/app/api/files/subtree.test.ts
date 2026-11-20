@@ -2,7 +2,7 @@
  * `DELETE`/`PATCH /api/files/:id` against a folder path, driven through the real route handlers —
  * issue #131's verifier attacks, reproduced against the code that ships, over the catalog service
  * (in-memory catalog and object store; the files routes answer 503 without it). Named
- * `subtree.test.ts`, not `route.test.ts`: `tests/route-inventory.test.ts` treats any
+ * `subtree.test.ts`, not `route.test.ts`: `tests/route-inventory.policy-check.ts` treats any
  * `apps/web/app/**` file named `route.<anything>` as a route Next.js serves.
  */
 // @story US-STO-02
@@ -14,7 +14,7 @@ import { GET as listRoute, POST as uploadRoute } from './route';
 import { DELETE as deleteRoute, GET as downloadRoute, PATCH as renameRoute } from './[id]/route';
 import { createCatalogFilesWorld } from '../../../server/files/catalog-runtime-fixtures';
 import { encodeFileId } from '../../../server/files/file-id';
-import { type WorkspaceResolution } from '../../../server/files/runtime';
+import { type WorkspaceResolution } from '../../../server/files/wiring';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
 import { installTestDomains } from '../../../server/application-context-fixtures';

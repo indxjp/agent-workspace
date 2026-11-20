@@ -5,14 +5,16 @@
 #   server      the cache server's contract / race / streaming / storage-failure / OIDC suite,
 #               and the container image build
 #   live-trust  against the DEPLOYED server: exchanges this job's real GitHub OIDC token through
-#               .github/actions/nx-remote-cache and proves the role the SERVER granted — a
-#               pull_request run must come back `read` and its PUT must get 403; a push to `main`
-#               must come back `write`, a duplicate PUT must get 409 and the bytes must round-trip.
-#               This is the acceptance test for "a pull request cannot populate the trusted cache".
+#               .github/actions/nx-remote-cache and proves the role the SERVER granted (the
+#               action's `role` output, never the plan): a `read` grant's PUT must get 403; a
+#               `write` grant (a push to `main`, and since ADR-0110 Amendment 2026-11-19 a
+#               same-repository pull request) must PUT 200, a duplicate PUT must get 409 and the
+#               bytes must round-trip. This is the acceptance test for "no run can replace an
+#               entry already in the cache" and for the read-only roles.
 #
 # Not required by ci-success on purpose: it is path-filtered, and an unreachable cache must never
 # turn CI red (the live check then warns and proves nothing). The guarantee it measures is enforced
-# by the server, not by this workflow. See docs/operations/ci.md "Nx remote cache".
+# by the server, not by this workflow. See docs/40-operate/operations/ci.md "Nx remote cache".
 name: CI Nx remote cache
 
 on:
@@ -43,7 +45,7 @@ concurrency:
 
 env:
   # Same plan, same expression, as ci.yml.
-  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'write' || 'read' }}
+  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')) || (github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository)) && 'write' || 'read' }}
 
 jobs:
   server:
@@ -81,23 +83,35 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Assert pull_request runs cannot select remote-cache write
+      - name: Assert fork pull_request runs cannot select remote-cache write
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::pull_request event resolved to remote-cache kind 'write'"
-            exit 1
+          if [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            case "$EVENT_NAME" in
+              push|schedule|merge_group) ;;
+              pull_request) [ "$HEAD_REPO" = "$BASE_REPO" ] || { echo "::error::fork pull_request run ($HEAD_REPO) resolved to remote-cache kind 'write'"; exit 1; } ;;
+              *) echo "::error::$EVENT_NAME event resolved to remote-cache kind 'write'"; exit 1 ;;
+            esac
           fi
 
       - name: Connect to the remote cache
+        id: cache
         uses: ./.github/actions/nx-remote-cache
         with:
           kind: ${{ env.NX_REMOTE_CACHE_KIND }}
           server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
 
       # Probes with a key Nx can never produce (Nx hashes are digits only), so nothing here can
-      # collide with or shadow a real artifact.
+      # collide with or shadow a real artifact. It tests the role the SERVER granted (the action
+      # already failed the job if that was more than the plan), so a server still on the main-only
+      # policy (before the redeploy of ADR-0110 Amendment 2026-11-19) proves read-only here.
       - name: Prove the granted role server-side
         if: env.NX_REMOTE_CACHE_KIND != 'off'
+        env:
+          GRANTED: ${{ steps.cache.outputs.role }}
         run: |
           set -euo pipefail
           if [ -z "${NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN:-}" ]; then
@@ -111,14 +125,17 @@ jobs:
           [ "$missing" = "404" ] || { echo "::error::GET of a missing key returned $missing, expected 404"; exit 1; }
           head -c 1048576 /dev/urandom > "$RUNNER_TEMP/body.bin"
           put=$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "$auth" -H 'Content-Type: application/octet-stream' --data-binary @"$RUNNER_TEMP/body.bin" "$S/v1/cache/$key")
-          if [ "$NX_REMOTE_CACHE_KIND" = "read" ]; then
+          if [ "$GRANTED" = "read" ]; then
             [ "$put" = "403" ] || { echo "::error::a READ-role run could PUT (HTTP $put) — the server let an untrusted run write"; exit 1; }
-            echo "::notice title=Live trust check::event=${{ github.event_name }} got a read token; PUT → 403 as required"
+            echo "::notice title=Live trust check::event=${{ github.event_name }} (planned '$NX_REMOTE_CACHE_KIND') got a read token; PUT → 403 as required"
+          elif [ "$GRANTED" != "write" ]; then
+            echo "::error::the cache action set a token but reported role '$GRANTED'"
+            exit 1
           else
-            [ "$put" = "200" ] || { echo "::error::trusted write PUT returned $put"; exit 1; }
+            [ "$put" = "200" ] || { echo "::error::write PUT returned $put"; exit 1; }
             again=$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "$auth" --data-binary @"$RUNNER_TEMP/body.bin" "$S/v1/cache/$key")
             [ "$again" = "409" ] || { echo "::error::second PUT of the same key returned $again, expected 409 (immutability)"; exit 1; }
             curl -fsS -H "$auth" "$S/v1/cache/$key" -o "$RUNNER_TEMP/back.bin"
             cmp "$RUNNER_TEMP/body.bin" "$RUNNER_TEMP/back.bin"
-            echo "::notice title=Live trust check::trusted run wrote; duplicate → 409; round-trip byte-exact"
+            echo "::notice title=Live trust check::event=${{ github.event_name }} wrote; duplicate → 409; round-trip byte-exact"
           fi

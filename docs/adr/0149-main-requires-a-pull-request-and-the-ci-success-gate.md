@@ -132,3 +132,22 @@ the latest `main` before it lands, without the merge-and-wait loop that strict c
   `main`.
 
 Rollback: remove the `merge_queue` rule from the ruleset; the `merge_group` triggers are then inert.
+
+## Amendment (2026-11-19): a queue group runs the pull request's set and writes the Nx cache
+
+Decided by: the Owner (decisions D1, D1b and D2 of the CI speed and cost programme).
+
+Two statements of the 2026-10-19 amendment change; the ruleset does not.
+
+- **What a group run checks.** A group runs the same set as a pull request: the static checks and
+  the typecheck, lint and tests its diff reaches against `merge_group.base_sha`. `formal` and
+  `image-scan`, which used to run in the queue when the diff reached them, are heavy tier now (the
+  nightly and the release gate; ADR-0053, Amendment 2026-11-19c). `CI success` and `OSS export · dry
+run` stay the required checks, and `CI success` still fails on any skip the tier rules do not
+  allow.
+- **Group runs write the Nx remote cache**, and so do same-repository pull requests (ADR-0110,
+  Amendment 2026-11-19). A group therefore mostly replays the results its pull request already
+  wrote. Group runs still never cancel each other.
+
+A proposal to retune the queue for the faster groups (`max_entries_to_build`, the response timeout)
+is in `docs/40-operate/operations/ci.md`, "Merge queue settings: proposal"; it is not applied.

@@ -4,7 +4,7 @@
  */
 import type { FeatureId } from '@indx-workspace/contracts/features';
 
-import type { FeatureSwitches } from '../features/runtime';
+import type { FeatureSwitches } from '../features/wiring';
 import type {
   WorkspaceFeatureStore,
   WorkspaceFeaturesAuditEvent,

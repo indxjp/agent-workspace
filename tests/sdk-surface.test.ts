@@ -39,12 +39,11 @@
  * citation and still weaker than a live probe. It is declared that way on this task's PR.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import prettier from 'prettier';
 import { describe, expect, it } from 'vitest';
 
 import { AGENT_TOOL_PERMISSION_MODES } from '@indx-workspace/contracts/agents';
@@ -566,66 +565,4 @@ describe('the CLAUDE_CODE_PROJECT_DIR_NAME resolver still fails silently in both
     expect(verdict.ok).toBe(false);
     expect(verdict.ok ? '' : verdict.reason).toContain('CLAUDE_CONFIG_DIR');
   });
-});
-
-/**
- * `tests/` is outside the repository's Prettier gate.
- *
- * Root `package.json`'s `format:check` globs are `apps/**`, `packages/**`, `scripts/**` and the
- * root `*.{json,mjs,ts}`. None of them match `tests/`, so this directory — created by this task —
- * would be the one place in the tree where formatting is unchecked. The root manifest belongs to
- * the wave's first task (ADR-0009 / ADR-0017), so the glob is not this task's to widen; the gate
- * is instead placed in a file this task owns, where it covers the same ground.
- *
- * It runs the same Prettier and the same `.prettierrc.json` that `pnpm format:check` runs, so
- * widening the glob later makes this redundant rather than contradictory.
- */
-describe('tests/ is covered by a formatting gate', () => {
-  function testSources(dir: string): string[] {
-    const found: string[] = [];
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'node_modules') continue;
-        found.push(...testSources(full));
-      } else if (/\.(ts|mts|cts|json)$/.test(entry.name)) {
-        found.push(full);
-      }
-    }
-    return found;
-  }
-
-  const sources = testSources(path.join(REPO_ROOT, 'tests'));
-
-  it('finds sources under tests/ to check', () => {
-    // Without this the loop below is a no-op that reports green: an empty enumeration is the
-    // classic ADR-0015 fall-through, and this directory can never legitimately be empty because
-    // this very file lives in it.
-    expect(sources.length).toBeGreaterThan(0);
-    expect(sources).toContain(path.join(REPO_ROOT, 'tests', 'sdk-surface.test.ts'));
-  });
-
-  it('is Prettier-clean under the repository config', async () => {
-    // Repeated rather than inherited from the assertion above: this `it` must fail on its own
-    // when there is nothing to check, not rely on a sibling to have noticed (ADR-0015).
-    expect(sources.length).toBeGreaterThan(0);
-    // Every file is checked concurrently (the same files, the same verdict); Promise.all keeps the
-    // input order, so the failure message is stable.
-    const verdicts = await Promise.all(
-      sources.map(async (file) => {
-        const options = await prettier.resolveConfig(file);
-        if (options === null) {
-          throw new Error(`no Prettier config resolved for ${file}; the check could not run`);
-        }
-        const clean = await prettier.check(readFileSync(file, 'utf8'), {
-          ...options,
-          filepath: file,
-        });
-        return clean ? null : path.relative(REPO_ROOT, file);
-      }),
-    );
-    const unformatted = verdicts.filter((file) => file !== null);
-    expect(unformatted, 'run `npx prettier --write "tests/**"`').toEqual([]);
-    // Every file under tests/ through Prettier: well past 5 s on a 2-vCPU CI runner.
-  }, 60_000);
 });

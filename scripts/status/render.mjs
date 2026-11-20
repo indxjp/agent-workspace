@@ -12,8 +12,8 @@ const allowedStatuses = new Set([
   'unsupported',
 ]);
 const root = new URL('../../', import.meta.url);
-const sourceUrl = new URL('docs/capabilities/status.json', root);
-const outputUrl = new URL('docs/capability-status.md', root);
+const sourceUrl = new URL('docs/30-reference/capabilities/status.json', root);
+const outputUrl = new URL('docs/30-reference/capabilities/capability-status.md', root);
 const source = JSON.parse(await readFile(sourceUrl, 'utf8'));
 
 if (source.schemaVersion !== 2 || source.canonical !== true) {
@@ -60,7 +60,7 @@ const rows = source.capabilities
   .join('\n');
 const output =
   `# Capability status\n\n` +
-  `This is generated from \`docs/capabilities/status.json\`; edit the JSON and run ` +
+  `This is generated from \`docs/30-reference/capabilities/status.json\`; edit the JSON and run ` +
   `\`pnpm status:render\`. “Fixture-verified” is not live-provider, deployed-runtime, or human ` +
   `acceptance evidence.\n\n` +
   `Release verdict: **${escape(source.releaseVerdict)}**.\n\n` +
@@ -70,11 +70,13 @@ const output =
 if (process.argv.includes('--check')) {
   const current = await readFile(outputUrl, 'utf8').catch(() => '');
   if (current !== output) {
-    console.error('docs/capability-status.md is stale; run pnpm status:render');
+    console.error(
+      'docs/30-reference/capabilities/capability-status.md is stale; run pnpm status:render',
+    );
     process.exit(1);
   }
   console.log('capability status is current');
 } else {
   await writeFile(outputUrl, output, 'utf8');
-  console.log('wrote docs/capability-status.md');
+  console.log('wrote docs/30-reference/capabilities/capability-status.md');
 }

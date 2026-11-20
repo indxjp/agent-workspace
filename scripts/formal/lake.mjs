@@ -27,7 +27,7 @@ function lakeExecutable() {
   if (onPath.status === 0) return 'lake';
   if (existsSync(elanLake)) return elanLake;
   throw new Error(
-    'lake was not found on PATH or in ~/.elan/bin. Install elan (see docs/formal/README.md) and retry.',
+    'lake was not found on PATH or in ~/.elan/bin. Install elan (see docs/20-design/formal/README.md) and retry.',
   );
 }
 

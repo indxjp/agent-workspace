@@ -60,7 +60,7 @@
         },
         {
           "path": "package.json",
-          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+          "added": "{\"dependencies\":{\"next\":\"16.4.6\"}}"
         },
         {
           "path": "package.json",
@@ -102,7 +102,7 @@
         "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
         "agent-workspace.yaml": "77a7d02c0b164893d05fbe1d8ed7354a7b9216e902a5d2fdd59a6b1b6cccd037",
         "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
-        "package.json": "cceffe253bdb22121540819966816f093a2248d1fd112c07ba57bed227ca8d3e",
+        "package.json": "251893baa494c1ec137522a41609faa6e5501471296faebcfc533aefba2712db",
         "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
         "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48"
       },

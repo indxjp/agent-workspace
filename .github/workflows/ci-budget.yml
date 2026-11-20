@@ -1,0 +1,108 @@
+# The weekly CI budget check (ADR-0053, Amendment 2026-11-19e). It reads the last seven days of
+# workflow runs, jobs and pull requests through the GitHub API (scripts/ci/metrics/report.mjs, Node
+# built-ins and `gh` only) and holds them to the budget block of docs/40-operate/operations/ci-budget.md.
+# Over budget (exit 1) opens one issue, or comments on the open one, with the offending rows, the
+# way nightly-alarm.yml does for a red nightly; a week within budget closes it. A report that could
+# not be produced (exit 2: the API, a malformed budget) fails the run without touching the issue.
+# It reads the Owner's billing data and writes an issue, so only INDXDev runs it.
+name: CI budget
+
+on:
+  schedule:
+    # Mondays 09:23 JST, after the weekend's nightly runs.
+    - cron: '23 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-budget
+  cancel-in-progress: false
+
+jobs:
+  budget:
+    if: github.repository_owner == 'INDXDev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      # About 2,300 REST calls for seven days (one jobs call per completed run), more than
+      # GITHUB_TOKEN's hourly allowance on some plans. A completed run's data never changes, so the
+      # tool's fetch cache is carried from week to week and only new runs are fetched; a rate-limit
+      # refusal exits 2 and the next run resumes from the saved cache.
+      - name: Restore the metrics fetch cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ci-metrics-cache
+          key: ci-metrics-${{ github.run_id }}
+          restore-keys: ci-metrics-
+
+      - name: Hold the last seven days to the budget
+        id: report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          status=0
+          node scripts/ci/metrics/report.mjs --days 7 --check --budget docs/40-operate/operations/ci-budget.md \
+            --cache-dir "$RUNNER_TEMP/ci-metrics-cache" > "$RUNNER_TEMP/budget.md" || status=$?
+          cat "$RUNNER_TEMP/budget.md"
+          {
+            echo '## CI budget, last 7 days'
+            echo
+            cat "$RUNNER_TEMP/budget.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -gt 1 ]; then
+            echo "::error title=CI budget report failed::scripts/ci/metrics/report.mjs exited $status"
+            exit "$status"
+          fi
+
+      - name: Save the metrics fetch cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ci-metrics-cache
+          key: ci-metrics-${{ github.run_id }}
+
+      - name: Open, update or close the budget issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          STATUS: ${{ steps.report.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="CI over budget"
+          issue=$(gh issue list --state open --search "in:title \"$title\"" --json number,title --jq "map(select(.title == \"$title\"))[0].number // empty")
+          if [ "$STATUS" = 0 ]; then
+            if [ -n "$issue" ]; then gh issue close "$issue" --comment "CI is within budget again: $RUN_URL"; fi
+            exit 0
+          fi
+          body="The last seven days of CI exceed docs/40-operate/operations/ci-budget.md: $RUN_URL
+
+          $(head -c 60000 "$RUNNER_TEMP/budget.md")
+
+          Find the job or workflow that grew, or raise the budget in docs/40-operate/operations/ci-budget.md with an ADR-0053 amendment that says why."
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+          exit 1

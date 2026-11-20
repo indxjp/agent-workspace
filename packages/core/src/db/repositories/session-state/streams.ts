@@ -1,6 +1,7 @@
 import { asc, desc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 
 import type { Database } from '../../client.js';
+import { SESSION_STATE_PAGE_LIMIT } from '../../limits.js';
 import { sessionStateEntries } from '../../schema/session-state-entries.js';
 import { sessionStateStreams } from '../../schema/session-state-streams.js';
 import type { ScopedSessionState, SessionStateEntryRow } from './scoped.js';
@@ -13,8 +14,7 @@ import type {
   StoredSessionStateStream,
 } from './types.js';
 
-/** The default page size of {@link SessionStateRepository.list}, and its ceiling. */
-export const SESSION_STATE_PAGE_LIMIT = 2_000;
+export { SESSION_STATE_PAGE_LIMIT };
 
 type Entry = SessionStateEntryInput['entry'];
 

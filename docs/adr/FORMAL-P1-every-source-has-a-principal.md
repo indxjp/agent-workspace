@@ -7,7 +7,7 @@ Scope: `packages/core/src/db/schema/workspace-principals.ts`, `packages/core/src
 
 ## Context
 
-RF-101 (`docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md`): "_Backfill one
+RF-101 (`docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md`): "_Backfill one
 human principal per Membership and one machine principal per APIKey_". The schema guarantees at
 most one principal per source (`workspace_principals_workspace_{membership,api_key}_key`) but not
 at least one; the repositories create the pair in one transaction, so this is an unenforced

@@ -13,12 +13,13 @@
     "lint": "nx run-many -t lint",
     "package-exports:check": "node scripts/check-package-exports.mjs",
     "package-exports:check:artifacts": "node scripts/check-package-exports.mjs --artifacts",
-    "architecture:check": "pnpm package-exports:check && depcruise --config dependency-cruiser.config.mjs --ignore-known .dependency-cruiser-known-violations.json apps packages",
+    "architecture:check": "pnpm package-exports:check && node scripts/policy-check-architecture.mjs",
     "deadcode:check": "knip",
     "duplication:check": "jscpd --config jscpd.json",
     "adr:check": "node scripts/check-adrs.mjs",
     "metrics:baseline": "node scripts/metrics/baseline.mjs",
     "workflows:check": "node scripts/check-workflows.mjs",
+    "test-inputs:check": "node scripts/policy-check-test-inputs.mjs",
     "format": "prettier --write \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
     "test": "node scripts/test-with-services.mjs",
@@ -35,6 +36,7 @@
     "migrations:lint": "node scripts/migrations.mjs lint",
     "complexity:check": "node scripts/check-complexity-ceiling.mjs",
     "clock:check": "node scripts/check-clock-ceiling.mjs",
+    "policy:check": "node scripts/policy-check.mjs",
     "durations:check": "node scripts/check-duration-ceiling.mjs",
     "migrations:renumber": "node scripts/migrations.mjs renumber",
     "e2e": "node tests/e2e/run.mjs",
@@ -53,12 +55,12 @@
     "adr:index": "node scripts/docs/adr-index.mjs",
     "docs:generate": "node scripts/docs/generate-api-reports.mjs --write && node scripts/docs/generate-sdk-reference.mjs --write && node scripts/docs/generate-openapi.mjs --write && node scripts/docs/generate-llms-txt.mjs --write && pnpm --filter @indx-workspace/contracts build && node packages/cli/scripts/generate-profile-schema.mjs --write && node tests/engine-matrix/run.mjs && node tests/platform-matrix/run.mjs && node scripts/docs/sync-platform-matrix.mjs --write && node tests/settings-table/run.mjs",
     "api:update": "node scripts/docs/generate-api-reports.mjs --write",
-    "docs:check": "node scripts/docs/generate-api-reports.mjs --check && node scripts/docs/generate-sdk-reference.mjs --check && node scripts/docs/generate-openapi.mjs --check && node scripts/docs/generate-llms-txt.mjs --check && pnpm --filter @indx-workspace/contracts build && node packages/cli/scripts/generate-profile-schema.mjs --check && node scripts/docs/check-front-door.mjs && node scripts/docs/check-links.mjs && node tests/platform-matrix/run.mjs --check && node scripts/docs/sync-platform-matrix.mjs --check && node tests/settings-table/run.mjs --check",
+    "docs:check": "node scripts/docs/generate-api-reports.mjs --check && node scripts/docs/generate-sdk-reference.mjs --check && node scripts/docs/generate-openapi.mjs --check && node scripts/docs/generate-llms-txt.mjs --check && pnpm --filter @indx-workspace/contracts build && node packages/cli/scripts/generate-profile-schema.mjs --check && node scripts/docs/check-front-door.mjs && node scripts/docs/check-links.mjs && node scripts/docs/sync-platform-matrix.mjs --check && node tests/static-checks/run.mjs docs-check",
     "stories:check": "node scripts/stories/check.mts",
     "formal:build": "node scripts/formal/lake.mjs build AgentWorkspace catalogue axioms imports vectors",
     "formal:generate": "node scripts/formal/generate.mjs --write",
     "formal:check": "node scripts/formal/check.mjs",
-    "check:fast": "pnpm adr:check && pnpm workflows:check && pnpm changes:check && pnpm format:check && pnpm migrations:check && pnpm migrations:lint && pnpm typecheck && pnpm lint && pnpm complexity:check && pnpm clock:check && pnpm durations:check && pnpm architecture:check && pnpm deadcode:check && pnpm duplication:check && pnpm docs:check && pnpm stories:check",
+    "check:fast": "pnpm adr:check && pnpm workflows:check && pnpm test-inputs:check && pnpm policy:check && pnpm changes:check && pnpm format:check && pnpm migrations:check && pnpm migrations:lint && pnpm typecheck && pnpm lint && pnpm complexity:check && pnpm clock:check && pnpm durations:check && pnpm architecture:check && pnpm deadcode:check && pnpm duplication:check && pnpm docs:check && pnpm stories:check",
     "check": "pnpm check:fast && pnpm test && pnpm build",
     "check:ci": "pnpm check:fast && pnpm test && pnpm test:coverage && pnpm test:coverage:apps && pnpm test:coverage:ui-cli && pnpm build",
     "sites:build": "node scripts/sites/build.mjs",
@@ -113,24 +115,29 @@
     ],
     "targets": {
       "typecheck": {
+        "//inputs": "The root typecheck (tsconfig.root.json) and lint cover tests/ and scripts/, and tests/ is now its own Nx projects (tests/projects.mjs), so its files are no longer the root project's own: they are named here, test files included. The implicit dependency on every project keeps what tests/ and scripts/ import, through tsconfig.root.json paths into package sources, in `^production`; neither target runs for a Markdown or docs/ change (ADR-0053 Amendment 2026-11-19f).",
+        "inputs": [
+          "code",
+          "^production",
+          "lintConfig",
+          "{workspaceRoot}/tests/**/*"
+        ],
         "executor": "nx:run-commands",
         "options": {
           "command": "tsc -p tsconfig.root.json"
         }
       },
       "lint": {
+        "//inputs": "The same inputs as typecheck, for the same reason (see its //inputs).",
+        "inputs": [
+          "code",
+          "^production",
+          "lintConfig",
+          "{workspaceRoot}/tests/**/*"
+        ],
         "executor": "nx:run-commands",
         "options": {
-          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs playwright.app-kit.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts tests scripts examples/store/catalog sites/lp/assets/site.js --max-warnings 0"
-        }
-      },
-      "test": {
-        "executor": "nx:run-commands",
-        "options": {
-          "command": "vitest run --project tests --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
-          "env": {
-            "NODE_OPTIONS": "--unhandled-rejections=strict"
-          }
+          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs playwright.app-kit.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts tests scripts examples/store/catalog sites/lp/assets/*.js --max-warnings 0"
         }
       }
     }

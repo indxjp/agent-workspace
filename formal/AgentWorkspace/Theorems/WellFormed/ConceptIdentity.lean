@@ -119,7 +119,7 @@ theorem invitation_state_wires :
 
 /-- The 46 refined checks cover exactly the checks `catalogue` records without a meaning on the
 eighteen identity tables, in the same order, and no check is refined twice. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem refined_checks_cover_the_cluster :
     tables.all (fun t => (checksOf t).map (·.1) == otherCheckNames t) = true ∧
@@ -180,7 +180,7 @@ elab "aw_identity_check_theorems" : command => do
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T0))
-        (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+        (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
         (ts := $ts)]
       theorem $thm :
           (semantics? $(Syntax.mkStrLit n)).map (CheckExpr.render $(Syntax.mkStrLit sql)) =

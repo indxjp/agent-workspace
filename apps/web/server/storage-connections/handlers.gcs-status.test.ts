@@ -21,7 +21,7 @@ import { openConnectionStore } from '@agent-workspace/core/storage';
 
 import { Principal } from '../rbac/principal';
 import { testStorageConnection } from './handlers';
-import type { StorageConnectionsRuntime } from './runtime';
+import type { StorageConnectionsRuntime } from './wiring';
 import { createRepositoryStorageConnectionsStoreProvider } from './store';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';

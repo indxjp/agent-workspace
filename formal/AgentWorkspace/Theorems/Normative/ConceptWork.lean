@@ -57,10 +57,10 @@ private def cardinalityDoc (fk : String) : String :=
       "sessions_owner_principal_workspace_fk", "projects_owner_principal_workspace_fk",
       "run_events_run_workspace_fk", "audit_events_actor_principal_workspace_fk",
       "projects_default_agent_workspace_fk"].contains fk then
-    "docs/sdk/04-api-specification.md#2-resource-model"
+    "docs/10-product/sdk/04-api-specification.md#2-resource-model"
   else if fk == "sessions_member_workspace_fk" then
-    "docs/formal/inventory.md#4-tenant-isolation-predicates"
-  else "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
+    "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates"
+  else "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
 
 /-- One T1 theorem per foreign key of the work tables. -/
 elab "aw_work_cardinality_theorems" : command => do
@@ -113,7 +113,7 @@ aw_work_cardinality_theorems
 /-- A run reaches exactly one agent, through its session: `Run(… → Session, → Agent …)`, with no
 `agent_id` of its own ("the run reaches its agent through `session_id`. One join, no way to be
 wrong"). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/runs.ts#runs")]
 theorem run_reaches_exactly_one_agent (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .runs) :
@@ -132,7 +132,7 @@ theorem run_reaches_exactly_one_agent (st : State) (hc : consistent catalogue st
 
 /-- A run reaches exactly one owning principal, through its session: `runs` carries no
 `owner_principal_id`, and a run is "own" or "other" by its session's owner. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "apps/web/server/runs/store.ts#ownerPrincipalId")]
 theorem run_reaches_exactly_one_owner (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .runs) :
@@ -154,7 +154,7 @@ theorem run_reaches_exactly_one_owner (st : State) (hc : consistent catalogue st
 in the run's own workspace, and the agent is then the session's; the owning principal likewise.
 A session with the run's session id in another workspace yields nothing: the concept join is
 the composite `(workspace_id, session_id)` key, never the bare id. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/runs.ts#runs")
   (ts := "apps/web/server/runs/store.ts#ownerPrincipalId")]
 theorem run_reaches_agent_and_owner_only_through_its_own_session (r : Run) (s : Session) :
@@ -174,7 +174,7 @@ theorem run_reaches_agent_and_owner_only_through_its_own_session (r : Run) (s : 
 /-- The cross-tenant counterexamples: the witness run reaches the witness session's agent and
 owner, but a session carrying the same session id in workspace `w2`, or another session of the
 same workspace, reaches neither. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/runs.ts#runs")
   (ts := "apps/web/server/runs/store.ts#ownerPrincipalId")]
 theorem run_join_refuses_another_workspace_or_session :
@@ -193,7 +193,7 @@ private theorem id_eq_of_val {k : IdKind} {a b : Id k} (h : a.val = b.val) : a =
 through `runs_session_workspace_fk` (the one reference `run_reaches_exactly_one_agent` and
 `run_reaches_exactly_one_owner` make unique), the run reaches that session's agent and owning
 principal. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/runs.ts#runs_session_workspace_fk")]
 theorem run_join_agrees_with_the_row_reference (st : State) (r : Run) (s : Session)
     (h : References catalogue st .runs (workFk .runs "runs_session_workspace_fk")
@@ -214,7 +214,7 @@ theorem run_join_agrees_with_the_row_reference (st : State) (r : Run) (s : Sessi
 
 /-- "The person a session belongs to must hold a membership in the workspace the session is
 in": a session row with a user has a membership row for that user in its own workspace. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/sessions.ts#sessions_member_workspace_fk")]
 theorem session_user_is_a_member_of_its_workspace (st : State)
     (hc : consistent catalogue st = true) {r : Row} (hr : r ∈ st .sessions) {u : String}
@@ -596,7 +596,7 @@ example : ledgerAccounting [Witness.usage, { Witness.usage with priceTableVersio
 archived session is never resumable, and a session the SDK never started launches fresh. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/sessions.ts#SessionResourceSchema")
   (ts := "apps/web/server/composition/session-launch.ts#sessionForLaunch")
-  (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
 theorem resumable_means_active_and_reported (s : Session) :
     (s.status = .archived → s.resumable = false) ∧
       (s.engineSessionId = none → s.launchMode = .fresh) ∧
@@ -621,7 +621,7 @@ theorem reported_identity_must_be_the_platform_id (s : Session) (reported : Stri
 128 characters. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/sessions.ts#TRANSCRIPT_SUBPATH_PATTERN")
   (ts := "packages/core/src/db/schema/session-transcripts.ts#subpath")
-  (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
 theorem main_transcript_has_no_wire_subpath :
     mainSubpath = "" ∧ isWireSubpath mainSubpath = false ∧
       ∀ s, isWireSubpath s = true → s.length ≤ 128 := by
@@ -665,7 +665,7 @@ Windows device name, so a workspace id never makes the SDK silently fall back to
 across tenants. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN")
   (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
-  (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
 theorem workspace_id_is_a_safe_project_key (s : String) (h : Uuid.isCanonical s = true) :
     isProjectKey s = true ∧ isWindowsDeviceName s = false := by
   simp only [Uuid.isCanonical, Bool.and_eq_true, beq_iff_eq] at h
@@ -680,7 +680,7 @@ theorem workspace_id_is_a_safe_project_key (s : String) (h : Uuid.isCanonical s 
 /-- With a non-blank configuration directory, the tenant session scope keyed by a workspace id is
 always accepted by `validateTenantSessionScope`. -/
 @[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem tenant_scope_accepts_a_workspace_key (ws configDir : String)
     (hws : Uuid.isCanonical ws = true) (hdir : Concepts.ModelConnection.isBlank configDir = false) :
     tenantScopeOk ws configDir = true := by
@@ -693,7 +693,7 @@ and no hidden or relative path), it is not a Windows device name, and the config
 is not blank. -/
 @[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (ts := "packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem tenant_scope_refuses_unsafe_keys (k d : String) (h : tenantScopeOk k d = true) :
     1 ≤ k.length ∧ k.length ≤ 64 ∧ (∀ c ∈ k.toList, c ≠ '/' ∧ c ≠ '\\' ∧ c ≠ '.') ∧
       isWindowsDeviceName k = false ∧ Concepts.ModelConnection.isBlank d = false := by
@@ -711,7 +711,7 @@ blanks `String.prototype.trim` also strips: U+3000, U+2028, U+205F, U+1680, U+FE
 refused, while a 64-character key under a real directory is accepted, and a directory holding a
 zero-width space (U+200B, not whitespace to ECMAScript) is not blank. -/
 @[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem tenant_scope_refusals :
     (["con", "COM1", "lpt9", "", "a/b", "..", String.ofList (List.replicate 65 'k')].all
         fun k => !tenantScopeOk k "/var/lib/aw") = true ∧
@@ -818,7 +818,7 @@ theorem event_name_pattern_edges :
 /-- A well-formed project's default model travels with its default connection (the project rung
 of the rule "no layer of the model-resolution ladder may mix a connection from one level with a
 model from another"). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/projects.ts#projects_default_model_pair")
   (ts := "packages/core/src/db/schema/projects.ts#defaultModel")
   (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
@@ -829,7 +829,7 @@ theorem project_default_model_travels_with_its_connection (p : Project)
 
 /-- The `?archived=` filters partition projects: every project is listed by exactly one of
 `active` and `archived`, and by `all`; its state is `archived` exactly when `archivedAt` is set. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#510-projects--awprojects")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#510-projects--awprojects")
   (ts := "packages/core/src/db/repositories/projects.ts#archivedPredicate")]
 theorem project_list_filters_partition (p : Project) :
     p.listedBy .active = !p.listedBy .archived ∧ p.listedBy .all = true ∧

@@ -4,7 +4,7 @@
  *
  * Each variable is parsed where it is used (`db/client.ts`, `secrets/master-key-config.ts`,
  * `secrets/master-key.ts`, `telemetry/tracing-settings.ts`). This module lists them, with their
- * defaults and meanings, so `docs/operations/settings.md` is generated from one place; the table
+ * defaults and meanings, so `docs/40-operate/operations/settings.md` is generated from one place; the table
  * test runs those parsers to prove the list is complete.
  *
  * What a bad value does differs by process, on purpose. Web keeps serving and says what is wrong:

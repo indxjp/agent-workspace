@@ -15,10 +15,18 @@
  * - The connectors are the ones the definition names, each with the tools that read and the tools
  *   that would send or write outside, so a visitor's copy can answer a read from the entry's records
  *   and a write with the demo-only reply. An app entry's tools are its app kit's, derived from the
- *   app's resources; `CONNECTOR_TOOLS` is the other entries' explicit table. A connector whose
- *   tools are not listed there declares none, and a copy offers it one send tool.
- * - The sample records are the entry's `demo.records` folder: one set per resource and language,
- *   mapped to the read tools that answer with it.
+ *   app's resources; an `openapiTool`'s are the operations its `allow` rules admit in its own
+ *   document; `CONNECTOR_TOOLS` is the explicit table of the gallery's `mcp()` connectors, whose
+ *   tools live in their servers' code. A connector found in none of these declares no tool, and a
+ *   copy offers it one send tool, so `tests/store/demo-copy-tools.test.ts` checks that every tool a
+ *   live entry's moment needs is offered.
+ * - An `openapiTool`'s writes wait for a person's approval on the platform because its connector
+ *   says so (ADR-0113 SD4), and a template's connector is a declaration with no document, so the
+ *   definition's policy states the same rules (`requireApproval`, by connector name, as compose
+ *   matches them) and the copy keeps them.
+ * - The sample records are the entry's `demo.records` folder (one set per resource and language) and
+ *   the gallery fixtures in `FIXTURE_RECORDS` (in the fixtures' one language), each mapped to the read
+ *   tools that answer with it.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -33,10 +41,22 @@ import {
   type DemoTemplateSeed,
 } from '@indx-workspace/contracts/demo-operator';
 import { isBuiltinSkillName } from '@indx-workspace/contracts/skills';
-import { toAgentVersionBody, type DefinedAgent } from '@indx-workspace/sdk/define';
+import {
+  selectAllowedOperations,
+  toolApprovalRules,
+  TOOL_OPERATION_METHODS,
+  type ToolOperationMethod,
+} from '@indx-workspace/contracts/tool-connectors';
+import {
+  isOpenApiTool,
+  toAgentVersionBody,
+  type DefinedAgent,
+  type OpenApiTool,
+} from '@indx-workspace/sdk/define';
 
 import type { LiveEntry } from '../../../examples/store/catalog/define.ts';
 import { CATALOG } from '../../../examples/store/catalog/index.ts';
+import { parseAuthorityMatrix } from '../../gallery/ringi-review/mcp/authority.mjs';
 import { demoAgentDefinition } from '../demo-agents.test-support.ts';
 
 const REPOSITORY_ROOT = path.resolve(
@@ -53,20 +73,127 @@ interface ToolLists {
 }
 
 /**
- * The tools of the connectors the gallery entries' agents name, where a seed carries records for
- * them: the quotation entry's ERP, whose reads are its three lookups and whose one write is the
- * quote it books after a person's approval. Keyed by entry slug, then connector name.
+ * The tools of the gallery's `mcp()` connectors that a seed carries records for (`FIXTURE_RECORDS`),
+ * as their servers (`<source>/mcp/*.mjs`) name them. Keyed by entry slug, then connector name.
  */
 const CONNECTOR_TOOLS: Readonly<Record<string, Readonly<Record<string, ToolLists>>>> = {
-  quotation: {
-    erp: { reads: ['searchParts', 'getOrder', 'getRate'], writes: ['createQuote'] },
-  },
+  'ringi-review': { authority: { reads: ['check_authority'], writes: [] } },
+  'meeting-minutes': { 'task-tracker': { reads: ['list_members'], writes: [] } },
 };
 
 /** Which read tools answer with the records of a gallery entry's resource (a records file name). */
 const RECORD_TOOLS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   quotation: { parts: ['searchParts'], orders: ['getOrder'], rates: ['getRate'] },
 };
+
+/** Records a gallery entry's fixtures hold for one connector, read from its source project. */
+interface FixtureRecords {
+  readonly connector: string;
+  readonly resource: string;
+  readonly tools: readonly string[];
+  readonly data: (source: string) => unknown;
+}
+
+const readJson = (file: string): unknown => JSON.parse(readFileSync(file, 'utf8')) as unknown;
+
+/**
+ * The gallery fixtures a copy's read tools answer with, for the entries whose catalog names no
+ * records folder: the QMS's past defect reports, the authority matrix as `check_authority` reads
+ * it from the rule book, and the assignable members `list_members` shows. The fixtures are in
+ * Japanese only, as the entries' data is. The gallery servers compute an answer from these (a 4M
+ * count, one approver); a copy hands the model the records the computation would read.
+ */
+const FIXTURE_RECORDS: Readonly<Record<string, readonly FixtureRecords[]>> = {
+  'quality-defect': [
+    {
+      connector: 'qms',
+      resource: 'defects',
+      tools: ['searchDefects', 'getDefect', 'causeStats'],
+      data: (source) =>
+        filesUnder(path.join(source, 'data', 'defects')).map((file) =>
+          readJson(path.join(source, 'data', 'defects', file)),
+        ),
+    },
+  ],
+  'ringi-review': [
+    {
+      connector: 'authority',
+      resource: 'authority',
+      tools: ['check_authority'],
+      data: (source) =>
+        parseAuthorityMatrix(
+          readFileSync(path.join(source, 'data', 'rules', 'authority-matrix.md'), 'utf8'),
+        ).categories,
+    },
+  ],
+  'meeting-minutes': [
+    {
+      connector: 'task-tracker',
+      resource: 'members',
+      tools: ['list_members'],
+      data: (source) => {
+        const roster = readJson(path.join(source, 'data', 'members.json')) as {
+          readonly members: readonly {
+            readonly name: string;
+            readonly department: string;
+            readonly title: string;
+            readonly assignable: boolean;
+          }[];
+        };
+        return roster.members
+          .filter((member) => member.assignable)
+          .map(({ name, department, title }) => ({ name, department, title }));
+      },
+    },
+  ],
+};
+
+const isOperationMethod = (method: string): method is ToolOperationMethod =>
+  TOOL_OPERATION_METHODS.some((known) => known === method);
+
+/**
+ * The operations an `openapiTool` exposes: the ones its `allow` rules admit in its document (a
+ * project-relative JSON file), by operation id, which is the tool name the platform registers.
+ */
+function operationsOf(
+  entry: LiveEntry,
+  tool: OpenApiTool,
+): readonly { readonly name: string; readonly method: ToolOperationMethod }[] {
+  const document = readJson(path.join(sourceOf(entry), tool.spec)) as {
+    readonly paths?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  };
+  const candidates = Object.entries(document.paths ?? {}).flatMap(([template, item]) =>
+    Object.entries(item).flatMap(([method, operation]) => {
+      const upper = method.toUpperCase();
+      const operationId = (operation as { readonly operationId?: unknown } | null)?.operationId;
+      return isOperationMethod(upper) && typeof operationId === 'string'
+        ? [{ method: upper, path: template, operationId }]
+        : [];
+    }),
+  );
+  const { admitted, refusals } = selectAllowedOperations(tool.allow, candidates);
+  if (refusals.length > 0 || admitted.length === 0) {
+    throw new Error(`${entry.slug}: the allow rules of ${tool.name} do not hold in its document`);
+  }
+  return admitted.map((operation) => ({ name: operation.operationId, method: operation.method }));
+}
+
+/** The `openapiTool`s the entry's agent holds. */
+function openApiToolsOf(entry: LiveEntry): readonly OpenApiTool[] {
+  const agent = demoAgentDefinition(entry) as DefinedAgent;
+  return (agent.tools ?? []).filter(isOpenApiTool);
+}
+
+/** Its reads and writes, as a seed declares a connector's tools. */
+function openApiToolLists(entry: LiveEntry, tool: OpenApiTool): ToolLists {
+  const operations = operationsOf(entry, tool);
+  const gated = new Set(toolApprovalRules(tool.name, operations));
+  const isWrite = (name: string): boolean => gated.has(`mcp__${tool.name}__${name}`);
+  return {
+    reads: operations.filter((op) => !isWrite(op.name)).map((op) => op.name),
+    writes: operations.filter((op) => isWrite(op.name)).map((op) => op.name),
+  };
+}
 
 /**
  * The agent tools of an app entry's connector, by resource (`tests/store/sample-data.test.ts` checks
@@ -131,8 +258,24 @@ function definitionOf(entry: LiveEntry): DemoTemplateSeed['definition'] {
     agent,
     instructions === undefined ? {} : { instructions },
   );
+  const gated = openApiToolsOf(entry).flatMap((tool) =>
+    toolApprovalRules(tool.name, operationsOf(entry, tool)),
+  );
+  const { policy } = definition;
+  if (gated.length > 0 && !('tools' in policy)) {
+    throw new Error(`${entry.slug}: an openapiTool's writes need a Claude policy to wait in`);
+  }
   return {
     ...definition,
+    ...(gated.length === 0 || !('tools' in policy)
+      ? {}
+      : {
+          policy: {
+            ...policy,
+            requireApproval: [...new Set([...(policy.requireApproval ?? []), ...gated])].sort(),
+          },
+          policySource: 'stored' as const,
+        }),
     agent: {
       ...definition.agent,
       model: null,
@@ -195,11 +338,15 @@ function connectorsOf(
   names: readonly string[],
   app: ReturnType<typeof appToolsOf> | null,
 ): readonly DemoSeedConnector[] {
+  const openApi = new Map(openApiToolsOf(entry).map((tool) => [tool.name, tool] as const));
   return names.map((name) => {
+    const tool = openApi.get(name);
     const tools =
       app !== null && name === app.connector
         ? app.all
-        : (CONNECTOR_TOOLS[entry.slug]?.[name] ?? { reads: [], writes: [] });
+        : tool !== undefined
+          ? openApiToolLists(entry, tool)
+          : (CONNECTOR_TOOLS[entry.slug]?.[name] ?? { reads: [], writes: [] });
     return { name, reads: tools.reads, writes: tools.writes };
   });
 }
@@ -210,8 +357,16 @@ function recordsOf(
   connectors: readonly DemoSeedConnector[],
   app: ReturnType<typeof appToolsOf> | null,
 ): readonly DemoSampleRecords[] {
+  const fixtures = (FIXTURE_RECORDS[entry.slug] ?? []).map((fixture): DemoSampleRecords => ({
+    connector: fixture.connector,
+    resource: fixture.resource,
+    lang: 'ja',
+    tools: fixture.tools,
+    data: fixture.data(sourceOf(entry)),
+  }));
   const folder = entry.demo.records;
-  if (folder === undefined) return [];
+  if (folder === undefined) return fixtures;
+  if (fixtures.length > 0) throw new Error(`${entry.slug}: records come from one place only`);
   const connector =
     app === null ? connectors.find((candidate) => candidate.reads.length > 0) : undefined;
   const connectorName = app === null ? connector?.name : app.connector;

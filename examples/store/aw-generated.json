@@ -46,7 +46,7 @@
         },
         {
           "path": "package.json",
-          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+          "added": "{\"dependencies\":{\"next\":\"16.4.6\"}}"
         },
         {
           "path": "package.json",

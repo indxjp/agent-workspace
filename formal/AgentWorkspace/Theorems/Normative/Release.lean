@@ -14,7 +14,7 @@ open AgentWorkspace AgentWorkspace.Concepts.Release
 
 /-- With a bar set, `promote … production` succeeds only if the promoted version's score is at least
 the bar; a version with no score is refused. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/domains/release.md#the-release-model")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/domains/release.md#the-release-model")
   (ts := "apps/web/server/agent-versions/release.ts#decidePromote")]
 theorem promote_requires_gate (b : Score) (r r' : Release) (a : AgentId) (src : Env)
     (h : step (some b) r (.promote a src .production) = .ok r') :
@@ -34,7 +34,7 @@ theorem promote_requires_gate (b : Score) (r r' : Release) (a : AgentId) (src : 
 
 /-- With no bar set, promotion needs no evaluation: whenever the source environment points at a
 version, promoting it to any environment succeeds and moves the target's pointer to it. -/
-@[aw_spec (tier := T1) (doc := "docs/formal/domains/release.md#the-release-model")
+@[aw_spec (tier := T1) (doc := "docs/20-design/formal/domains/release.md#the-release-model")
   (ts := "apps/web/server/agent-versions/release.ts#decidePromote")]
 theorem promote_without_a_bar_needs_no_evaluation (r : Release) (a : AgentId) (src dst : Env)
     (v : VersionNo) (hp : r.pointer a src = some v) :

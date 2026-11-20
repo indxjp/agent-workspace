@@ -126,7 +126,7 @@ describe('spec §9 gateway inventory', () => {
   });
 
   it('publishes each optional capability as the provider adapter declares it', async () => {
-    // docs/compatibility/providers.md is rendered from scripts/matrix/providers.json, a hand-kept
+    // docs/30-reference/compatibility/providers.md is rendered from scripts/matrix/providers.json, a hand-kept
     // table; a capability flag flipped in the adapter must flip the published cell too.
     const published = JSON.parse(
       await readFile(new URL('../scripts/matrix/providers.json', import.meta.url), 'utf8'),

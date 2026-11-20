@@ -23,7 +23,7 @@
  */
 import { createWorkspace, listWorkspaces } from '../../../server/workspaces/handlers';
 import { apiKeyRefusal } from '../../../server/workspaces/access';
-import type { WorkspaceRepositoryPort } from '../../../server/workspaces/runtime';
+import type { WorkspaceRepositoryPort } from '../../../server/workspaces/wiring';
 import { applicationContext } from '../../../server/application-context';
 import { readJsonBody, type ApiResult } from '../../../server/http/result';
 import { problem, toResponse } from '../../../server/rbac/http';

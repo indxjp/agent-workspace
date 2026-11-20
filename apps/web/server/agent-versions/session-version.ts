@@ -64,7 +64,7 @@ export function resolveSessionVersion<V>(
  * `session_already_started` is `SessionRepository.ensure` answering `existing` unchanged, so every
  * caller asks for a session that has not started. `no_pointer` departs from the model: an agent
  * with no pointer is a legacy, unversioned agent, and its session stores `null` and runs from the
- * row instead of being refused (`docs/formal/domains/release.md`).
+ * row instead of being refused (`docs/20-design/formal/domains/release.md`).
  */
 export function versionToPin(
   pointers: readonly AgentVersionPointerRecord[],

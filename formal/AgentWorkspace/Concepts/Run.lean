@@ -68,7 +68,7 @@ end ModelProvider
 /-- One run, with the fields `runs` stores. -/
 @[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs")
   (ts := "packages/contracts/src/runs.ts#RunResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure Run where
   id : RunId
   workspace : WorkspaceId
@@ -184,7 +184,7 @@ def lastStamp (r : Run) : Nat := max r.createdAt (max (r.startedAt.getD 0) (r.en
 
 /-- The run's agent, reached through its session (`runs` has no `agent_id`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 def agentVia (r : Run) (s : Session) : Option AgentId :=
   if s.id = r.session ∧ s.workspace = r.workspace then some s.agent else none
 
@@ -192,7 +192,7 @@ def agentVia (r : Run) (s : Session) : Option AgentId :=
 `owner_principal_id`; `RunRecord.ownerPrincipalId` is "the exact workspace principal that owns
 the session"). -/
 @[aw_spec (ts := "apps/web/server/runs/store.ts#ownerPrincipalId")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 def ownerVia (r : Run) (s : Session) : Option PrincipalId :=
   if s.id = r.session ∧ s.workspace = r.workspace then some s.ownerPrincipal else none
 

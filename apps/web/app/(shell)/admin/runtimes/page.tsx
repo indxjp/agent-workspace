@@ -4,7 +4,7 @@ import { versionsLocaleOf } from '../../../../components/agents/versions-message
 import { runtimesStrings } from '../../../../components/runtimes/runtimes-messages';
 import { RuntimesScreen } from '../../../../components/runtimes/runtimes-screen';
 import { NotAllowedScreen } from '../../../../components/shell/screen-main';
-import { getSession } from '../../../../server/auth';
+import { getSignInSession } from '../../../../server/auth';
 import { decide } from '../../../../server/rbac/decide';
 import { applicationContext } from '../../../../server/application-context';
 import { currentWebRuntimeRegistry } from '../../../../server/runtimes/registry';
@@ -21,7 +21,7 @@ export const revalidate = 0;
 async function callerManagesRuntimes(): Promise<boolean> {
   const rbac = applicationContext()?.rbac ?? null;
   if (rbac === null) return false;
-  const session = await getSession();
+  const session = await getSignInSession();
   if (session === null) return false;
   const viewer = await resolveTeamViewer(rbac.directory, session);
   return (

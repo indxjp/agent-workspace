@@ -27,7 +27,7 @@ import {
 } from '../../../../server/agents/http';
 import { route } from '../../../../server/http/route';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`, "runs every route on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`, "runs every route on the
 // Node runtime and never prerenders one"). Added by W1-INT-02, for the reason given at the same
 // place in `../route.ts`.
 export const dynamic = 'force-dynamic';

@@ -77,7 +77,7 @@ theorem granted_builder_runs_the_agent_a_granted_viewer_can :
 
 /-- Both revoke route shapes have one dedicated decision: Owner and Admin pass, while Builder and
 Viewer deny, independently of the ownership answer. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "apps/web/server/runs/api.ts#revokeRunTokens") (ts := "apps/web/server/rbac/decide.ts#decide")]
 theorem decide_and_the_revoke_gate_agree_for_every_role :
     ∀ path ∈ ["/api/runs/:id/revoke-tokens", "/api/runs/:id"],
@@ -109,7 +109,7 @@ theorem admin_run_verbs_adrs_disagree_at_one_cell :
 Admin over `secrets` and `audit-events`, Builder and Viewer over `audit-events` — and
 is silent on `demo`, `endpoint-clients`, `me`, `setup`, `storage-connections`, `tool-bundles` and
 `triggers`. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#33-roles")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")
   (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem documented_table_diverges_exactly_at :
     (Resource.all.flatMap fun res => (roles.filter fun r =>
@@ -125,7 +125,7 @@ theorem documented_table_diverges_exactly_at :
 `(resource, operation)` with no sub-resource key, so a run scope also passes `decide()` for
 `GET`/`HEAD` on every other `runs` sub-resource of its run (`interrupt`, `revoke-tokens`,
 `feedback`), shapes with no `GET` handler. -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")]
 theorem run_scope_passes_every_get_on_its_runs_shapes :
     ["/api/runs/r", "/api/runs/r/events", "/api/runs/r/interrupt", "/api/runs/r/revoke-tokens",
@@ -135,7 +135,7 @@ theorem run_scope_passes_every_get_on_its_runs_shapes :
   decide +kernel
 
 /-- The upper-case spelling of the scoped UUID is admitted as the same run. -/
-@[aw_spec (tier := T5) (doc := "docs/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
+@[aw_spec (tier := T5) (doc := "docs/20-design/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
   (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_scope_id_accepts_equivalent_uuid_spelling :
     decideAuth ⟨"owner", "GET", "/api/runs/0f8fad5b-d9cb-469f-a165-70867728950e", .own,

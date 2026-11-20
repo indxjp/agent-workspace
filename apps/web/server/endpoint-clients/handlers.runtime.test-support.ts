@@ -1,7 +1,7 @@
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
 import { randomUUID } from 'node:crypto';
 import { installTestDomains } from '../application-context-fixtures';
-import type { EndpointClientAuditEvent, EndpointClientsRuntime } from './runtime';
+import type { EndpointClientAuditEvent, EndpointClientsRuntime } from './wiring';
 
 export interface EndpointClientState {
   readonly clients: Map<string, EndpointClientResource & { workspaceId: string }>;

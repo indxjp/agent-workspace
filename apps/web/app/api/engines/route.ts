@@ -15,7 +15,7 @@
 import { listEngines } from '../../../server/engines/handlers';
 import { authorise, toResponse } from '../../../server/rbac/http';
 
-// The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
+// The repository-wide route invariant (`tests/route-inventory.policy-check.ts`): every route runs on the
 // Node runtime and none is prerendered. Correct here independently of the gate — the answer depends
 // on the caller's credential, which `authorise` reads from the request.
 export const dynamic = 'force-dynamic';

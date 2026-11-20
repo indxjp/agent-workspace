@@ -4,7 +4,7 @@
  *
  * The tutorials' status tables are rendered from `<use case>/benchmark.ts` between the markers
  * `{/* benchmark:start *\/}` and `{/* benchmark:end *\/}`. A hand edit that disagrees with the
- * benchmark fails here; `GALLERY_WRITE=1 pnpm vitest run --project tests tests/gallery` rewrites
+ * benchmark fails here; `GALLERY_WRITE=1 pnpm vitest run --project tests-gallery tests/gallery` rewrites
  * them from the benchmarks.
  *
  * The landing page's use-case scores sit between `<!-- benchmark:score <use case> -->` and

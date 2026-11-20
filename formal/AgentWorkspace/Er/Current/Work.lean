@@ -42,7 +42,7 @@ ENG-06 (#305) added the last three: `session_state_streams`, `session_state_entr
 session told for every engine rather than for one. The Claude pair stays until the contract step of
 the expand/contract migration (ADR-0071). ADR-0144 (#1292) added the last two: a trigger starts
 runs of one agent, and a delivery is the claimed slot of one firing, naming the run it started. -/
-@[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/index.ts")]
 def workTables : List TableName :=
   [.projects, .sessions, .sessionTranscripts, .sessionMessages, .sessionStateStreams,
@@ -141,7 +141,7 @@ end AuditAction
 was written; `subjectId` is text with no foreign key, because the subject may be gone. -/
 @[aw_spec (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")
   (ts := "packages/contracts/src/observability.ts#AuditEventSchema")
-  (doc := "docs/sdk/04-api-specification.md#514-metrics-and-audit--awobservability")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#514-metrics-and-audit--awobservability")]
 structure AuditEvent where
   id : AuditEventId
   workspace : WorkspaceId
@@ -472,7 +472,7 @@ def workCheckHolds (n : String) (r : Row) : Bool :=
 the latest snapshot (`Er.Snapshot.file`) by the conformance suite, which is a snapshot that
 carries the three session-state tables this cluster gained in 0026). -/
 @[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def workCheckSql : List (String × String) :=
   [("projects_name_not_blank", "length(btrim(\"projects\".\"name\")) > 0"),
     ("projects_default_model_pair",
@@ -548,7 +548,7 @@ def workChecksHold (st : State) : Bool :=
 /-- The states the database can hold, as far as the work cluster can tell: every constraint of
 `Er.Core` holds, and so does every refined check of the work tables. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def workConsistent (st : State) : Bool := consistent catalogue st && workChecksHold st
 
 /-! ## Relationships -/
@@ -558,7 +558,7 @@ def workConsistent (st : State) : Bool := consistent catalogue st && workChecksH
 def workFk (t : TableName) (n : String) : ForeignKey := ((catalogue t).foreignKey? n).getD default
 
 /-- How many parent rows a child row links through a foreign key. -/
-@[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 inductive Cardinality where
   /-- Every key column is `NOT NULL`: every child row has exactly one parent (`||` in the ER
   diagram). -/
@@ -580,7 +580,7 @@ instance : WireEnum Cardinality where
   toWire_injective := by intro a b; cases a <;> cases b <;> decide
 
 /-- The cardinality a foreign key imposes on its child rows. -/
-@[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def fkCardinality (S : Schema) (t : TableName) (fk : ForeignKey) : Cardinality :=
   if fk.columns.all (S t).isNotNull then .exactlyOne else .atMostOne
 

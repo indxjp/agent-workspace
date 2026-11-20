@@ -21,7 +21,7 @@ import { createRuntimeWorkspaceLifecycle } from '../../compose/workspace-lifecyc
 import type { LaunchContext, RunPrincipal } from '../../runs/environment';
 import { atStep, resolvedSecretValues } from '../../runs/failures';
 import { createRunnerLauncher, type RunnerLauncherOptions } from '../../runs/launcher';
-import { activeTraceHeaders } from '../../telemetry/runtime';
+import { activeTraceHeaders } from '../../telemetry/wiring';
 import { maximumRunDurationMs } from '../config';
 import { recordReportedSessionIdentity } from '../session-launch';
 import type { AgentsWiring } from './agents';

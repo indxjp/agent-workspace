@@ -2,7 +2,7 @@
 // Nx remote-cache configuration guard — ported from a sibling repository (its
 // scripts/ci/check-nx-cache-config.mjs, PR #1950) when this repository left Nx Cloud
 // (docs/adr/0110-nx-cloud-is-replaced-by-a-self-hosted-oidc-gated-remote-cache.md; how CI uses
-// the cache: docs/operations/ci.md "Nx remote cache").
+// the cache: docs/40-operate/operations/ci.md "Nx remote cache").
 //
 // Fails CI if any of these regress. Every rule is a named check scoped to an explicit set of
 // ACTIVE configuration files — docs and history are never scanned, so no per-file exceptions.
@@ -29,10 +29,14 @@
 //                         CI writes only through the OIDC exchange
 //   cache-env-via-action  no workflow sets NX_SELF_HOSTED_REMOTE_CACHE_SERVER / _ACCESS_TOKEN
 //                         itself — only .github/actions/nx-remote-cache does
-//   pr-write-assertion    every workflow using the action carries the "Assert pull_request runs
-//                         cannot select remote-cache write" step
+//   pr-write-assertion    every workflow using the action carries the "Assert fork pull_request
+//                         runs cannot select remote-cache write" step
 //   cache-kind-plan       every use of the action takes its kind from the workflow's single
 //                         `NX_REMOTE_CACHE_KIND` plan, defined exactly once
+//   fork-read-only        a plan that lets a pull_request write requires the head repository to
+//                         be this one (owner decision D1b: same-repository pull requests write,
+//                         forks never; ADR-0110 Amendment 2026-11-19), and the action keeps its
+//                         own fork refusal
 //   nx-via-wrapper        in a workflow using the action, every task-running `nx` call goes
 //                         through scripts/ci/nx.sh: Nx 23 fails a run on any remote-cache
 //                         transport error or 5xx, and the wrapper is what keeps the cache from
@@ -80,7 +84,20 @@ const CLOUD_CI_PATTERNS = [
 ];
 
 const USES_ACTION = /uses:\s*\.\/\.github\/actions\/nx-remote-cache\b/u;
-const PR_WRITE_ASSERTION = /name:\s*Assert pull_request runs cannot select remote-cache write/u;
+const PR_WRITE_ASSERTION =
+  /name:\s*Assert fork pull_request runs cannot select remote-cache write/u;
+// A plan's pull_request write clause must carry the same-repository condition.
+const PR_IN_PLAN = /github\.event_name\s*==\s*'pull_request'/u;
+const SAME_REPO_IN_PLAN =
+  /github\.event\.pull_request\.head\.repo\.full_name\s*==\s*github\.repository\b/u;
+const ACTION_FILE = '.github/actions/nx-remote-cache/action.yml';
+// The action's own refusal: the head repository reaches the script through env, and a write
+// for a pull_request whose head is not this repository exits 1.
+const ACTION_FORK_GUARD = [
+  'HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}',
+  'BASE_REPO: ${{ github.repository }}',
+  'if [ "$HEAD_REPO" != "$BASE_REPO" ]; then',
+];
 const KIND_INPUT = /^\s*kind:\s*(.*?)\s*$/u;
 const PLANNED_KIND = '${{ env.NX_REMOTE_CACHE_KIND }}';
 const PLAN_DEFINITION = /^\s*NX_REMOTE_CACHE_KIND:/u;
@@ -271,7 +288,17 @@ export function checkCiText(text, file, { isWorkflow = false } = {}) {
       });
     }
     if (!usesAction) return;
-    if (PLAN_DEFINITION.test(line)) planDefinitions += 1;
+    if (PLAN_DEFINITION.test(line)) {
+      planDefinitions += 1;
+      if (PR_IN_PLAN.test(line) && !SAME_REPO_IN_PLAN.test(line)) {
+        out.push({
+          rule: 'fork-read-only',
+          file: at,
+          message:
+            "NX_REMOTE_CACHE_KIND names pull_request without `github.event.pull_request.head.repo.full_name == github.repository` — a fork's pull request must never plan write (ADR-0110, Amendment 2026-11-19).",
+        });
+      }
+    }
     const kind = KIND_INPUT.exec(line);
     if (kind && kind[1] !== PLANNED_KIND) {
       out.push({
@@ -294,7 +321,7 @@ export function checkCiText(text, file, { isWorkflow = false } = {}) {
       rule: 'pr-write-assertion',
       file,
       message:
-        'uses nx-remote-cache but has no "Assert pull_request runs cannot select remote-cache write" step.',
+        'uses nx-remote-cache but has no "Assert fork pull_request runs cannot select remote-cache write" step.',
     });
   }
   if (usesAction && planDefinitions !== 1) {
@@ -305,6 +332,22 @@ export function checkCiText(text, file, { isWorkflow = false } = {}) {
     });
   }
   return out;
+}
+
+/**
+ * The nx-remote-cache action must refuse a write planned for a fork's pull request by itself,
+ * whatever a workflow's plan says.
+ * @param {string} text
+ * @param {string} [file]
+ * @returns {Problem[]}
+ */
+export function checkActionText(text, file = ACTION_FILE) {
+  const missing = ACTION_FORK_GUARD.filter((needle) => !text.includes(needle));
+  return missing.map((needle) => ({
+    rule: 'fork-read-only',
+    file,
+    message: `the action must refuse write for a fork pull_request itself; missing \`${needle}\`.`,
+  }));
 }
 
 /**
@@ -421,6 +464,7 @@ export function runAll() {
   for (const { p, isWorkflow } of activeCiFiles()) {
     problems.push(...checkCiText(read(p), p, { isWorkflow }));
   }
+  problems.push(...checkActionText(read(ACTION_FILE)));
   const tracked = execFileSync('git', ['ls-files'], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
@@ -435,7 +479,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (problems.length > 0) {
     for (const p of problems) console.error(`::error::[${p.rule}] ${p.file}: ${p.message}`);
     console.error(
-      `\n${String(problems.length)} problem(s). See docs/operations/ci.md "Nx remote cache" for the rules this guard enforces.`,
+      `\n${String(problems.length)} problem(s). See docs/40-operate/operations/ci.md "Nx remote cache" for the rules this guard enforces.`,
     );
     process.exit(1);
   }

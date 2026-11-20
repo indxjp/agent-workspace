@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
-  type VerifiedSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+  type VerifiedSignInSessionClaims,
 } from '../auth/session';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
@@ -18,12 +18,12 @@ const PRINCIPAL_ID = '44444444-4444-4444-8444-444444444444';
 const HUMAN_PRINCIPAL_ID = '77777777-7777-4777-8777-777777777777';
 const SESSION_SECRET = 'a-test-session-secret-that-is-long-enough-32';
 
-async function verifiedClaims(): Promise<VerifiedSessionClaims> {
-  const token = await mintSessionToken(
-    newSessionClaims('owner@example.test', 'workspace'),
+async function verifiedClaims(): Promise<VerifiedSignInSessionClaims> {
+  const token = await mintSignInSessionToken(
+    newSignInSessionClaims('owner@example.test', 'workspace'),
     SESSION_SECRET,
   );
-  const verified = await verifySessionToken(token, SESSION_SECRET);
+  const verified = await verifySignInSessionToken(token, SESSION_SECRET);
   if (!verified.ok)
     throw new Error(`the fixture could not verify its own token: ${verified.reason}`);
   return verified.claims;

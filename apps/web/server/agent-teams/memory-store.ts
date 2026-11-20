@@ -20,7 +20,7 @@ import type {
   AgentTeamsRuntime,
   AgentTeamVersionInput,
   AgentTeamVersionRecord,
-} from './runtime';
+} from './wiring';
 
 /** The agent name a pin resolves to in `workspaceId`, or `null` when it is no version there. */
 export type PinnedAgentLookup = (

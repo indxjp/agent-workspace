@@ -64,11 +64,6 @@
       "count": 1
     }
   },
-  "apps/web/server/telemetry/runtime.ts": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "packages/aw/src/tools/host-child.ts": {
     "no-restricted-syntax": {
       "count": 1

@@ -41,7 +41,7 @@ import { formatIssues, problem, readJsonBody, type ApiResult } from '../http/res
 import { perMinuteLimiter, type Admission } from '../http/rate-limit';
 import { checkClientCredentials, readBasic } from '../oauth/client-auth';
 import { admitOAuthAuthAttempt, OAUTH_RATE_LIMITS, recordOAuthAuthFailure } from '../oauth/limits';
-import type { OAuthClient } from '../oauth/runtime';
+import type { OAuthClient } from '../oauth/wiring';
 import { mintOAuthToken } from '../oauth/tokens';
 import { log } from '../telemetry/logger';
 import {

@@ -12,7 +12,7 @@
  * `packages/core/src/db/repositories/workspaces.test.ts` proves it against real PostgreSQL.
  */
 import type { Role } from '../rbac/core/roles';
-import type { WorkspaceRepositoryPort } from './runtime';
+import type { WorkspaceRepositoryPort } from './wiring';
 
 interface WorkspaceRow {
   id: string;

@@ -82,7 +82,7 @@ would make "a consumer can stop a run it started" false for exactly the roles th
 `apps/web/app/api/runs/[id]/revoke-tokens/route.ts` adapter over the **same** `revokeRunTokens`
 handler; the old `POST /api/runs/[id]` is untouched in behaviour and its route declaration records
 the deprecation in prose (`tests/route-declarations/W1-CP-04.ts`'s `mandate.because`), because a
-machine-readable `deprecated` flag would mean editing `tests/route-inventory.test.ts`'s
+machine-readable `deprecated` flag would mean editing `tests/route-inventory.policy-check.ts`'s
 `ROUTE_FIELDS` and `tests/inventory-support.ts` — a shared gate outside this unit's declared globs.
 No second copy of the handler exists.
 
@@ -117,7 +117,7 @@ write-like routes) would be two rules.
   opposite of the issue's outcome.
 - **A machine-readable `deprecated` flag on a route declaration.** Rejected for this unit: it would
   require widening this unit's globs to include the route-inventory gate's own support files
-  (`tests/inventory-support.ts`, `tests/route-inventory.test.ts`), which are shared infrastructure
+  (`tests/inventory-support.ts`, `tests/route-inventory.policy-check.ts`), which are shared infrastructure
   outside `Owns`. Prose in the existing declaration's `mandate.because` records the same fact
   without touching a gate two other units also depend on.
 
@@ -141,7 +141,7 @@ write-like routes) would be two rules.
   store branches on `status !== 'queued'` — so neither gains a query; only the port stopped
   discarding it.
 - **`permissions.ts` is `runs`' published role table**, and the site
-  (`docs/sdk/04-api-specification.md` §3.3, `docs/sdk/site/concepts/workspaces-and-principals.mdx`
+  (`docs/10-product/sdk/04-api-specification.md` §3.3, `docs/sdk/site/concepts/workspaces-and-principals.mdx`
   and `docs/sdk/site/concepts/ownership-and-sharing.mdx`) reproduces it verbatim; all three move in
   this change. It is a widening — Admin gains `run: 'any'`, Builder and Viewer gain `run: 'own'`
   — so no caller loses access.

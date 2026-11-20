@@ -1,0 +1,17 @@
+id: sdk
+title: TypeScript SDK
+summary: >
+  The typed isomorphic client over /api/**: sends the contracts version, validates every response and decodes problems into typed errors. Also agents-as-code (/define) and the project file (/project).
+layer: client
+paths:
+  - "packages/sdk/**"
+key_files:
+  - { path: packages/sdk/src/index.ts, role: "createClient and AgentWorkspaceClient, one resource client per family" }
+  - { path: packages/sdk/src/http.ts, role: "transport: version header, validation, problems" }
+  - { path: packages/sdk/src/errors.ts, role: "ApiProblemError and the other error classes" }
+interface: [createClient, AgentWorkspaceClient, ApiProblemError]
+depends_on: [contracts]
+uses: [zod]
+rules: []
+checklist: []
+status: current

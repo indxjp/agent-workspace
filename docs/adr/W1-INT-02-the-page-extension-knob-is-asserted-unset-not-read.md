@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W1-INT-02 (Wave 1 invariants)
-Scope: `tests/route-inventory.test.ts`; amends decision 4 of
+Scope: `tests/route-inventory.policy-check.ts`; amends decision 4 of
 [W1-CP-05-route-inventory-is-a-three-way-comparison](W1-CP-05-route-inventory-is-a-three-way-comparison.md)
 
 ## Context
@@ -20,7 +20,7 @@ over one it cannot decide statically. A dynamic import whose argument is a compu
 exactly that, and on the Wave 1a union it reported:
 
 ```
-tests/route-inventory.test.ts: a import() call whose argument is not a plain quoted string,
+tests/route-inventory.policy-check.ts: a import() call whose argument is not a plain quoted string,
 so this gate cannot tell which module it names
 ```
 

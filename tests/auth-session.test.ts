@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_SESSION_SECRET_LENGTH,
-  sessionCookieName,
-  SESSION_TTL_SECONDS,
-  clearedSessionCookie,
-  mintSessionToken,
-  newSessionClaims,
+  signInSessionCookieName,
+  SIGN_IN_SESSION_TTL_SECONDS,
+  clearedSignInSessionCookie,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
   readSessionSecret,
-  sessionCookie,
-  verifySessionToken,
+  signInSessionCookie,
+  verifySignInSessionToken,
 } from '../apps/web/server/auth/session.js';
 
 const SECRET = 'a'.repeat(MIN_SESSION_SECRET_LENGTH);
@@ -32,11 +32,11 @@ describe('readSessionSecret', () => {
   });
 });
 
-describe('verifySessionToken', () => {
+describe('verifySignInSessionToken', () => {
   it('round-trips a minted token', async () => {
-    const claims = newSessionClaims('admin@example.com', 'default');
-    const token = await mintSessionToken(claims, SECRET);
-    const result = await verifySessionToken(token, SECRET);
+    const claims = newSignInSessionClaims('admin@example.com', 'default');
+    const token = await mintSignInSessionToken(claims, SECRET);
+    const result = await verifySignInSessionToken(token, SECRET);
     expect(result.ok).toBe(true);
     // Every claim but the role, which verifying drops (refactoring part 06, step 9).
     if (result.ok) expect({ ...result.claims }).toEqual({ ...claims, role: undefined });
@@ -44,21 +44,27 @@ describe('verifySessionToken', () => {
 
   it('rejects an absent cookie by name', async () => {
     for (const absent of [undefined, null, '']) {
-      const result = await verifySessionToken(absent, SECRET);
+      const result = await verifySignInSessionToken(absent, SECRET);
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.code).toBe('no_session_cookie');
     }
   });
 
   it('rejects a token signed with a different secret', async () => {
-    const token = await mintSessionToken(newSessionClaims('admin@example.com', 'default'), SECRET);
-    const result = await verifySessionToken(token, 'b'.repeat(MIN_SESSION_SECRET_LENGTH));
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('admin@example.com', 'default'),
+      SECRET,
+    );
+    const result = await verifySignInSessionToken(token, 'b'.repeat(MIN_SESSION_SECRET_LENGTH));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('invalid_signature');
   });
 
   it('rejects a tampered payload', async () => {
-    const token = await mintSessionToken(newSessionClaims('admin@example.com', 'default'), SECRET);
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('admin@example.com', 'default'),
+      SECRET,
+    );
     const parts = token.split('.');
     const forged = JSON.stringify({
       sub: 'attacker@example.com',
@@ -68,32 +74,35 @@ describe('verifySessionToken', () => {
       exp: Math.floor(Date.now() / 1000) + 60,
     });
     const swapped = `${parts[0] ?? ''}.${Buffer.from(forged).toString('base64url')}.${parts[2] ?? ''}`;
-    const result = await verifySessionToken(swapped, SECRET);
+    const result = await verifySignInSessionToken(swapped, SECRET);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('invalid_signature');
   });
 
   it('rejects a token whose version tag is not this build’s', async () => {
-    const token = await mintSessionToken(newSessionClaims('admin@example.com', 'default'), SECRET);
-    const result = await verifySessionToken(token.replace(/^aw1\./u, 'aw2.'), SECRET);
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('admin@example.com', 'default'),
+      SECRET,
+    );
+    const result = await verifySignInSessionToken(token.replace(/^aw1\./u, 'aw2.'), SECRET);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('malformed_session');
   });
 
   it('rejects a structurally wrong token without throwing', async () => {
     for (const bad of ['x', 'a.b', 'a.b.c.d', 'aw1..', 'aw1.$$$.$$$', 42, {}, []]) {
-      const result = await verifySessionToken(bad, SECRET);
+      const result = await verifySignInSessionToken(bad, SECRET);
       expect(result.ok, JSON.stringify(bad)).toBe(false);
     }
   });
 
   it('rejects an expired session', async () => {
-    const issuedAt = Date.now() - (SESSION_TTL_SECONDS + 60) * 1000;
-    const token = await mintSessionToken(
-      newSessionClaims('admin@example.com', 'default', issuedAt),
+    const issuedAt = Date.now() - (SIGN_IN_SESSION_TTL_SECONDS + 60) * 1000;
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('admin@example.com', 'default', issuedAt),
       SECRET,
     );
-    const result = await verifySessionToken(token, SECRET);
+    const result = await verifySignInSessionToken(token, SECRET);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('expired_session');
   });
@@ -122,7 +131,7 @@ describe('verifySessionToken', () => {
       { ...base, role: 'admin', exp: base.iat + 60 },
       { ...base, sub: '', exp: base.iat + 60 },
       { ...base, ws: 42, exp: base.iat + 60 },
-      { ...base, exp: base.iat + SESSION_TTL_SECONDS * 10 },
+      { ...base, exp: base.iat + SIGN_IN_SESSION_TTL_SECONDS * 10 },
     ];
     for (const payload of payloads) {
       const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -137,7 +146,7 @@ describe('verifySessionToken', () => {
       const signature = Buffer.from(
         await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed)),
       ).toString('base64url');
-      const result = await verifySessionToken(`${signed}.${signature}`, SECRET);
+      const result = await verifySignInSessionToken(`${signed}.${signature}`, SECRET);
       expect(result.ok, JSON.stringify(payload)).toBe(false);
       if (!result.ok) expect(result.code).toBe('malformed_session');
     }
@@ -157,7 +166,7 @@ describe('verifySessionToken', () => {
       const signature = Buffer.from(
         await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed)),
       ).toString('base64url');
-      const result = await verifySessionToken(`${signed}.${signature}`, SECRET);
+      const result = await verifySignInSessionToken(`${signed}.${signature}`, SECRET);
       expect(result.ok, scalar).toBe(false);
     }
   });
@@ -165,17 +174,17 @@ describe('verifySessionToken', () => {
 
 describe('the session cookie', () => {
   it('is __Host-, HttpOnly, Secure, SameSite=Lax and Path=/', () => {
-    const cookie = sessionCookie('token', sessionCookieName({}));
+    const cookie = signInSessionCookie('token', signInSessionCookieName({}));
     expect(cookie.name).toBe('__Host-aw_session');
     expect(cookie.httpOnly).toBe(true);
     expect(cookie.secure).toBe(true);
     expect(cookie.sameSite).toBe('lax');
     expect(cookie.path).toBe('/');
-    expect(cookie.maxAge).toBe(SESSION_TTL_SECONDS);
+    expect(cookie.maxAge).toBe(SIGN_IN_SESSION_TTL_SECONDS);
   });
 
   it('clears with the same attributes and a zero lifetime', () => {
-    const cleared = clearedSessionCookie(sessionCookieName({}));
+    const cleared = clearedSignInSessionCookie(signInSessionCookieName({}));
     expect(cleared.name).toBe('__Host-aw_session');
     expect(cleared.value).toBe('');
     expect(cleared.maxAge).toBe(0);

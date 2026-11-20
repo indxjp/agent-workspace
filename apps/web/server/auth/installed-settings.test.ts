@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getSession, signIn } from '.';
+import { getSignInSession, signIn } from '.';
 import {
-  mintSessionToken,
-  newSessionClaims,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
   signIn as signInFromEnv,
-  verifySessionToken,
+  verifySignInSessionToken,
 } from './session';
 
 const cookieJar = vi.hoisted(() => new Map<string, string>());
@@ -40,7 +40,7 @@ describe('the auth root reads the installed sign-in settings (refactoring part 0
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.cookie.name).toBe('__Host-aw_session_acme-ai');
-    expect((await verifySessionToken(result.token, SECRET)).ok).toBe(true);
+    expect((await verifySignInSessionToken(result.token, SECRET)).ok).toBe(true);
   });
 
   it('refuses with the reason when no administrator is configured', async () => {
@@ -52,13 +52,16 @@ describe('the auth root reads the installed sign-in settings (refactoring part 0
   it("reads the session from this deployment's cookie, verified with its secret", async () => {
     vi.stubEnv('SESSION_SECRET', SECRET);
     vi.stubEnv('AW_INSTANCE_ID', 'acme-ai');
-    const token = await mintSessionToken(newSessionClaims('owner@example.test', 'default'), SECRET);
+    const token = await mintSignInSessionToken(
+      newSignInSessionClaims('owner@example.test', 'default'),
+      SECRET,
+    );
     cookieJar.set('__Host-aw_session_other', token);
-    expect(await getSession()).toBeNull();
+    expect(await getSignInSession()).toBeNull();
     cookieJar.set('__Host-aw_session_acme-ai', token);
-    expect(await getSession()).toMatchObject({ sub: 'owner@example.test', ws: 'default' });
+    expect(await getSignInSession()).toMatchObject({ sub: 'owner@example.test', ws: 'default' });
     vi.stubEnv('SESSION_SECRET', '');
-    expect(await getSession()).toBeNull();
+    expect(await getSignInSession()).toBeNull();
   });
 
   it('names the cookie from the environment it is given when signing in from one', async () => {

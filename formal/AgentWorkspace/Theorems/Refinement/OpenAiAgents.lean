@@ -34,7 +34,7 @@ private theorem written_append {α : Type} (s : List (Entry α)) (items : List �
 /-- The adapter's `Session` refines the store: on a stream it wrote, `getItems` lists the items,
 `addItems` appends them, `popItem` returns and removes the last, and `clearSession` replaces the
 stream with nothing — each through the store's list, append, delete-last and replace-all. -/
-@[aw_spec (tier := T4) (doc := "docs/formal/units/engine-openai-agents.md#session")
+@[aw_spec (tier := T4) (doc := "docs/20-design/formal/units/engine-openai-agents.md#session")
   (ts := "packages/engine-openai-agents/src/session.ts#EngineStoreSession")
   (ts := "packages/engine/src/port.ts#EngineSessionStore")]
 theorem the_session_refines_the_store {α : Type} (s : List (Entry α)) (items : List α)

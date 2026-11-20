@@ -56,7 +56,7 @@ theorem resolved_scope_names_an_existing_workspace (st : State) (key : String) (
 /-- A session selects the workspace its verified slug names: the principal's workspace id is that
 `workspaces` row's id, and its principal is an unrevoked `workspace_principals` row of that same
 workspace; it is a `session` principal with no browser-token scope. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#31-credentials")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")
   (ts := "packages/core/src/db/repositories/root.ts#resolveMembership")
   (ts := "apps/web/server/rbac/principal.ts#fromSession")]
 theorem session_principal_is_in_the_session_workspace (st : State) (claims : SessionClaims)
@@ -91,7 +91,7 @@ theorem session_principal_is_in_the_session_workspace (st : State) (claims : Ses
 /-- An API key selects the workspace it was minted in: the principal's workspace is the key row's
 (the one whose hash was presented), and its principal row is paired with the key in that same
 workspace. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")
   (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
   (ts := "apps/web/server/rbac/principal.ts#fromApiKey")]
 theorem api_key_principal_is_in_the_key_workspace (st : State) (keyHash : String) (now : Nat)
@@ -124,7 +124,7 @@ theorem api_key_principal_is_in_the_key_workspace (st : State) (keyHash : String
 
 /-- A browser token selects its minter's workspace, which is the token row's own: the principal is
 the minter's (re-read in the token's workspace) with the token's scope attached. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")
   (ts := "apps/web/server/rbac/principal.ts#fromBrowserToken")]
 theorem browser_token_principal_is_in_the_token_workspace (st : State) (tokenHash : String)
@@ -163,7 +163,7 @@ theorem browser_token_principal_is_in_the_token_workspace (st : State) (tokenHas
 
 /-- `Principal.fromSession` refuses a workspace whose slug is not the verified session's. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/rbac/principal.ts#fromSession")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 theorem session_for_another_workspace_is_refused (claims : SessionClaims) (ws : SessionWorkspace)
     (role : String) (identity : MemberIdentity) (hslug : ws.slug ≠ claims.ws) :
     fromSession claims ws role identity = .error .workspaceMismatch := by
@@ -172,7 +172,7 @@ theorem session_for_another_workspace_is_refused (claims : SessionClaims) (ws : 
 /-- `Principal.fromSession` refuses an identity whose principal id, user id or label is blank, even
 for the session's own workspace. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/rbac/principal.ts#fromSession")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 theorem session_with_a_blank_identity_is_refused (claims : SessionClaims) (ws : SessionWorkspace)
     (role : String) (identity : MemberIdentity) (hslug : ws.slug = claims.ws)
     (hblank : Text.isBlank identity.principalId = true ∨ Text.isBlank identity.userId = true ∨
@@ -183,7 +183,7 @@ theorem session_with_a_blank_identity_is_refused (claims : SessionClaims) (ws : 
 /-- A revoked or expired API key selects no workspace: when every `api_keys` row with the presented
 hash is revoked, or carries an expiry that is not after `now`, authentication answers nothing (a
 revoked, expired and unknown key are indistinguishable). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#31-credentials")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")
   (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")]
 theorem revoked_or_expired_api_key_selects_no_workspace (st : State) (keyHash : String) (now : Nat)
     (hdead : ∀ k ∈ st .apiKeys, k.get "key_hash" = some keyHash →
@@ -206,7 +206,7 @@ theorem revoked_or_expired_api_key_selects_no_workspace (st : State) (keyHash : 
 
 /-- An API key whose workspace principal is revoked selects no workspace, even while the key row
 itself is live. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#31-credentials")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")
   (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")]
 theorem api_key_of_a_revoked_principal_selects_no_workspace (st : State) (keyHash : String)
     (now : Nat) (hrev : ∀ pr ∈ st .workspacePrincipals, (pr.get "revoked_at").isSome = true) :
@@ -282,7 +282,7 @@ private theorem unpack_browser_token {st : State} {tokenHash : String} {now : Na
 
 /-- A browser token selects a workspace only while it is live: its row is unrevoked and its expiry
 is after `now` (an expired or revoked token authenticates as nothing). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")]
 theorem browser_token_selection_requires_a_live_token (st : State) (tokenHash : String) (now : Nat)
     (p : RequestPrincipal) (h : resolveBrowserToken st tokenHash now = some p) :
@@ -296,7 +296,7 @@ workspace and, for a key-minted token, while the minting API key itself is neith
 expired; the role it carries is the one the directory holds now (the member's current membership
 role, or the key's role): revoking the minting key or principal, or demoting the minting member,
 takes effect on the token's next call. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/repositories/directory.ts#principalById")]
 theorem browser_token_selection_requires_a_live_minter (st : State) (tokenHash : String) (now : Nat)
     (p : RequestPrincipal) (h : resolveBrowserToken st tokenHash now = some p) :
@@ -318,7 +318,7 @@ theorem browser_token_selection_requires_a_live_minter (st : State) (tokenHash :
 
 /-- An expiry cell is exclusive: a credential whose `expires_at` is the instant `t` is live at
 `now` exactly when `now < t` (`gt(expires_at, now)`), so at its expiry instant it is already dead. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
   (ts := "packages/core/src/db/repositories/directory.ts#principalById")]
 theorem expiry_instant_is_exclusive (t now : Nat) :
@@ -327,7 +327,7 @@ theorem expiry_instant_is_exclusive (t now : Nat) :
 
 /-- A run-scoped browser token selects a workspace only while its run exists in the token's
 workspace and has not reached a terminal status (`cancelled`, `completed`, `failed`). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")]
 theorem browser_token_for_a_run_requires_a_live_run (st : State) (tokenHash : String) (now : Nat)
     (p : RequestPrincipal) (h : resolveBrowserToken st tokenHash now = some p) (rid : RunId)
@@ -356,7 +356,7 @@ theorem browser_token_for_a_run_requires_a_live_run (st : State) (tokenHash : St
 
 /-- A session-scoped browser token selects a workspace only while its session exists in the token's
 workspace and is not archived. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")]
 theorem browser_token_for_a_session_requires_a_live_session (st : State) (tokenHash : String)
     (now : Nat) (p : RequestPrincipal) (h : resolveBrowserToken st tokenHash now = some p)
@@ -429,8 +429,8 @@ id check; for the other three routes the id check), it answers `404 run_not_foun
 "no run <id> in this workspace." for a run id with no run in the caller's workspace — whether the id
 names no run at all or a run of another workspace — before the handler reads the run: never
 `403`. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#4-conventions")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "apps/web/server/runs/api.ts#readRun")]
 theorem run_route_answers_404_for_absent_or_foreign_runs {α : Type} (route : RunRoute) (st : State)
     (caller : RunCaller) (runId : String) (k : Row → Except RunProblem α)
@@ -451,7 +451,7 @@ theorem run_route_answers_404_for_absent_or_foreign_runs {α : Type} (route : Ru
 its role and whatever the path id (well-formed or not), a scoped caller never reaches the role gate,
 the id check or the run lookup. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#revokeRunTokens")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 theorem revoke_tokens_refuses_a_browser_token_first (ws role runId : String) :
     runPreflight .revokeTokens ⟨ws, role, true⟩ runId =
       some ⟨403, "token_out_of_scope", "a browser token’s scope does not reach revoking run tokens."⟩ := by
@@ -461,7 +461,7 @@ theorem revoke_tokens_refuses_a_browser_token_first (ws role runId : String) :
 `403 run_token_revoke_forbidden`, before it checks the path id: a malformed id from such a caller is
 still `403`, not `400`. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#revokeRunTokens")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem revoke_tokens_requires_owner_or_admin_before_the_id_check (ws role runId : String)
     (hrole : role ≠ "owner" ∧ role ≠ "admin") :
     runPreflight .revokeTokens ⟨ws, role, false⟩ runId =
@@ -474,7 +474,7 @@ unscoped owner or admin, for `revoke-tokens`) answers `400 invalid_run_id` for a
 a canonical UUID, and passes a canonical one on to the lookup. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/runs/api.ts#readRun")
   (ts := "apps/web/server/runs/api.ts#revokeRunTokens")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 theorem run_route_checks_the_id_after_its_gates (route : RunRoute) (caller : RunCaller)
     (runId : String)
     (hgate : route = .revokeTokens →
@@ -529,7 +529,7 @@ theorem authorise_follows_decide_after_an_ownership (p : RequestPrincipal)
 /-- Before any resolver or `decide()` runs, `authorise` answers `503 rbac_runtime_not_configured`
 when the runtime is not wired and `401 unauthenticated` when no principal was identified. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/rbac/http.ts#authorise")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 theorem authorise_refuses_before_resolving (principal : Option RequestPrincipal)
     (resolve : RequestPrincipal → ResolverOutcome)
     (decideFn : RequestPrincipal → Ownership → Decision) :
@@ -539,7 +539,7 @@ theorem authorise_refuses_before_resolving (principal : Option RequestPrincipal)
 
 /-- Every workspace route refuses an API-key caller with `403 api_key_not_permitted` (for a
 well-formed id), before any membership is read. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")
   (doc := "docs/adr/W9-WS-119-api-key-callers-are-refused.md#decision")
   (ts := "apps/web/server/workspaces/access.ts#apiKeyRefusal")]
 theorem api_key_caller_is_refused_on_workspace_routes (repo : WorkspaceRepo) (id : String)
@@ -578,8 +578,8 @@ theorem lesser_member_is_measured_not_concealed (repo : WorkspaceRepo) (id : Str
 well-formed id and a caller that is not an API key, when the caller's email names no member, or the
 member it names holds no membership of that workspace (because there is none, or because the
 workspace does not exist), both resolvers answer `404 workspace_not_found` — never `403`. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#32-workspace-selection")
-  (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#32-workspace-selection")
+  (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (ts := "apps/web/server/workspaces/access.ts#resolveMembershipView")]
 theorem non_member_or_absent_workspace_is_not_found (repo : WorkspaceRepo) (id : String)
     (p : RequestPrincipal) (directory : List MemberSummary) (hid : Uuid.isCanonical id = true)
@@ -637,7 +637,7 @@ theorem key_guard_refuses_each_named_traversal :
 
 /-- The three credential kinds are spelled `session`, `api-key` and `browser-token` on the wire, in
 `principal.ts`'s order (transcribed independently from §3.1's table). -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#31-credentials")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")
   (ts := "apps/web/server/rbac/principal.ts#Via")]
 theorem via_wire_spellings :
     (WireEnum.all (α := Via)).map WireEnum.toWire = ["session", "api-key", "browser-token"] := by
@@ -845,7 +845,7 @@ private def foreignMembershipFirst : State
 
 /-- `resolveMembership` must skip a same-user membership of another workspace and return the
 membership principal from the workspace named by the verified session slug. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#31-credentials")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")
   (ts := "packages/core/src/db/repositories/root.ts#resolveMembership")
   (ts := "apps/web/server/composition/session-rbac.ts#installRbacApi")]
 theorem session_selects_target_membership_after_foreign_first :

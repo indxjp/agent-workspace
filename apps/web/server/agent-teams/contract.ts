@@ -10,7 +10,7 @@ import {
 } from '@indx-workspace/contracts/agent-teams';
 
 import { readListCursor } from '../pagination/list-cursor';
-import type { AgentTeamListPosition, AgentTeamRecord, AgentTeamVersionRecord } from './runtime';
+import type { AgentTeamListPosition, AgentTeamRecord, AgentTeamVersionRecord } from './wiring';
 
 /** The page `GET /api/agent-teams` and the version list serve when the query names no `limit`. */
 const AGENT_TEAM_LIST_DEFAULT_LIMIT = 50;

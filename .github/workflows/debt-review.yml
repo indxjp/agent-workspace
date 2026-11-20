@@ -1,5 +1,5 @@
 # Quarterly debt review (engineering audit W4-3): opens, or refreshes, one issue per quarter that
-# lists the size of every baseline that may only shrink. Procedure: docs/operations/debt-review.md.
+# lists the size of every baseline that may only shrink. Procedure: docs/40-operate/operations/debt-review.md.
 name: Debt review
 
 on:

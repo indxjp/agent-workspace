@@ -52,7 +52,7 @@
         },
         {
           "path": "package.json",
-          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+          "added": "{\"dependencies\":{\"next\":\"16.4.6\"}}"
         },
         {
           "path": "package.json",
@@ -96,7 +96,7 @@
         "agent-workspace.yaml": "691e73496d28414a523ffb379134781047a47bc2d483edd9c16c7bcc9b5c00f5",
         "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
         "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-        "package.json": "7d7eda2ab82b94d46274bd58fee9de14cdd30f85591821a04ac3175539953af5",
+        "package.json": "6243ce4a159c50431280ad31f216450d8703fb0092b26bc5eeba06f0add5be77",
         "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
         "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
         "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39"

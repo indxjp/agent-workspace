@@ -5,7 +5,7 @@ import { requireResourceAccess, type ResourceAccess } from '../resources/authori
 import type { ProjectCreateInput, ProjectPatchInput } from '../../contracts/projects';
 import { DomainError } from '../errors';
 import { applicationContext } from '../application-context';
-import type { ProjectActor, ProjectsRuntime } from './runtime';
+import type { ProjectActor, ProjectsRuntime } from './wiring';
 import type { ProjectListFilter } from './store';
 
 export type ProjectContext = Awaited<ReturnType<ProjectsRuntime['forWorkspace']>> & {

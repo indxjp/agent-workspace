@@ -171,8 +171,8 @@ it one:
 runs `migrate`; old and new revisions never serve against the same database. **Rollback** is
 restoring the database backup taken before the cutover, together with the previous images — not a
 redeploy of the previous images over the migrated database. Each deployment guide carries the step
-beside its ADR-0069 note (`docs/deploy/azure-container-apps.md`, `docs/deploy/kubernetes.md`,
-`docs/deploy/single-vm.md`, and the Cloud Run section of `docs/sdk/site/concepts/data-plane.mdx`).
+beside its ADR-0069 note (`docs/40-operate/deploy/azure-container-apps.md`, `docs/40-operate/deploy/kubernetes.md`,
+`docs/40-operate/deploy/single-vm.md`, and the Cloud Run section of `docs/sdk/site/concepts/data-plane.mdx`).
 
 A dual-write or read-both window was the alternative, and was not chosen: the Owner decided on the
 ADR-0069 shape on #305, which keeps one writer of each table at every moment and makes the backfill

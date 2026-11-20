@@ -31,7 +31,7 @@ open AgentWorkspace
 `as const` order. -/
 @[aw_spec (ts := "packages/core/src/db/schema/model-connections.ts#modelProviders")
   (ts := "packages/contracts/src/runs.ts#MODEL_PROVIDERS")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 inductive Provider where
   | anthropic
   | anthropicCompatible
@@ -102,7 +102,7 @@ structure ConfigRule where
 OpenAI-compatible requires it, Azure OpenAI requires all three fields, and Vertex AI is keyless
 (workload identity) and requires `projectId`, with an optional `location`. -/
 @[aw_spec (ts := "packages/contracts/src/models.ts#MODEL_PROVIDER_CONFIG_RULES")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def rule : Provider → ConfigRule
   | .anthropic => { allowed := [.baseUrl], required := [] }
   | .anthropicCompatible => { allowed := [.baseUrl], required := [] }
@@ -165,7 +165,7 @@ def isBlank (s : String) : Bool := s.toList.all isJsTrimmed
 /-- `isModelConnectionConfigComplete`: every field the provider requires is present and not
 blank. -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#isModelConnectionConfigComplete")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def isComplete (p : Provider) (c : Config) : Bool :=
   (rule p).required.all fun f => match c.get f with
     | some v => !isBlank v
@@ -193,7 +193,7 @@ def configValuesAccepted (p : Provider) (c : Config) : Bool :=
 
 /-- The derived readiness of a connection. -/
 @[aw_spec (ts := "packages/contracts/src/models.ts#ModelConnectionResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 inductive Readiness where
   | ready
   | noCredential
@@ -207,7 +207,7 @@ def isKeyless (p : Provider) : Bool := (rule p).credential == .workloadIdentity
 
 /-- `ready = (hasCredential || isKeylessProvider(provider)) && isModelConnectionConfigComplete(provider, config)`. -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#toModelConnectionResource")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def ready (hasCredential : Bool) (p : Provider) (c : Config) : Bool :=
   (hasCredential || isKeyless p) && isComplete p c
 
@@ -222,7 +222,7 @@ def readiness (hasCredential : Bool) (p : Provider) (c : Config) : Readiness :=
 
 /-- One `model_connections` row as the concept knows it. -/
 @[aw_spec (ts := "packages/core/src/db/schema/model-connections.ts#modelConnections")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 structure ModelConnection where
   id : ModelConnectionId
   workspace : WorkspaceId
@@ -274,7 +274,7 @@ def createFields : List String := ["name", "provider", "apiKey", "config"]
 
 /-- The fields `POST /api/model-connections` requires; `config` may be omitted. -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#parseCreateModelConnection")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def createRequiredFields : List String := ["name", "provider", "apiKey"]
 
 
@@ -283,20 +283,20 @@ def createRequiredFields : List String := ["name", "provider", "apiKey"]
 follows the connection to a new destination). -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#parseUpdateModelConnection")
   (ts := "packages/contracts/src/models.ts#UpdateModelConnectionPatch")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def updateFields : List String := ["name", "config", "apiKey"]
 
 /-- `parseCreateModelConnection` over the keys of a body (each present value valid): closed, with
 `name`, `provider` and `apiKey` required. -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#parseCreateModelConnection")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def createAccepts (keys : List String) : Bool :=
   Secret.closedBodyAccepts createFields createRequiredFields keys
 
 /-- `parseUpdateModelConnection` over the keys of a body (each present value valid): closed, and
 nothing is required, so an empty body is a no-op update. -/
 @[aw_spec (ts := "apps/web/server/models/contract.ts#parseUpdateModelConnection")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def updateAccepts (keys : List String) : Bool := Secret.closedBodyAccepts updateFields [] keys
 
 /-- The value rule for a connection's `name` on create and update: a string that is not blank after
@@ -311,7 +311,7 @@ def apiKeyAccepted (s : String) : Bool := !s.isEmpty
 
 /-- A model choice: always a connection and a provider-side model id together. -/
 @[aw_spec (ts := "packages/contracts/src/models.ts#DiscoveredModelSchema")
-  (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 structure ModelChoice where
   connection : ModelConnectionId
   model : String

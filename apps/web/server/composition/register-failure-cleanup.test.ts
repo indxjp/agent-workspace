@@ -21,8 +21,8 @@ const injected = vi.hoisted(() => ({
   sweep: { staleAfterMs: 0, env: {} as NodeJS.ProcessEnv },
 }));
 
-vi.mock('../telemetry/runtime', async (importActual) => {
-  const actual = await importActual<typeof import('../telemetry/runtime')>();
+vi.mock('../telemetry/wiring', async (importActual) => {
+  const actual = await importActual<typeof import('../telemetry/wiring')>();
   return {
     ...actual,
     configureTelemetryRuntime: (...args: Parameters<typeof actual.configureTelemetryRuntime>) =>

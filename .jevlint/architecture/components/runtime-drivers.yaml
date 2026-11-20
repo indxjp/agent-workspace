@@ -1,0 +1,17 @@
+id: runtime-drivers
+title: Runtime drivers
+summary: >
+  The RuntimeDriver port with one exports subpath per driver (local, Docker, Kubernetes, Cloud Run, ACA, Cloudflare, Vercel, external) and the workspace archive transfer. Imports nothing in the workspace.
+layer: adapters
+paths:
+  - "packages/runtime/**"
+key_files:
+  - { path: packages/runtime/src/driver.ts, role: "RuntimeDriver and its capabilities" }
+  - { path: packages/runtime/src/docker.ts, role: "the Docker driver" }
+  - { path: packages/runtime/src/kubernetes.ts, role: "the Kubernetes driver" }
+interface: [RuntimeDriver, RuntimeRefusalError]
+depends_on: []
+uses: [kubernetes, google_auth]
+rules: []
+checklist: []
+status: current

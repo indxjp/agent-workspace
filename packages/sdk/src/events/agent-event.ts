@@ -1,5 +1,5 @@
 /**
- * `AgentEvent` — the neutral event view (`docs/sdk/04-api-specification.md` §6.3).
+ * `AgentEvent` — the neutral event view (`docs/10-product/sdk/04-api-specification.md` §6.3).
  *
  * **This module knows nothing about any engine.** Since ENG-03 (#302) the stream itself carries one
  * engine-neutral vocabulary: the closed `agent.*` frame set of `@indx-workspace/contracts`, which

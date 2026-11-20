@@ -412,7 +412,7 @@ function nativeName(event: ClassifiedSdkEvent): string {
 
 /**
  * Map one classified Claude Agent SDK message onto the neutral `agent.*` frames (ADR-0065 D5,
- * `docs/sdk/04-api-specification.md` §6.3). **Pure, and never throws.**
+ * `docs/10-product/sdk/04-api-specification.md` §6.3). **Pure, and never throws.**
  *
  * This is the one place the Claude vocabulary is read. It is the function the runner calls on a
  * live event and the function `apps/web/server/runs/` calls to upgrade a `run_events` row recorded
@@ -445,7 +445,7 @@ export function toAgentFrames(
   // is deliberate: a frame is read on its own — by a consumer that resumed inside a message, by one
   // that only reads `agent.result`, by the upgraded legacy path — and a frame whose engine-native
   // source lived on a sibling it may never see would make `raw` an escape hatch that only works
-  // sometimes. `docs/sdk/04-api-specification.md` §6.3 states the cost.
+  // sometimes. `docs/10-product/sdk/04-api-specification.md` §6.3 states the cost.
   const b = engineFrameBuilder(engine);
   // Capped once per event: the builder caps again per frame, which is then cheap (≤ 64 KiB, or
   // the marker) instead of re-serialising an arbitrarily large message once per fan-out frame.

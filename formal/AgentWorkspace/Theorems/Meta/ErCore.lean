@@ -2,7 +2,7 @@ import AgentWorkspace.Er.Core
 
 /-!
 T5 — properties of the ER specification itself, including the places where it contradicts
-itself or a document (the findings of the `er-core` unit, `docs/formal/units/er-core.md`).
+itself or a document (the findings of the `er-core` unit, `docs/20-design/formal/units/er-core.md`).
 -/
 
 namespace AgentWorkspace.Theorems.Meta.ErCore
@@ -12,7 +12,7 @@ open AgentWorkspace AgentWorkspace.Er.Core
 /-- `ON DELETE SET NULL` nulls every column of the key. Exactly two keys of today's schema are
 composite `SET NULL` keys that include the `NOT NULL` `workspace_id`, so the action they declare
 cannot execute: deleting the parent fails with a `NOT NULL` violation instead (finding: see
-`docs/formal/units/er-core.md`). Every other `SET NULL` key is executable. -/
+`docs/20-design/formal/units/er-core.md`). Every other `SET NULL` key is executable. -/
 @[aw_spec (tier := T5) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")
   (ts := "packages/core/src/db/schema/projects.ts#projects_default_agent_workspace_fk")
   (ts := "packages/core/src/db/schema/sessions.ts#sessions_project_workspace_fk")]
@@ -59,7 +59,7 @@ theorem project_default_agent_set_null_violates_not_null :
 
 /-- The structure map says "`created_at` and `updated_at` are present on every table"; in today's
 schema six tables have neither and twenty more have no `updated_at` (finding). -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem timestamps_are_not_on_every_table :
     allTables.filter (fun t => !(catalogue t).hasColumn "created_at") =
         [.agentPointerMoves, .demoDailyCosts, .demoEntryStates, .endpointClientAgents, .endpointClientApiKeys, .projectFiles,
@@ -80,7 +80,7 @@ theorem timestamps_are_not_on_every_table :
 in today's schema the single-column keys other than the root references are the eight
 references to `users` and the seven `SET NULL` siblings, and neither kind can cross a tenant
 (finding: the sentence should say "tenant-paired, by itself or by a sibling"). -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 theorem single_column_references_are_global_or_siblings :
     (allTables.flatMap fun t => ((catalogue t).foreignKeys.filter fun fk =>
@@ -123,7 +123,7 @@ project join tables, the run-event and transcript tables, the three ENG-06 sessi
 the per-run share charge, the per-session surface key, an agent-team version's members (one per
 version and agent), the per-UTC-day demo cost (`demo_daily_costs`, keyed by `day`) and the
 verdict on each live store entry (`demo_entry_states`, keyed by `entry`). -/
-@[aw_spec (tier := T5) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+@[aw_spec (tier := T5) (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
 theorem primary_keys_other_than_id :
     allTables.filterMap (fun t =>

@@ -15,7 +15,7 @@ repository can validate against them, and nothing inside it proves that the brow
 response and the server's rendering of it are the same shape.
 
 Migrating every domain in one change would be both exhausting and risky: the refactoring programme
-(`docs/architecture/refactoring/`) already has open items that will change several of these
+(`docs/20-design/architecture/refactoring/`) already has open items that will change several of these
 surfaces (RF-102, RF-103, RF-202/203, RF-204, RF-304), and a client that froze them now would
 freeze the defects too.
 
@@ -54,7 +54,7 @@ spec §42 confines to one file. This decision adds a second meaning and names it
   fields are therefore minor releases of both packages made together, and a customer pins the
   contracts version to the control-plane release they deploy against. This is deliberate: a
   client that silently accepts fields it does not know is one that cannot tell drift from data.
-- "SDK" is ambiguous in prose from now on. `docs/sdk/README.md` fixes the two meanings; new text
+- "SDK" is ambiguous in prose from now on. `docs/10-product/sdk/README.md` fixes the two meanings; new text
   says "Claude Agent SDK" or "Agent Workspace SDK".
 
 ## Alternatives considered

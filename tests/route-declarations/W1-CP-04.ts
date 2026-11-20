@@ -1,7 +1,7 @@
 /**
  * W1-CP-04 · the run API and the SSE relay.
  *
- * Converted out of `tests/route-inventory.test.ts`'s `EXPECTED_ROUTES` array by W2-INT-00 —
+ * Converted out of `tests/route-inventory.policy-check.ts`'s `EXPECTED_ROUTES` array by W2-INT-00 —
  * [ADR-0025](../../docs/adr/0025-the-route-inventory-is-partitioned-by-owner.md) §4.
  *
  * `GET /api/runs/:id` is here because W1-INT-02 added it: spec §34 names it and no version of the

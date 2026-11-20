@@ -12,11 +12,11 @@ import { renderCompatibilityMatrixWithScenarios } from '../../tests/providers/re
 
 const root = new URL('../../', import.meta.url);
 const paths = {
-  providerDocument: new URL('docs/compatibility/providers.md', root),
-  runtimeDocument: new URL('docs/runtime-driver-matrix.md', root),
-  matrixCheck: new URL('docs/compatibility/matrix-check.md', root),
-  unverified: new URL('docs/compatibility/unverified.json', root),
-  notDerivable: new URL('docs/compatibility/not-derivable.json', root),
+  providerDocument: new URL('docs/30-reference/compatibility/providers.md', root),
+  runtimeDocument: new URL('docs/30-reference/matrices/runtime-driver-matrix.md', root),
+  matrixCheck: new URL('docs/30-reference/compatibility/matrix-check.md', root),
+  unverified: new URL('docs/30-reference/compatibility/unverified.json', root),
+  notDerivable: new URL('docs/30-reference/compatibility/not-derivable.json', root),
 };
 
 /** @typedef {{ id: string, default: string, basis: string, overrides?: Record<string, string> }} ProviderEntry */
@@ -38,7 +38,11 @@ function providerScenarios(spec) {
 function trackedDocuments() {
   return execFileSync(
     'git',
-    ['ls-files', 'docs/compatibility/providers.md', 'docs/runtime-driver-matrix.md'],
+    [
+      'ls-files',
+      'docs/30-reference/compatibility/providers.md',
+      'docs/30-reference/matrices/runtime-driver-matrix.md',
+    ],
     { cwd: root, encoding: 'utf8' },
   )
     .trim()
@@ -94,7 +98,10 @@ function validateClassifications(unverified, notDerivable) {
 }
 
 const tracked = trackedDocuments();
-for (const required of ['docs/compatibility/providers.md', 'docs/runtime-driver-matrix.md']) {
+for (const required of [
+  'docs/30-reference/compatibility/providers.md',
+  'docs/30-reference/matrices/runtime-driver-matrix.md',
+]) {
   if (!tracked.includes(required)) {
     throw new Error(
       `required owning-wave document is not tracked: ${required}; git ls-files printed ${tracked.join(', ')}`,

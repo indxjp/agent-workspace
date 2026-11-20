@@ -1,6 +1,6 @@
 /**
  * The `release` vector `a-conversation-keeps-its-version`, replayed against `resolveSessionVersion`
- * (issue #612; `docs/formal/domains/release.md`). Each `startSession` step feeds the model's state
+ * (issue #612; `docs/20-design/formal/domains/release.md`). Each `startSession` step feeds the model's state
  * before it (has the conversation started, where does the environment point) into the TypeScript
  * decision and compares the answer with the step the model emitted: the refusal code, or the
  * version the conversation pins. Every other step must leave the pins alone
@@ -9,7 +9,7 @@
  * The server departs from the model in one place: `no_pointer` keeps a legacy session unpinned
  * (`versionToPin` answers `null`) instead of refusing it, and the replay asserts that too. A
  * disagreement with the model is a failing test, and the fix is never to edit a vector
- * (`docs/formal/00-orchestrator-prompt.md` §10).
+ * (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import { describe, expect, it } from 'vitest';
 

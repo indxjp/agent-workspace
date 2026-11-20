@@ -4,7 +4,9 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 const root = new URL('../', import.meta.url);
-const status = JSON.parse(readFileSync(new URL('docs/capabilities/status.json', root), 'utf8')) as {
+const status = JSON.parse(
+  readFileSync(new URL('docs/30-reference/capabilities/status.json', root), 'utf8'),
+) as {
   canonical?: boolean;
   releaseVerdict?: string;
   capabilities?: Array<{ area?: string; status?: string; evidence?: string[] }>;

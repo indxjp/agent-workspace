@@ -13,7 +13,7 @@
  * inside Mastra — model requests only to the provider's base URL, no telemetry without a `Mastra`
  * instance, writes only through the handed filesystem, `maxSteps` honoured, memory only through
  * the handed storage domain — is the family's declared hypothesis, enforced by the package's own
- * boundary suite (docs/formal/units/engine-mastra.md, "Declared gaps").
+ * boundary suite (docs/20-design/formal/units/engine-mastra.md, "Declared gaps").
  *
  * Under D-012 this file is in `tests/formal/`: every subject is a package export.
  */

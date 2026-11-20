@@ -1,0 +1,17 @@
+id: gateway
+title: Model and tool gateway
+summary: >
+  The proxy for every model and tool call: checks the run token, swaps it for the stored provider credential, translates provider APIs, meters spend, and forwards aw-control to the Builder.
+layer: adapters
+paths:
+  - "packages/gateway/**"
+key_files:
+  - { path: packages/gateway/src/index.ts, role: "createGatewayApplication and startGateway" }
+  - { path: packages/gateway/src/router.ts, role: "provider routing" }
+  - { path: packages/gateway/src/tokens/run-token.ts, role: "the run token (5 min, at most 1 h)" }
+interface: [createGatewayApplication, startGateway, createRouter, authorizeToolCall]
+depends_on: [persistence, contracts]
+uses: [google_auth, mcp, postgres]
+rules: []
+checklist: []
+status: current

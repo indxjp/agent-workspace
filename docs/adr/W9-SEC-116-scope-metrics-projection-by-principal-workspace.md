@@ -72,7 +72,7 @@ ADR leaves to the implementation.
   test (`apps/web/server/telemetry/runtime.test.ts`) both needed a one-line update to pass a
   workspace id; both are inside this task's `Owns globs`.
 - The new colocated route test is named `apps/web/app/api/metrics/metrics.test.ts`, not
-  `route.test.ts`. `tests/route-inventory.test.ts`'s `classifyAppFile` treats any file under
+  `route.test.ts`. `tests/route-inventory.policy-check.ts`'s `classifyAppFile` treats any file under
   `apps/web/app/**` named `route.<anything>` as a claim that Next.js serves it as a route handler,
   and throws when `<anything>` is not one of `next.config.ts`'s `pageExtensions` — which
   `route.test.ts` is not. This is why no other route under `apps/web/app/api/**` had a colocated

@@ -28,7 +28,7 @@ private theorem every_frame_is_neutral (f : Frame) :
 
 /-- The mapping never drops an event: each one becomes at least one frame, and every frame is a
 neutral frame, `agent.native` or `agent.malformed`. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-pi.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-pi.md#events")
   (ts := "packages/engine-pi/src/frames.ts#createPiFrameMapper")]
 theorem the_mapping_never_drops_an_event (announced : List String) (e : Event) :
     (step announced e).2 ≠ [] ∧
@@ -122,7 +122,7 @@ private theorem paired_from (events : List Event) :
 
 /-- Tool pairing holds on every mapped stream: every `agent.tool.result` answers a call an earlier
 `agent.tool.call` announced and no earlier result answered. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-pi.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-pi.md#events")
   (ts := "packages/engine-pi/src/frames.ts#createPiFrameMapper")]
 theorem tool_pairing_holds (events : List Event) :
     Behaviour.Engines.OpenAiAgents.pairedFrom [] (mapAll events) = true :=
@@ -146,7 +146,7 @@ example :
 /-! ## The turn limit -/
 
 /-- The adapter never takes more than `limits.maxTurns` turns. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-pi.md#turns")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-pi.md#turns")
   (ts := "packages/engine-pi/src/boundary.ts#startPiRun")]
 theorem the_run_stops_at_or_before_max_turns (m : Nat) :
     ∀ (turns : List Bool) (n : Nat), n < m → (turnRun (some m) n turns).1 ≤ m := by
@@ -164,7 +164,7 @@ theorem the_run_stops_at_or_before_max_turns (m : Nat) :
 
 /-- A run the limit cut short ends `max_turns` exactly at the limit: a `max_turns` stop is never
 reported for a run that stopped early. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-pi.md#turns")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-pi.md#turns")
   (ts := "packages/engine-pi/src/boundary.ts#startPiRun")
   (ts := "packages/engine-pi/src/frames.ts#createPiFrameMapper")]
 theorem a_max_turns_stop_is_at_the_limit (m : Nat) :
@@ -185,7 +185,7 @@ theorem a_max_turns_stop_is_at_the_limit (m : Nat) :
 /-- The converse: a run whose model keeps running tools for every turn up to the limit is cut
 short exactly at `limits.maxTurns` and ends `max_turns`, and its terminal event maps to
 `agent.result {stopReason: 'max_turns', turns: m}` after the usage. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-pi.md#turns")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-pi.md#turns")
   (ts := "packages/engine-pi/src/boundary.ts#startPiRun")
   (ts := "packages/engine-pi/src/frames.ts#createPiFrameMapper")]
 theorem a_run_the_limit_cuts_short_ends_max_turns (m : Nat) :
@@ -281,7 +281,7 @@ private theorem readable_suffix_is_fresh {sid : String} {f₁ f₂ : List Line}
 empty store stream by one `persist` of a prefix of it (an earlier `turn_end`) and a second of the
 whole grown file, which rebuilds exactly the file — only the new lines are appended — and reading
 the stream back gives the same `id`/`parentId` tree. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-pi.md#session")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-pi.md#session")
   (ts := "packages/engine-pi/src/session.ts#PiSessionMirror")
   (ts := "packages/engine-pi/src/session.ts#readPiStream")]
 theorem the_session_tree_round_trips (sid : String) (file f₁ : List Line)

@@ -2,7 +2,7 @@
  * The agent wire contract now lives in `@indx-workspace/contracts/agents`, the package the SDK and
  * every external consumer validate against. This module is the application's import seam: browser
  * and server code keep importing `contracts/agents` while the canonical schema moves out, so the
- * migration is one file at a time rather than a flag day (`docs/sdk/03-sdk-design.md`).
+ * migration is one file at a time rather than a flag day (`docs/10-product/sdk/03-sdk-design.md`).
  */
 export {
   AGENT_INSTRUCTIONS_MAX_LENGTH,

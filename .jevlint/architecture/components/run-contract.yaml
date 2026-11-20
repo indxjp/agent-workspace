@@ -1,0 +1,18 @@
+id: run-contract
+title: Engine port and run protocol
+summary: >
+  The private run contract: the AgentEngine port, agent.* frame builders and path grants (packages/engine), and RunRequest with its schemas and Claude event mapping (packages/run-protocol). Types and pure functions.
+layer: contracts
+paths:
+  - "packages/engine/**"
+  - "packages/run-protocol/**"
+key_files:
+  - { path: packages/engine/src/port.ts, role: "AgentEngine: the port every adapter implements" }
+  - { path: packages/engine/src/frames.ts, role: "agent.* frame builders" }
+  - { path: packages/run-protocol/src/schemas.ts, role: "RunRequest, the body of POST /run" }
+interface: [AgentEngine, RunRequest, EngineRefusalError]
+depends_on: [contracts]
+uses: [zod]
+rules: []
+checklist: []
+status: current

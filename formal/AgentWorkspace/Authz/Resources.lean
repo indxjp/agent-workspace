@@ -29,7 +29,7 @@ instance decidableForallWireEnum {α : Type} [WireEnum α] (p : α → Prop) [De
 
 /-- `RESOURCES`: the 33 top-level resources, in the `as const` order of `resources.ts`. -/
 @[aw_spec (ts := "apps/web/server/rbac/core/resources.ts#RESOURCES")
-  (doc := "docs/sdk/04-api-specification.md#33-roles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")]
 inductive Resource where
   | agents | apiKeys | auditEvents | connectors | demo | endpointClients | engines | files | invitations
   | me | memberships | metrics | modelConnections | models | platforms | projects | runs

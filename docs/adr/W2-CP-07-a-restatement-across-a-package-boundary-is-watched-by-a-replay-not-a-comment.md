@@ -49,7 +49,7 @@ bounds where a reader will meet them.**
    same reason. The AST rather than a regular expression is [ADR-0030](0030-import-edges-are-resolved-by-the-compiler-not-matched-by-regex.md)'s
    rule one level down — a property name is a node, not a substring.
 2. `tests/route-declarations/W2-CP-07.ts`, the same way. That file is what
-   `tests/route-inventory.test.ts` checks the real App Router files against, so comparing the
+   `tests/route-inventory.policy-check.ts` checks the real App Router files against, so comparing the
    mirror's paths to it reaches the route files without this gate knowing where they live.
 3. The five handlers in `apps/web/server/sessions/api.ts`, **executed** — requests assembled out of
    the mirror's own field names, against a real store and a real principal.

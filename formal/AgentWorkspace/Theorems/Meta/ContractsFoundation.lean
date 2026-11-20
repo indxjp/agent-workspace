@@ -19,7 +19,7 @@ open AgentWorkspace.Contracts.Problem
 
 /-- Adding any field beside `error` to a valid standard envelope makes every strict envelope
 refuse the body (`readProblem` keeps the code only by pruning first, CF-2). -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")
   (ts := "packages/sdk/src/http.ts#readProblem")]
@@ -53,7 +53,7 @@ example : normaliseCurrent (.obj [("error", encodeBody ⟨"forbidden", "No.", no
 /-- Adding any field outside `code`, `message`, `details` and the deprecated `detail` inside a valid standard envelope's
 `error` object makes every strict envelope refuse the body (`readProblem` keeps the code only by
 pruning first, CF-2). -/
-@[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#4-conventions")
+@[aw_spec (tier := T5) (doc := "docs/10-product/sdk/04-api-specification.md#4-conventions")
   (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
   (ts := "packages/contracts/src/problem.ts#ApiProblemSchema")
   (ts := "packages/sdk/src/http.ts#readProblem")]

@@ -16,14 +16,14 @@ namespace AgentWorkspace.Theorems.WellFormed.ErSynthesis
 open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Er
 
 /-- The cluster wire spellings, in declaration order. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/00-orchestrator-prompt.md#7-phases-and-units")]
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/00-orchestrator-prompt.md#7-phases-and-units")]
 theorem cluster_wires :
     (WireEnum.all : List Current.Cluster).map WireEnum.toWire =
       ["identity", "catalog", "configuration", "work", "publication"] := by decide +kernel
 
 /-- Every table of the snapshot belongs to exactly one of the five concept clusters. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem clusters_partition_the_tables :
     (allTables.all fun t =>
@@ -34,7 +34,7 @@ theorem clusters_partition_the_tables :
 /-- Today's schema has 128 checks that are not closed sets, and every one of them is given a
 meaning by at least one cluster. -/
 @[aw_spec (tier := T0)
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem every_other_check_is_refined :
     Current.otherChecks.length = 128 ∧
@@ -60,7 +60,7 @@ theorem check_semantics_follow_the_owning_cluster :
 
 /-- Every table of the target schema is well formed: unique names, a `NOT NULL` primary key, keys
 PostgreSQL accepts, well-formed unique keys and checks, and the tenancy rule. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/concepts.md#the-target-er-model")
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem target_tables_are_well_formed (t : TableName) :
     tableWellFormed Target.schema t = true := by
@@ -68,7 +68,7 @@ theorem target_tables_are_well_formed (t : TableName) :
 
 /-- Every check of the target that is not a closed set has a meaning: one the target gives it, or
 the one today's owning cluster gives it. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/concepts.md#the-target-er-model")]
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")]
 theorem target_checks_all_have_a_meaning :
     (allTables.all fun t => (Target.schema t).checks.all fun
       | .other n => (Target.targetCheck? n default).isSome || !(Current.refinedBy t n).isEmpty
@@ -76,7 +76,7 @@ theorem target_checks_all_have_a_meaning :
 
 /-- The target ER diagram draws each foreign key at most once, and draws every key except the 59
 references to the tenant root and the 10 single-column `SET NULL` siblings. -/
-@[aw_spec (tier := T0) (doc := "docs/formal/concepts.md#the-target-er-model")]
+@[aw_spec (tier := T0) (doc := "docs/20-design/formal/concepts.md#the-target-er-model")]
 theorem er_diagram_draws_each_relationship_once :
     ((Target.drawn Target.schema).map (·.2.name)).Nodup ∧
       (Target.drawn Target.schema).length + 59 + 10 =

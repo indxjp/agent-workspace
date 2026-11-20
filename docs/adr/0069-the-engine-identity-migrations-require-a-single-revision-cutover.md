@@ -4,8 +4,8 @@ Status: accepted
 Date: 2026-09-27
 Decided by: the Owner ("cutover + ADR", recorded on issue #317; agent-engines programme, tracker
 #299, unit ENG-02a)
-Scope: `migrations/0024_*`, `migrations/0025_*`; `docs/deploy/azure-container-apps.md`,
-`docs/deploy/kubernetes.md`, `docs/deploy/single-vm.md`,
+Scope: `migrations/0024_*`, `migrations/0025_*`; `docs/40-operate/deploy/azure-container-apps.md`,
+`docs/40-operate/deploy/kubernetes.md`, `docs/40-operate/deploy/single-vm.md`,
 `docs/sdk/site/concepts/data-plane.mdx` (Google Cloud Run)
 
 ## Context

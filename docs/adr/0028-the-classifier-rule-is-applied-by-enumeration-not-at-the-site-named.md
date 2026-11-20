@@ -19,7 +19,7 @@ one the finding named:
 | Where | The narrowing |
 | --- | --- |
 | `tests/no-sdk-import.test.ts` | `collectAliases()` filters the tracked listing by `/^tsconfig(\..+)?\.json$/` with a silent `continue` |
-| `tests/screen-inventory.test.ts` | `planSources()` filters `git ls-files -- docs` by a wave-plan regex |
+| `tests/screen-inventory.policy-check.ts` | `planSources()` filters `git ls-files -- docs` by a wave-plan regex |
 | `tenancy.test.ts` | `schemaModuleFiles()` uses `readdirSync` + `.filter()` — a *working-tree* listing, not `git ls-files` |
 | `tenancy.test.ts` | `CREATE_TABLE` / `DROP_TABLE` match only double-quoted identifiers and filter the migration text |
 | `scope-forgery.test.ts` | the repository-provider set is a regex over module text with no `else`, so a provider written in arrow form is unchecked |

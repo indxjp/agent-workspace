@@ -33,7 +33,7 @@ import type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
 import type { ApiResult } from '../http/result';
 import { resolveSessionActorUserId } from '../rbac/ownership';
 import type { Principal } from '../rbac/principal';
-import type { WorkspaceRepositoryPort } from './runtime';
+import type { WorkspaceRepositoryPort } from './wiring';
 
 /**
  * RFC 9562 canonical textual form, any version — the same pattern every other resource module in

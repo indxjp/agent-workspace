@@ -1,5 +1,9 @@
+import { headers } from 'next/headers';
 import { Suspense } from 'react';
 
+import { versionsLocaleOf } from '../../../components/agents/versions-messages';
+
+import { projectsStrings } from '../../../components/projects/projects-messages';
 import { ProjectsScreen } from '../../../components/projects/projects-screen';
 import { switchedOffPanel } from '../feature-gate';
 
@@ -17,9 +21,17 @@ export const dynamic = 'force-dynamic';
 export default async function ProjectsPage() {
   const off = await switchedOffPanel('projects');
   if (off !== null) return off;
+  // The reader's language (UX-15 in #2086), negotiated as the shell negotiates it.
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
   return (
-    <Suspense fallback={<main className="p-8 text-[13px] text-muted">Loading…</main>}>
-      <ProjectsScreen />
+    <Suspense
+      fallback={
+        <main lang={locale} className="p-8 text-[13px] text-muted">
+          {projectsStrings(locale).loading}
+        </main>
+      }
+    >
+      <ProjectsScreen locale={locale} />
     </Suspense>
   );
 }

@@ -7,7 +7,7 @@
  * adapter, and a second implementation of `..` resolution is a second chance to get it wrong.
  *
  * A disagreement with `formal/AgentWorkspace/Authz/PathGrant.lean` is a failing test, and the
- * fix is never to edit a vector (`docs/formal/00-orchestrator-prompt.md` §10).
+ * fix is never to edit a vector (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import {
   normaliseGrantPath,

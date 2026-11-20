@@ -47,7 +47,7 @@ import {
 import { apiError, isUuid, type RunRecord } from '../execution';
 import { interruptRunFor, requireRunPermission } from '../runs/api';
 import { MAX_PROMPT_CHARS, startRunOnSession } from '../runs/service';
-import type { AgentTeamVersionRecord, LeadRunCaller, MemberCallerVerifier } from './runtime';
+import type { AgentTeamVersionRecord, LeadRunCaller, MemberCallerVerifier } from './wiring';
 
 /** The path of a lead run's member endpoint, which compose gives the lead as its `agent` server. */
 export function memberEndpointPath(runId: string): string {

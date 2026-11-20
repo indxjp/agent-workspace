@@ -24,7 +24,11 @@ import {
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
 
-import { mintSessionToken, newSessionClaims, verifySessionToken } from '../auth/session';
+import {
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
+} from '../auth/session';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { memberOwnershipResolver, ownerOwnershipResolver } from './access';
@@ -89,11 +93,11 @@ describe.skipIf(!hasDatabase)(
         });
       });
 
-      const claims = await mintSessionToken(
-        newSessionClaims(owner.email, workspace.slug),
+      const claims = await mintSignInSessionToken(
+        newSignInSessionClaims(owner.email, workspace.slug),
         TEST_SESSION_SECRET,
       );
-      const verified = await verifySessionToken(claims, TEST_SESSION_SECRET);
+      const verified = await verifySignInSessionToken(claims, TEST_SESSION_SECRET);
       if (!verified.ok)
         throw new Error(`the test could not verify its own token: ${verified.reason}`);
       const built = Principal.fromSession(

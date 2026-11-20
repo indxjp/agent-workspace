@@ -23,7 +23,7 @@ list is a gate somebody forgets to add to. W1-CP-06 probed `POST /api/auth/signi
 `tests/auth.test.ts` still asserts it, and this branch's own run of that suite passes.
 
 **Two**, and this is the fact that arrived after W1-CP-06 wrote its record. W1-INT-02 landed
-`tests/route-inventory.test.ts`, which enumerates **every** tracked `route.<ext>` file under
+`tests/route-inventory.policy-check.ts`, which enumerates **every** tracked `route.<ext>` file under
 `apps/web/app` — not only under `apps/web/app/api` — derives the HTTP surface, and asserts it
 *equals* the declared subset of spec §34. §34 prints no sign-in route of any kind. So a
 `route.ts` at `apps/web/app/p/signin/`, which is the placement W1-CP-06's ADR names first, fails
@@ -44,7 +44,7 @@ Three things follow from it and each is a property, not a coincidence:
 
 * `classifyPath('/signin')` returns `page`, `enforcementFor('page')` returns `allow`, and an
   unauthenticated visitor reaches the screen. Nothing about the `/api/**` rule changes.
-* `tests/route-inventory.test.ts` classifies a file under `apps/web/app` as a route **only** when
+* `tests/route-inventory.policy-check.ts` classifies a file under `apps/web/app` as a route **only** when
   its name begins `route.`; `page.tsx` is ignored by name, and the header says so — *"Pages.
   `page.tsx` is a screen, not an API route"*. The closed world over §34 stays exactly as tight as
   W1-INT-02 left it. This branch's `pnpm test` run passes it unchanged.
@@ -89,7 +89,7 @@ control belongs to the shell that would show it.
   that design exists to not have, and W1-CP-06 rejected it in writing before this task existed.
 * **`apps/web/app/p/signin/route.ts`, W1-CP-06's first choice.** Correct about the middleware and
   now blocked by a gate that did not exist when it was written. Taking it would mean editing
-  `tests/route-inventory.test.ts` to admit a route §34 does not print, which is the fail-open
+  `tests/route-inventory.policy-check.ts` to admit a route §34 does not print, which is the fail-open
   shape [ADR-0019](0019-repo-wide-gates-belong-to-the-integration-level.md) and
   [W1-INT-02's record](W1-INT-02-a-repository-wide-route-rule-is-satisfied-not-narrowed.md) both
   refuse — *"an invariant that skips the two files that violate it is not an invariant"*.

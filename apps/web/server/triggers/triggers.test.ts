@@ -8,7 +8,7 @@ import { DELETE, GET as GET_ONE, PATCH } from '../../app/api/triggers/[id]/route
 import { POST as ROTATE } from '../../app/api/triggers/[id]/secret/route';
 import { POST as CREATE, GET as LIST } from '../../app/api/triggers/route';
 import { installTestDomains } from '../application-context-fixtures';
-import { configureFeatureSwitches } from '../features/runtime';
+import { configureFeatureSwitches } from '../features/wiring';
 import { conferredBy } from '../rbac/core/conferral';
 import { TEST_WORKSPACE_ID } from '../rbac/testing';
 

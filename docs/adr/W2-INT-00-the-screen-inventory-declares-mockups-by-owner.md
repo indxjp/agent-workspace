@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-04
 Decided by: W2-INT-00 (implementer)
-Scope: `tests/screen-inventory.test.ts`, `tests/screen-declarations/**`
+Scope: `tests/screen-inventory.policy-check.ts`, `tests/screen-declarations/**`
 
 ## Context
 
@@ -69,7 +69,7 @@ is a claim, and a wave number written by hand is exactly the measured-number-in-
    declared `unplanned` set against the set of declarations no wave section of the plan names, both
    derived at run time and in both directions, and its failure message prints the derivation. When a
    wave's task card claims one, the declaration moves to `planned` and the set shrinks with no edit
-   to `tests/screen-inventory.test.ts` — see
+   to `tests/screen-inventory.policy-check.ts` — see
    [W2-INT-00-a-gate-derives-its-partition-from-the-tracked-tree.md](W2-INT-00-a-gate-derives-its-partition-from-the-tracked-tree.md),
    which repaired the three-element literal that used to make that sentence false.
 
@@ -88,7 +88,7 @@ is a claim, and a wave number written by hand is exactly the measured-number-in-
    [ADR-0019](0019-repo-wide-gates-belong-to-the-integration-level.md)'s union failure in a new
    costume. Waves 3, 4, 5 and 7 are not dispatched and their task ids are the plan's guess, so their
    rows stay with the inventory until the wave that owns them repartitions — exactly as W2-INT-00
-   repartitioned Wave 1's route entries out of `tests/route-inventory.test.ts`.
+   repartitioned Wave 1's route entries out of `tests/route-inventory.policy-check.ts`.
 
 6. **`ui/agent-run.html` and `ui/home.html` both declare `apps/web/app/(shell)/page.tsx`.** That is
    spec §19.5 rule 5, not a mistake: `home-chat.tsx` returns `RunView` once a run has started, so one

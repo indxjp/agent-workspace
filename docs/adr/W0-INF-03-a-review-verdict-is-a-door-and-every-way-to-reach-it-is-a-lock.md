@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W0-INF-03, Infra agent
-Scope: `scripts/check-licenses.mjs`, `docs/dependency-policy.md`, research note R-16
+Scope: `scripts/check-licenses.mjs`, `docs/30-reference/policies/dependency-policy.md`, research note R-16
 
 ## Context
 
@@ -185,7 +185,7 @@ plus one that a readable future expiry still clears.
   `WHY` column quotes the parse error against the normalised string, so when the two differ the
   message names the normalised expression explicitly rather than reporting an offset into a string
   the reader cannot see.
-* The stage list in [`docs/dependency-policy.md`](../dependency-policy.md) §3 gains a stage, and that
+* The stage list in [`docs/30-reference/policies/dependency-policy.md`](../30-reference/policies/dependency-policy.md) §3 gains a stage, and that
   file now states which stages actually change a verdict — measured by short-circuiting each one and
   re-running `--self-test`, not asserted. Stage 4 (`review` exact match) changes nothing today; that
   is written down rather than claimed the other way.

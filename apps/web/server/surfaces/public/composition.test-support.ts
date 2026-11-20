@@ -6,7 +6,7 @@ import type { AgentRecord } from '../../agents/contract';
 import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
 import { type IdGenerator } from '../../ids';
 import { createSurfaceSessionsRuntime } from './composition';
-import type { ResolvedSurface, SurfaceSessionOpening, SurfaceSessionsRuntime } from './runtime';
+import type { ResolvedSurface, SurfaceSessionOpening, SurfaceSessionsRuntime } from './wiring';
 
 export const WORKSPACE_ID = '66666666-6666-4666-8666-666666666666';
 

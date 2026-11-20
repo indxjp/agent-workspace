@@ -2,14 +2,14 @@
 
 Status: accepted — decision 8 amended by [ADR-0063](0063-the-formal-programme-proceeds-one-domain-at-a-time-and-fixes-the-bugs-it-finds.md)
 Date: 2026-09-23
-Decided by: the Owner (formal specification programme, `docs/formal/00-orchestrator-prompt.md`)
-Scope: `formal/`, `scripts/formal/`, `tests/formal/`, `docs/formal/`, the `formal:*` scripts, the
+Decided by: the Owner (formal specification programme, `docs/20-design/formal/00-orchestrator-prompt.md`)
+Scope: `formal/`, `scripts/formal/`, `tests/formal/`, `docs/20-design/formal/`, the `formal:*` scripts, the
 `formal` job in `.github/workflows/ci.yml` and the `ci-success` rule in `scripts/check-workflows.mjs`
 
 ## Context
 
 What Agent Workspace means is spread across `docs/spec.md`, the SDK API specification
-(`docs/sdk/04-api-specification.md`), the docs-site concept pages, about 280 ADRs, the Zod contracts,
+(`docs/10-product/sdk/04-api-specification.md`), the docs-site concept pages, about 280 ADRs, the Zod contracts,
 the RBAC decision tables and the domain code. The documents disagree with each other and with the
 code in places, and the docs site already marks the gaps as "Today / Target" callouts and "Open
 questions". Tests exercise examples. Nothing states a property for all inputs, so tenant isolation,
@@ -25,7 +25,7 @@ the absence of privilege escalation and the run lifecycle are argued in prose an
 2. **Toolchain and dependencies are pinned.** Lean `v4.34.0` (`formal/lean-toolchain`), Batteries
    `v4.34.0` at `f2effa3d803fda822b1f97b806c47cf2adfbcbc2` and Plausible `v4.34.0` at
    `118aa17ee84656b8bd727fef7c458ee8c833385c` (`formal/lakefile.lean`, `formal/lake-manifest.json`).
-   All three, and elan, are Apache-2.0 (`docs/dependency-policy.md` §11). Mathlib is not a
+   All three, and elan, are Apache-2.0 (`docs/30-reference/policies/dependency-policy.md` §11). Mathlib is not a
    dependency. Adding it requires an ADR that shows a theorem needs it, because it multiplies the
    build time.
 3. **Soundness is gated.** `lake exe axioms` fails when any model declaration depends on an axiom
@@ -44,7 +44,7 @@ the absence of privilege escalation and the run lifecycle are argued in prose an
    them against the real contracts, decision functions, SDK and CLI inside `pnpm test`. A
    disagreement fails a test. The fix is never to edit a vector.
 6. **Derived documents are generated and gated.** `formal/generated/catalogue.json`,
-   `docs/formal/catalogue.md`, `docs/formal/traceability.md` and the vectors are committed.
+   `docs/20-design/formal/catalogue.md`, `docs/20-design/formal/traceability.md` and the vectors are committed.
    `pnpm formal:check` regenerates them and fails when the committed copies are stale.
 7. **CI runs the model on every relevant change.** The `formal` job installs elan from a pinned
    release with a verified SHA-256, caches the toolchain and `formal/.lake`, then runs
@@ -53,7 +53,7 @@ the absence of privilege escalation and the run lifecycle are argued in prose an
    `validateWorkflowDocuments` now enforces that, with regression tests in
    `tests/tooling/quality-validators.test.ts`. This strengthens a gate and loosens none.
 8. **Product code is not changed by the programme.** A disagreement becomes a finding
-   (`docs/formal/findings.md`). The document is fixed when the code is right. An ADR draft or issue
+   (`docs/20-design/formal/findings.md`). The document is fixed when the code is right. An ADR draft or issue
    is raised when the code or the concept model should change. The only product-code edits allowed
    are behaviour-preserving extractions that make a decision function callable from the conformance
    suite, and each comes with a test.
@@ -79,6 +79,6 @@ the absence of privilege escalation and the run lifecycle are argued in prose an
   fail on stale vectors or on a vector the TypeScript no longer satisfies. The fix is to update the
   model (and so the vectors) or to record a finding. Weakening the test is never the fix.
 - The Lean toolchain is a development dependency outside npm. It is installed by elan
-  (`docs/formal/README.md`) and is not part of the shipped product.
+  (`docs/20-design/formal/README.md`) and is not part of the shipped product.
 - The theorem catalogue becomes the reviewable statement of behaviour. A theorem that is removed or
   weakened shows up in the generated catalogue diff.

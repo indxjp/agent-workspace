@@ -7,7 +7,7 @@ on:
       - 'apps/runner/src/manager*.ts'
       - 'apps/web/instrumentation*.ts'
       - 'apps/web/server/compose/runtime-manager-client*.ts'
-      - 'docs/deploy/azure-container-apps.md'
+      - 'docs/40-operate/deploy/azure-container-apps.md'
       - 'infra/terraform/azure-container-apps/**'
       - 'packages/runtime/src/aca-sessions*.ts'
       - 'packages/runtime/src/azure-auth*.ts'

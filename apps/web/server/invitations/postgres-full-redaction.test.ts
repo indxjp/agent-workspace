@@ -20,9 +20,9 @@ import { POST as CREATE } from '../../app/api/invitations/route';
 import {
   invitationIdentityCookieName,
   mintInvitationIdentityToken,
-  mintSessionToken,
-  newSessionClaims,
-  verifySessionToken,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  verifySignInSessionToken,
 } from '../auth';
 import { createPostgresDirectory } from '../rbac/postgres-directory';
 import { Principal } from '../rbac/principal';
@@ -88,11 +88,11 @@ describe.skipIf(!hasDatabase)('full PostgreSQL invitation and audit redaction', 
   it('retains the plaintext in no invitation row, audit row, or log across create and accept', async () => {
     process.env['SESSION_SECRET'] = SECRET;
     const directory = createPostgresDirectory(root.directory);
-    const sessionToken = await mintSessionToken(
-      newSessionClaims('owner@example.test', workspaceSlug),
+    const sessionToken = await mintSignInSessionToken(
+      newSignInSessionClaims('owner@example.test', workspaceSlug),
       SECRET,
     );
-    const verified = await verifySessionToken(sessionToken, SECRET);
+    const verified = await verifySignInSessionToken(sessionToken, SECRET);
     if (!verified.ok) throw new Error('session setup failed');
     const membership = (await directory.forWorkspace(workspaceId).listMemberships()).find(
       (candidate) => candidate.email === 'owner@example.test',

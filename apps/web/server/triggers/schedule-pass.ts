@@ -14,11 +14,11 @@
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { renderTriggerPrompt } from '@indx-workspace/contracts/triggers';
 
-import { enabledFeaturesFor } from '../features/runtime';
+import { enabledFeaturesFor } from '../features/wiring';
 import { getRunApi } from '../runs/environment';
 import { deliver, type Runs } from './fire';
 import { ownerFor } from './fire';
-import type { TriggerRecord, TriggersRuntime } from './runtime';
+import type { TriggerRecord, TriggersRuntime } from './wiring';
 import { dueSlot } from './schedule';
 
 const LEASE_NAME = 'trigger-schedule';

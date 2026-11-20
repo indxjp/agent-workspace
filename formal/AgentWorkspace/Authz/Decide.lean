@@ -259,7 +259,7 @@ def decideOrdinary (q : Query) : Decision :=
       | p => .refuse (.path p)
 
 /-- `decide`: a dedicated revoke capability precedes the ordinary operation table. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#decide") (doc := "docs/sdk/04-api-specification.md#33-roles")]
+@[aw_spec (ts := "apps/web/server/rbac/decide.ts#decide") (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")]
 def decideAuth (q : Query) : Decision :=
   match parseRoleInput q.role with
   | none => .refuse .unknownRole
@@ -283,7 +283,7 @@ def decideAuth (q : Query) : Decision :=
 /-- The role predicate of the dedicated revoke decision: after the scope refusal, only `owner`
 and `admin` pass (`403 run_token_revoke_forbidden` otherwise). -/
 @[aw_spec (ts := "apps/web/server/runs/api.ts#revokeRunTokens")
-  (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")]
 def revokeTokensRoleGate (role : RoleInput) : Bool := role == "owner" || role == "admin"
 
 /-! ## The declared route inventory

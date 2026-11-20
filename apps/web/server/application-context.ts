@@ -13,39 +13,39 @@
  * registries, per-run telemetry attributes, the held composition, detection and cron caches).
  */
 import type { A2a } from './a2a/env';
-import type { AgentTeamsRuntime } from './agent-teams/runtime';
-import type { AgentVersionsRuntime } from './agent-versions/runtime';
-import type { AgentsRuntime } from './agents/runtime';
-import type { AuditRuntime } from './audit/runtime';
+import type { AgentTeamsRuntime } from './agent-teams/wiring';
+import type { AgentVersionsRuntime } from './agent-versions/wiring';
+import type { AgentsRuntime } from './agents/wiring';
+import type { AuditRuntime } from './audit/wiring';
 import type { BuilderDoor } from './builder/transport/mcp';
-import type { CliAuthRuntime } from './cli-auth/runtime';
+import type { CliAuthRuntime } from './cli-auth/wiring';
 import type { DemoOperatorRuntime } from './demo/operator';
-import type { Connectors } from './connectors/runtime';
+import type { Connectors } from './connectors/wiring';
 import type { EmailLinkRuntime } from './email-link/transport/routes';
-import type { EndpointClientsRuntime } from './endpoint-clients/runtime';
-import type { Files } from './files/runtime';
-import type { InvitationsRuntime } from './invitations/runtime';
-import type { Models } from './models/runtime';
-import type { OAuthRuntime } from './oauth/runtime';
-import type { ProjectsRuntime } from './projects/runtime';
-import type { RbacRuntime } from './rbac/runtime';
+import type { EndpointClientsRuntime } from './endpoint-clients/wiring';
+import type { Files } from './files/wiring';
+import type { InvitationsRuntime } from './invitations/wiring';
+import type { Models } from './models/wiring';
+import type { OAuthRuntime } from './oauth/wiring';
+import type { ProjectsRuntime } from './projects/wiring';
+import type { RbacRuntime } from './rbac/wiring';
 import { defineSlot } from './runtime-slot';
 import type { RunApi } from './runs/environment';
-import type { Runtimes } from './runtimes/runtime';
-import type { Secrets } from './secrets/runtime';
+import type { Runtimes } from './runtimes/wiring';
+import type { Secrets } from './secrets/wiring';
 import type { SessionApiEnvironment } from './sessions/environment';
 import type { StoreRuntime } from './demo/storefront/transport/routes';
-import type { Setup } from './setup/runtime';
-import type { SharesRuntime } from './shares/runtime';
-import type { Skills } from './skills/runtime';
-import type { StorageConnections } from './storage-connections/runtime';
-import type { PublicSurfaces } from './surfaces/public/runtime';
-import type { Tokens } from './tokens/runtime';
+import type { Setup } from './setup/wiring';
+import type { SharesRuntime } from './shares/wiring';
+import type { Skills } from './skills/wiring';
+import type { StorageConnections } from './storage-connections/wiring';
+import type { PublicSurfaces } from './surfaces/public/wiring';
+import type { Tokens } from './tokens/wiring';
 import type { ToolEndpoint } from './tool-endpoint/env';
-import type { Triggers } from './triggers/runtime';
-import type { Webhooks } from './webhooks/runtime';
+import type { Triggers } from './triggers/wiring';
+import type { Webhooks } from './webhooks/wiring';
 import type { WorkspaceFeaturesRuntime } from './workspaces/features-runtime';
-import type { WorkspacesRuntime } from './workspaces/runtime';
+import type { WorkspacesRuntime } from './workspaces/wiring';
 
 /** Every domain the composition root has collected, each fully built. */
 export interface ApplicationContext {

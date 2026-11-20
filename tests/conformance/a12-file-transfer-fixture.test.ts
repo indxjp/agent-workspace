@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { runA12ConformanceSuite } from './harness.js';
+import { FIXTURE_TIMERS } from './timers.js';
 import {
   FILE_TRANSFER_FIXTURE_CAPABILITIES,
   fileTransferFixtureProbe,
@@ -26,6 +27,7 @@ describe('A.12 against a fixture driver whose file transfer is putFiles/getFiles
       driver,
       FILE_TRANSFER_FIXTURE_CAPABILITIES,
       fileTransferFixtureProbe,
+      { timers: FIXTURE_TIMERS },
     );
 
     console.log(

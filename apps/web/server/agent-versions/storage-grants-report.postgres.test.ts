@@ -1,6 +1,6 @@
 /**
  * The operator report of agent versions whose storage folders cannot be bound at run time
- * (`docs/operations/storage-grants-report.sql`, #1835 STO-507), run against real PostgreSQL. A run
+ * (`docs/40-operate/operations/storage-grants-report.sql`, #1835 STO-507), run against real PostgreSQL. A run
  * of a version is refused with `run_storage_grant_unavailable` when the version grants more
  * `storage://` folders than it has `agent_version_storage_grants` rows: it was deployed before
  * grants were recorded per version, or a connection it grants was deleted. The report lists exactly
@@ -25,7 +25,9 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const REPORT = readFileSync(
-  fileURLToPath(new URL('../../../../docs/operations/storage-grants-report.sql', import.meta.url)),
+  fileURLToPath(
+    new URL('../../../../docs/40-operate/operations/storage-grants-report.sql', import.meta.url),
+  ),
   'utf8',
 );
 

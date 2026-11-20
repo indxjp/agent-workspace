@@ -24,7 +24,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts.Share
 
 /-- The tables of the publication cluster. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def tables : List TableName := [.shares, .shareViews, .shareRunCharges]
 
 /-! ## The nine foreign keys -/
@@ -49,7 +49,7 @@ def sharesCreatorKey : ForeignKey :=
 
 /-- `(shares.workspace_id, publisher_principal_id) → workspace_principals (workspace_id, id)`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/shares.ts#shares_publisher_principal_workspace_fk")
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def sharesPublisherKey : ForeignKey :=
   { name := "shares_publisher_principal_workspace_fk",
     columns := ["workspace_id", "publisher_principal_id"], refTable := .workspacePrincipals,
@@ -143,7 +143,7 @@ def clusterChecksHold (st : State) : Bool :=
 /-- The states PostgreSQL can hold, as far as this cluster knows: every constraint of every table
 holds, and the cluster's own checks hold with their semantics. -/
 @[aw_spec (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
+  (doc := "docs/20-design/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def consistent (st : State) : Bool := Er.Core.consistent catalogue st && clusterChecksHold st
 
 /-! ## The Target reading -/

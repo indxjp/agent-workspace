@@ -1,4 +1,4 @@
-import type { ModelsAuditEvent } from './runtime';
+import type { ModelsAuditEvent } from './wiring';
 import { applicationContext } from '../application-context';
 import { problem, type ApiResult } from '../http/result';
 import type { DiscoverModelsResult } from './discovery';

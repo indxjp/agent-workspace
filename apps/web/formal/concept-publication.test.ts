@@ -36,7 +36,7 @@ import { Principal } from '../server/rbac/principal';
 import { ROLES, type Role } from '../server/rbac/core/roles';
 import { PublishShareRequestSchema, type PublishShareInput } from '../server/shares/core/input';
 import { toShareListItem, toShareResource } from '../server/shares/core/resource';
-import { type WorkspaceSharing } from '../server/shares/runtime';
+import { type WorkspaceSharing } from '../server/shares/wiring';
 import { ShareService } from '../server/shares/service';
 import { RunnableShareService } from '../server/shares/runnable/service';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';

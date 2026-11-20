@@ -5,7 +5,7 @@ namespace AgentWorkspace.Theorems.Normative.SdkRuns
 open AgentWorkspace AgentWorkspace.Sdk.Runs
 
 /-- Starting a run posts a fully normalized body and expects acceptance. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "packages/sdk/src/resources/runs.ts#start")]
 theorem start_request_normalizes_absent_fields :
     start "agent" "go" none none =
@@ -93,7 +93,7 @@ theorem reset_keeps_resume_cursor :
 theorem ordinary_requests_are_single_attempt : attemptCount = 1 := rfl
 
 /-- A completed, failed, or cancelled run is settled; a live record after done is a contract error. -/
-@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (tier := T1) (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "packages/sdk/src/resources/runs.ts#waitForOutcome")]
 theorem wait_requires_settled_record :
     waitOutcome true .completed = none ∧ waitOutcome true .failed = none ∧

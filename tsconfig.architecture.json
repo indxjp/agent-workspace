@@ -108,6 +108,7 @@
       "@agent-workspace/core/daily-cost": ["./packages/core/src/daily-cost.ts"],
       "@agent-workspace/core/db": ["./packages/core/src/db/index.ts"],
       "@agent-workspace/core/db/unscoped": ["./packages/core/src/db/repositories/unscoped.ts"],
+      "@agent-workspace/core/db-model": ["./packages/core/src/db-model.ts"],
       "@agent-workspace/core/posture": ["./packages/core/src/posture.ts"],
       "@agent-workspace/core/run-transitions": ["./packages/core/src/runs/transitions.ts"],
       "@agent-workspace/core/secrets": ["./packages/core/src/secrets/index.ts"],

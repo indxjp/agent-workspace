@@ -6,6 +6,7 @@ the short operational checklist. [llms.txt](llms.txt) indexes them together with
 design documents and every page of the developer docs site, in reading order — start there when
 you need to find the document that covers a question. It is generated (`pnpm docs:generate`) and
 gated (`pnpm docs:check`); regenerate it when you add or rename a document it lists.
+[docs/README.md](docs/README.md) maps each kind of task to the documents to read in `docs/`.
 
 ## Working agreement
 
@@ -31,13 +32,13 @@ gated (`pnpm docs:check`); regenerate it when you add or rename a document it li
 
 ## Find the owner before editing
 
-| You are changing…                  | Owning module                                         | Read first                                        |
-| ---------------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
-| A wire field, status, role or code | `packages/contracts`                                  | [SDK structure map](docs/sdk/07-structure-map.md) |
-| A use case                         | `apps/web/server/<domain>/service.ts`                 | that domain's `store.ts`                          |
-| Storage shape                      | `packages/core/src/db` and `migrations/`              | the migration rules under Required verification   |
-| Run execution                      | `apps/runner`, `packages/runtime`, `packages/engine*` | `packages/contracts/src/run-events.ts`            |
-| UI                                 | `apps/web/components` (through the SDK)               | `apps/web/contracts`                              |
+| You are changing…                  | Owning module                                         | Read first                                                   |
+| ---------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| A wire field, status, role or code | `packages/contracts`                                  | [SDK structure map](docs/10-product/sdk/07-structure-map.md) |
+| A use case                         | `apps/web/server/<domain>/service.ts`                 | that domain's `store.ts`                                     |
+| Storage shape                      | `packages/core/src/db` and `migrations/`              | the migration rules under Required verification              |
+| Run execution                      | `apps/runner`, `packages/runtime`, `packages/engine*` | `packages/contracts/src/run-events.ts`                       |
+| UI                                 | `apps/web/components` (through the SDK)               | `apps/web/contracts`                                         |
 
 ## Hexagonal rules
 
@@ -89,7 +90,7 @@ The components, their ports and how they talk are in
 4. List the risks (tenant isolation, authorisation, secrets, data loss, migration) and the
    regression test that covers each.
 5. Write the failing test first for bug fixes and for new behaviour at a seam. The layers and when
-   each is required are in [docs/testing-strategy.md](docs/testing-strategy.md).
+   each is required are in [docs/30-reference/policies/testing-strategy.md](docs/30-reference/policies/testing-strategy.md).
 6. Implement the smallest correct change; no new abstraction without a second real caller.
 7. Refactor only inside the files the change already touches.
 8. Run the narrow checks: the named test files, the owning package's `typecheck`, and

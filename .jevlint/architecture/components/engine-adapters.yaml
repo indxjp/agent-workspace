@@ -1,0 +1,21 @@
+id: engine-adapters
+title: Engine adapters
+summary: >
+  One package per engine (Claude Agent SDK, OpenAI Agents, Mastra, pi), each exporting one AgentEngine factory; exactly one file per adapter imports its SDK.
+layer: adapters
+paths:
+  - "packages/engine-claude-agent-sdk/**"
+  - "packages/engine-mastra/**"
+  - "packages/engine-openai-agents/**"
+  - "packages/engine-pi/**"
+key_files:
+  - { path: packages/engine-claude-agent-sdk/src/engine.ts, role: "createClaudeAgentSdkEngine" }
+  - { path: packages/engine-claude-agent-sdk/src/boundary.ts, role: "the one file that imports the Claude Agent SDK" }
+  - { path: packages/engine-openai-agents/src/engine.ts, role: "the OpenAI Agents engine" }
+interface: [createClaudeAgentSdkEngine, createMastraEngine]
+depends_on: [run-contract, contracts]
+uses: [claude_agent_sdk, openai_agents, mastra, pi_agent, ai_sdk]
+rules: []
+checklist:
+  - { id: one-sdk-file-per-engine, text: "Each third-party engine SDK is imported by exactly one file of its adapter, and no adapter imports another." }
+status: current

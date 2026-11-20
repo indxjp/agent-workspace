@@ -35,7 +35,7 @@ import type {
   AgentTeamRecord,
   AgentTeamRepository,
   AgentTeamsRuntime,
-} from './runtime';
+} from './wiring';
 
 function domainProblem(code: AgentTeamProblemCode, message: string): ApiResult {
   return problem(AGENT_TEAM_PROBLEM_CODES[code], code, message);

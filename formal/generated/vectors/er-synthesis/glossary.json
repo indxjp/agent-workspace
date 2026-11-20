@@ -617,4 +617,4 @@
    "id": "term/tenant selection",
    "expected": {"tables": [], "aliases": ["repository scope", "workspace selection"]}}],
  "family": "er-synthesis",
- "description": "Every glossary term, its aliases today and its tables, listed by docs/formal/concepts.md."}
+ "description": "Every glossary term, its aliases today and its tables, listed by docs/20-design/formal/concepts.md."}

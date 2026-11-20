@@ -21,7 +21,7 @@
  *
  * ## Reading order matters
  *
- * `verifySessionToken` rejects in a fixed order and names what it rejected at every step. The
+ * `verifySignInSessionToken` rejects in a fixed order and names what it rejected at every step. The
  * order is not cosmetic: the signature is checked **before** the payload is parsed, so no
  * attacker-controlled JSON is ever handed to `JSON.parse` on the strength of a bad MAC, and
  * `exp` is parsed and type-checked **before** it is compared, so a missing or non-numeric expiry
@@ -31,25 +31,25 @@
 
 import { systemClock } from '../clock.ts';
 import {
-  emailLinkSessionClaimsAt,
-  parseSessionClaims,
-  SESSION_TTL_SECONDS,
-  sessionClaimsAt,
-  sessionCookie,
-  sessionTimeRefusal,
-  type SessionClaims,
-  type SessionCookie,
-  type SessionVia,
+  emailLinkSignInSessionClaimsAt,
+  parseSignInSessionClaims,
+  SIGN_IN_SESSION_TTL_SECONDS,
+  signInSessionClaimsAt,
+  signInSessionCookie,
+  signInSessionTimeRefusal,
+  type SignInSessionClaims,
+  type SignInSessionCookie,
+  type SignInSessionVia,
 } from './core/session-rules.ts';
 import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
 
 // The pure rules live in `./core/` (ADR W1-CP-06, amended); this module signs and verifies.
 export {
-  clearedSessionCookie,
-  SESSION_TTL_SECONDS,
-  sessionCookie,
-  type SessionClaims,
-  type SessionCookie,
+  clearedSignInSessionCookie,
+  SIGN_IN_SESSION_TTL_SECONDS,
+  signInSessionCookie,
+  type SignInSessionClaims,
+  type SignInSessionCookie,
 } from './core/session-rules.ts';
 
 /**
@@ -57,9 +57,9 @@ export {
  * `Secure`, `Path=/` and carries no `Domain`. That makes subdomain injection impossible without
  * anything on the server having to check for it.
  *
- * This is the name of a deployment that sets no `AW_INSTANCE_ID`; see {@link sessionCookieName}.
+ * This is the name of a deployment that sets no `AW_INSTANCE_ID`; see {@link signInSessionCookieName}.
  */
-export const DEFAULT_SESSION_COOKIE_NAME = '__Host-aw_session';
+export const DEFAULT_SIGN_IN_SESSION_COOKIE_NAME = '__Host-aw_session';
 
 /**
  * Lowercase letters, digits, `-` and `_`: Compose's own rule for a project name, and a subset of
@@ -123,14 +123,14 @@ export function scopedCookieName(base: string, instanceId: string | undefined): 
 
 /**
  * The session cookie's name for this deployment: `__Host-aw_session_<id>`, or
- * {@link DEFAULT_SESSION_COOKIE_NAME} when `AW_INSTANCE_ID` is unset, so an existing deployment's
+ * {@link DEFAULT_SIGN_IN_SESSION_COOKIE_NAME} when `AW_INSTANCE_ID` is unset, so an existing deployment's
  * sessions survive an upgrade.
  *
- * Every reader and writer — the proxy, `getSession`, the route handlers that read the raw
- * `Cookie` header, and {@link sessionCookie} — calls this, so none can disagree about the name.
+ * Every reader and writer — the proxy, `getSignInSession`, the route handlers that read the raw
+ * `Cookie` header, and {@link signInSessionCookie} — calls this, so none can disagree about the name.
  */
-export function sessionCookieName(env: Readonly<Record<string, string | undefined>>): string {
-  return scopedCookieName(DEFAULT_SESSION_COOKIE_NAME, cookieInstanceId(env));
+export function signInSessionCookieName(env: Readonly<Record<string, string | undefined>>): string {
+  return scopedCookieName(DEFAULT_SIGN_IN_SESSION_COOKIE_NAME, cookieInstanceId(env));
 }
 
 /** The only token format this build mints or accepts. */
@@ -147,15 +147,15 @@ const encoder = new TextEncoder();
 
 /**
  * The same five fields, and one statement about where they came from that the type system
- * enforces: `verifySessionToken` returned them, which means `crypto.subtle.verify` accepted the
+ * enforces: `verifySignInSessionToken` returned them, which means `crypto.subtle.verify` accepted the
  * MAC over this exact payload.
  *
  * ## Why this is a class with a `#private` field, and not an interface
  *
  * The property that matters — a tenant is derived from a verified session and from nothing else
  * (spec §25) — is a statement about *provenance*, and a structural type cannot hold one. Before
- * this class existed, `workspaceScopeFrom` took an interface, so
- * `workspaceScopeFrom({ sub: body.email, ws: body.workspace, role: 'owner', iat: 0, exp: 9e9 })`
+ * this class existed, `callerWorkspaceFrom` took an interface, so
+ * `callerWorkspaceFrom({ sub: body.email, ws: body.workspace, role: 'owner', iat: 0, exp: 9e9 })`
  * compiled under `--strict` and produced a scope for whatever tenant the request body named.
  *
  * A phantom `unique symbol` brand was the first attempt and it is not enough: TypeScript keeps
@@ -166,17 +166,17 @@ const encoder = new TextEncoder();
  *
  * The class is deliberately **not exported as a value**: only the type below is. There is
  * therefore no constructor reachable from outside this module, and the only expression in the
- * program that produces one is in `verifySessionToken`, below the MAC check.
+ * program that produces one is in `verifySignInSessionToken`, below the MAC check.
  *
- * `newSessionClaims` does **not** return this type. What that function builds is an unverified
+ * `newSignInSessionClaims` does **not** return this type. What that function builds is an unverified
  * payload on its way to being signed; letting it stand in here would reopen the hole. A test
  * that needs verified claims mints and verifies, which is four lines and exercises the real code:
  *
  * ```ts
- * const token = await mintSessionToken(newSessionClaims('a@b.test', 'default'), secret);
- * const result = await verifySessionToken(token, secret);
+ * const token = await mintSignInSessionToken(newSignInSessionClaims('a@b.test', 'default'), secret);
+ * const result = await verifySignInSessionToken(token, secret);
  * if (!result.ok) throw new Error(result.reason);
- * const claims = result.claims; // VerifiedSessionClaims
+ * const claims = result.claims; // VerifiedSignInSessionClaims
  * ```
  *
  * What this does not do: a deliberate `as` cast, or `Object.create` on the prototype, still
@@ -189,13 +189,13 @@ const encoder = new TextEncoder();
  * not that a determined author cannot lie to the compiler, which is true of every type in the
  * program.
  */
-class VerifiedClaims implements SessionClaims {
+class VerifiedClaims implements SignInSessionClaims {
   public readonly sub: string;
   public readonly ws: string;
   public readonly iat: number;
   public readonly exp: number;
   /** `'email_link'` for a guest session from the email-link sign-in; absent (no key) otherwise. */
-  declare public readonly via?: SessionVia;
+  declare public readonly via?: SignInSessionVia;
 
   /**
    * Unnameable outside this file, and — unlike a symbol-keyed phantom property — not carried
@@ -203,9 +203,9 @@ class VerifiedClaims implements SessionClaims {
    * `JSON.stringify` produces only the public claims. There is no `role`: the role is read from
    * the membership row per request, never from the token (refactoring part 06, step 9).
    */
-  readonly #verifiedBy = 'verifySessionToken';
+  readonly #verifiedBy = 'verifySignInSessionToken';
 
-  public constructor(claims: SessionClaims) {
+  public constructor(claims: SignInSessionClaims) {
     this.sub = claims.sub;
     this.ws = claims.ws;
     this.iat = claims.iat;
@@ -219,14 +219,14 @@ class VerifiedClaims implements SessionClaims {
   }
 }
 
-/** Claims that came back from `verifySessionToken`. The type is exported; the class is not. */
-export type VerifiedSessionClaims = VerifiedClaims;
+/** Claims that came back from `verifySignInSessionToken`. The type is exported; the class is not. */
+export type VerifiedSignInSessionClaims = VerifiedClaims;
 
 export type SecretResult =
   { readonly ok: true; readonly secret: string } | { readonly ok: false; readonly reason: string };
 
 export type VerifyResult =
-  | { readonly ok: true; readonly claims: VerifiedSessionClaims }
+  | { readonly ok: true; readonly claims: VerifiedSignInSessionClaims }
   | { readonly ok: false; readonly code: VerifyFailure; readonly reason: string };
 
 /**
@@ -350,7 +350,10 @@ async function verifiesUnderAnyKey(
 }
 
 /** Mint a token for `claims`. The caller has already decided the claims are true. */
-export async function mintSessionToken(claims: SessionClaims, secret: string): Promise<string> {
+export async function mintSignInSessionToken(
+  claims: SignInSessionClaims,
+  secret: string,
+): Promise<string> {
   const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
   const signed = `${TOKEN_VERSION}.${payload}`;
   const signature = await crypto.subtle.sign(
@@ -362,13 +365,13 @@ export async function mintSessionToken(claims: SessionClaims, secret: string): P
 }
 
 /** Build the claims for a new session. Separated from minting so the clock is one argument. */
-export function newSessionClaims(
+export function newSignInSessionClaims(
   sub: string,
   ws: string,
   nowMs: number = systemClock.now().getTime(),
-  ttlSeconds: number = SESSION_TTL_SECONDS,
-): SessionClaims {
-  return sessionClaimsAt(sub, ws, nowMs, ttlSeconds);
+  ttlSeconds: number = SIGN_IN_SESSION_TTL_SECONDS,
+): SignInSessionClaims {
+  return signInSessionClaimsAt(sub, ws, nowMs, ttlSeconds);
 }
 
 /**
@@ -376,12 +379,12 @@ export function newSessionClaims(
  * `verifyEmailLink` calls this: the mark is what stops `POST /api/auth/workspace` switching such a
  * session to any workspace but its own.
  */
-export function newEmailLinkSessionClaims(
+export function newEmailLinkSignInSessionClaims(
   sub: string,
   ws: string,
   nowMs: number = systemClock.now().getTime(),
-): SessionClaims {
-  return emailLinkSessionClaimsAt(sub, ws, nowMs);
+): SignInSessionClaims {
+  return emailLinkSignInSessionClaimsAt(sub, ws, nowMs);
 }
 
 function reject(code: VerifyFailure, reason: string): VerifyResult {
@@ -393,7 +396,7 @@ function reject(code: VerifyFailure, reason: string): VerifyResult {
  * this function that returns `ok` without a valid MAC, a well-formed payload and an expiry that
  * parsed as a finite number and is in the future.
  */
-export async function verifySessionToken(
+export async function verifySignInSessionToken(
   token: unknown,
   secret: string,
   nowMs: number = systemClock.now().getTime(),
@@ -436,9 +439,9 @@ export async function verifySessionToken(
   } catch {
     return reject('malformed_session', 'payload is not JSON');
   }
-  const claims = parseSessionClaims(parsed);
+  const claims = parseSignInSessionClaims(parsed);
   if (!claims.ok) return reject(claims.code, claims.reason);
-  const refused = sessionTimeRefusal(claims.claims, nowMs);
+  const refused = signInSessionTimeRefusal(claims.claims, nowMs);
   if (refused !== null) return reject(refused.code, refused.reason);
 
   // The one expression in the program that constructs verified claims, and it is reachable only
@@ -605,7 +608,7 @@ export interface SignInInput {
 }
 
 export type SignInResult =
-  | { readonly ok: true; readonly token: string; readonly cookie: SessionCookie }
+  | { readonly ok: true; readonly token: string; readonly cookie: SignInSessionCookie }
   | { readonly ok: false; readonly code: SignInFailure; readonly reason: string };
 
 /**
@@ -627,7 +630,7 @@ export function signIn(
     {
       secret: readSessionSecret(env),
       admin: readBootstrapAdmin(env),
-      cookieName: sessionCookieName(env),
+      cookieName: signInSessionCookieName(env),
     },
     nowMs,
   );
@@ -674,11 +677,15 @@ export async function signInWith(
     return { ok: false, code: 'invalid_credentials', reason: 'email or password did not match' };
   }
 
-  const claims = newSessionClaims(configured.admin.email, configured.admin.workspaceSlug, nowMs);
-  const token = await mintSessionToken(claims, secret.secret);
+  const claims = newSignInSessionClaims(
+    configured.admin.email,
+    configured.admin.workspaceSlug,
+    nowMs,
+  );
+  const token = await mintSignInSessionToken(claims, secret.secret);
   return {
     ok: true,
     token,
-    cookie: sessionCookie(token, settings.cookieName, SESSION_TTL_SECONDS),
+    cookie: signInSessionCookie(token, settings.cookieName, SIGN_IN_SESSION_TTL_SECONDS),
   };
 }

@@ -6,7 +6,7 @@
 import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../features/wiring';
 import { runSchedulePass, startSchedulePassScheduler } from './schedule-pass';
 import {
   add,

@@ -1,0 +1,44 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "tests-next",
+  "implicitDependencies": ["!agent-workspace", "!tests", "@indx-workspace/contracts"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "parallelism": false,
+      "options": {
+        "command": "vitest run --project tests-next --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+        "env": {
+          "NODE_OPTIONS": "--unhandled-rejections=strict",
+          "VITEST_MAX_WORKERS": "1"
+        }
+      },
+      "inputs": [
+        "default",
+        "^default",
+        "vitestConfig",
+        "{workspaceRoot}/tests/projects.mjs",
+        "{workspaceRoot}/tests/vitest.shared.ts",
+        "{workspaceRoot}/AGENTS.md",
+        "{workspaceRoot}/CLAUDE.md",
+        "{workspaceRoot}/apps/web/**/*",
+        "{workspaceRoot}/docs/adr/0083-the-cli-signs-a-person-in-with-a-device-flow-and-a-short-lived-user-token.md",
+        "{workspaceRoot}/docs/adr/0104-a-team-is-a-resource.md",
+        "{workspaceRoot}/docs/adr/0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md",
+        "{workspaceRoot}/docs/adr/W2-INT-01-the-files-routes-answer-500-because-the-storage-barrel-exports-its-test-contract.md",
+        "{workspaceRoot}/docs/spec.md",
+        "{workspaceRoot}/packages/core/**/*",
+        "{workspaceRoot}/tests/auth-server-credentials.ts",
+        "{workspaceRoot}/tests/auth-server-fixtures.ts",
+        "{workspaceRoot}/tests/auth-server-signin.ts",
+        "{workspaceRoot}/tests/auth-server-surface.ts",
+        "{workspaceRoot}/tests/auth-server-unregistered.ts",
+        "{workspaceRoot}/tests/inventory-support.ts",
+        "{workspaceRoot}/tests/no-route-probe-database.ts",
+        "{workspaceRoot}/tests/no-route-probe-process.ts",
+        "{workspaceRoot}/tests/no-route-probe.ts",
+        "{workspaceRoot}/tests/route-declarations/**/*"
+      ]
+    }
+  }
+}

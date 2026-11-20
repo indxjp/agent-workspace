@@ -8,7 +8,7 @@
  *
  * ## What the shell reads, and what it refuses to invent
  *
- * `getSession()` never throws and returns `null` for an absent or invalid session, so reading it
+ * `getSignInSession()` never throws and returns `null` for an absent or invalid session, so reading it
  * here does not gate the page surface — which matters, because no Wave 1 task owns a sign-in
  * page and gating the shell would send an unauthenticated browser to a route that does not exist
  * (see `apps/web/middleware.ts` and docs/adr/W1-CP-06-the-gate-covers-api-only.md).
@@ -21,14 +21,14 @@
  *
  * ## Issue #120: a removed or archived current workspace offers a route back to selection
  *
- * A session token stays cryptographically valid — `getSession()` only checks its signature and
+ * A session token stays cryptographically valid — `getSignInSession()` only checks its signature and
  * expiry — long after the membership it names has been deleted, or the workspace itself archived
  * out from under it. `resolveIdentity` (`server/features/console.ts`) already re-reads the
  * directory on every request rather than trusting the token, so it already notices; the only piece
  * this task adds is acting on a `null` it returns for the right reason. `shouldRecoverSession`
  * (`components/shell/session-recovery.ts`) is that positive check (ADR-0015): it tells "the
  * caller's own membership is genuinely gone" apart from "the RBAC runtime is not wired at all"
- * (`server/rbac/runtime.ts`'s own declared gap, a different task's), so this redirect fires for the
+ * (`server/rbac/wiring.ts`'s own declared gap, a different task's), so this redirect fires for the
  * first and never loops on the second.
  */
 import { headers } from 'next/headers';
@@ -47,7 +47,7 @@ import { Sidebar, type SidebarUser, type WorkspaceBrand } from '../../components
 import { Topbar, type RuntimeChip } from '../../components/shell/topbar';
 import { DeploymentDriverBanner } from '../../components/shell/driver-banner';
 import { shellStrings, type ShellLocale } from '../../components/shell/shell-messages';
-import { getSession } from '../../server/auth';
+import { getSignInSession } from '../../server/auth';
 import { applicationContext } from '../../server/application-context';
 import { currentWorkspaceFeatures, resolveIdentity } from '../../server/features/console';
 import { recentChatsFor } from '../../server/sessions/recent';
@@ -57,12 +57,13 @@ import { navIdsHiddenFrom } from './nav-access';
 
 export const dynamic = 'force-dynamic';
 
-/** Shown as the brand line when the request carries no session and no workspace is known. */
-const UNIDENTIFIED_WORKSPACE: WorkspaceBrand = {
-  name: 'Agent Workspace',
-  detail: 'Self-hosted',
-  slug: null,
-};
+/**
+ * Shown as the brand line when the request carries no session and no workspace is known. The
+ * product name stays as it is; the line under it is in the reader's language.
+ */
+function unidentifiedWorkspace(locale: ShellLocale): WorkspaceBrand {
+  return { name: 'Agent Workspace', detail: shellStrings(locale).selfHosted, slug: null };
+}
 
 /**
  * Wave 1 registers no runtime with the control plane — `apps/web/server/runs/environment.ts`
@@ -99,7 +100,7 @@ function runtimeChipFor(managers: boolean, locale: ShellLocale): RuntimeChip {
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   // The reader's language (UX-15 in #2086), negotiated as `app/layout.tsx` negotiates `<html lang>`.
   const locale = versionsLocaleOf((await headers()).get('accept-language'));
-  const session = await getSession();
+  const session = await getSignInSession();
   const resolved = session === null ? null : await resolveIdentity(session);
   // ADR-0160 D8: the sidebar hides a switched-off feature's entry. No session, no runtime and no
   // switch all answer every feature, so the markup is then the one it always was.
@@ -119,10 +120,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   const workspace: WorkspaceBrand =
     session === null
-      ? UNIDENTIFIED_WORKSPACE
+      ? unidentifiedWorkspace(locale)
       : {
           name: resolved?.workspaceName ?? session.ws,
-          detail: UNIDENTIFIED_WORKSPACE.detail,
+          detail: shellStrings(locale).selfHosted,
           slug: session.ws,
         };
 

@@ -61,7 +61,7 @@ export interface SkillPrincipal {
 /**
  * K-4: every `SkillDetail` now carries a required `id`, and an id comes only from a catalog row. A
  * route with no catalog wired can no longer answer 200 without one — that would be handing out a
- * body the published contract says cannot exist. See `docs/sdk/04-api-specification.md` and the
+ * body the published contract says cannot exist. See `docs/10-product/sdk/04-api-specification.md` and the
  * K-4 unit's implementation plan, Impact & risks. Every route that would answer a `SkillDetail`
  * refuses with this first; `POST` and `PATCH` do so before the store is written to.
  */

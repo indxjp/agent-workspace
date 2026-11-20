@@ -18,7 +18,7 @@ open AgentWorkspace.Theorems.Invariants.ErCore
 tenant-carrying row of a different workspace is not a state the database accepts, whatever ids
 the writer copied into the row. -/
 @[aw_spec (tier := T3)
-  (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+  (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem forged_cross_tenant_reference_is_rejected (S : Schema) (hS : pairingComplete S = true)
     (st : State) {t : TableName} {fk : ForeignKey} {r r' : Row}
@@ -69,7 +69,7 @@ example : consistent catalogue (fun t => if t = .agents then Witness.state .agen
 /-- Rule 3 of `tenancy.test.ts`: whoever deletes every foreign key over an undeclared `*_id`
 column of a table (so that the pairing rule has nothing left to check) fails the
 "every reference is declared" gate. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem deleted_reference_is_caught (S : Schema) (decl : List (TableName × String × SqlType))
     (t : TableName) (c : Column) (hc : c ∈ (S t).columns) (hid : isIdColumn c.name = true)
@@ -99,7 +99,7 @@ def withoutModelConnectionKeys : Schema := fun u =>
 
 /-- Deleting the foreign keys over `agents.model_connection_id` keeps the pairing rule green (no
 key is left to be unpaired) but fails the declared-reference gate, which is why rule 3 exists. -/
-@[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
+@[aw_spec (tier := T3) (doc := "docs/20-design/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")
   (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem deleting_a_reference_passes_pairing_but_not_the_gate :

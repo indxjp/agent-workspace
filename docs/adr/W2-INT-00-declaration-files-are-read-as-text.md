@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-04
 Decided by: W2-INT-00 (implementer)
-Scope: `tests/inventory-support.ts`, `tests/route-inventory.test.ts`, `tests/screen-inventory.test.ts`, `tests/route-declarations/**`, `tests/screen-declarations/**`
+Scope: `tests/inventory-support.ts`, `tests/route-inventory.policy-check.ts`, `tests/screen-inventory.policy-check.ts`, `tests/route-declarations/**`, `tests/screen-declarations/**`
 
 ## Context
 
@@ -66,7 +66,7 @@ sets of failure modes, and the failure modes are the whole of what ADR-0025 §3 
   and the only way to make it pass is to weaken that gate. A gate that another gate must be weakened
   to accept is not a gate.
 * **Static imports at the top of the inventory.** That is the array again with extra steps: adding a
-  route would mean editing `tests/route-inventory.test.ts`, which is exactly what ADR-0025 exists to
+  route would mean editing `tests/route-inventory.policy-check.ts`, which is exactly what ADR-0025 exists to
   stop.
 * **Declare the routes as JSON rather than TypeScript.** JSON needs no tokenizer, and it was
   tempting. Rejected on two counts: ADR-0025 §1 says `.ts`, and JSON carries no comments and no type

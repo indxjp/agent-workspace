@@ -7,7 +7,7 @@
 
 ## Context
 
-`tests/route-inventory.test.ts` carried this, introduced as *"a positive assertion that the parse
+`tests/route-inventory.policy-check.ts` carried this, introduced as *"a positive assertion that the parse
 worked"*:
 
 ```ts

@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-09-03
 Decided by: W1-CP-05 (Control Plane)
-Scope: `tests/route-inventory.test.ts`; binding on every task that adds an HTTP route to
+Scope: `tests/route-inventory.policy-check.ts`; binding on every task that adds an HTTP route to
 `apps/web/app`
 
 ## Context
@@ -65,7 +65,7 @@ application does not serve — every one of them throws with its reason. None re
 and none is a silent skip. ADR-0015's rule is the whole point of the file: an inventory that
 silently found nothing, or silently found less, would make every membership assertion pass
 vacuously, which is exactly how a surface gate stops being a gate. How many such readers there are
-is deliberately not written here — `tests/route-inventory.test.ts` is the list, and a count in
+is deliberately not written here — `tests/route-inventory.policy-check.ts` is the list, and a count in
 prose is a number that rots (ADR-0016).
 
 **4 — Which files are route handlers is derived from `apps/web/next.config.ts`, not written down.**

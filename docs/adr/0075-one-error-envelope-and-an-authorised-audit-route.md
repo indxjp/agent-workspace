@@ -9,7 +9,7 @@ Scope: `packages/contracts/src/problem.ts`; `packages/sdk/src/http.ts`;
 `apps/web/app/api/auth/workspace/route.ts`; `apps/web/app/api/audit-events/route.ts`;
 `apps/web/server/audit/api.ts`, `apps/web/server/audit/runtime.ts`;
 `apps/web/server/composition/register.ts`; `formal/AgentWorkspace/Contracts/Problem.lean`; spec
-`docs/sdk/04-api-specification.md` §8 rows S-16 and S-17
+`docs/10-product/sdk/04-api-specification.md` §8 rows S-16 and S-17
 
 ## Context
 

@@ -5,7 +5,7 @@ import { EvaluationResourceSchema } from '@indx-workspace/contracts/evaluations'
 
 import { POST } from './route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
 import { createInMemoryAgentVersionStoreProvider } from '../../../../../server/agent-versions/memory-store';

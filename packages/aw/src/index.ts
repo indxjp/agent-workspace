@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * `aw` — the Agent Workspace command line, a thin scriptable client over `@indx-workspace/sdk`
- * (`docs/sdk/04-api-specification.md` §7).
+ * (`docs/10-product/sdk/04-api-specification.md` §7).
  *
  * This file is the only one that touches `process`. It binds the process to the {@link CliIo}
  * boundary and runs {@link main}, but only when it is the script Node was asked to run: the

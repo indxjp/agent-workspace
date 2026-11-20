@@ -7,7 +7,7 @@ import { GET, POST } from './route';
 import { POST as ADVANCE } from '../evaluation-advance/route';
 import { POST as PROMOTE } from '../promote/route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/wiring';
 import type { AgentStoreProvider } from '../../../../../server/agents/store';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';

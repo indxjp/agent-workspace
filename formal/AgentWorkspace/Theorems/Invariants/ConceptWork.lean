@@ -87,7 +87,7 @@ private theorem subset_of_same {a b : List String} (h : sameColumns a b = true) 
 key that is not partial) identifies at most one row: two rows with the same non-`NULL` key
 values are the same row. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem key_identifies_one_row (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {cols : List String} (hkey : (S t).isKey cols = true) {r1 r2 : Row}
     (h1 : r1 ∈ st t) (h2 : r2 ∈ st t) (hpres : r1.present cols = true)
@@ -107,7 +107,7 @@ theorem key_identifies_one_row (S : Schema) (st : State) (hc : consistent S st =
 /-- In every consistent state, a reference through a foreign key whose target columns form a key
 of the parent reaches at most one parent row. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem reference_has_one_target (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {fk : ForeignKey} (hkey : (S fk.refTable).isKey fk.refColumns = true)
     {r r1 r2 : Row} (h1 : References S st t fk r r1) (h2 : References S st t fk r r2) :
@@ -127,7 +127,7 @@ private theorem fk_holds {S : Schema} {st : State} (hc : consistent S st = true)
 /-- In every consistent state, a row whose foreign-key columns are all set references a parent
 row through that key (PostgreSQL's `MATCH SIMPLE`). -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem set_reference_has_a_target (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {fk : ForeignKey} (hfk : fk ∈ (S t).foreignKeys) {r : Row} (hr : r ∈ st t)
     (hset : r.present fk.columns = true) : ∃ r', References S st t fk r r' := by
@@ -139,7 +139,7 @@ theorem set_reference_has_a_target (S : Schema) (st : State) (hc : consistent S 
 /-- In every consistent state, a row references a parent through every foreign key whose columns
 are all `NOT NULL`. -/
 @[aw_spec (tier := T2)
-  (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
+  (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem required_reference_has_a_target (S : Schema) (st : State) (hc : consistent S st = true)
     {t : TableName} {fk : ForeignKey} (hfk : fk ∈ (S t).foreignKeys)
     (hnn : fk.columns.all (S t).isNotNull = true) {r : Row} (hr : r ∈ st t) :
@@ -189,7 +189,7 @@ elab "aw_work_tenant_theorems" : command => do
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T2))
-        (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
+        (doc := "docs/10-product/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
         (ts := $fkTs) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
       theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : consistent catalogue st = true)
           {r r' : AgentWorkspace.Er.Core.Row}

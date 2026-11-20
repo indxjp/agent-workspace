@@ -6,7 +6,7 @@ import AgentWorkspace.Concepts.Session
 # The principal concept
 
 A **principal** is "the exact actor a request runs as: a membership (a user in a workspace, with a
-role) or an API key (with a role). Never a bare user." (`docs/sdk/04-api-specification.md` §1.1).
+role) or an API key (with a role). Never a bare user." (`docs/10-product/sdk/04-api-specification.md` §1.1).
 It is the only identifier authorisation compares (`ownerPrincipalId`), never a user id.
 
 The word covers two things the code keeps apart, and this module models both:
@@ -88,7 +88,7 @@ def wireKindOfStorage? (s : String) : Option String := (Kind.ofStorage? s).map W
 
 /-- A principal's source: exactly one membership or exactly one API key. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspace-principals.ts#workspace_principals_source_xor")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 inductive Source where
   | membership (id : MembershipId)
   | apiKey (id : ApiKeyId)
@@ -101,7 +101,7 @@ def Source.kind : Source → Kind
 
 /-- A durable principal: a row of `workspace_principals`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")
-  (doc := "docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")]
+  (doc := "docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md#rf-101--introduce-workspaceprincipal-and-split-identity-ownership-and-attribution")]
 structure Principal where
   id : PrincipalId
   workspace : WorkspaceId
@@ -127,7 +127,7 @@ def Principal.actsForValid (p : Principal) : Bool :=
 def Principal.valid (p : Principal) : Bool := p.revokedAt.all (p.activatedAt ≤ ·) && p.actsForValid
 
 /-- The two states of a principal. -/
-@[aw_spec (doc := "docs/formal/inventory.md#2-state-machines")]
+@[aw_spec (doc := "docs/20-design/formal/inventory.md#2-state-machines")]
 inductive PrincipalState where
   | active
   | revoked
@@ -171,7 +171,7 @@ def actsForStands (p : Principal) (target : Option ActsForRow) : Bool :=
 principal it acts for, if any, still stands (`actsForStands`). `target` is that principal as the
 directory re-reads it; left out, it is absent, so a key that acts for someone is refused. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 def apiKeyAdmitted (k : Concepts.ApiKey.ApiKey) (p : Principal) (now : Instant)
     (target : Option ActsForRow := none) : Bool :=
   p.workspace == k.workspace && p.source == .apiKey k.id && k.live now && p.active &&
@@ -214,7 +214,7 @@ def ScopedRow.scope : ScopedRow → Scope
 /-- The scope is still open: the scoped row exists, is the one the scope names, and has not reached
 a terminal state (a run's `completed`/`failed`/`cancelled`, a session's `archived`). -/
 @[aw_spec (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def scopeOpen : Scope → Option ScopedRow → Bool
   | .run r, some (.run r' st) => r == r' && !st.isTerminal
   | .session s, some (.session s' st) => s == s' && st == .active
@@ -224,7 +224,7 @@ def scopeOpen : Scope → Option ScopedRow → Bool
 scope is still open, and its minter — the principal the row names, in the row's workspace —
 still resolves. -/
 @[aw_spec (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def browserTokenAdmitted (t : BrowserToken) (target : Option ScopedRow) (minter : Principal)
     (src : SourceRow) (now : Instant) (actsFor : Option ActsForRow := none) : Bool :=
   t.live now && scopeOpen t.scope target && minter.id == t.mintedBy &&
@@ -262,7 +262,7 @@ def actsForOfRow? (r : Row) : Option PrincipalId := (r.get "acts_for_principal_i
 /-- `Via`: which verifier produced an authenticated principal. A browser token is not a third
 identity; it is the minter's session or API-key identity with a scope attached. -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#Via")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 inductive Via where
   | session
   | apiKey
@@ -377,7 +377,7 @@ def fromApiKey (i : ApiKeyIdentity) : Actor :=
 /-- `Principal.fromBrowserToken`: the minter, with `via = browser-token` and the scope attached;
 every other field is the minter's, the owner included. -/
 @[aw_spec (ts := "apps/web/server/rbac/principal.ts#fromBrowserToken")
-  (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def fromBrowserToken (minter : Actor) (scope : Scope) : Actor :=
   { minter with via := .browserToken, scope := some scope }
 

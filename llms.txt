@@ -19,35 +19,37 @@ then the guides, then the resource-by-resource detail.
 
 - [Repository Instructions for Coding Agents](AGENTS.md): The operational checklist for coding agents: the working agreement, the required verification, the pull-request rules.
 - [Claude Development Instructions](CLAUDE.md): Instructions for Claude Code in this repository: what to read first and the per-task procedure.
+- [Docs](docs/README.md): The map of docs/: which document to read for each kind of task, what to skip, and how specs are named.
 - [Engineering Guidelines](ENGINEERING_GUIDELINES.md): The rules for production code, tests and agent changes; a repository-wide gate is weakened only by an ADR.
 - [Architecture](docs/architecture.md): System shape, what each application and package owns and must not own, the dependency direction and the trust boundaries — enforced by dependency-cruiser.
-- [Testing strategy](docs/testing-strategy.md): Where a test goes, the CI gates that keep tests honest (no skips, coverage floors, ratchets) and how to run each lane locally.
+- [agent-workspace architecture](docs/20-design/architecture/ssot/ARCHITECTURE.md): Generated from the jevlint architecture SSOT in .jevlint/architecture/: components, layers, rules, flows, diagrams and the change guide. Edit the SSOT, then regenerate with jevlint architecture show.
+- [Testing strategy](docs/30-reference/policies/testing-strategy.md): Where a test goes, the CI gates that keep tests honest (no skips, coverage floors, ratchets) and how to run each lane locally.
 - [Agent Workspace docs site](docs/sdk/site/README.md): How the docs site is previewed, checked and generated, and the Today / Target callout convention every page follows.
 
 ## Product and design
 
 - [Build a Minimal Self-Hosted Enterprise Control Plane for the Claude Agent SDK](docs/spec.md): The original specification: a minimal, self-hosted enterprise control plane around the Claude Agent SDK.
-- [Agent Workspace SDK](docs/sdk/README.md): The SDK programme: the two meanings of "SDK" in this repository, the staged approach, and the four design documents.
-- [2. Use cases and documentation](docs/sdk/02-use-cases-and-documentation.md): The consumer use cases the SDK is designed for and the documentation they need.
-- [3. SDK design](docs/sdk/03-sdk-design.md): Package structure and layering, the public API and usage patterns, versioning, the testing seam and the application-migration plan.
-- [4. Agent Workspace SDK — API specification](docs/sdk/04-api-specification.md): The normative resource-by-resource contract of /api/**, the role table, runtime neutrality (§6) and the server changes still required (§8).
-- [SDK structure map](docs/sdk/07-structure-map.md): One page to read before touching a migration unit: the package map with the allowed import direction, one resource through the four layers, the ER diagram of the tables the SDK surfaces, and the resource-to-route-to-SDK-to-CLI table.
-- [Claude Agent Workspace refactoring plan](docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md): The refactoring programme: the target architecture of the platform and the RF-nnn units that reach it.
-- [Claude Agent Workspace refactoring decision ledger](docs/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md): The decision ledger of the refactoring programme.
+- [Agent Workspace SDK](docs/10-product/sdk/README.md): The SDK programme: the two meanings of "SDK" in this repository, the staged approach, and the four design documents.
+- [2. Use cases and documentation](docs/10-product/sdk/02-use-cases-and-documentation.md): The consumer use cases the SDK is designed for and the documentation they need.
+- [3. SDK design](docs/10-product/sdk/03-sdk-design.md): Package structure and layering, the public API and usage patterns, versioning, the testing seam and the application-migration plan.
+- [4. Agent Workspace SDK — API specification](docs/10-product/sdk/04-api-specification.md): The normative resource-by-resource contract of /api/**, the role table, runtime neutrality (§6) and the server changes still required (§8).
+- [SDK structure map](docs/10-product/sdk/07-structure-map.md): One page to read before touching a migration unit: the package map with the allowed import direction, one resource through the four layers, the ER diagram of the tables the SDK surfaces, and the resource-to-route-to-SDK-to-CLI table.
+- [Claude Agent Workspace refactoring plan](docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md): The refactoring programme: the target architecture of the platform and the RF-nnn units that reach it.
+- [Claude Agent Workspace refactoring decision ledger](docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md): The decision ledger of the refactoring programme.
 - [Architecture Decision Records](docs/adr/README.md): The architecture decision log for the whole programme, and how to print its index of every record.
 - [ADR-0052 — The SDK is contracts-first, and the application is its first consumer](docs/adr/0052-the-sdk-is-contracts-first-and-the-application-is-its-first-consumer.md): Why the SDK is two packages with one dependency direction, why the application is its first consumer, and why the packages are not published yet.
 - [ADR-0054 — Developer documentation is a Mintlify site whose reference pages are generated from the contracts and the SDK](docs/adr/0054-developer-documentation-is-a-mintlify-site-generated-from-the-contracts.md): Why the developer documentation is a Mintlify site whose reference pages are generated from the contracts, the SDK and the CLI, with staleness as a CI failure.
 
 ## Operating the platform and its status
 
-- [Capability status](docs/capability-status.md): Generated: the release verdict per capability and the evidence each one still needs.
-- [Runtime driver matrix](docs/runtime-driver-matrix.md): Generated: which runtime driver is verified for which capability in this build.
-- [Single VM — Docker Compose](docs/deploy/single-vm.md): Docker Compose on one VM: the security boundary and the start procedure.
-- [Kubernetes — Helm](docs/deploy/kubernetes.md): The Helm chart and its per-cloud values files.
-- [Azure Container Apps preview deployment](docs/deploy/azure-container-apps.md): The managed-sandbox preview deployment on the same images.
-- [Production operations runbook](docs/operations/runbook.md): Production operations: upgrade, backup and restore, drills.
-- [Claude Agent SDK upgrade policy](docs/upgrade-policy.md): How the Claude Agent SDK dependency is upgraded and what compatibility is promised.
-- [Dependency and licence policy](docs/dependency-policy.md): Which dependencies and licences are allowed.
+- [Capability status](docs/30-reference/capabilities/capability-status.md): Generated: the release verdict per capability and the evidence each one still needs.
+- [Runtime driver matrix](docs/30-reference/matrices/runtime-driver-matrix.md): Generated: which runtime driver is verified for which capability in this build.
+- [Single VM — Docker Compose](docs/40-operate/deploy/single-vm.md): Docker Compose on one VM: the security boundary and the start procedure.
+- [Kubernetes — Helm](docs/40-operate/deploy/kubernetes.md): The Helm chart and its per-cloud values files.
+- [Azure Container Apps preview deployment](docs/40-operate/deploy/azure-container-apps.md): The managed-sandbox preview deployment on the same images.
+- [Production operations runbook](docs/40-operate/operations/runbook.md): Production operations: upgrade, backup and restore, drills.
+- [Claude Agent SDK upgrade policy](docs/30-reference/policies/upgrade-policy.md): How the Claude Agent SDK dependency is upgraded and what compatibility is promised.
+- [Dependency and licence policy](docs/30-reference/policies/dependency-policy.md): Which dependencies and licences are allowed.
 
 ## Docs site: Start here
 

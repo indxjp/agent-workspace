@@ -7,7 +7,7 @@
  */
 import type { AgentRestoreCapability } from '../../contracts/agents';
 import { applicationContext } from '../application-context';
-import { getSession } from '../auth';
+import { getSignInSession } from '../auth';
 import { ownershipCapabilityFor, ownershipGrantsForRole } from '../projects/archive-capability';
 
 const RESTORE_PATH = '/api/agents/:id/restore';
@@ -32,7 +32,7 @@ export function agentRestoreGrantsForRole(role: string): {
 export async function resolveAgentRestoreCapability(): Promise<AgentRestoreCapability> {
   const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) return NO_RESTORE_CAPABILITY;
-  const session = await getSession();
+  const session = await getSignInSession();
   if (session === null) return NO_RESTORE_CAPABILITY;
   const capability = await ownershipCapabilityFor(runtime.directory, session, RESTORE_PATH);
   return {

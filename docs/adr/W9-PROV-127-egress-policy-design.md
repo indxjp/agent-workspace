@@ -59,7 +59,7 @@ two things being simultaneously true:
 When both hold, the URL handed to `fetch` has its hostname replaced with the address `checkEgress`
 already validated, so `fetch`'s own internal DNS lookup for that request never runs — there is no
 second answer left to substitute. This is exactly the case the loopback dev-fixture exception
-exists for (`docs/operations/W9-PROV-127-egress-policy.md`), which is also what every fixture
+exists for (`docs/40-operate/operations/W9-PROV-127-egress-policy.md`), which is also what every fixture
 server in this codebase's provider tests already is, and it is where `packages/core/src/net/
 egress-policy.test.ts`'s `'connects to the checked address on the real transport, closing the
 DNS-rebinding window'` test exercises it end-to-end against a real `node:http` server with an
@@ -102,7 +102,7 @@ was built instead of the weaker one that was equally available.
 
 - The only production traffic that is not literally pinned is HTTPS to a real provider — the
   traffic the policy most needs to protect, and the traffic pinning cannot touch without a
-  heavier mechanism. `docs/operations/W9-PROV-127-egress-policy.md` and this task's PR body state
+  heavier mechanism. `docs/40-operate/operations/W9-PROV-127-egress-policy.md` and this task's PR body state
   this as gap G-1, not as complete DNS-rebinding immunity.
 - No existing test asserting an exact URL string handed to a provider's own `fetch` double needed
   to change. `azure-openai.test.ts`'s one assertion of `init?.redirect` did change, from
@@ -120,7 +120,7 @@ was built instead of the weaker one that was equally available.
 
 ## Related
 
-- `docs/operations/W9-PROV-127-egress-policy.md` — the operator-facing environment-variable
+- `docs/40-operate/operations/W9-PROV-127-egress-policy.md` — the operator-facing environment-variable
   reference (`NODE_ENV`, `EGRESS_ALLOW_HOSTS`) and the two declared gaps, G-1 and G-2.
 - The Wave 9 plan's `W9-PROV-127` card — "Deliberately not built" already names the
   per-connection socket-level hook this ADR's G-1 restates with the reasoning behind it.

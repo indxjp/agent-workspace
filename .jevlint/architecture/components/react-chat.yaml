@@ -1,0 +1,17 @@
+id: react-chat
+title: Hosted chat for React
+summary: >
+  The hosted surface chat as <Chat/> with replaceable parts and the headless useConversation() hook.
+layer: client
+paths:
+  - "packages/react/**"
+key_files:
+  - { path: packages/react/src/index.ts, role: "the package's exported parts" }
+  - { path: packages/react/src/run-model.ts, role: "Run: the view model of one run's frames" }
+  - { path: packages/react/src/surface-chat-model.ts, role: "surface conversation state over the SDK" }
+interface: [Chat, useConversation, AssistantProse]
+depends_on: [sdk, contracts]
+uses: [react]
+rules: []
+checklist: []
+status: current

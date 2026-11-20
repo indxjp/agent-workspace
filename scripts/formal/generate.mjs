@@ -4,8 +4,8 @@
  *
  * - `formal/generated/catalogue.json` — every `@[aw_spec]` declaration (`lake exe catalogue`);
  * - `formal/generated/vectors/**` — the differential test vectors (`lake exe vectors`);
- * - `docs/formal/catalogue.md` — the theorem catalogue, grouped by tier and family, with counts;
- * - `docs/formal/traceability.md` — document anchor ↔ Lean name ↔ TypeScript symbol ↔ test;
+ * - `docs/20-design/formal/catalogue.md` — the theorem catalogue, grouped by tier and family, with counts;
+ * - `docs/20-design/formal/traceability.md` — document anchor ↔ Lean name ↔ TypeScript symbol ↔ test;
  * - `formal/generated/ErSnapshot.lean` — the ER snapshot pins (the latest migration's snapshot
  *   file, its table names and its column, foreign-key, unique-key and check totals), read from
  *   `migrations/meta/_journal.json` and that snapshot. It is written before `lake` runs, because
@@ -32,8 +32,14 @@ import { FORMAL_ROOT, REPOSITORY_ROOT, runLake } from './lake.mjs';
 
 const CATALOGUE_JSON = path.join(FORMAL_ROOT, 'generated', 'catalogue.json');
 const VECTORS_DIR = path.join(FORMAL_ROOT, 'generated', 'vectors');
-const CATALOGUE_MD = path.join(REPOSITORY_ROOT, 'docs', 'formal', 'catalogue.md');
-const TRACEABILITY_MD = path.join(REPOSITORY_ROOT, 'docs', 'formal', 'traceability.md');
+const CATALOGUE_MD = path.join(REPOSITORY_ROOT, 'docs', '20-design', 'formal', 'catalogue.md');
+const TRACEABILITY_MD = path.join(
+  REPOSITORY_ROOT,
+  'docs',
+  '20-design',
+  'formal',
+  'traceability.md',
+);
 const ER_SNAPSHOT_LEAN = path.join(FORMAL_ROOT, 'generated', 'ErSnapshot.lean');
 const MIGRATIONS_META = path.join(REPOSITORY_ROOT, 'migrations', 'meta');
 const TIERS = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5'];
@@ -288,7 +294,7 @@ function renderCatalogue(entries) {
     '',
     BANNER,
     '',
-    'Every theorem and traced definition of the Lean model in `formal/`, grouped by tier (docs/formal/00-orchestrator-prompt.md §6) and family. Statements are the Lean types; the sentence under each is its docstring.',
+    'Every theorem and traced definition of the Lean model in `formal/`, grouped by tier (docs/20-design/formal/00-orchestrator-prompt.md §6) and family. Statements are the Lean types; the sentence under each is its docstring.',
     '',
     '## Counts',
     '',

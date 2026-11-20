@@ -39,7 +39,11 @@ import { POST as approveRoute } from '../../app/api/auth/cli-verify/route';
 import { GET as meRoute } from '../../app/api/me/route';
 import { GET as listSecretsRoute } from '../../app/api/secrets/route';
 import { GET as listWorkspacesRoute } from '../../app/api/workspaces/route';
-import { sessionCookieName, mintSessionToken, newSessionClaims } from '../auth/session';
+import {
+  signInSessionCookieName,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+} from '../auth/session';
 import { resetCliPollMemory } from '../cli-auth/handlers';
 import type { RegisteredComposition } from './register';
 
@@ -143,8 +147,8 @@ describe.skipIf(!hasDatabase)('aw login, end to end through register() and the r
     );
     expect(pending.status).toBe(400);
 
-    const cookie = await mintSessionToken(
-      newSessionClaims(person.email, workspace.slug),
+    const cookie = await mintSignInSessionToken(
+      newSignInSessionClaims(person.email, workspace.slug),
       SESSION_SECRET,
     );
     const approved = await approveRoute(
@@ -152,7 +156,7 @@ describe.skipIf(!hasDatabase)('aw login, end to end through register() and the r
         method: 'POST',
         headers: {
           origin: ORIGIN,
-          cookie: `${sessionCookieName(process.env)}=${cookie}`,
+          cookie: `${signInSessionCookieName(process.env)}=${cookie}`,
           'content-type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({

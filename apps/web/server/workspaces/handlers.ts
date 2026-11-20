@@ -16,7 +16,7 @@ import { problemWithDetail as problem } from '../http/result';
 // second copy.
 import { asObject, readString } from '../rbac/body-readers';
 import { log } from '../telemetry/logger';
-import type { WorkspaceRepositoryPort } from './runtime';
+import type { WorkspaceRepositoryPort } from './wiring';
 
 /**
  * These three are derived from {@link WorkspaceRepositoryPort} rather than imported from

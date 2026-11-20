@@ -37,6 +37,11 @@ const REPOSITORY_SECTIONS = [
           'Instructions for Claude Code in this repository: what to read first and the per-task procedure.',
       },
       {
+        path: 'docs/README.md',
+        description:
+          'The map of docs/: which document to read for each kind of task, what to skip, and how specs are named.',
+      },
+      {
         path: 'ENGINEERING_GUIDELINES.md',
         description:
           'The rules for production code, tests and agent changes; a repository-wide gate is weakened only by an ADR.',
@@ -47,7 +52,12 @@ const REPOSITORY_SECTIONS = [
           'System shape, what each application and package owns and must not own, the dependency direction and the trust boundaries — enforced by dependency-cruiser.',
       },
       {
-        path: 'docs/testing-strategy.md',
+        path: 'docs/20-design/architecture/ssot/ARCHITECTURE.md',
+        description:
+          'Generated from the jevlint architecture SSOT in .jevlint/architecture/: components, layers, rules, flows, diagrams and the change guide. Edit the SSOT, then regenerate with jevlint architecture show.',
+      },
+      {
+        path: 'docs/30-reference/policies/testing-strategy.md',
         description:
           'Where a test goes, the CI gates that keep tests honest (no skips, coverage floors, ratchets) and how to run each lane locally.',
       },
@@ -67,37 +77,37 @@ const REPOSITORY_SECTIONS = [
           'The original specification: a minimal, self-hosted enterprise control plane around the Claude Agent SDK.',
       },
       {
-        path: 'docs/sdk/README.md',
+        path: 'docs/10-product/sdk/README.md',
         description:
           'The SDK programme: the two meanings of "SDK" in this repository, the staged approach, and the four design documents.',
       },
       {
-        path: 'docs/sdk/02-use-cases-and-documentation.md',
+        path: 'docs/10-product/sdk/02-use-cases-and-documentation.md',
         description:
           'The consumer use cases the SDK is designed for and the documentation they need.',
       },
       {
-        path: 'docs/sdk/03-sdk-design.md',
+        path: 'docs/10-product/sdk/03-sdk-design.md',
         description:
           'Package structure and layering, the public API and usage patterns, versioning, the testing seam and the application-migration plan.',
       },
       {
-        path: 'docs/sdk/04-api-specification.md',
+        path: 'docs/10-product/sdk/04-api-specification.md',
         description:
           'The normative resource-by-resource contract of /api/**, the role table, runtime neutrality (§6) and the server changes still required (§8).',
       },
       {
-        path: 'docs/sdk/07-structure-map.md',
+        path: 'docs/10-product/sdk/07-structure-map.md',
         description:
           'One page to read before touching a migration unit: the package map with the allowed import direction, one resource through the four layers, the ER diagram of the tables the SDK surfaces, and the resource-to-route-to-SDK-to-CLI table.',
       },
       {
-        path: 'docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md',
+        path: 'docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-plan.md',
         description:
           'The refactoring programme: the target architecture of the platform and the RF-nnn units that reach it.',
       },
       {
-        path: 'docs/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md',
+        path: 'docs/20-design/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md',
         description: 'The decision ledger of the refactoring programme.',
       },
       {
@@ -121,38 +131,38 @@ const REPOSITORY_SECTIONS = [
     heading: 'Operating the platform and its status',
     documents: [
       {
-        path: 'docs/capability-status.md',
+        path: 'docs/30-reference/capabilities/capability-status.md',
         description:
           'Generated: the release verdict per capability and the evidence each one still needs.',
       },
       {
-        path: 'docs/runtime-driver-matrix.md',
+        path: 'docs/30-reference/matrices/runtime-driver-matrix.md',
         description:
           'Generated: which runtime driver is verified for which capability in this build.',
       },
       {
-        path: 'docs/deploy/single-vm.md',
+        path: 'docs/40-operate/deploy/single-vm.md',
         description: 'Docker Compose on one VM: the security boundary and the start procedure.',
       },
       {
-        path: 'docs/deploy/kubernetes.md',
+        path: 'docs/40-operate/deploy/kubernetes.md',
         description: 'The Helm chart and its per-cloud values files.',
       },
       {
-        path: 'docs/deploy/azure-container-apps.md',
+        path: 'docs/40-operate/deploy/azure-container-apps.md',
         description: 'The managed-sandbox preview deployment on the same images.',
       },
       {
-        path: 'docs/operations/runbook.md',
+        path: 'docs/40-operate/operations/runbook.md',
         description: 'Production operations: upgrade, backup and restore, drills.',
       },
       {
-        path: 'docs/upgrade-policy.md',
+        path: 'docs/30-reference/policies/upgrade-policy.md',
         description:
           'How the Claude Agent SDK dependency is upgraded and what compatibility is promised.',
       },
       {
-        path: 'docs/dependency-policy.md',
+        path: 'docs/30-reference/policies/dependency-policy.md',
         description: 'Which dependencies and licences are allowed.',
       },
     ],

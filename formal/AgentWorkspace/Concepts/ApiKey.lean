@@ -70,13 +70,13 @@ def displayPrefixShaped (s : String) : Bool :=
 /-- `API_KEY_PATTERN`: a whole presented key, `ak_live_<22>_<43>`. -/
 @[aw_spec (ts := "packages/contracts/src/api-keys.ts#API_KEY_PATTERN")
   (ts := "apps/web/server/rbac/api-key.ts#parsePresentedKey")
-  (doc := "docs/sdk/04-api-specification.md#31-credentials")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#31-credentials")]
 def presentedShaped (s : String) : Bool := bearerShaped prefix_ idLength secretLength s
 
 /-- An API key, with every column of `api_keys`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/api-keys.ts#apiKeys")
   (ts := "packages/contracts/src/api-keys.ts#ApiKeyResourceSchema")
-  (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#2-resource-model")]
 structure ApiKey where
   id : ApiKeyId
   workspace : WorkspaceId
@@ -100,7 +100,7 @@ def ApiKey.valid (k : ApiKey) : Bool :=
     k.expiresAt.all (k.createdAt < ·) && k.revokedAt.all (k.createdAt ≤ ·)
 
 /-- The states of a key at an instant. -/
-@[aw_spec (doc := "docs/formal/inventory.md#2-state-machines")
+@[aw_spec (doc := "docs/20-design/formal/inventory.md#2-state-machines")
   (ts := "packages/core/src/db/schema/api-keys.ts#revokedAt")]
 inductive ApiKeyState where
   | active

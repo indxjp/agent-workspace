@@ -41,7 +41,7 @@ describe.skipIf(!databaseConfigured(process.env))('the PostgreSQL run store: leg
     const served = await serve(handle.events, null);
 
     // A legacy log serves only `agent.*` frames, and exactly the frames a fresh run of the same
-    // messages produces — the replay refinement of `docs/formal/domains/d1-runs.md`, over rows that
+    // messages produces — the replay refinement of `docs/20-design/formal/domains/d1-runs.md`, over rows that
     // really went through PostgreSQL rather than through an in-memory map.
     const fresh = LEGACY_MESSAGES.flatMap((message) => [
       ...toAgentFrames(classifySdkEvent(message)),

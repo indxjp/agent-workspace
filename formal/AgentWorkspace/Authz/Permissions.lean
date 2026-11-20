@@ -12,7 +12,7 @@ fallback plus an override per named resource. Owner's fallback is `EVERYTHING` (
 The model transcribes `POLICY` **literally**, as the same fallback-plus-override shape with the
 same named constants, so each of the 4 × 32 × 3 = 384 cells is computed the way `grantsFor`
 computes it. The per-cell theorems (`Theorems.Normative.AuthzDecide`) pin every cell against an
-independent transcription of the document table in `docs/sdk/04-api-specification.md` §3.3.
+independent transcription of the document table in `docs/10-product/sdk/04-api-specification.md` §3.3.
 -/
 
 namespace AgentWorkspace.Authz.Permissions
@@ -41,7 +41,7 @@ instance : WireEnum Operation where
 
 /-- `Grant`: how wide a permission is. -/
 @[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#Grant")
-  (doc := "docs/sdk/04-api-specification.md#33-roles")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")]
 inductive Grant where
   | none | own | permitted | any
   deriving DecidableEq, Repr, Inhabited
@@ -97,7 +97,7 @@ structure RolePolicy where
 
 /-- `POLICY`, role by role, in the order and with the constants `permissions.ts` uses. -/
 @[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")
-  (doc := "docs/sdk/04-api-specification.md#33-roles") (doc := "docs/spec.md#21-users-and-rbac")]
+  (doc := "docs/10-product/sdk/04-api-specification.md#33-roles") (doc := "docs/spec.md#21-users-and-rbac")]
 def policy : Role → RolePolicy
   | .owner => { fallback := EVERYTHING, byResource := [(.workspaces, WORKSPACE_MEMBER_SCOPED)] }
   | .admin =>
@@ -222,7 +222,7 @@ def Grant.le : Grant → Grant → Bool
   | .any, .any => true
   | _, _ => false
 
-/-! ## The table as `docs/sdk/04-api-specification.md` §3.3 prints it
+/-! ## The table as `docs/10-product/sdk/04-api-specification.md` §3.3 prints it
 
 An independent transcription of the document's table, phrase by phrase, so that the per-cell
 theorems compare two readings rather than restate one. §3.3 says the table "is
@@ -281,7 +281,7 @@ def DocPhrase.grants (resource : Resource) : DocPhrase → Grants
 `none` for the six resources it does not name (`endpoint-clients`, `me`, `setup`,
 `storage-connections`, `tool-bundles`, `triggers`). The "audit" of
 "metrics, audit" is `audit-events`. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#33-roles")]
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#33-roles")]
 def docRow : Resource → Option (DocPhrase × DocPhrase × DocPhrase × DocPhrase)
   | .agents => some (.all, .all, .readAnyWriteOwnRunPermitted, .readAnyRunPermitted)
   | .skills | .files => some (.all, .all, .readAnyWriteOwn, .none)

@@ -6,10 +6,8 @@
  * itself, narrowed to the skill calls. `store.test.ts` checks that each port type equals the
  * catalog type it stands for, both ways, so the two cannot drift through a structural match.
  */
-import {
-  parsePendingSkillDelete as parseCatalogPendingSkillDelete,
-  type ResourceCatalogRepository,
-} from '@agent-workspace/core/db';
+import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
+import { parsePendingSkillDelete as parseCatalogPendingSkillDelete } from '@agent-workspace/core/db-model';
 
 import type { PendingSkillDelete, SkillCatalog } from './ports';
 

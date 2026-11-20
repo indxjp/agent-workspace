@@ -32,7 +32,7 @@ private theorem every_frame_is_neutral (f : Frame) :
 
 /-- The mapping never drops a chunk: each one becomes at least one frame, and every frame is a
 neutral frame, `agent.native` or `agent.malformed`. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#events")
   (ts := "packages/engine-mastra/src/frames.ts#createMastraFrameMapper")]
 theorem the_mapping_never_drops_an_event (connectors : List String) (s : MapState) (e : Chunk) :
     (step connectors s e).2 ≠ [] ∧
@@ -55,7 +55,7 @@ theorem the_mapping_never_drops_an_event (connectors : List String) (s : MapStat
 than `finish` is forwarded as itself, and `finish` becomes the adapter's terminal event — or, after
 an `error` chunk, which no second result may follow, is forwarded as a native chunk. With
 `the_mapping_never_drops_an_event`, each of those events becomes at least one frame. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#events")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")
   (ts := "packages/engine-mastra/src/frames.ts#createMastraFrameMapper")]
 theorem every_raw_chunk_is_represented (raws : List Raw)
@@ -197,7 +197,7 @@ private theorem paired_from (connectors : List String) (chunks : List Chunk) :
 
 /-- Tool pairing holds on every mapped stream: every `agent.tool.result` answers a call an earlier
 `agent.tool.call` announced and no earlier result answered. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#events")
   (ts := "packages/engine-mastra/src/frames.ts#createMastraFrameMapper")]
 theorem tool_pairing_holds (connectors : List String) (chunks : List Chunk) :
     Behaviour.Engines.OpenAiAgents.pairedFrom [] (mapAll connectors chunks) = true :=
@@ -247,7 +247,7 @@ private theorem results_follow_calls (fs : List Frame) :
 /-- Every mapped stream — the boundary's events included — is `paired` in the sense of
 `Events/AgentFrames.lean`: each `agent.tool.result` names an id an earlier `agent.tool.call`
 announced. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#events")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#events")
   (ts := "packages/engine-mastra/src/frames.ts#createMastraFrameMapper")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
 theorem every_mapped_stream_is_paired (connectors : List String) (chunks : List Chunk) :
@@ -278,7 +278,7 @@ example :
 /-! ## The step limit -/
 
 /-- Compile hands Mastra the portable `limits.maxTurns` as its native `maxSteps`, unchanged. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#steps")
   (ts := "packages/engine-mastra/src/compile.ts#compileMastraRun")]
 theorem the_step_limit_is_max_turns {r : Request} {c : Compiled} (h : compile r = .ok c) :
     c.maxSteps = r.maxTurns := by
@@ -288,7 +288,7 @@ theorem the_step_limit_is_max_turns {r : Request} {c : Compiled} (h : compile r 
 /-- The boundary's verdict on a drained run: an interrupt wins over the step limit, and otherwise the run ends `max_turns` exactly when it reached `maxSteps` with its
 last step still asking for tools — so a run that used exactly `maxSteps` steps and stopped on its
 own ends `end_turn` — and `end_turn` with no limit. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#steps")
   (ts := "packages/engine-mastra/src/boundary.ts#mastraStopReason")]
 theorem the_stop_reason_follows_the_precedence (steps : Nat) (last : Option String)
     (maxSteps : Option Nat) :
@@ -314,7 +314,7 @@ example :
   decide +kernel
 
 /-- The adapter never takes more than `limits.maxTurns` steps. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#steps")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
 theorem the_run_stops_at_or_before_max_turns (m : Nat) :
     ∀ (steps : List Bool) (n : Nat), n < m → (stepRun (some m) n steps).1 ≤ m := by
@@ -331,7 +331,7 @@ theorem the_run_stops_at_or_before_max_turns (m : Nat) :
         exact ih (n + 1) (by omega)
 
 /-- A run the limit cut short ends `max_turns` exactly at the limit. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#steps")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")]
 theorem a_max_turns_stop_is_at_the_limit (m : Nat) :
     ∀ (steps : List Bool) (n : Nat), n < m →
@@ -351,7 +351,7 @@ theorem a_max_turns_stop_is_at_the_limit (m : Nat) :
 /-- The converse: a run whose model keeps asking for tools at every step up to the limit is cut
 short exactly at `limits.maxTurns` and ends `max_turns`, and its terminal event maps to
 `agent.result {stopReason: 'max_turns', turns: m}` after the usage. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#steps")
   (ts := "packages/engine-mastra/src/boundary.ts#startMastraRun")
   (ts := "packages/engine-mastra/src/frames.ts#createMastraFrameMapper")]
 theorem a_run_the_limit_cuts_short_ends_max_turns (m : Nat) :
@@ -432,7 +432,7 @@ private theorem fold_messages (tid : String) :
 /-- A thread's messages, each with its own id and all of that thread, journalled into the store
 read back as exactly those messages, in order: the round trip a second run's recall rests on. The
 store is the platform's engine-scoped stream; no database is involved. -/
-@[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#memory")
+@[aw_spec (tier := T2) (doc := "docs/20-design/formal/units/engine-mastra.md#memory")
   (ts := "packages/engine-mastra/src/session.ts#MastraMemoryJournal")
   (ts := "packages/engine-mastra/src/session.ts#readMastraThread")]
 theorem the_thread_round_trips (tid : String) (msgs : List Message)

@@ -27,13 +27,15 @@
 # remote cache (infra/nx-cache, docs/adr/0110) — Nx Cloud is gone (nx.json neverConnectToCloud).
 # Each Nx job connects through .github/actions/nx-remote-cache: the job's GitHub OIDC token is
 # exchanged for a short-lived cache token whose role the SERVER decides from GitHub's signed
-# claims, so only a push to `main` can write and a pull request — even one that edits this file —
-# can only read. Every task-running `nx` call goes through scripts/ci/nx.sh, which reruns on the
+# claims: a push or nightly on `main`, a merge-queue group of `main` and a same-repository pull
+# request into `main` write (owner decisions D1/D1b, ADR-0110 Amendment 2026-11-19), any other run
+# — a fork's pull request, a dispatch — can only read, even one that edits this file, and no write
+# can replace an entry already in the cache (409). Every task-running `nx` call goes through scripts/ci/nx.sh, which reruns on the
 # local cache if the remote one fails mid-run: the cache is an optimisation and never decides
 # whether CI is green. Kill switch: repository variable INDX_NX_REMOTE_CACHE_ENABLED != 'true'.
 # Caching `.nx/cache` with actions/cache is NOT an option: since Nx 20 the cache index is a
 # database named after the machine, so a directory restored onto a fresh VM is never consulted
-# (verified on 23.2.1 — see docs/adr/0053). docs/operations/ci.md has the operating detail.
+# (verified on 23.2.1 — see docs/adr/0053). docs/40-operate/operations/ci.md has the operating detail.
 #
 # fast-checks (static gates) needs nothing and runs beside `build`, so a malformed PR body still
 # fails in seconds; everything that needs built packages starts when `build` is done.
@@ -41,10 +43,12 @@
 # COST (docs/adr/0053, Amendments 2026-10-19 and 2026-10-24). A change used to be tested three
 # times in full: on the pull request, in the merge queue and again on the push to main. Now four
 # tiers. The pull request runs the inner loop (fast checks, build, typecheck and lint, tests). The
-# merge queue runs the same inner loop on the merged commit, plus `formal` and `image-scan` when the
-# diff reaches what they read (their `scope` steps). The heavy tier (release checks and images,
-# generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser,
-# and formal and image-scan unscoped) runs nightly on main (`schedule`), on a dispatch, on a pull request
+# merge queue runs the same set on the merged commit and nothing more (owner decision D2, plan A;
+# ADR-0053 Amendment 2026-11-19c): what the group's diff reaches, mostly replayed from the remote
+# cache the queued pull request wrote (ADR-0110 Amendment 2026-11-19). The heavy tier (release
+# checks and images, generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims,
+# tool-sandbox-e2e, coverage, browser, formal and image-scan, the last two path-scoped only against a
+# diff base) runs nightly on main (`schedule`), on a dispatch, on a pull request
 # labelled `ci:full` before its next push (never on its `edited` runs, which skip `build`), and as
 # the release gate: publish-packages.yml and images.yml call this workflow with `full: true` on the
 # tagged commit before they publish. A failed nightly opens or updates one issue
@@ -52,6 +56,11 @@
 # which writes the remote cache. A body or title edit re-runs the fast checks only (the PR-body
 # gates). `ci-success` accepts a skipped job on a pull request, a push and in the queue, never on
 # the nightly, a dispatch or the release gate.
+# THE FAST PATH (docs/adr/0053, Amendment 2026-11-19b). Within a tier, the `plan` job decides which
+# of the four Nx jobs (`build`, `build-embedded`, `typecheck-lint`, `heavy-checks`) the run needs,
+# from the Nx tasks the diff reaches (scripts/ci/ci-plan.mjs), and which test shards. A job the plan
+# answers `false` for is skipped, and `ci-success` accepts the skip of those four ONLY where the plan
+# said `false` (or on a body/title edit, which skips the plan too), never because of the event alone.
 name: CI
 
 on:
@@ -77,9 +86,9 @@ on:
   # `merge_group.base_sha` (DIFF_BASE below), never against origin/main.
   merge_group:
     types: [checks_requested]
-  # The nightly full run of main (02:37 JST): the heavy tier left the queue, and the image scan is
-  # otherwise skipped for a diff that changes no image input, so a new CVE would go unseen
-  # (ADR-0053, Amendments 2026-10-19 and 2026-10-24).
+  # The nightly full run of main (02:37 JST): the heavy tier, including `formal` and the image scan
+  # since they left the queue (ADR-0053, Amendments 2026-10-19, 2026-10-24 and 2026-11-19c), so a
+  # new CVE or a model divergence is found within a day and before any release (`full: true`).
   schedule:
     - cron: '37 17 * * *'
 
@@ -99,14 +108,15 @@ permissions:
 
 env:
   # THE remote-cache plan for this run, computed once and read by every Nx job's
-  # nx-remote-cache step: `off` when the kill switch is not 'true' or no server is configured,
-  # `write` for a push to `main` and for the nightly scheduled run of `main` (the server's
-  # `push,schedule` rule, ADR-0110), `read` for everything else (pull requests, merge-queue groups,
-  # dispatches). A merge_group run is read-only: its commit is not on main yet and the queue may
-  # still drop it, and the server refuses write for its gh-readonly-queue/* ref anyway.
+  # nx-remote-cache step: `off` when the kill switch is not 'true' or no server is configured;
+  # `write` for a push to `main` and its nightly, for a merge-queue group of `main`
+  # (gh-readonly-queue/main/*) and for a SAME-REPOSITORY pull request into `main` (owner decisions
+  # D1 and D1b, ADR-0110 Amendment 2026-11-19); `read` for everything else (a fork's pull request,
+  # which GitHub gives no OIDC token anyway, a dispatch, the release gate's tag push).
   # The server applies the same rule independently from the job's signed OIDC claims and can
-  # only ever grant LESS than this; the action fails the job if it is granted more.
-  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main') && 'write' || 'read' }}
+  # only ever grant LESS than this; the action fails the job if it is granted more. 409
+  # first-writer-wins means no write can replace an entry already in the cache.
+  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')) || (github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository)) && 'write' || 'read' }}
   # The base of every affected (nx affected) and path-scoped (`id: scope`) decision. A pull request
   # compares with origin/main; a merge-queue group with `merge_group.base_sha`, the commit the
   # group was built on (main's tip, or the head of the group ahead of it, which is not on main).
@@ -259,6 +269,18 @@ jobs:
       # Scans the commits this run adds, not history; findings are redacted in the log.
       # Both downloads retry for up to three minutes: github.com release assets answer 504 in bursts.
       # If gitleaks still cannot be fetched, the same version is built from the Go module proxy.
+      # The two release files are kept in actions/cache, keyed by version and SHA-256, so a run
+      # normally downloads nothing; a restored file is checked against the same pinned SHA-256
+      # before it runs, exactly as a downloaded one, so the cache can save time but never change the
+      # binary. Saved by a step of its own right after the two scans (not in a post step), also when
+      # a scan found something, so a red main run still fills the cache.
+      - name: Restore the scanner downloads
+        id: scanner-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/scanner-downloads
+          key: scanner-downloads-gitleaks-8.30.1-551f6fc8-osv-scanner-2.7.0-160c6253
+
       - name: Secret scan (gitleaks)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -268,10 +290,20 @@ jobs:
           version=8.30.1
           sha256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
           dir="$RUNNER_TEMP/gitleaks"
-          mkdir -p "$dir"
-          if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 -o "$dir/gitleaks.tar.gz"             "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"; then
-            echo "$sha256  $dir/gitleaks.tar.gz" | sha256sum --check --strict -
-            tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks
+          downloads="$RUNNER_TEMP/scanner-downloads"
+          mkdir -p "$dir" "$downloads"
+          archive="$downloads/gitleaks_${version}_linux_x64.tar.gz"
+          # A download lands under a temporary name, so a partial file is never cached or reused.
+          if [ ! -f "$archive" ]; then
+            if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 -o "$archive.part"               "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"; then
+              mv "$archive.part" "$archive"
+            else
+              rm -f "$archive.part"
+            fi
+          fi
+          if [ -f "$archive" ]; then
+            echo "$sha256  $archive" | sha256sum --check --strict - || { rm -f "$archive"; exit 1; }
+            tar -xzf "$archive" -C "$dir" gitleaks
           else
             # The same pinned version from the Go module proxy, verified against sum.golang.org.
             echo "::warning title=Secret scan::the gitleaks release download failed; building v${version} with go install"
@@ -312,9 +344,15 @@ jobs:
           version=2.7.0
           sha256=160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
           dir="$RUNNER_TEMP/osv-scanner"
-          mkdir -p "$dir"
-          curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 -o "$dir/osv-scanner"             "https://github.com/google/osv-scanner/releases/download/v${version}/osv-scanner_linux_amd64"             || fail "could not download osv-scanner"
-          echo "$sha256  $dir/osv-scanner" | sha256sum --check --strict - || fail "osv-scanner checksum mismatch"
+          downloads="$RUNNER_TEMP/scanner-downloads"
+          mkdir -p "$dir" "$downloads"
+          binary="$downloads/osv-scanner_${version}_linux_amd64"
+          if [ ! -f "$binary" ]; then
+            curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 -o "$binary.part"               "https://github.com/google/osv-scanner/releases/download/v${version}/osv-scanner_linux_amd64"               || { rm -f "$binary.part"; fail "could not download osv-scanner"; }
+            mv "$binary.part" "$binary"
+          fi
+          echo "$sha256  $binary" | sha256sum --check --strict - || { rm -f "$binary"; fail "osv-scanner checksum mismatch"; }
+          cp "$binary" "$dir/osv-scanner"
           chmod +x "$dir/osv-scanner"
           # Exit 1 means "vulnerabilities found" and is judged against the baseline below; any
           # other non-zero exit is a scanner failure.
@@ -328,6 +366,23 @@ jobs:
             node scripts/ci/check-osv-baseline.mjs "$dir/osv.json" .osv-baseline.json --warn-only
           fi
 
+      # Saved only with both release files present; each one was checked against its SHA-256 above.
+      - name: Are both scanner downloads present
+        id: scanner-files
+        if: ${{ !cancelled() && steps.scanner-cache.outputs.cache-hit != 'true' }}
+        run: |
+          downloads="$RUNNER_TEMP/scanner-downloads"
+          if [ -f "$downloads/gitleaks_8.30.1_linux_x64.tar.gz" ] && [ -f "$downloads/osv-scanner_2.7.0_linux_amd64" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save the scanner downloads
+        if: ${{ !cancelled() && steps.scanner-files.outputs.complete == 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/scanner-downloads
+          key: ${{ steps.scanner-cache.outputs.cache-primary-key }}
+
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
@@ -339,11 +394,65 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # docs:check is the longest gate here and needs nothing but the install, so it runs beside the
+      # steps below (a GitHub-hosted runner has two or more vCPUs; the other gates are mostly
+      # single-threaded). Its log and exit status land in RUNNER_TEMP; the step
+      # "Generated SDK reference and llms.txt are current" waits for it, prints the log and fails
+      # with its status. A step that fails before then ends the job red, as it did when the gates
+      # ran one after another.
+      - name: Start docs:check in the background
+        run: |
+          (
+            status=0
+            pnpm docs:check > "$RUNNER_TEMP/docs-check.log" 2>&1 || status=$?
+            echo "$status" > "$RUNNER_TEMP/docs-check.status.tmp"
+            mv "$RUNNER_TEMP/docs-check.status.tmp" "$RUNNER_TEMP/docs-check.status"
+          ) &
+
       - name: Lockfile is deduplicated
         run: pnpm dedupe --check
 
+      # The route and screen inventories, the RF-001 register, the catalog fakes and the duplicate
+      # vocabulary compared with the tracked tree (scripts/policy-check.mjs). These were cases of the
+      # root Vitest project until ADR-0053 Amendment 2026-11-19f; they need no build and no service.
+      - name: Inventories and registers match the tracked tree
+        run: pnpm policy:check
+
+      # Each tests/ Nx project's `test` inputs cover every file its tests import or read, and every
+      # tests/ test file belongs to exactly one project (scripts/policy-check-test-inputs.mjs). An
+      # undeclared read would let `nx affected` skip, or the cache replay, a test whose input changed.
+      - name: Test project inputs cover what the tests read
+        run: pnpm test-inputs:check
+
+      # What `nx affected` selects for a docs-only, a README, a test-only, a root-test and a source
+      # change (nx.json `production` / `code` inputs, task-based affected; ADR-0053, Amendment
+      # 2026-11-19), which Nx jobs and test shards the `plan` job makes of a selection, and which
+      # skips `CI success`'s own script accepts (Amendment 2026-11-19b). `--explain` computes the
+      # selection and runs no task (about 15 s).
+      - name: Nx affected selection, the CI plan and the CI success gate
+        run: node --test scripts/ci/nx-affected.test.mjs scripts/ci/ci-plan.test.mjs scripts/ci/ci-success.test.mjs
+
+      # Prettier's own cache (--cache-strategy content): a file whose content, Prettier version and
+      # options all match an entry that was formatted is not formatted again. Only a file that
+      # passed is ever recorded, and a change of version or of .prettierrc.json invalidates every
+      # entry (both measured; see the commit). The cache is saved by a push to main only, so a pull
+      # request or a queue group starts from main's and cannot hand an entry to another run.
+      - name: Restore the Prettier cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/prettier-cache
+          key: prettier-${{ hashFiles('pnpm-lock.yaml', '.prettierrc.json') }}-${{ github.sha }}
+          restore-keys: prettier-${{ hashFiles('pnpm-lock.yaml', '.prettierrc.json') }}-
+
       - name: Formatting
-        run: pnpm format:check
+        run: pnpm format:check --cache --cache-strategy content --cache-location "$RUNNER_TEMP/prettier-cache"
+
+      - name: Save the Prettier cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/prettier-cache
+          key: prettier-${{ hashFiles('pnpm-lock.yaml', '.prettierrc.json') }}-${{ github.sha }}
 
       # Two branches that each add migration N collide on migrations/meta; a hand-merged journal
       # can then reuse an idx or carry a `when` the migrator silently skips. Fails with the fix.
@@ -357,11 +466,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node scripts/migrations.mjs lint --base "$BASE_SHA"
 
-      # Reads packages/{contracts,sdk,aw}/src directly and builds only the contracts' dist (for the
-      # profile-schema generator), so it sits after the two-second format check and before the Nx
-      # graph, matching check:fast's order of cheap deterministic gates first. Also checks llms.txt against the documents it indexes.
+      # `pnpm docs:check`, started after the install (see "Start docs:check in the background"). It
+      # reads packages/{contracts,sdk,aw}/src directly and builds only the contracts' dist (for the
+      # profile-schema generator); it also checks llms.txt against the documents it indexes.
       - name: Generated SDK reference and llms.txt are current
-        run: pnpm docs:check
+        timeout-minutes: 10
+        run: |
+          while [ ! -f "$RUNNER_TEMP/docs-check.status" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/docs-check.log"
+          exit "$(cat "$RUNNER_TEMP/docs-check.status")"
 
       # Design §07: a malformed story tag fails, a cell covered at the base that is uncovered here
       # fails, and so does any gap of a storage story (#1703). A Builder gap prints until its issue.
@@ -383,10 +496,55 @@ jobs:
   # @indx-workspace/embedded every one of them paid for it. Embedded is built beside this job, in
   # `build-embedded`: its webpack build alone is ~9 minutes on a 2-vCPU runner, and only the jobs
   # that pack the published set wait for it.
-  build:
-    name: build · every workspace but embedded
+  # THE FAST PATH's decision (see the header; ADR-0053, Amendment 2026-11-19b): `nx affected
+  # --explain` over build, typecheck, lint and test for a pull request or a queue group (it computes
+  # the selection and runs no task), the event's tier otherwise. Light work, so GitHub-hosted (it is
+  # in HOSTED_JOBS): only the root workspace is installed (`--filter .`), which is all Nx needs for
+  # the project graph and gives the same selection as the full install. It needs no other job, so
+  # nothing but it stands between a push and `build`.
+  plan:
+    name: plan · which Nx jobs this change needs
     if: >-
       github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      build-embedded: ${{ steps.plan.outputs.build-embedded }}
+      typecheck-lint: ${{ steps.plan.outputs.typecheck-lint }}
+      heavy-checks: ${{ steps.plan.outputs.heavy-checks }}
+      test-shards: ${{ steps.plan.outputs.test-shards }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The merge base with DIFF_BASE, for nx affected and the formal scope.
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - name: Install the root workspace
+        run: pnpm install --frozen-lockfile --filter . --ignore-scripts
+
+      # PLAN_FULL is the heavy tier's condition (every job, every test project).
+      - name: Decide which Nx jobs this run needs
+        id: plan
+        env:
+          PLAN_FULL: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: node scripts/ci/ci-plan.mjs
+
+  build:
+    name: build · every workspace but embedded
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
     runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
@@ -407,11 +565,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Assert pull_request runs cannot select remote-cache write
+      - name: Assert fork pull_request runs cannot select remote-cache write
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
-            exit 1
+          if [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            case "$EVENT_NAME" in
+              push|schedule|merge_group) ;;
+              pull_request) [ "$HEAD_REPO" = "$BASE_REPO" ] || { echo "::error::fork pull_request run ($HEAD_REPO) resolved to remote-cache kind 'write'"; exit 1; } ;;
+              *) echo "::error::$EVENT_NAME event resolved to remote-cache kind 'write'"; exit 1 ;;
+            esac
           fi
 
       - name: Connect Nx to the remote cache
@@ -575,10 +740,13 @@ jobs:
   # cache) rather than waited for: they take about a minute, apps/web's own build is skipped
   # (embedded makes its own), and the webpack build starts minutes earlier. Keeping webpack's own
   # cache between runs was measured and not adopted: 1.4 GB for 283 s -> 251 s after a web change.
+  # The plan runs it when the diff reaches one of embedded's own tasks (its build reads its
+  # dependencies' `production` files, its own files and migrations/), and always on main and in the
+  # heavy tier: a docs-only change does not change its hash, and it no longer builds for one.
   build-embedded:
     name: build · embedded and its tests
-    if: >-
-      github.event.action != 'edited'
+    needs: plan
+    if: needs.plan.outputs.build-embedded == 'true'
     runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
@@ -599,11 +767,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Assert pull_request runs cannot select remote-cache write
+      - name: Assert fork pull_request runs cannot select remote-cache write
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
-            exit 1
+          if [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            case "$EVENT_NAME" in
+              push|schedule|merge_group) ;;
+              pull_request) [ "$HEAD_REPO" = "$BASE_REPO" ] || { echo "::error::fork pull_request run ($HEAD_REPO) resolved to remote-cache kind 'write'"; exit 1; } ;;
+              *) echo "::error::$EVENT_NAME event resolved to remote-cache kind 'write'"; exit 1 ;;
+            esac
           fi
 
       - name: Connect Nx to the remote cache
@@ -697,11 +872,15 @@ jobs:
   # looked affected". The builds both targets depend on come from the `build` job, so Nx is told
   # not to run them (`--excludeTaskDependencies`). The repository-wide static checks that read
   # built packages run once, in this job.
+  #
+  # The plan skips the whole job when the diff reaches no typecheck or lint task (a docs-only
+  # change). The repository-wide checks below read only what those tasks read (TypeScript and
+  # JavaScript, package.json and the checks' own configs, all Nx `code` inputs of some project), so
+  # a change that reaches no typecheck or lint task cannot change their result either.
   typecheck-lint:
     name: typecheck and lint · Nx task graph
-    if: >-
-      (github.event_name != 'push' || inputs.full) && github.event.action != 'edited'
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.typecheck-lint == 'true'
     # Blacksmith, not the pool (ADR-0053, Amendment 2026-10-25): with `tests` these are the jobs every
     # pull request and queue group waits on after `build`, and on the pool they waited longest for a slot.
     # COST (ADR-0053, Amendment 2026-11-10): one job for both targets, not a matrix of two. Each
@@ -732,11 +911,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Assert pull_request runs cannot select remote-cache write
+      - name: Assert fork pull_request runs cannot select remote-cache write
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
-            exit 1
+          if [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            case "$EVENT_NAME" in
+              push|schedule|merge_group) ;;
+              pull_request) [ "$HEAD_REPO" = "$BASE_REPO" ] || { echo "::error::fork pull_request run ($HEAD_REPO) resolved to remote-cache kind 'write'"; exit 1; } ;;
+              *) echo "::error::$EVENT_NAME event resolved to remote-cache kind 'write'"; exit 1 ;;
+            esac
           fi
 
       - name: Connect Nx to the remote cache
@@ -797,26 +983,19 @@ jobs:
 
   heavy-checks:
     name: tests · ${{ matrix.shard }}
-    if: >-
-      (github.event_name != 'push' || inputs.full) && github.event.action != 'edited'
-    needs: build
-    # The Vitest projects, spread over four runners by measured time (main, 2026-10-15, seconds
-    # on a 16-vCPU runner): the root `tests` project is serial by design (tests/vitest.config.ts,
-    # 315 s) and gets a runner to itself; aw (178) with cli (82); web (132) with core (128); and
-    # every other project (each under 60 s) in `rest`. `rest` is defined as "not named in another
-    # shard", so a project added to the workspace is tested without editing this list.
+    needs: [plan, build]
+    if: needs.plan.outputs.heavy-checks == 'true'
+    # The Vitest projects, spread over up to four runners by measured time. The shards and their
+    # projects are scripts/ci/ci-plan.mjs's TEST_SHARDS: the tests/ tree's projects (tests/projects.mjs:
+    # `tests`, tests-docs, tests-tooling, tests-next and the rest of tests/<dir>); aw with cli;
+    # web with core; and `rest`, every other test project, so a project added to the workspace is
+    # tested without editing a list. The plan gives each leg the affected projects of its shard (all
+    # of them in the heavy tier) and leaves out a shard with none, so no runner starts to test
+    # nothing; embedded is tested in build-embedded.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - shard: tests
-            projects: agent-workspace
-          - shard: aw-cli
-            projects: '@indx-workspace/aw @indx-workspace/cli'
-          - shard: web-core
-            projects: '@agent-workspace/web @agent-workspace/core'
-          - shard: rest
-            projects: ''
+        include: ${{ fromJSON(needs.plan.outputs.test-shards) }}
     # The org runner group heavy-ci (ADR-0053, Amendment 2026-11-08): the costliest Blacksmith job,
     # so it runs on our own machines (MS-A2, x86_64, and the GX10's CI runners, arm64), on the
     # runners with Docker (label `docker`). GitHub hands each shard to whichever of them is idle.
@@ -989,11 +1168,18 @@ jobs:
             echo "TEST_GCS_ENDPOINT=http://127.0.0.1:$gcs"
           } >> "$GITHUB_ENV"
 
-      - name: Assert pull_request runs cannot select remote-cache write
+      - name: Assert fork pull_request runs cannot select remote-cache write
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
-            exit 1
+          if [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            case "$EVENT_NAME" in
+              push|schedule|merge_group) ;;
+              pull_request) [ "$HEAD_REPO" = "$BASE_REPO" ] || { echo "::error::fork pull_request run ($HEAD_REPO) resolved to remote-cache kind 'write'"; exit 1; } ;;
+              *) echo "::error::$EVENT_NAME event resolved to remote-cache kind 'write'"; exit 1 ;;
+            esac
           fi
 
       - name: Connect Nx to the remote cache
@@ -1002,9 +1188,13 @@ jobs:
           kind: ${{ env.NX_REMOTE_CACHE_KIND }}
           server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
 
-      # Built once by the `build` job; nothing in this job runs an Nx build.
+      # Built once by the `build` job; nothing in this job runs an Nx build. Not embedded's build:
+      # no test shard reads it, so a shard never waits for build-embedded. The restore's minute on
+      # these runners is the artifact download itself (run 44223711131: 69 s for 30 MB).
       - name: Restore the workspace build
         uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'false'
 
       # ADR-0015 again, and this is the step the whole database change turns on. The suites in
       # packages/core/src/db/seed.test.ts are `describe.skipIf(!hasDatabase)`: with
@@ -1051,54 +1241,29 @@ jobs:
               });
           '
 
-      # One Nx `test` task per Vitest project (every workspace package plus the root `tests`
-      # project), started all at once: `--parallel=10` is the project count. Each PACKAGE's task
-      # caps its own worker pool (VITEST_MAX_WORKERS=4 in its package.json `nx` block) so ten
-      # Vitest processes share the 16 cores; the root project's task sets no cap on purpose,
-      # because that variable overrides the `tests` project's `fileParallelism: false` and would
-      # run its two `next dev` suites side by side (nx.json, targetDefaults.test `//workers`).
-      # Never export VITEST_MAX_WORKERS at step level here. Every task writes `.vitest-report.json` in
-      # its project root (`--reporter=default` keeps the human-readable log, `--reporter=json`
-      # the file the no-skip gate reads), and nx.json declares that file as the task's output so
-      # a cache replay restores it too. A pull request runs only the affected projects; the
-      # root project depends on every package (`implicitDependencies: ["*"]`), so its
-      # cross-cutting suites run whenever anything changes. A push to `main` runs them all.
+      # One Nx `test` task per Vitest project of this shard, the projects the plan gave it (the
+      # affected ones for a pull request or a queue group, all of them in the heavy tier). Each
+      # project's task caps its own worker pool (VITEST_MAX_WORKERS=4 in its package.json `nx` block
+      # or tests/<dir>/project.json), except tests-next, which sets 1: that variable overrides
+      # `fileParallelism: false`, and its two `next dev` suites must not run side by side (nx.json,
+      # targetDefaults.test `//workers`; tests/projects.mjs). Never export VITEST_MAX_WORKERS at step
+      # level here. Every task writes `.vitest-report.json` in its project root (`--reporter=default` keeps
+      # the human-readable log, `--reporter=json` the file the no-skip gate reads), and nx.json
+      # declares that file as the task's output so a cache replay restores it too.
       # TEST_DATABASE_URL and TEST_S3_ENDPOINT are part of every test task's cache hash
       # (nx.json `vitestConfig`), so a result computed without the services is never replayed.
       - name: Test
-        id: test
         env:
           SHARD_PROJECTS: ${{ matrix.projects }}
-          # Every project a named shard owns; `rest` runs whatever is not in this list. Keep it in
-          # step with the matrix above.
-          NAMED_PROJECTS: 'agent-workspace @indx-workspace/aw @indx-workspace/cli @agent-workspace/web @agent-workspace/core'
-          # Tested in build-embedded, where its build is, not in any shard.
-          ELSEWHERE_PROJECTS: '@indx-workspace/embedded'
         run: |
           set -euo pipefail
-          # --json=false: Nx 24 prints a JSON array when it detects an AI agent (AI_AGENT,
-          # CLAUDECODE, …), and the loop below would then match no project and skip every test.
-          if [ -n "$DIFF_BASE" ]; then
-            candidates="$(pnpm exec nx show projects --json=false --with-target test --affected --base="$DIFF_BASE" --head=HEAD)"
-          else
-            candidates="$(pnpm exec nx show projects --json=false --with-target test)"
+          # The plan never makes a leg without a project; an empty list here is a plan defect, and
+          # running nothing would read as green.
+          if [ -z "$SHARD_PROJECTS" ]; then
+            echo "::error::the plan gave shard ${{ matrix.shard }} no test project"
+            exit 1
           fi
-          projects=''
-          for project in $candidates; do
-            if [ -n "$SHARD_PROJECTS" ]; then
-              case " $SHARD_PROJECTS " in *" $project "*) projects="$projects,$project" ;; esac
-            else
-              case " $NAMED_PROJECTS $ELSEWHERE_PROJECTS " in *" $project "*) ;; *) projects="$projects,$project" ;; esac
-            fi
-          done
-          projects="${projects#,}"
-          if [ -z "$projects" ]; then
-            echo "::notice title=No test project in this shard::the diff reaches no test project of shard ${{ matrix.shard }}."
-            echo "ran=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "ran=true" >> "$GITHUB_OUTPUT"
-          scripts/ci/nx.sh run-many -t test --projects="$projects" --excludeTaskDependencies --parallel=2 --output-style=static
+          scripts/ci/nx.sh run-many -t test --projects="$SHARD_PROJECTS" --excludeTaskDependencies --parallel=2 --output-style=static
 
       # The positive assertion that the database suites RAN. `pnpm test` exiting 0 does not say
       # so — vitest counts a skipped test as neither passed nor failed, and the 14 tests this
@@ -1116,17 +1281,16 @@ jobs:
       # quietly.
       #
       # There is one report per Nx test task that ran (`<project root>/.vitest-report.json`),
-      # so this reads every one it finds and requires at least one: a run in which no project
-      # was affected at all cannot happen (every file belongs to some project, and the root
-      # project's suites run for any change), so zero reports means the reports were not
-      # written, not that there was nothing to test.
+      # so this reads every one it finds and requires at least one: every leg the plan makes has
+      # a project, so zero reports means the reports were not written, not that there was nothing
+      # to test.
       - name: No test in the run was skipped
-        if: steps.test.outputs.ran == 'true'
         run: node scripts/ci/vitest-no-skip.mjs
 
       # The storage design, §07 "Load test": a 1 GiB file round-trips with flat memory (RSS growth
       # < 64 MiB) on local disk, SeaweedFS, Azurite and fake-gcs-server. One serial run of about
-      # 4 GiB, so only on a diff that reaches the storage code or the load harness, and always when
+      # 4 GiB, so only on a diff that reaches the storage code, the load harness or a backend SDK
+      # (a dependency bump that starts buffering must meet this before it merges), and always when
       # there is no diff base (the nightly run, a manual dispatch). It asserts that all four cases
       # passed by title, so a backend whose variable went missing fails instead of vanishing.
       - name: Decide whether the diff reaches the storage load test
@@ -1138,13 +1302,13 @@ jobs:
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Read the whole list before matching: grep -q under pipefail dies of SIGPIPE on a long diff.
-          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
-          if grep -Eq '^(packages/core/src/storage/|tests/load/)' <<<"$changed"; then
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "applies=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Storage load test not applicable::the diff touches neither packages/core/src/storage nor tests/load; the nightly run covers it."
+          # The scope is scripts/ci/load-scope.mjs: the storage code, tests/load, and the backend
+          # SDKs through packages/core/package.json and pnpm-lock.yaml. The answer is used whole,
+          # so a failing script fails the step instead of answering false.
+          answer="$(node scripts/ci/load-scope.mjs "$DIFF_BASE")"
+          echo "$answer" >> "$GITHUB_OUTPUT"
+          if [ "$answer" = "applies=false" ]; then
+            echo "::notice title=Storage load test not applicable::the diff touches neither the storage code, tests/load nor the backend SDKs; the nightly run covers it."
           fi
 
       - name: Storage load test — 1 GiB on four backends
@@ -1351,11 +1515,13 @@ jobs:
           echo '::error::the egress proxy container did not become healthy'
           exit 1
 
-  # The Lean 4 specification (docs/adr/0062, docs/formal/README.md). It builds the model, runs
+  # The Lean 4 specification (docs/adr/0062, docs/20-design/formal/README.md). It builds the model, runs
   # the soundness audit (no `sorry`, no axiom beyond propext / Classical.choice / Quot.sound),
   # checks the model's layer direction, regenerates the catalogue, traceability matrix and test
   # vectors and fails when the committed ones are stale, then replays the vectors against the
-  # real TypeScript. It runs beside the other two gate jobs and ci-success requires it.
+  # real TypeScript. It runs beside the other two gate jobs and ci-success requires it. Heavy tier
+  # only since ADR-0053 Amendment 2026-11-19c (owner decision D2, plan A): the nightly, a dispatch,
+  # a `ci:full` pull request and the release gate; no longer in the merge queue.
   #
   # PATH FILTER INSIDE THE JOB, NOT ON IT. ci-success treats a skipped job as a failure, so a
   # job-level `if:` would turn every unrelated pull request red. Instead the first step decides
@@ -1368,7 +1534,7 @@ jobs:
   formal:
     name: formal · Lean specification
     if: >-
-      github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
     needs: build
     # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): the longest queue-tier job there
     # (10 min against 5.5 here) for the least Blacksmith money. scripts/check-workflows.mjs
@@ -1395,17 +1561,13 @@ jobs:
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # The model's sources (contracts, SDK, aw, the server domains and the core, gateway, runtime
-          # and runner code it mirrors), the conformance suite, the generators, and the documents
-          # the model cites.
-          pattern='^(formal/|packages/(contracts|sdk|aw|core|gateway|runtime)/src/|packages/engine[^/]*/src/|migrations/|apps/web/server/|apps/runner/src/|apps/(web|runner)/formal/|tests/formal/|scripts/formal/|docs/formal/|docs/sdk/|docs/adr/|docs/spec\.md$|docs/architecture\.md$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)'
-          # Read the whole list before matching. Piping git diff into grep -q fails open under
-          # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
-          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
-          if grep -Eq "$pattern" <<<"$changed"; then
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "applies=false" >> "$GITHUB_OUTPUT"
+          # The model's sources, the conformance suite, the generators and the documents the model
+          # cites: scripts/ci/formal-scope.mjs. Only a `ci:full` pull request has a diff base here,
+          # and its plan is the full tier, which always builds. It prints applies=true or
+          # applies=false and fails, never answering false, when git does.
+          answer="$(node scripts/ci/formal-scope.mjs "$DIFF_BASE")"
+          echo "$answer" >> "$GITHUB_OUTPUT"
+          if [ "$answer" = "applies=false" ]; then
             echo "::notice title=Formal job not applicable::the diff touches nothing the Lean model reads or cites."
           fi
 
@@ -1523,8 +1685,8 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm vitest run tests/formal apps/web/formal apps/runner/formal --reporter=verbose
 
-  # COST: keeps main's Lean build cache current, the only one a merge-queue group can restore
-  # (`formal` restores, never saves). Two jobs (ADR-0053, Amendment 2026-11-10): the lookup runs on
+  # COST: keeps main's Lean build cache current, the only one `formal` can restore (it restores,
+  # never saves) — on the nightly, the release gate and a `ci:full` pull request. Two jobs (ADR-0053, Amendment 2026-11-10): the lookup runs on
   # the smallest Blacksmith runner, because a push whose Lean sources already have a main entry stops
   # there (most pushes, in seconds); only a miss starts `formal-cache`, which builds incrementally
   # from the newest main entry on 8 vCPU and saves. Neither is required by ci-success: a miss only
@@ -1603,17 +1765,19 @@ jobs:
             formal/.lake
           key: ${{ env.FORMAL_CACHE_KEY }}
 
-  # #373 (docs/adr/0087): the release vulnerability gate, on every pull request. It builds each
+  # #373 (docs/adr/0087): the release vulnerability gate, in the heavy tier (the nightly, a dispatch,
+  # a `ci:full` pull request and the release gate; out of the merge queue since ADR-0053 Amendment
+  # 2026-11-19c, owner decision D2, plan A, where it held a group for 11-19 min). It builds each
   # image of the release plan (infra/release/images.mjs) for linux/amd64 and runs
   # infra/release/trivy-gate.sh on it: the same script, and so the same flags and the same
   # .trivyignore.yaml, that build-and-push.sh runs on every published digest. A finding that would
-  # stop an images-v* release fails the pull request that introduces it instead. trivy is pinned to
+  # stop an images-v* release fails the nightly (and the release gate) instead. trivy is pinned to
   # the version images.yml uses (tests/release/platform-images.test.ts holds the two together).
   # Its own job, beside the other gates, because it builds seven images; ci-success requires it.
   image-scan:
     name: release images · trivy gate · ${{ matrix.shard }}/3
     if: >-
-      github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
     runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     # Nine images, three per runner: scan-images.sh --shard takes every third image of the plan,
     # so a new image lands in a shard without this list naming it.
@@ -2823,10 +2987,15 @@ jobs:
   # a run that could no longer pass. Separate jobs, not a step in the gate: a cancel from inside a job
   # would turn that job's own red into "cancelled". The red job stays red and `CI success` reads
   # cancelled, which also blocks the merge.
+  # Only on a pull request and in the merge queue (ADR-0053, Amendment 2026-11-19). On a push to
+  # main, the nightly, a dispatch and the release gate a red fast-checks (an outside osv.dev
+  # advisory, most often) must not cancel `build`: that build is what writes the remote cache, and
+  # the nightly's heavy tier is the only place its jobs run. `CI success` still reads the red
+  # fast-checks and fails, so nothing goes green that was red.
   cancel-on-fast-failure:
     name: end the run when fast checks fail
     needs: fast-checks
-    if: failure()
+    if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -2851,10 +3020,11 @@ jobs:
 
   # The one status check to require. fast-checks and heavy-checks run side by side, so a
   # branch rule pointing at either would see the other's result only by accident; this job
-  # fails if any required job (the two gate jobs, `formal`, `image-scan`,
+  # fails if any required job (the two gate jobs, `formal`, `image-scan` — both heavy tier now,
   # `generated-project-e2e`, `app-kit-e2e`, `apps-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
   # or a cancellation is a failure here, not a pass, because a gate that did not run has not
-  # passed, except where the COST note skips a tier on purpose. full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
+  # passed, except where the COST note skips a tier on purpose and where THE FAST PATH's plan skipped
+  # an Nx job (see the header). full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
   # over the `needs` context on the smallest runner size.
   ci-success:
     name: CI success
@@ -2862,6 +3032,7 @@ jobs:
     needs:
       [
         fast-checks,
+        plan,
         build,
         build-embedded,
         typecheck-lint,
@@ -2884,15 +3055,34 @@ jobs:
       - name: Every required job succeeded
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          EDITED: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' }}
         run: |
           set -euo pipefail
           echo "$NEEDS_JSON" | jq .
           # A skipped job passes only where the trigger skips it on purpose (the COST note at the
           # top of this file): a pull request, a push to main and the merge queue. The nightly, a
           # dispatch and the release gate (`full`, which arrives as a push) need every job to succeed.
+          # The jobs a tier skips this way are the heavy tier's job-level `if:`s, which
+          # scripts/check-workflows holds to the one heavy-tier condition: since ADR-0053 Amendment
+          # 2026-11-19c that set includes `formal` and `image-scan`, so a merge-queue group skips
+          # them like a pull request does, and the nightly and the release gate still require them.
           case "${{ github.event_name }}" in pull_request|push|merge_group) skip_ok=true ;; *) skip_ok=false ;; esac
           if [ "${{ inputs.full }}" = true ]; then skip_ok=false; fi
-          failed=$(echo "$NEEDS_JSON" | jq -r --argjson skip_ok "$skip_ok" 'to_entries[] | select(.value.result != "success" and (.value.result != "skipped" or ($skip_ok | not))) | "\(.key): \(.value.result)"')
+          # THE FAST PATH: `plan` must succeed, and build, build-embedded, typecheck-lint and
+          # heavy-checks pass skipped ONLY where the plan's output for that job is "false" (a job's
+          # outputs are in the needs context), never because of the event. The one other such skip
+          # is a body or title edit (EDITED), which runs the fast checks only and skips the plan.
+          failed=$(echo "$NEEDS_JSON" | jq -r --argjson skip_ok "$skip_ok" --argjson edited "$EDITED" '
+            (.plan.outputs // {}) as $plan
+            | to_entries[]
+            | select(.value.result != "success")
+            | select(
+                if .value.result != "skipped" then true
+                elif .key == "plan" then ($edited | not)
+                elif (.key | IN("build", "build-embedded", "typecheck-lint", "heavy-checks")) then (($edited or $plan[.key] == "false") | not)
+                else ($skip_ok | not)
+                end)
+            | "\(.key): \(.value.result)"')
           if [ -n "$failed" ]; then
             echo "One or more required jobs did not succeed:"
             echo "$failed"

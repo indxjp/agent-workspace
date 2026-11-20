@@ -1,5 +1,5 @@
 import type { Role } from '../../identity';
-import type { WorkspaceSharing } from '../runtime';
+import type { WorkspaceSharing } from '../wiring';
 import { DomainError } from '../../errors';
 
 export function isPublicSharingEnabled(sharing: WorkspaceSharing): Promise<boolean> {

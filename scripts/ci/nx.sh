@@ -6,7 +6,7 @@
 # request: … /v1/cache/<hash>" (server unreachable) or "Misconfigured remote
 # cache endpoint: Unexpected response status: 503" — and exits non-zero even
 # when every task itself succeeded (measured 2026-10 against nx 23.2.0; see
-# docs/operations/ci.md "Nx remote cache" → "Outage behaviour"). The remote cache
+# docs/40-operate/operations/ci.md "Nx remote cache" → "Outage behaviour"). The remote cache
 # is an optimisation and must never decide whether CI is green, so:
 #
 #   1. run `nx` with whatever remote cache .github/actions/nx-remote-cache

@@ -14,7 +14,7 @@ import { scriptedModelsDirFromEnv } from './providers/scripted.js';
 
 export type SettingsEnvironment = Readonly<Record<string, string | undefined>>;
 
-/** One row of the generated settings table (`docs/operations/settings.md`, refactoring part 03). */
+/** One row of the generated settings table (`docs/40-operate/operations/settings.md`, refactoring part 03). */
 export interface SettingDescription {
   readonly name: string;
   readonly default: string;

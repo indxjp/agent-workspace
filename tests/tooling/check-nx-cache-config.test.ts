@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  checkActionText,
   checkCiText,
   checkLockfile,
   checkNxJson,
@@ -18,7 +19,7 @@ const workflow = (body: string) =>
 // A minimal workflow that uses the action correctly; each test below breaks one thing.
 const plan =
   "env:\n  NX_REMOTE_CACHE_KIND: ${{ github.event_name == 'push' && 'write' || 'read' }}\n";
-const assertion = '      - name: Assert pull_request runs cannot select remote-cache write\n';
+const assertion = '      - name: Assert fork pull_request runs cannot select remote-cache write\n';
 const connect =
   '      - uses: ./.github/actions/nx-remote-cache\n        with:\n          kind: ${{ env.NX_REMOTE_CACHE_KIND }}\n';
 const goodWorkflow = `${plan}jobs:\n  a:\n    steps:\n${assertion}${connect}      - run: scripts/ci/nx.sh run-many -t build\n`;
@@ -119,8 +120,45 @@ describe('active CI files', () => {
     ]);
   });
 
-  it('requires the pull_request write assertion', () => {
+  it('requires the fork pull_request write assertion', () => {
     expect(rules(workflow(goodWorkflow.replace(assertion, '')))).toEqual(['pr-write-assertion']);
+    // The pre-D1b name (every pull_request read-only) no longer satisfies it.
+    expect(
+      rules(
+        workflow(
+          goodWorkflow.replace(
+            assertion,
+            '      - name: Assert pull_request runs cannot select remote-cache write\n',
+          ),
+        ),
+      ),
+    ).toEqual(['pr-write-assertion']);
+  });
+
+  // Owner decision D1b (ADR-0110, Amendment 2026-11-19): same-repository pull requests may plan
+  // write, forks never.
+  it('rejects a plan that lets a pull_request write without the same-repository condition', () => {
+    const forkWrite =
+      "env:\n  NX_REMOTE_CACHE_KIND: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && 'write' || 'read' }}\n";
+    expect(rules(workflow(goodWorkflow.replace(plan, forkWrite)))).toEqual(['fork-read-only']);
+    const sameRepo =
+      "env:\n  NX_REMOTE_CACHE_KIND: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && 'write' || 'read' }}\n";
+    expect(workflow(goodWorkflow.replace(plan, sameRepo))).toEqual([]);
+  });
+
+  it('requires the action to refuse a fork pull_request write by itself', () => {
+    const guard = [
+      '        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}',
+      '        BASE_REPO: ${{ github.repository }}',
+      '              if [ "$HEAD_REPO" != "$BASE_REPO" ]; then',
+    ].join('\n');
+    expect(checkActionText(guard)).toEqual([]);
+    expect(rules(checkActionText(guard.replace('!=', '=')))).toEqual(['fork-read-only']);
+    expect(rules(checkActionText(''))).toEqual([
+      'fork-read-only',
+      'fork-read-only',
+      'fork-read-only',
+    ]);
   });
 
   it('requires the kind to come from the one plan', () => {

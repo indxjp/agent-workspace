@@ -7,7 +7,7 @@ const MIN_KEY_LENGTH = 32;
 const DEFAULT_HOST = '0.0.0.0';
 const DEFAULT_PORT = '3128';
 
-/** One row of the generated settings table (`docs/operations/settings.md`, refactoring part 03). */
+/** One row of the generated settings table (`docs/40-operate/operations/settings.md`, refactoring part 03). */
 export interface SettingDescription {
   readonly name: string;
   readonly default: string;

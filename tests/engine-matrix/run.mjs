@@ -1,7 +1,7 @@
 /* global console */
 
 /**
- * Write `docs/engine-matrix.md` (ENG-04, #303).
+ * Write `docs/30-reference/matrices/engine-matrix.md` (ENG-04, #303).
  *
  *   node tests/engine-matrix/run.mjs
  *
@@ -37,4 +37,6 @@ const run = spawnSync(command, argumentsForCommand, {
 });
 if (run.error) throw run.error;
 if (run.status !== 0) process.exit(run.status ?? 1);
-console.log('wrote docs/engine-matrix.md from each adapter’s own declaration');
+console.log(
+  'wrote docs/30-reference/matrices/engine-matrix.md from each adapter’s own declaration',
+);

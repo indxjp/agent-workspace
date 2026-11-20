@@ -36,12 +36,12 @@ import type {
   SecretMetadata as CoreSecretMetadata,
   SecretsService as CoreSecretsService,
 } from '@agent-workspace/core/secrets';
-import {
-  UnknownWorkspaceError,
-  type StorageConnectionRepositoryProvider,
-  type WorkspaceScope as CoreWorkspaceScope,
-  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import type {
+  StorageConnectionRepositoryProvider,
+  WorkspaceScope as CoreWorkspaceScope,
+  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
+import { UnknownWorkspaceError } from '@agent-workspace/core/db-model';
 
 import { storageConnectionIdOf } from './contract';
 

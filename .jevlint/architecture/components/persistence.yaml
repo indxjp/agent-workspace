@@ -1,0 +1,17 @@
+id: persistence
+title: Persistence, storage, secrets and telemetry
+summary: >
+  @agent-workspace/core: Drizzle schema and workspace-scoped repositories over PostgreSQL, the ObjectStore port with backends loaded one at a time, secrets, egress policy and the Logger port. All database and bucket access goes through here.
+layer: adapters
+paths:
+  - "packages/core/**"
+key_files:
+  - { path: packages/core/src/storage/index.ts, role: "storage barrel; cloud backends only through openObjectStore" }
+  - { path: packages/core/src/db/repositories/root.ts, role: "DatabaseRoot: one provider per repository" }
+  - { path: packages/core/src/db/repositories/scope.ts, role: "WorkspaceScope: the only tenant value a repository takes" }
+interface: [DatabaseRoot, WorkspaceScope, requireWorkspaceScope, ObjectStore, openObjectStore, Logger]
+depends_on: [contracts]
+uses: [postgres, drizzle, s3, gcs, azure_blob, google_auth, opentelemetry]
+rules: []
+checklist: []
+status: current

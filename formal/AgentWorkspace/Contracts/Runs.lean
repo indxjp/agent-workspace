@@ -17,7 +17,7 @@ open AgentWorkspace
 
 /-- The run lifecycle as the API reports it: `queued` and `running` are live, `awaitingApproval` is
 the ADR-0145 pause (stopped, yet not final), the other three are terminal. -/
-@[aw_spec (doc := "docs/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
+@[aw_spec (doc := "docs/10-product/sdk/04-api-specification.md#512-runs-and-the-event-stream--awruns")
   (ts := "packages/contracts/src/runs.ts#RUN_STATUSES")]
 inductive RunStatus where
   | queued

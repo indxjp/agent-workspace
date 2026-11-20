@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { isBuilderAgent } from '../builder/agent/is-builder-agent';
 import { ownershipOf, resolveAgentRunOwnership } from './run-ownership';
 import { createInMemoryAgentStoreProvider } from './memory-store';
-import { type AgentsRuntime, type WorkspaceResolution } from './runtime';
+import { type AgentsRuntime, type WorkspaceResolution } from './wiring';
 
 const CREATE_INPUT = {
   name: 'Support',

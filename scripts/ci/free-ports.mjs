@@ -2,7 +2,7 @@
 // Prints `NAME=<port>` for each variable name given, each a distinct loopback port free right now,
 // for a job to append to $GITHUB_ENV. The self-hosted MS-A2 pool runs several jobs on one host and
 // one Docker daemon, so a harness that publishes a fixed host port (3000, 8333, ...) collides with
-// whichever job holds it (docs/operations/ci.md).
+// whichever job holds it (docs/40-operate/operations/ci.md).
 //
 // Every port stays bound until all are picked, so no two names get the same port. Another process
 // can still take one after it is released; the window is the few seconds before the harness binds.

@@ -20,7 +20,7 @@
  * for, so it cannot present an *expired* one. The last block therefore installs a runtime whose
  * `identify`
  * is the production shape from `apps/web/server/composition/session-rbac.ts` — read the session
- * cookie, `verifySessionToken`, `null` on any failure — over the same in-memory directory, and
+ * cookie, `verifySignInSessionToken`, `null` on any failure — over the same in-memory directory, and
  * drives the same route with a real token minted twelve hours and one second ago. A fresh token
  * through the *same* resolver is asserted to reach `200`, so the `401` is evidence about the
  * expiry rather than about a resolver that never worked.
@@ -29,13 +29,13 @@ import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
-  mintSessionToken,
-  newSessionClaims,
-  sessionCookieName,
-  SESSION_TTL_SECONDS,
-  verifySessionToken,
+  mintSignInSessionToken,
+  newSignInSessionClaims,
+  signInSessionCookieName,
+  SIGN_IN_SESSION_TTL_SECONDS,
+  verifySignInSessionToken,
 } from '../../../server/auth/session';
-import { clearFeatureSwitches, configureFeatureSwitches } from '../../../server/features/runtime';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../../server/features/wiring';
 import { sessionCookieValue } from '../../../server/composition/identity';
 import { conferredBy } from '../../../server/rbac/core/conferral';
 import {
@@ -229,7 +229,7 @@ describe('GET /api/me refuses a credential that stopped being usable', () => {
             );
             return identity === null ? null : Principal.fromApiKey(identity);
           }
-          const verified = await verifySessionToken(
+          const verified = await verifySignInSessionToken(
             sessionCookieValue(request.headers.get('cookie')),
             SECRET,
           );
@@ -258,17 +258,17 @@ describe('GET /api/me refuses a credential that stopped being usable', () => {
     const call = async (token: string): Promise<Response> =>
       GET(
         new Request('https://control-plane.test/api/me', {
-          headers: { cookie: `${sessionCookieName(process.env)}=${token}` },
+          headers: { cookie: `${signInSessionCookieName(process.env)}=${token}` },
         }),
       );
 
     // One second past the maximum lifetime this build issues.
-    const expiredAt = Date.now() - (SESSION_TTL_SECONDS + 1) * 1000;
-    const expired = await mintSessionToken(
-      newSessionClaims(MEMBER.email, TEST_WORKSPACE_SLUG, expiredAt),
+    const expiredAt = Date.now() - (SIGN_IN_SESSION_TTL_SECONDS + 1) * 1000;
+    const expired = await mintSignInSessionToken(
+      newSignInSessionClaims(MEMBER.email, TEST_WORKSPACE_SLUG, expiredAt),
       SECRET,
     );
-    const verdict = await verifySessionToken(expired, SECRET);
+    const verdict = await verifySignInSessionToken(expired, SECRET);
     expect(verdict.ok ? 'verified' : verdict.code).toBe('expired_session');
 
     const refused = await call(expired);
@@ -283,8 +283,8 @@ describe('GET /api/me refuses a credential that stopped being usable', () => {
 
     // The control: a fresh token through the same resolver reaches the principal, so the 401
     // above is about the expiry and not about a resolver that never worked.
-    const fresh = await mintSessionToken(
-      newSessionClaims(MEMBER.email, TEST_WORKSPACE_SLUG),
+    const fresh = await mintSignInSessionToken(
+      newSignInSessionClaims(MEMBER.email, TEST_WORKSPACE_SLUG),
       SECRET,
     );
     const allowed = await call(fresh);

@@ -48,6 +48,7 @@ export { withThemeLocale, journeyEnv } from './lane-journeys.mjs';
 export {
   withProductionApps,
   standInImage,
+  standInPlatformImages,
   composeAppsProblem,
   helmAppsProblem,
   renderedPlan,

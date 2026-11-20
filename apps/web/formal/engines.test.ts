@@ -12,84 +12,40 @@
  *   - `migration.json`: migration 0025's per-row rewrite. The SQL itself is exercised against a
  *     real PostgreSQL by `packages/core/src/db/repositories/engine-migration.test.ts`; what is
  *     replayed here is the rewrite whose keys and backfill value are read out of that SQL file.
- *   - `enforcement.json` (ENG-02b): the save-time capability check against `engineCapabilityRefusal`,
- *     and session engine pinning against the **real** `startRun` — the run route, with a run store
- *     installed, so that "and creates no run row" is checked on the rows and not on a verdict.
- *   - `sdk.json` (ENG-02c, #319): `GET /api/engines` as a projection of the registry, replayed
- *     against the **real route handler** through the RBAC harness — the registry the vector
- *     states is installed with `registerEngineForTests`, and the body the route produced is
- *     compared to the list the model says a client sees.
+ *   - `enforcement.json` (ENG-02b): replayed by `engine-enforcement.test.ts`.
+ *   - `sdk.json` (ENG-02c, #319): replayed by `engine-catalogue-route.test.ts`.
  *
  * A disagreement is a failing test, and the fix is never to edit a vector
- * (`docs/formal/00-orchestrator-prompt.md` §10).
+ * (`docs/20-design/formal/00-orchestrator-prompt.md` §10).
  */
 import {
   ENGINE_BUDGET_ENFORCEMENTS,
   ENGINE_IDS,
   ENGINE_LIMIT_ENFORCEMENTS,
   EngineCapabilitiesSchema,
-  EngineCapabilityKeySchema,
   EngineDescriptorSchema,
   WIRE_PROTOCOLS,
 } from '@indx-workspace/contracts/engines';
-import { createClient } from '@indx-workspace/sdk';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { GET as getEngines } from '../app/api/engines/route';
-import { engineCapabilityRefusal, parsePolicyBody } from '../server/agents/policy';
-import { sessionForLaunch } from '../server/composition/session-launch';
-import { listEngines } from '../server/engines/handlers';
-import {
-  clearEnginesRegisteredForTests,
-  registerEngineForTests,
-  registeredEngine,
-  registeredEngineIds,
-} from '../server/engines/registry';
-import {
-  clearEngineImagesConfiguredForTests,
-  configureEngineImagesForTests,
-} from '../server/engines/images';
-import { parseRole } from '../server/rbac/core/roles';
-import { installRbacHarness, TEST_WORKSPACE_ID } from '../server/rbac/testing';
-import { startRun } from '../server/runs/api';
-import { InMemoryRunStore } from '../server/runs/memory-store';
+import { parsePolicyBody } from '../server/agents/policy';
+import { registeredEngineIds } from '../server/engines/registry';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
-import { installTestRunApi, resetTestRunApi } from '../server/application-context-fixtures';
+import { asBoolean, asNullableString, asStringArray } from './engines.test-support';
 
 const catalogVectors = loadVectors('engines', 'catalog.json');
 const schemaVectors = loadVectors('engines', 'schemas.json');
 const policyVectors = loadVectors('engines', 'policy.json');
 const migrationVectors = loadVectors('engines', 'migration.json');
-const enforcementVectors = loadVectors('engines', 'enforcement.json');
-const sdkVectors = loadVectors('engines', 'sdk.json');
 
 /** The schemas the `schemas.json` vectors name, so a vector cannot select an absent schema. */
 const SCHEMAS = {
   EngineCapabilitiesSchema,
   EngineDescriptorSchema,
 } as const;
-
-function asStringArray(value: unknown, what: string): readonly string[] {
-  if (!Array.isArray(value)) throw new Error(`${what}: expected an array`);
-  return value.map((entry, index) => asString(entry, `${what}[${String(index)}]`));
-}
-
-function asNullableString(value: unknown, what: string): string | null {
-  return value === null ? null : asString(value, what);
-}
-
-function asBoolean(value: unknown, what: string): boolean {
-  if (typeof value !== 'boolean') throw new Error(`${what}: expected a boolean`);
-  return value;
-}
-
-function asNumber(value: unknown, what: string): number {
-  if (typeof value !== 'number') throw new Error(`${what}: expected a number`);
-  return value;
-}
 
 describe('engine catalogue', () => {
   it.each(catalogVectors.map((v) => [v.id, v] as const))('%s', (_id, vector) => {
@@ -271,347 +227,4 @@ it('registers only engines the published catalogue names', () => {
   for (const id of registeredEngineIds()) {
     expect(ENGINE_IDS as readonly string[]).toContain(id);
   }
-});
-
-// ── ENG-02b: the two enforcements ────────────────────────────────────────────────────────────────
-
-const ENFORCEMENT_WORKSPACE = '22222222-2222-4222-8222-222222222222';
-const ENFORCEMENT_AGENT = '33333333-3333-4333-8333-333333333333';
-const ENFORCEMENT_SESSION = '44444444-4444-4444-8444-444444444444';
-
-/**
- * A `claude-agent-sdk` descriptor whose three demandable capabilities are the vector's.
- *
- * It replaces the built-in descriptor rather than sitting beside it, which is the only way the
- * refusal is reachable: `AgentPolicy` has one arm, so no engine other than `claude-agent-sdk` can be
- * named by a body that parses at all. Every other field is the real descriptor's.
- */
-function registerCapabilities(capabilities: {
-  mcp: boolean;
-  skills: boolean;
-  subagents: boolean;
-}): void {
-  const claude = registeredEngine('claude-agent-sdk');
-  if (claude === null) throw new Error('claude-agent-sdk is not registered');
-  // `installed` is dropped rather than carried over: since ENG-07 it is the deployment's configured
-  // image map, not a field a descriptor may state (`../server/engines/registry.ts`).
-  registerEngineForTests({
-    id: claude.id,
-    displayName: claude.displayName,
-    version: claude.version,
-    capabilities: { ...claude.capabilities, ...capabilities },
-  });
-}
-
-describe('engine enforcement', () => {
-  afterEach(() => {
-    clearEnginesRegisteredForTests();
-    resetTestRunApi();
-  });
-
-  it.each(
-    enforcementVectors.filter((v) => v.id.startsWith('capability/')).map((v) => [v.id, v] as const),
-  )('%s', (_id, vector) => {
-    const input = asRecord(vector.input, vector.id);
-    const expected = asRecord(vector.expected, vector.id);
-    const capabilities = asRecord(input['capabilities'], `${vector.id} capabilities`);
-    const demand = asRecord(input['demand'], `${vector.id} demand`);
-
-    registerCapabilities({
-      mcp: asBoolean(capabilities['mcp'], `${vector.id} mcp`),
-      skills: asBoolean(capabilities['skills'], `${vector.id} skills`),
-      subagents: asBoolean(capabilities['subagents'], `${vector.id} subagents`),
-    });
-    const refusal = engineCapabilityRefusal('claude-agent-sdk', {
-      connectors: asBoolean(demand['connectors'], `${vector.id} connectors`),
-      skills: asBoolean(demand['skills'], `${vector.id} demanded skills`),
-      subagents: asBoolean(demand['subagents'], `${vector.id} demanded subagents`),
-    });
-
-    if (asString(expected['verdict'], vector.id) === 'saved') {
-      expect(refusal, `${vector.id} should be saved`).toBeNull();
-      expect(expected['details']).toEqual([]);
-      return;
-    }
-    expect(refusal, `${vector.id} should be refused`).not.toBeNull();
-    if (refusal === null) return;
-    const body = asRecord(refusal.body, `${vector.id} problem body`);
-    const error = asRecord(body['error'], `${vector.id} problem error`);
-    expect(error['code']).toBe('engine_capability_unsupported');
-    expect(refusal.status).toBe(expected['status']);
-    // The capability travels as the single `details` entry, and it is one the contract publishes.
-    expect(error['details']).toEqual(expected['details']);
-    for (const detail of asStringArray(error['details'], `${vector.id} details`)) {
-      expect(EngineCapabilityKeySchema.safeParse(detail).success).toBe(true);
-    }
-  });
-
-  it.each(
-    enforcementVectors.filter((v) => v.id.startsWith('pinning/')).map((v) => [v.id, v] as const),
-  )('%s', async (_id, vector) => {
-    const input = asRecord(vector.input, vector.id);
-    const expected = asRecord(vector.expected, vector.id);
-    const sessionEngine = asNullableString(input['sessionEngine'], `${vector.id} sessionEngine`);
-    const agentEngine = asString(input['agentEngine'], `${vector.id} agentEngine`);
-
-    const store = new InMemoryRunStore();
-    const launched: unknown[] = [];
-    installTestRunApi({
-      authenticate: () =>
-        Promise.resolve({
-          principalId: '77777777-7777-4777-8777-777777777777',
-          ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
-          userId: '66666666-6666-4666-8666-666666666666',
-          workspaceId: ENFORCEMENT_WORKSPACE,
-          role: 'owner' as const,
-          scope: null,
-        }),
-      findAgent: (principal, agentId) =>
-        Promise.resolve(
-          agentId === ENFORCEMENT_AGENT
-            ? { id: ENFORCEMENT_AGENT, workspaceId: principal.workspaceId, engine: agentEngine }
-            : null,
-        ),
-      openSession: () =>
-        Promise.resolve({
-          id: ENFORCEMENT_SESSION,
-          agentId: ENFORCEMENT_AGENT,
-          engine: sessionEngine,
-        }),
-      ownsRun: () => Promise.resolve(true),
-      store,
-      launch: (context) => {
-        launched.push(context);
-      },
-    });
-
-    const response = await startRun(
-      new Request(`http://web/api/agents/${ENFORCEMENT_AGENT}/runs`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt: 'replay', sessionId: ENFORCEMENT_SESSION }),
-      }),
-      ENFORCEMENT_AGENT,
-    );
-
-    expect(response.status).toBe(expected['status']);
-    const persisted = await store.listRuns(ENFORCEMENT_WORKSPACE, { limit: 10 });
-    // The half a verdict cannot state: the rows themselves.
-    expect(persisted.items).toHaveLength(asNumber(expected['runsAfter'], `${vector.id} runsAfter`));
-
-    if (asString(expected['verdict'], vector.id) === 'session_engine_mismatch') {
-      const body = asRecord(await response.json(), `${vector.id} problem body`);
-      const error = asRecord(body['error'], `${vector.id} problem error`);
-      expect(error['code']).toBe('session_engine_mismatch');
-      expect(launched).toHaveLength(0);
-      return;
-    }
-    const body = asRecord(await response.json(), `${vector.id} run body`);
-    const run = asRecord(body['run'], `${vector.id} run`);
-    expect(run['engine']).toBe(expected['runEngine']);
-    expect(launched).toHaveLength(1);
-  });
-
-  it.each(
-    enforcementVectors.filter((v) => v.id.startsWith('pinning/')).map((v) => [v.id, v] as const),
-  )('%s carries the session pin into the launch reference', (_id, vector) => {
-    // The other side of "a run never re-pins the session": the launch reference the route compares
-    // against is the session row's own engine, carried across unchanged by `session-launch.ts`.
-    const input = asRecord(vector.input, vector.id);
-    const expected = asRecord(vector.expected, vector.id);
-    const sessionEngine = asNullableString(input['sessionEngine'], `${vector.id} sessionEngine`);
-    const ref = sessionForLaunch({
-      id: ENFORCEMENT_SESSION,
-      workspaceId: ENFORCEMENT_WORKSPACE,
-      agentId: ENFORCEMENT_AGENT,
-      userId: null,
-      ownerPrincipalId: 'principal-1',
-      projectId: null,
-      engineSessionId: null,
-      engine: sessionEngine === null ? null : 'claude-agent-sdk',
-      agentVersionId: null,
-      title: null,
-      status: 'active',
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    });
-    // A session row can only carry a published engine, so the reference is `null` exactly when the
-    // vector's session is unpinned — which is what the expected `sessionEngine` records.
-    expect(ref.engine === null).toBe(expected['sessionEngine'] === null);
-  });
-});
-
-/**
- * `sdk.json` (ENG-02c, #319), replayed against the real `GET /api/engines`.
- *
- * The model's `Descriptor` carries the four fields the projection can observe; `capabilities` is
- * `Contracts/Engines.lean`'s business and is checked by `schemas.json`. So the route's body is
- * projected onto those four fields before the comparison, and every other field of it is already
- * held to `EngineDescriptorSchema` by the route itself.
- */
-const MEMBER = { email: 'formal-engines@example.test' };
-
-/** The `{ id, displayName, version, installed }` projection the Lean model states. */
-function projectDescriptor(value: unknown, what: string): Record<string, unknown> {
-  const descriptor = asRecord(value, what);
-  return {
-    id: descriptor['id'],
-    displayName: descriptor['displayName'],
-    version: descriptor['version'],
-    installed: descriptor['installed'],
-  };
-}
-
-function asArray(value: unknown, what: string): readonly unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${what}: expected an array`);
-  return value;
-}
-
-describe('the engine catalogue route is a projection of the registry', () => {
-  afterEach(() => {
-    clearEnginesRegisteredForTests();
-    clearEngineImagesConfiguredForTests();
-  });
-
-  it.each(sdkVectors.map((v) => [v.id, v] as const))('%s', async (_id, vector) => {
-    const input = asRecord(vector.input, vector.id);
-    const expected = asRecord(vector.expected, vector.id);
-
-    if (vector.id === 'request') {
-      // The call the real SDK makes, as the CLI and the browser both reach it: `engines.list()`
-      // through a fetch double that records the request and answers with the route's own body.
-      // `expected['columns']` is replayed against the real table header by
-      // `tests/formal/engines.test.ts`, which drives the `aw` binary.
-      const accepted = expected['expect'];
-      if (typeof accepted !== 'number') throw new Error(`${vector.id}: expect is not a number`);
-      const served = listEngines();
-      expect(served.status).toBe(accepted);
-      const seen: Request[] = [];
-      const sdkAnswering = (status: number) =>
-        createClient({
-          baseUrl: 'https://aw.example.com',
-          auth: { kind: 'api-key', apiKey: 'ak_live_k' },
-          fetch: (request, init) => {
-            seen.push(new Request(request, init));
-            return Promise.resolve(
-              new Response(JSON.stringify(served.body), {
-                status,
-                headers: { 'content-type': 'application/json' },
-              }),
-            );
-          },
-        });
-
-      await expect(sdkAnswering(accepted).engines.list()).resolves.toBeDefined();
-      expect(seen).toHaveLength(1);
-      expect(seen[0]?.method).toBe(expected['method']);
-      expect(new URL(seen[0]?.url ?? '').pathname).toBe(expected['path']);
-      // The accepted status is exactly the model's: any other, even another success, is refused.
-      await expect(sdkAnswering(accepted + 1).engines.list()).rejects.toMatchObject({
-        status: accepted + 1,
-      });
-      return;
-    }
-    if (vector.id.startsWith('authz/')) {
-      // The decision itself is replayed by `authz-decide.test.ts` over the whole matrix; what
-      // this vector pins is that the catalogue route is in it and readable by every role.
-      const readableBy = asArray(expected['readableBy'], vector.id).map((entry, index) => {
-        const role = parseRole(asString(entry, `${vector.id} role ${String(index)}`));
-        if (role === null) throw new Error(`${vector.id}: "${String(entry)}" is not a role`);
-        return role;
-      });
-      const harness = installRbacHarness(
-        readableBy.map((role) => ({
-          email: `${role}@example.test`,
-          name: 'Formal',
-          workspaceId: TEST_WORKSPACE_ID,
-          role,
-        })),
-      );
-      try {
-        for (const role of readableBy) {
-          const response = await harness.call(getEngines, {
-            method: 'GET',
-            path: '/api/engines',
-            as: { email: `${role}@example.test` },
-          });
-          expect(response.status, `${vector.id}: ${role}`).toBe(200);
-        }
-      } finally {
-        harness.teardown();
-      }
-      return;
-    }
-
-    // ENG-07 (#306): `installed` is the deployment's configured `engine to image` map and is no
-    // longer a field of a registered descriptor, so the vector's `installed` flags are replayed as
-    // the *configuration* this deployment has. That makes the assertion below the T1 statement
-    // itself — the catalogue the route serves is the map — rather than an echo of a field the test
-    // handed the registry a moment earlier.
-    configureEngineImagesForTests(
-      new Map(
-        asArray(expected['engines'] ?? [], vector.id)
-          .map((entry, index) => asRecord(entry, `${vector.id} engine ${String(index)}`))
-          .filter((descriptor) => descriptor['installed'] === true)
-          .map((descriptor) => [
-            asString(descriptor['id'], `${vector.id} engine id`),
-            `registry.example/agent-workspace/runtime-${asString(descriptor['id'], 'id')}:test`,
-          ]),
-      ),
-    );
-
-    for (const [index, extra] of asArray(input['extraEngines'], vector.id).entries()) {
-      const descriptor = asRecord(extra, `${vector.id} extra ${String(index)}`);
-      registerEngineForTests({
-        id: asString(descriptor['id'], `${vector.id} extra id`),
-        displayName: asString(descriptor['displayName'], `${vector.id} extra displayName`),
-        version: asString(descriptor['version'], `${vector.id} extra version`),
-        capabilities: EngineCapabilitiesSchema.parse({
-          mcp: false,
-          skills: false,
-          subagents: false,
-          resume: false,
-          fork: false,
-          interrupt: false,
-          streamingText: false,
-          reasoning: false,
-          maxTurns: 'adapter',
-          maxBudget: 'none',
-          wireProtocols: ['anthropic-messages'],
-        }),
-      });
-    }
-
-    const harness = installRbacHarness([
-      { email: MEMBER.email, name: 'Formal', workspaceId: TEST_WORKSPACE_ID, role: 'viewer' },
-    ]);
-    try {
-      const response = await harness.call(getEngines, {
-        method: 'GET',
-        path: '/api/engines',
-        as: MEMBER,
-      });
-
-      expect(response.status).toBe(expected['status']);
-      if (expected['engines'] === null) {
-        // Refused whole: no engine of the registry crosses, not even a describable one.
-        const body = asRecord(response.body, `${vector.id} problem body`);
-        const error = asRecord(body['error'], `${vector.id} problem error`);
-        expect(error['code']).toBe(expected['code']);
-        expect(response.text).not.toContain('claude-agent-sdk');
-        return;
-      }
-      const body = asRecord(response.body, `${vector.id} body`);
-      const served = asArray(body['engines'], `${vector.id} engines`);
-      expect(
-        served.map((entry, index) => projectDescriptor(entry, `${vector.id}[${index}]`)),
-      ).toEqual(
-        asArray(expected['engines'], `${vector.id} expected`).map((entry, index) =>
-          projectDescriptor(entry, `${vector.id} expected[${index}]`),
-        ),
-      );
-    } finally {
-      harness.teardown();
-    }
-  });
 });
