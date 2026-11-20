@@ -1,3 +1,6 @@
+import { headers } from 'next/headers';
+
+import { versionsLocaleOf } from '../../../../components/agents/versions-messages';
 import { ProjectDetail } from '../../../../components/projects/project-detail';
 import { resolveProjectArchiveCapability } from '../../../../server/projects/archive-capability';
 import { switchedOffPanel } from '../../feature-gate';
@@ -18,5 +21,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const off = await switchedOffPanel('projects');
   if (off !== null) return off;
   const [{ id }, capability] = await Promise.all([params, resolveProjectArchiveCapability()]);
-  return <ProjectDetail id={id} capability={capability} />;
+  // The reader's language (UX-15 in #2086), negotiated as the shell negotiates it.
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
+  return <ProjectDetail id={id} capability={capability} locale={locale} />;
 }

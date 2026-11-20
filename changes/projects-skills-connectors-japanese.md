@@ -9,5 +9,4 @@ section: Changed
   the empty state), the Connectors list and Add connector (every field, the authentication choices,
   Test connection, Save and Cancel, and the test result), and the line under the workspace name in
   the sidebar. Each screen carries `lang`. Project, skill and connector names, transport names and
-  a failed test's server message are shown as they are. A project's detail and form fields and a
-  skill's detail screen are still English. English is unchanged (UX-15 in #2086).
+  a failed test's server message are shown as they are. English is unchanged (UX-15 in #2086).

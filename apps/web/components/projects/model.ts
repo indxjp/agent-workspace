@@ -351,11 +351,6 @@ export interface ArchiveImpactCounts {
   readonly runsTruncated: boolean;
 }
 
-function countPhrase(count: number, singular: string, plural: string, truncated: boolean): string {
-  if (truncated) return `${String(count)}+ ${plural}`;
-  return count === 1 ? `1 ${singular}` : `${String(count)} ${plural}`;
-}
-
 /**
  * The impact sentence the confirmation renders.
  *
@@ -364,13 +359,17 @@ function countPhrase(count: number, singular: string, plural: string, truncated:
  * neither publishes a total. Naming the scope is the difference between a partial count and a wrong
  * one — see the task ADR, which records what an exact count would cost.
  */
-export function summariseArchiveImpact(counts: ArchiveImpactCounts): string {
+export function summariseArchiveImpact(
+  counts: ArchiveImpactCounts,
+  strings: ProjectsStrings['lifecycle'] = ENGLISH_PROJECTS_STRINGS.lifecycle,
+): string {
   if (counts.sessions === 0 && counts.runs === 0 && !counts.runsTruncated) {
-    return 'No sessions or runs that you can see are affected. Archiving stops new sessions and runs from starting in this project.';
+    return strings.impactNone;
   }
-  const sessions = countPhrase(counts.sessions, 'session', 'sessions', false);
-  const runs = countPhrase(counts.runs, 'run', 'runs', counts.runsTruncated);
-  return `${sessions} and ${runs} that you can see become read-only. Completed work stays in history, and no new sessions or runs can start in this project.`;
+  return strings.impactSome(
+    strings.impactSessions(counts.sessions, false),
+    strings.impactRuns(counts.runs, counts.runsTruncated),
+  );
 }
 
 /**
@@ -395,9 +394,12 @@ export type ArchiveDialogState =
  * a claim about the database that this client cannot make, so the wording names only what is true
  * for both readings. Every other status keeps the server's own message.
  */
-export function describeLifecycleFailure(problem: RequestProblem): RequestProblem {
+export function describeLifecycleFailure(
+  problem: RequestProblem,
+  noLongerAvailable: string = ENGLISH_PROJECTS_STRINGS.lifecycle.noLongerAvailable,
+): RequestProblem {
   return problem.kind === 'api' && problem.status === 404
-    ? { ...problem, message: 'This project is no longer available.' }
+    ? { ...problem, message: noLongerAvailable }
     : problem;
 }
 

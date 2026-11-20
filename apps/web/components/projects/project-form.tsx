@@ -24,9 +24,16 @@ import {
   type ProjectVisibility,
   type RequestProblem,
 } from './model';
+import { ProblemLine } from '../agents/problem-line';
+import type { VersionsLocale } from '../agents/versions-messages';
 import { describeInheritance } from '../models/catalog';
 import { ModelSelector, ModelUnavailableNotice, useModelCatalog } from '../models/model-selector';
 import { loadProjectCatalogs } from './project-requests-model';
+import {
+  ENGLISH_PROJECTS_STRINGS,
+  projectsStrings,
+  type ProjectsStrings,
+} from './projects-messages';
 
 // ── Transcribed class strings — the same tokens `../agents/agent-form.tsx` spends ─────────────
 export const BTN =
@@ -54,7 +61,7 @@ export interface ProjectCatalogs {
 export type ProjectCatalogsState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly catalogs: ProjectCatalogs }
-  | { readonly kind: 'failed'; readonly reason: string };
+  | { readonly kind: 'failed'; readonly reason: string; readonly detail: string };
 
 /**
  * Fetch `/api/agents`, `/api/files` and `/api/connectors` for the pickers.
@@ -77,9 +84,11 @@ export function useProjectCatalogs(): ProjectCatalogsState {
       })
       .catch((error: unknown) => {
         if (!active) return;
+        const detail = error instanceof Error ? error.message : String(error);
         setState({
           kind: 'failed',
-          reason: `Project options could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+          reason: `${ENGLISH_PROJECTS_STRINGS.form.optionsFailed} ${detail}`,
+          detail,
         });
       });
     return () => {
@@ -100,31 +109,36 @@ export function ProjectFields({
   catalogs,
   onChange,
   idPrefix,
+  locale = 'en',
 }: Readonly<{
   draft: ProjectDraft;
   catalogs: ProjectCatalogs;
   onChange: (patch: Partial<ProjectDraft>) => void;
   idPrefix: string;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
 }>) {
+  const strings = projectsStrings(locale);
+  const words = strings.form;
   return (
     <>
       <div className={CARD}>
         <div className={FIELD}>
           <label className={LABEL} htmlFor={`${idPrefix}-name`}>
-            Name
+            {words.name}
           </label>
           <input
             id={`${idPrefix}-name`}
             type="text"
             className={CONTROL}
-            placeholder="e.g. Q3 Contract Review"
+            placeholder={words.namePlaceholder}
             value={draft.name}
             onChange={(event) => onChange({ name: event.target.value })}
           />
         </div>
         <div className={FIELD}>
           <label className={LABEL} htmlFor={`${idPrefix}-instructions`}>
-            Instructions
+            {words.instructions}
           </label>
           {createElement('textarea', {
             id: `${idPrefix}-instructions`,
@@ -134,11 +148,11 @@ export function ProjectFields({
             onChange: (event: ChangeEvent<HTMLTextAreaElement>) =>
               onChange({ instructions: event.target.value }),
           })}
-          <div className={HELP}>Added to every agent’s context when this project is selected.</div>
+          <div className={HELP}>{words.instructionsHelp}</div>
         </div>
         <div className={FIELD}>
           <label className={LABEL} htmlFor={`${idPrefix}-visibility`}>
-            Visibility
+            {words.visibility}
           </label>
           <select
             id={`${idPrefix}-visibility`}
@@ -146,14 +160,14 @@ export function ProjectFields({
             value={draft.visibility}
             onChange={(event) => onChange({ visibility: event.target.value as ProjectVisibility })}
           >
-            <option value="private">Private — only you</option>
-            <option value="workspace">Workspace — everyone in this workspace</option>
-            <option value="public">Public — anyone with a share link</option>
+            <option value="private">{words.visibilityOption.private}</option>
+            <option value="workspace">{words.visibilityOption.workspace}</option>
+            <option value="public">{words.visibilityOption.public}</option>
           </select>
         </div>
         <div className="mb-0">
           <label className={LABEL} htmlFor={`${idPrefix}-default-agent`}>
-            Default agent
+            {words.defaultAgent}
           </label>
           <select
             id={`${idPrefix}-default-agent`}
@@ -161,7 +175,7 @@ export function ProjectFields({
             value={draft.defaultAgentId ?? ''}
             onChange={(event) => onChange({ defaultAgentId: event.target.value || null })}
           >
-            <option value="">No default agent</option>
+            <option value="">{strings.noDefaultAgent}</option>
             {catalogs.agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.label}
@@ -170,11 +184,11 @@ export function ProjectFields({
           </select>
         </div>
       </div>
-      <ProjectModelField draft={draft} onChange={onChange} idPrefix={idPrefix} />
+      <ProjectModelField draft={draft} onChange={onChange} idPrefix={idPrefix} locale={locale} />
       <fieldset className={`${CARD} mt-4`}>
-        <legend className="px-1 text-[13px] font-semibold">Files and folders</legend>
+        <legend className="px-1 text-[13px] font-semibold">{words.filesAndFolders}</legend>
         {catalogs.files.length === 0 ? (
-          <p className="text-[12px] text-muted">None configured.</p>
+          <p className="text-[12px] text-muted">{words.noneConfigured}</p>
         ) : (
           catalogs.files.map((file) => (
             <label className={CHECK_ROW} key={file.id}>
@@ -195,9 +209,9 @@ export function ProjectFields({
         )}
       </fieldset>
       <fieldset className={`${CARD} mt-4`}>
-        <legend className="px-1 text-[13px] font-semibold">Connectors</legend>
+        <legend className="px-1 text-[13px] font-semibold">{words.connectors}</legend>
         {catalogs.connectors.length === 0 ? (
-          <p className="text-[12px] text-muted">None configured.</p>
+          <p className="text-[12px] text-muted">{words.noneConfigured}</p>
         ) : (
           catalogs.connectors.map((connector) => (
             <label className={CHECK_ROW} key={connector.id}>
@@ -231,40 +245,54 @@ function ProjectModelField({
   draft,
   onChange,
   idPrefix,
+  locale,
 }: Readonly<{
   draft: ProjectDraft;
   onChange: (patch: Partial<ProjectDraft>) => void;
   idPrefix: string;
+  locale: VersionsLocale;
 }>) {
+  const words = projectsStrings(locale).form;
   const catalogState = useModelCatalog();
   const catalogModels = catalogState.kind === 'ready' ? catalogState.catalog.models : [];
   const catalogUnavailable = catalogState.kind === 'ready' ? catalogState.catalog.unavailable : [];
   return (
     <div className={`${CARD} mt-4`}>
-      <div className={LABEL}>Default model</div>
+      <div className={LABEL}>{words.defaultModel}</div>
       {catalogState.kind === 'loading' ? (
-        <p className="text-[13px] text-muted">Loading model connections…</p>
+        <p className="text-[13px] text-muted">{words.loadingModels}</p>
       ) : catalogState.kind === 'failed' ? (
         <p className="text-[13px] text-danger" role="alert">
-          {catalogState.reason}
+          <ProblemLine
+            locale={locale}
+            english={catalogState.reason}
+            lead={words.modelsFailed}
+            detail={catalogState.detail}
+          />
         </p>
       ) : (
         <ModelSelector
           id={`${idPrefix}-default-model`}
-          label="Default"
+          label={words.modelDefault}
           models={catalogModels}
           value={draft.defaultModel}
           onChange={(defaultModel) => onChange({ defaultModel })}
-          inheritLabel="No project default"
+          inheritLabel={words.noProjectDefault}
+          words={{ connection: words.connection, noModels: words.noModelsAvailable }}
           ariaDescribedBy={`${idPrefix}-model-inheritance-line`}
         />
       )}
       <p id={`${idPrefix}-model-inheritance-line`} className={HELP}>
         {draft.defaultModel === null
-          ? 'Project default → not set — falls back to the workspace default.'
-          : describeInheritance('Project default', draft.defaultModel, catalogModels)}
+          ? words.projectDefaultNotSet
+          : describeInheritance(
+              words.projectDefault,
+              draft.defaultModel,
+              catalogModels,
+              words.staleModel,
+            )}
       </p>
-      <ModelUnavailableNotice unavailable={catalogUnavailable} />
+      <ModelUnavailableNotice unavailable={catalogUnavailable} dismissLabel={words.dismiss} />
     </div>
   );
 }
@@ -294,8 +322,11 @@ export function useBeforeUnloadGuard(dirty: boolean): void {
 }
 
 /** `window.confirm` gated on there being something to lose. Never prompts over a clean form. */
-export function confirmDiscard(dirty: boolean): boolean {
-  return !dirty || window.confirm('Discard the changes you made?');
+export function confirmDiscard(
+  dirty: boolean,
+  strings: ProjectsStrings = ENGLISH_PROJECTS_STRINGS,
+): boolean {
+  return !dirty || window.confirm(strings.form.discardChanges);
 }
 
 /** The failed-request callout every project screen shows the same way `NewAgentScreen` does. */

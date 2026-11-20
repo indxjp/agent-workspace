@@ -11,10 +11,16 @@ import {
 } from '@indx-workspace/sdk/testing';
 
 import { connectorsStrings } from './connectors-messages';
-import { ConnectorNewScreen, ConnectorsScreen, SkillsScreen } from './resource-screens';
+import {
+  ConnectorNewScreen,
+  ConnectorsScreen,
+  SkillDetailScreen,
+  SkillsScreen,
+} from './resource-screens';
 import { skillsStrings } from './skills-messages';
 
-// UX-15 in #2086: the Connectors, Add connector and Skills screens in the reader's language.
+// UX-15 in #2086: the Connectors, Add connector, Skills and skill detail screens in the reader's
+// language.
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -256,5 +262,62 @@ describe('SkillsScreen', () => {
     expect(host.querySelector('h1')?.textContent).toBe('Skills');
     expect(host.textContent).toContain('Create and manage private workspace skills.');
     expect(host.textContent).toContain('Create skill');
+  });
+});
+
+describe('SkillDetailScreen', () => {
+  const ja = skillsStrings('ja').detail;
+  const detail = {
+    ...skill('pdf-summary', true),
+    description: 'Summarise a PDF.',
+    instructions: 'Read every page.',
+    files: [{ path: 'SKILL.md', sizeBytes: 12 }],
+  };
+
+  it('shows every label and button in Japanese, the skill as it is stored', async () => {
+    vi.stubGlobal('fetch', server(listed('/api/skills/pdf-summary', { skill: detail })).fetch);
+    act(() => root.render(<SkillDetailScreen name="pdf-summary" locale="ja" />));
+    await vi.waitFor(() => expect(host.querySelector('form')).not.toBeNull());
+
+    expect(host.querySelector('[lang="ja"]')).not.toBeNull();
+    expect(host.querySelector('h1')?.textContent).toBe('pdf-summary');
+    expect(host.textContent).toContain(ja.intro);
+    expect(host.querySelector('a')?.textContent).toBe('スキル一覧に戻る');
+    const ownText = (label: Element) =>
+      [...label.childNodes]
+        .filter((node) => node.nodeType === node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join('')
+        .trim();
+    expect([...host.querySelectorAll('label')].map(ownText)).toEqual(['説明', '指示文', '有効']);
+    expect(host.querySelector<HTMLInputElement>('[name="description"]')?.value).toBe(
+      'Summarise a PDF.',
+    );
+    expect(host.textContent).toContain('補助ファイル: SKILL.md');
+    expect(host.textContent).toContain(
+      '公開済みのリビジョン (新しい順。公開するには aw skills publish を使います): なし',
+    );
+    expect(host.querySelector('code')?.textContent).toBe('aw skills publish');
+    expect(host.querySelector('button')?.textContent).toBe('変更を保存');
+    expect(englishLeft(skillsStrings('en'))).toEqual([]);
+  });
+
+  it('says loading in Japanese', () => {
+    vi.stubGlobal('fetch', server(() => undefined).fetch);
+    act(() => root.render(<SkillDetailScreen name="pdf-summary" locale="ja" />));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(ja.loading);
+  });
+
+  it('keeps the English screen as it was', async () => {
+    vi.stubGlobal('fetch', server(listed('/api/skills/pdf-summary', { skill: detail })).fetch);
+    act(() => root.render(<SkillDetailScreen name="pdf-summary" />));
+    await vi.waitFor(() => expect(host.querySelector('form')).not.toBeNull());
+    expect(host.textContent).toContain('Skill manifest and installed files.');
+    expect(host.querySelector('a')?.textContent).toBe('Back');
+    expect(host.textContent).toContain('Supporting files: SKILL.md');
+    expect(host.textContent).toContain(
+      'Published revisions (newest first; publish with aw skills publish): none',
+    );
+    expect(host.querySelector('button')?.textContent).toBe('Save changes');
   });
 });

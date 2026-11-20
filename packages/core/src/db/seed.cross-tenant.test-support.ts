@@ -167,6 +167,10 @@ async function refusesRemovingSessionOwner({ db, a }: CrossTenantContext): Promi
     agentId: a.agentId,
     ownerPrincipalId: a.principalId,
   });
+  // The fixture's agent is also created by this member, so `agents_created_by_workspace_fk`
+  // refuses the same delete. PostgreSQL fires FK triggers in an order that is not stable
+  // across databases, so drop that second reference to leave only the FK under test.
+  await db.update(agents).set({ createdBy: null }).where(eq(agents.id, a.agentId));
 
   await expectConstraintViolation(
     db
