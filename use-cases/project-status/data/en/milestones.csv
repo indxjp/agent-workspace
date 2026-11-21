@@ -1,0 +1,4 @@
+milestone_id,workstream,name,due_date,forecast_date,status
+MS-01,Data migration,Production data migration rehearsal,2026-12-11,2026-12-18,Expected late
+MS-02,Screens,Start of order screen acceptance test,2026-12-04,2026-12-04,On track
+MS-03,Training,Operating training for the sales department,2026-12-14,2026-12-14,On track

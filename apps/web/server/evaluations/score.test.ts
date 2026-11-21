@@ -101,6 +101,29 @@ describe('pausedCall (issue #1569)', () => {
   });
 });
 
+describe('checkCase tool names, with or without the engine prefix', () => {
+  const calls = [{ name: 'mcp__agent-workspace__search_files', input: { query: '宿泊費' } }];
+
+  it('matches a bare name to the prefixed call Claude reports', () => {
+    expect(checkCase({ tool: 'search_files' }, '', calls, null)).toEqual([]);
+    expect(
+      checkCase({ tool: 'search_files', toolInput: { query: '宿泊費' } }, '', calls, null),
+    ).toEqual([]);
+  });
+
+  it('still matches the prefixed name exactly, and a bare call by its bare name', () => {
+    expect(checkCase({ tool: 'mcp__agent-workspace__search_files' }, '', calls, null)).toEqual([]);
+    expect(checkCase({ tool: 'lookup' }, '', [{ name: 'lookup', input: {} }], null)).toEqual([]);
+  });
+
+  it('matches neither a partial suffix nor a single-underscore prefix', () => {
+    expect(checkCase({ tool: 'files' }, '', calls, null)).toEqual(['tool: files was not called']);
+    expect(
+      checkCase({ tool: 'search_files' }, '', [{ name: 'server_search_files', input: {} }], null),
+    ).toEqual(['tool: search_files was not called']);
+  });
+});
+
 describe('checkCase toolInput (issue #799)', () => {
   const calls = [
     { name: 'lookup', input: { id: 'a', filter: { tags: ['x', 'y'], limit: 5 } } },

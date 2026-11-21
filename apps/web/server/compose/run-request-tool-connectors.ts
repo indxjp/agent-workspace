@@ -32,6 +32,24 @@ import type { AgentRunResourceSelection, PendingToolConnector } from './resource
 const LEGACY_CONNECTOR_RULE_PREFIX = /^mcp__connector-([0-9a-f-]{36})__/u;
 
 /**
+ * `rules` with every rule written against an MCP connector's id, `mcp__connector-<id>__…`, pointed
+ * at the key the connector has in this run; any other rule is left as it is. A stored tool rule and
+ * a stored approval gate (`requireApproval`) go through it alike, so a gate on a connector's id
+ * still matches the tool the run offers (a demo copy writes its gates on its stand-ins' ids).
+ */
+export function rulesWithRunConnectorKeys(
+  rules: readonly string[],
+  keys: Readonly<Record<string, string>>,
+): readonly string[] {
+  return rules.map((rule) =>
+    rule.replace(LEGACY_CONNECTOR_RULE_PREFIX, (prefix, id: string) => {
+      const key = keys[id];
+      return key === undefined ? prefix : `mcp__${key}__`;
+    }),
+  );
+}
+
+/**
  * A stored Claude tool policy with every rule written against an MCP connector's old server key,
  * `mcp__connector-<id>__…`, pointed at the key the connector has in this run (ADR-0113 SD13,
  * #1109), so a `deny` or an `autoApprove` keeps its meaning when the key is its slug name. A rule
@@ -42,12 +60,7 @@ export function withRunConnectorKeys<T extends AgentToolPolicy>(
   keys: Readonly<Record<string, string>>,
 ): T {
   const rewrite = (rules: readonly string[]): readonly string[] =>
-    rules.map((rule) =>
-      rule.replace(LEGACY_CONNECTOR_RULE_PREFIX, (prefix, id: string) => {
-        const key = keys[id];
-        return key === undefined ? prefix : `mcp__${key}__`;
-      }),
-    );
+    rulesWithRunConnectorKeys(rules, keys);
   return {
     ...tools,
     base: tools.base === 'claude_code_preset' ? tools.base : rewrite(tools.base),

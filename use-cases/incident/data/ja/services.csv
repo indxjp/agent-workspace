@@ -1,0 +1,5 @@
+service,team,tier,description,runbook
+order-api,受注基盤チーム,1,オンラインストアの注文の登録と照会,RB-ORDER-01
+payment-gateway,決済チーム,1,カード決済の承認と取消,RB-PAY-01
+nightly-report,データ基盤チーム,3,店舗向け売上帳票の夜間作成,RB-DATA-03
+shared-db,インフラチーム,1,受注と決済が使う共用データベース,RB-INFRA-02

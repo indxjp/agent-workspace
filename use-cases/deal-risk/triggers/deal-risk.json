@@ -1,0 +1,41 @@
+{
+  "kind": "schedule",
+  "name": "deal-risk",
+  "prompt": "今週の失注リスクレポートを作成して、deal-risk-reports フォルダに保存してください。 / Write this week's deal risk report and save it to the deal-risk-reports folder.",
+  "cron": "0 9 * * 1",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "deals", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "deals": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "opportunity",
+            "account",
+            "owner",
+            "risk",
+            "evidence",
+            "nextStep",
+            "sources"
+          ],
+          "properties": {
+            "opportunity": { "type": "string" },
+            "account": { "type": "string" },
+            "owner": { "type": "string" },
+            "risk": { "type": "string", "enum": ["stalled", "at-risk"] },
+            "evidence": { "type": "array", "items": { "type": "string" } },
+            "nextStep": { "type": "string" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

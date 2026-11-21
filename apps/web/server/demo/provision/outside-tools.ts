@@ -15,6 +15,8 @@
  * is copied as it is: a reader is not carried into the copy (the sample data is the files), and a
  * writer becomes a stand-in with no address and no secret.
  */
+import type { DemoRecordedWrite } from '@indx-workspace/contracts/demo-operator';
+
 import type { AnyConnectorResource } from '../../integrations';
 import { declaredTools } from './template-connector';
 
@@ -22,6 +24,7 @@ import { declaredTools } from './template-connector';
  * What the visitor's copy gets in place of one template connector. A stand-in answers
  * `DEMO_SEND_RESULT` on its `tools` (the ones that could send or write) and, for each tool in
  * `reads`, from the entry's sample records when the seed has records for it (`records-server.ts`).
+ * A write in `recorded` keeps what a person approves, and its read answers with it (ADR-0169).
  */
 export type DemoConnectorPlan =
   | { readonly kind: 'omit'; readonly name: string }
@@ -30,6 +33,7 @@ export type DemoConnectorPlan =
       readonly name: string;
       readonly tools: readonly string[];
       readonly reads: readonly string[];
+      readonly recorded: readonly DemoRecordedWrite[];
     };
 
 /** The methods that only read; every other method writes. */
@@ -44,12 +48,15 @@ export function planDemoConnector(connector: AnyConnectorResource): DemoConnecto
       .map((operation) => operation.name);
     // A connector with no operation listed is not shown to read: it is a stand-in.
     const reads = (connector.openapi?.operations.length ?? 0) > 0 && writers.length === 0;
-    return reads ? { kind: 'omit', name } : { kind: 'stand-in', name, tools: writers, reads: [] };
+    return reads
+      ? { kind: 'omit', name }
+      : { kind: 'stand-in', name, tools: writers, reads: [], recorded: [] };
   }
   // A connector the deployment's seed declared says which of its tools read and which write.
   const declared = declaredTools(connector);
   if (declared !== null) {
-    return { kind: 'stand-in', name, tools: declared.writes, reads: declared.reads };
+    const { writes, reads, recorded } = declared;
+    return { kind: 'stand-in', name, tools: writes, reads, recorded };
   }
-  return { kind: 'stand-in', name, tools: [], reads: [] };
+  return { kind: 'stand-in', name, tools: [], reads: [], recorded: [] };
 }

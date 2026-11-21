@@ -73,6 +73,17 @@ export type CloudRunDriverOptions<TRequest, TEvent> = Readonly<{
    * `key` signs the per-session credential; `bypass` hosts (the gateway) skip the proxy.
    */
   egressProxy?: Readonly<{ url: string; key: string; bypass: readonly string[] }>;
+  /**
+   * The control plane's address as a sandbox reaches it, given to every service as
+   * `AW_SESSION_MIRROR_URL`: the runner mirrors the run's transcript there and serves
+   * `search_files` from it (spec §14.9, ADR-0147). On the gcp-cloudrun stack it is the gateway's
+   * internal load balancer, the one address a sandbox's firewall allows (ADR-0172). With
+   * `egressProxy`, its host must be one of `egressProxy.bypass`, or a proxied sandbox would send
+   * its mirror calls to the proxy. Absent: the runs are not durable and offer no `search_files`.
+   * An origin only: any path other than `/` is refused. The runner manager passes it to the agent
+   * driver only, never to the tool-host driver (`rt-tool-`), which mirrors nothing.
+   */
+  sessionMirrorUrl?: string;
   /** Milliseconds since the epoch; injected by tests. */
   now?: () => number;
   /**

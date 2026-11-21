@@ -36,6 +36,7 @@ async function install(token: string | null) {
     templateEntries: () => Promise.resolve([entry]),
     directory: world.directory,
     limits: { maxTurns: 5, maxBudgetUsd: 0.2 },
+    markVerificationWorkspace: () => Promise.resolve(),
   });
   installTestDomains({ demoOperator: { ...NO_DEMO_OPERATOR, token, verification } });
   return { world, entry };

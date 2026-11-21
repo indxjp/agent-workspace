@@ -5,19 +5,25 @@
  * `judgeMoment` on the same shape. It lives with the tests, not in the store app: the app only reads
  * the recorded result.
  *
- * Each frame payload is parsed with the contract's `AgentFrameSchema`, as the SDK and the Try tab
+ * Each frame payload is parsed with the contract's `AgentFrameSchema`, as the SDK and the Try it section
  * parse it; a malformed or unknown frame changes nothing.
  */
 import { AgentFrameSchema } from '@indx-workspace/contracts/run-events';
 import type { RunEventFrame } from '@indx-workspace/sdk/events';
 
-import type { RecordedStep, RecordedTurn } from '../../../examples/store/catalog/recording.ts';
+import {
+  recordedTurnSchema,
+  type RecordedStep,
+  type RecordedTurn,
+} from '../../../examples/store/catalog/recording.ts';
 
 /** One run of the turn, in order: the question's, then each approval continuation's. */
 export interface RecordedRun {
   readonly frames: readonly RunEventFrame[];
   /** What the person decided on the call this run stopped at for approval, if it did. */
   readonly decision?: 'approved' | 'rejected';
+  /** The run's `output.structured`: its typed answer, when it was asked for one (ADR-0143). */
+  readonly structured?: unknown;
 }
 
 /** The turn `runs` make for `prompt`. */
@@ -89,5 +95,9 @@ export function recordTurn(prompt: string, runs: readonly RecordedRun[]): Record
       }
     }
   }
-  return { prompt, steps, stopReason };
+  // The turn's typed answer is the last run's; a run asked for no schema answered `null`.
+  const typed = recordedTurnSchema.shape.structured.safeParse(runs.at(-1)?.structured);
+  return typed.success && typed.data !== undefined
+    ? { prompt, steps, stopReason, structured: typed.data }
+    : { prompt, steps, stopReason };
 }

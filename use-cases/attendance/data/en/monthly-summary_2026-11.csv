@@ -1,0 +1,6 @@
+employee_id,name,team,manager,overtime_month_to_date_hours,as_of
+E1021,Yuzuki Asagi,Production 1,Makoto Shinonome,38.5,2026-11-20
+E1034,Hayate Makino,Production 1,Makoto Shinonome,12.0,2026-11-20
+E1063,Minato Shiga,Production 1,Makoto Shinonome,20.5,2026-11-20
+E1047,Ritsu Saotome,Logistics,Yoko Tsuzuki,47.0,2026-11-20
+E1052,Koharu Ibuki,Logistics,Yoko Tsuzuki,8.0,2026-11-20

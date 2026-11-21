@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "f392682bb71bb389ac8601c782cdf86d6e844ee329b26865e6fe5a5209d5fa03",
+        "agents/release-notes.md": "a028c4ac1008024f5b4c33f4b323aea43371221a47bc2a5bf3fc19aa03ece52a",
+        "agents/release-notes.ts": "ae7dad5df1538d6b6473d4898aae1fdaba284ab57d4ebf39a138cab5c68685ba",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/release-notes.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/release-notes/SKILL.md": "b54cb2984c7daedc6faeb2e8e2f4520eb98264df7c4ac9ef1753ddc8ae00e41b",
+        "surfaces/main.ts": "5a1cde738a92d22dfdbabc489fe39ad13ef48bf9d6467219bd9f4246ccd37b19"
+      },
+      "edits": []
+    }
+  }
+}

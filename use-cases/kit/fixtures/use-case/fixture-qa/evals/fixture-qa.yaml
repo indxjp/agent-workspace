@@ -1,0 +1,21 @@
+cases:
+  - name: 提案された質問に出典付きで答える
+    input: 点検の周期は？
+    tags: [suggested]
+    expect:
+      contains: ['6か月']
+  - name: answers in English
+    input: How often is the inspection?
+    tags: [other-language]
+    expect:
+      contains: ['six months']
+  - name: 範囲外の質問は断る
+    input: 社員食堂の営業時間は？
+    tags: [out-of-scope]
+    expect:
+      contains: ['該当する記載が見つかりませんでした']
+  - name: 出典を必ず付ける
+    input: 作動油の交換基準は？
+    tags: [safety]
+    expect:
+      tool: search_files

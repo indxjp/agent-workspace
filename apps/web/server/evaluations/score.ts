@@ -4,6 +4,7 @@
  */
 import type { EvalExpect } from '@indx-workspace/contracts/evaluations';
 import type { AgentFrame } from '@indx-workspace/contracts/run-events';
+import { namesTool } from '@indx-workspace/contracts/surfaces';
 import { z } from 'zod';
 
 /**
@@ -116,7 +117,8 @@ function containsValue(actual: unknown, expected: unknown): boolean {
 
 /**
  * Why the answer fails `contains`, `notContains`, `tool`, `toolInput` and `output`; empty when it
- * passes all that are set. Substrings are case-sensitive and `tool` is one exact name. With
+ * passes all that are set. Substrings are case-sensitive, and `tool` is one name, exact or without
+ * the engine's prefix (`namesTool`). With
  * `toolInput`, one call of that tool must have arguments that contain it; `output` must be contained
  * in `structured`, the run's structured output (`null` when it has none). `judge` is not checked here.
  */
@@ -126,7 +128,10 @@ export function checkCase(
   calls: readonly ToolCall[],
   structured: unknown,
 ): readonly string[] {
-  const named = expect.tool === undefined ? [] : calls.filter((call) => call.name === expect.tool);
+  const { tool } = expect;
+  // `tool: search_files` names Claude's `mcp__agent-workspace__search_files` too, as a surface's
+  // `toolResults` key does; the engine's prefix is the engine's, not the case author's.
+  const named = tool === undefined ? [] : calls.filter((call) => namesTool(tool, call.name));
   const toolFailure = (): readonly string[] => {
     if (expect.tool === undefined) return [];
     if (named.length === 0) return [`tool: ${expect.tool} was not called`];

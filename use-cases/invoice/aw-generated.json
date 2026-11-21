@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "ce7bd9b8c7530840cdc9d07b069a7bd621b4fc6ded40a4afa05c2fa5a934f04d",
+        "agents/invoice.md": "9421058a2e219b123dcc4730f954082a803d0e49911c2d939727b7bf7969df32",
+        "agents/invoice.ts": "f8b8090c661b02598792aae709c108ef324055518a0d6863505f37a108279a58",
+        "evals/invoice.yaml": "62d6a86cc41af3200c643414591d40795fe059e431967770ea99d6beaf280231",
+        "skills/invoice/SKILL.md": "01134cfaa7cb9301f1e54985225e96f958db7b95f4561932b3c8214f661976aa",
+        "surfaces/main.ts": "cd0caedb100574d62ddda4fc662fd750d5d57de8aa81004d8ee95e728c7cf13b"
+      },
+      "edits": []
+    }
+  }
+}

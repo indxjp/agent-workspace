@@ -1,0 +1,27 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"AuthorizationFailures\"}",
+  "status": "firing",
+  "receiver": "agent-workspace-incident",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alert_id": "ALT-0044",
+        "alertname": "AuthorizationFailures",
+        "service": "payment-gateway",
+        "env": "production",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "payment-gateway card authorizations are almost all failing",
+        "description": "For the last 5 minutes, 95% of card authorizations have timed out."
+      },
+      "startsAt": "2026-11-21T10:05:00+09:00",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://monitoring.example.invalid/alerts/ALT-0044",
+      "fingerprint": "00000000005a17c2"
+    }
+  ],
+  "externalURL": "https://alertmanager.example.invalid"
+}

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import { SurfaceDefinitionSchema } from '@indx-workspace/contracts/surfaces';
+import { SurfaceDefinitionSchema, type ResultChart } from '@indx-workspace/contracts/surfaces';
 
 import { DefinitionError, defineSurface, isDefinedAgent, isDefinedSurface } from './index.js';
 
@@ -62,6 +62,26 @@ describe('defineSurface', () => {
     expect(defineSurface(input)).toStrictEqual(input);
   });
 
+  it('accepts a result chart declared over the typed output, and types it (ADR-0168)', () => {
+    const input = {
+      name: 'main',
+      agent: 'analyst',
+      resultCharts: [
+        {
+          kind: 'line',
+          field: 'months',
+          label: 'month',
+          value: 'sales',
+          title: { ja: '月次売上', en: 'Monthly sales' },
+          axes: { label: { ja: '月', en: 'Month' }, value: { ja: '売上', en: 'Sales' } },
+        },
+      ],
+    } as const;
+    const surface = defineSurface(input);
+    expect(surface).toStrictEqual(input);
+    expectTypeOf(surface.resultCharts).toEqualTypeOf<readonly ResultChart[] | undefined>();
+  });
+
   it('brands the surface without a visible key', () => {
     const surface = defineSurface(FULL);
 
@@ -78,6 +98,22 @@ describe('defineSurface', () => {
     [{ limits: { messagesPerMinute: 10 } }, ['limits']],
     [{ parts: { agentSwitcher: { agents: ['a', 'a'] } } }, ['parts.agentSwitcher.agents.1']],
     [{ toolResults: { x: 'chart' } }, ['toolResults.x']],
+    [{ resultCharts: [] }, ['resultCharts']],
+    [
+      {
+        resultCharts: [
+          {
+            kind: 'pie',
+            field: 'rows',
+            label: 'name',
+            value: 'count',
+            title: { ja: '件数', en: 'Count' },
+            axes: { label: { ja: '名前', en: 'Name' }, value: { ja: '件数', en: 'Count' } },
+          },
+        ],
+      },
+      ['resultCharts.0.kind'],
+    ],
     [{ parts: { attachments: 'yes' } }, ['parts.attachments']],
     [{ name: 'Main' }, ['name']],
   ])('refuses %j', (extra, paths) => {

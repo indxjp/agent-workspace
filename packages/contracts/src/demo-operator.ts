@@ -67,17 +67,229 @@ const SeedResourceSchema = z
   .regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/u, 'must be a resource name: letters, digits, _ and -');
 
 /**
+ * The kinds of change a demo's records stand-in keeps once a person approved the write (ADR-0169):
+ * a calendar event, a task, an access change and a booking.
+ */
+export const DEMO_RECORD_KINDS = ['calendar', 'task', 'access', 'booking'] as const;
+export const DemoRecordKindSchema = z.enum(DEMO_RECORD_KINDS);
+export type DemoRecordKind = z.infer<typeof DemoRecordKindSchema>;
+
+/** The most changes one records stand-in keeps, recorded and refused together. */
+export const DEMO_RECORD_WRITES_MAX = 50;
+
+const RecordTextSchema = z.string().trim().min(1).max(200);
+const RecordPersonSchema = z.string().trim().min(1).max(120);
+/** A moment with its offset, as a calendar or booking system exports it: `2026-12-01T10:00:00+09:00`. */
+const RecordTimeSchema = z.iso.datetime({ offset: true });
+const RecordDateSchema = z.iso.date();
+
+/**
+ * Whether `end` is after `start`. Zod runs this even when a field failed, so a time that is not a
+ * time passes here: its own field already names it, and an `end` issue would be a wrong one.
+ */
+function endsAfterStart(span: { readonly start: string; readonly end: string }): boolean {
+  const start = Date.parse(span.start);
+  const end = Date.parse(span.end);
+  return Number.isNaN(start) || Number.isNaN(end) || end > start;
+}
+const END_AFTER_START = { message: 'must end after it starts', path: ['end'] };
+
+/** A calendar event the agent puts on a calendar. */
+export const DemoCalendarEventSchema = z
+  .strictObject({
+    title: RecordTextSchema,
+    start: RecordTimeSchema,
+    end: RecordTimeSchema,
+    attendees: z.array(RecordPersonSchema).max(20).readonly().optional(),
+    location: RecordTextSchema.optional(),
+  })
+  .refine(endsAfterStart, END_AFTER_START)
+  .readonly();
+
+/** A task the agent opens for a person. */
+export const DemoTaskSchema = z
+  .strictObject({
+    title: RecordTextSchema,
+    assignee: RecordPersonSchema,
+    due: RecordDateSchema.optional(),
+    notes: z.string().trim().min(1).max(2_000).optional(),
+  })
+  .readonly();
+
+/** An access change: a grant or a revocation of one level on one system for one person. */
+export const DemoAccessChangeSchema = z
+  .strictObject({
+    person: RecordPersonSchema,
+    system: RecordTextSchema,
+    level: z.enum(['read', 'write', 'admin']),
+    change: z.enum(['grant', 'revoke']),
+    until: RecordDateSchema.optional(),
+  })
+  .readonly();
+
+/** A booking of a room, a desk, a car or another shared resource. */
+export const DemoBookingSchema = z
+  .strictObject({
+    resource: RecordTextSchema,
+    start: RecordTimeSchema,
+    end: RecordTimeSchema,
+    bookedFor: RecordPersonSchema,
+    purpose: RecordTextSchema.optional(),
+  })
+  .refine(endsAfterStart, END_AFTER_START)
+  .readonly();
+
+/** The arguments a recorded write of each kind must have; anything else is refused. */
+export const DEMO_RECORD_SCHEMAS = {
+  calendar: DemoCalendarEventSchema,
+  task: DemoTaskSchema,
+  access: DemoAccessChangeSchema,
+  booking: DemoBookingSchema,
+} as const satisfies Record<DemoRecordKind, z.ZodType>;
+
+/** One fictional record of each kind, Japanese first, as an entry's agent would write it. */
+export const DEMO_RECORD_SAMPLES = {
+  calendar: {
+    ja: {
+      title: '新任者オリエンテーション',
+      start: '2026-12-01T10:00:00+09:00',
+      end: '2026-12-01T11:00:00+09:00',
+      attendees: ['佐藤 美咲', '田中 健一'],
+      location: '本社 3階 会議室A',
+    },
+    en: {
+      title: 'New starter orientation',
+      start: '2026-12-01T10:00:00+09:00',
+      end: '2026-12-01T11:00:00+09:00',
+      attendees: ['Misaki Sato', 'Kenichi Tanaka'],
+      location: 'Head office, 3F meeting room A',
+    },
+  },
+  task: {
+    ja: { title: 'ノートPCを準備する', assignee: '情報システム部 山田', due: '2026-11-28' },
+    en: { title: 'Prepare a laptop', assignee: 'IT, Yamada', due: '2026-11-28' },
+  },
+  access: {
+    ja: { person: '佐藤 美咲', system: '経費精算システム', level: 'read', change: 'grant' },
+    en: { person: 'Misaki Sato', system: 'Expense system', level: 'read', change: 'grant' },
+  },
+  booking: {
+    ja: {
+      resource: '本社 3階 会議室A',
+      start: '2026-12-02T14:00:00+09:00',
+      end: '2026-12-02T15:00:00+09:00',
+      bookedFor: '田中 健一',
+      purpose: '取引先との打ち合わせ',
+    },
+    en: {
+      resource: 'Head office, 3F meeting room A',
+      start: '2026-12-02T14:00:00+09:00',
+      end: '2026-12-02T15:00:00+09:00',
+      bookedFor: 'Kenichi Tanaka',
+      purpose: 'Meeting with a client',
+    },
+  },
+} as const satisfies {
+  readonly [Kind in DemoRecordKind]: {
+    readonly ja: z.input<(typeof DEMO_RECORD_SCHEMAS)[Kind]>;
+    readonly en: z.input<(typeof DEMO_RECORD_SCHEMAS)[Kind]>;
+  };
+};
+
+/**
+ * One write tool of a declared connector whose approved calls the stand-in keeps (ADR-0169): the
+ * write tool, the kind of record its arguments are, and the read tool that answers with it.
+ */
+export const DemoRecordedWriteSchema = z
+  .strictObject({
+    write: ToolOperationNameSchema,
+    kind: DemoRecordKindSchema,
+    read: ToolOperationNameSchema,
+  })
+  .readonly();
+export type DemoRecordedWrite = z.infer<typeof DemoRecordedWriteSchema>;
+
+/** The codes a records stand-in refuses a recorded write with (ADR-0169 D4). */
+export const DEMO_RECORD_WRITE_PROBLEM_CODES = [
+  'demo_record_invalid',
+  'demo_write_not_recorded',
+] as const;
+export type DemoRecordWriteProblemCode = (typeof DEMO_RECORD_WRITE_PROBLEM_CODES)[number];
+
+/** The most issues one refusal names. */
+export const DEMO_RECORD_ISSUES_MAX = 20;
+
+/** One reason the arguments of a write were refused: the field's path (`$` for the root) and why. */
+export const DemoRecordIssueSchema = z
+  .strictObject({ path: z.string().max(200), message: z.string().max(500) })
+  .readonly();
+export type DemoRecordIssue = z.infer<typeof DemoRecordIssueSchema>;
+
+/**
+ * What a records stand-in's recorded write answers in `structuredContent` (ADR-0169 D4): the record
+ * it kept, or the typed reason it kept nothing. A refusal is also a tool error.
+ */
+export const DemoRecordWriteAnswerSchema = z.discriminatedUnion('recorded', [
+  z
+    .strictObject({
+      demoOnly: z.literal(true),
+      recorded: z.literal(true),
+      tool: ToolOperationNameSchema,
+      record: z.record(z.string(), z.unknown()),
+    })
+    .readonly(),
+  z
+    .strictObject({
+      demoOnly: z.literal(true),
+      recorded: z.literal(false),
+      tool: ToolOperationNameSchema,
+      code: z.enum(DEMO_RECORD_WRITE_PROBLEM_CODES),
+      issues: z.array(DemoRecordIssueSchema).max(DEMO_RECORD_ISSUES_MAX).readonly().optional(),
+    })
+    .readonly(),
+]);
+export type DemoRecordWriteAnswer = z.infer<typeof DemoRecordWriteAnswerSchema>;
+
+/** The `recorded` entries of a connector name its own tools, each write once. */
+function checkRecordedWrites(
+  connector: {
+    readonly reads: readonly string[];
+    readonly writes: readonly string[];
+    readonly recorded?: readonly DemoRecordedWrite[] | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const seen = new Set<string>();
+  for (const [index, entry] of (connector.recorded ?? []).entries()) {
+    const at = (field: string): PropertyKey[] => ['recorded', index, field];
+    if (!connector.writes.includes(entry.write)) {
+      ctx.addIssue({ code: 'custom', path: at('write'), message: 'must be a write tool of it' });
+    }
+    if (!connector.reads.includes(entry.read)) {
+      ctx.addIssue({ code: 'custom', path: at('read'), message: 'must be a read tool of it' });
+    }
+    if (seen.has(entry.write)) {
+      ctx.addIssue({ code: 'custom', path: at('write'), message: 'is recorded twice' });
+    }
+    seen.add(entry.write);
+  }
+}
+
+/**
  * One connector the demo agent names, as the seed declares it: the tools that only read and the
  * tools that would send or write outside. The template keeps no address and no secret of it. In a
  * visitor's copy a read tool answers from the entry's sample records ({@link DemoSampleRecordsSchema})
- * and a write tool answers `DEMO_SEND_RESULT` (`./demo`).
+ * and a write tool answers `DEMO_SEND_RESULT` (`./demo`). A write named in `recorded` is kept in
+ * the visitor's workspace once a person approved it, and its read tool answers with it (ADR-0169).
  */
 export const DemoSeedConnectorSchema = z
   .strictObject({
     name: SeedNameSchema,
     reads: z.array(ToolOperationNameSchema).max(64).readonly(),
     writes: z.array(ToolOperationNameSchema).max(64).readonly(),
+    recorded: z.array(DemoRecordedWriteSchema).max(16).readonly().optional(),
   })
+  .superRefine(checkRecordedWrites)
   .readonly();
 export type DemoSeedConnector = z.infer<typeof DemoSeedConnectorSchema>;
 

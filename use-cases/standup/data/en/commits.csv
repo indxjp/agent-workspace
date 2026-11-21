@@ -1,0 +1,5 @@
+commit,date,author,repository,message
+a41c9e2,2026-11-24 17:15,Minato Chihaya,order-web,Add status and date filters to the order list (TSK-412)
+7d03b5f,2026-11-24 14:50,Tsumugi Yuzuki,billing,Embed the font in invoice PDFs (TSK-418)
+c92e1aa,2026-11-24 11:25,Saku Noto,infra,Change where the nightly batch alerts are posted (TSK-420)
+5be7f10,2026-11-20 09:55,Tsumugi Yuzuki,order-web,Add tests for the contact form input checks (TSK-409)

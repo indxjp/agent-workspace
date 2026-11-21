@@ -36,6 +36,7 @@ const record = (entry: string, date: string, result: 'pass' | 'fail'): RealModel
   result,
   reason: result === 'pass' ? 'the moment happened' : 'a tool did not run',
   environment: 'staging',
+  sourceHash: 'a'.repeat(64),
 });
 
 const kinds = (runs: readonly RealModelRun[]) =>
@@ -56,15 +57,23 @@ describe('the committed evidence', () => {
     for (const run of parsed.runs) expect(LIVE).toContain(run.entry);
   });
 
-  it('starts empty: the real run waits for a person to approve the spend', () => {
-    expect(REAL_MODEL_EVIDENCE.runs).toEqual([]);
+  it('flips exactly the entries whose latest committed record passed', () => {
+    const latest = new Map<string, RealModelRun>();
+    for (const run of REAL_MODEL_EVIDENCE.runs) {
+      const seen = latest.get(run.entry);
+      if (seen === undefined || seen.date < run.date) latest.set(run.entry, run);
+    }
+    const passed = LIVE.filter((slug) => latest.get(slug)?.result === 'pass');
+    const states = kinds(REAL_MODEL_EVIDENCE.runs);
+    expect(LIVE.filter((slug) => states[slug] === 'real-model')).toEqual(passed);
   });
 });
 
 describe('a live card', () => {
   it('is verified with the scripted model, and its label never says real Claude, until a record passed', () => {
     expect(new Set(Object.values(kinds([])))).toEqual(new Set(['scripted-model']));
-    for (const slug of LIVE) {
+    const committed = kinds(REAL_MODEL_EVIDENCE.runs);
+    for (const slug of LIVE.filter((other) => committed[other] === 'scripted-model')) {
       expect(verificationLabel(slug, 'en')).toBe('Verified with the scripted model');
       expect(verificationLabel(slug, 'ja')).not.toContain('Claude');
     }
@@ -119,7 +128,8 @@ describe('a card under maintenance', () => {
   it('touches only the entries listed, and an empty list changes nothing', () => {
     expect(cardState(SECOND, [FIRST], [passed]).kind).toBe('scripted-model');
     expect(cardState(FIRST, [], [passed])).toEqual(cardVerification(FIRST, [passed]));
-    expect(verificationLabel(SECOND, 'en', [FIRST])).toBe('Verified with the scripted model');
+    expect(verificationLabel(SECOND, 'en', [FIRST])).toBe(verificationLabel(SECOND, 'en'));
+    expect(verificationLabel(SECOND, 'en', [FIRST])).not.toBe('Under maintenance');
   });
 });
 
@@ -175,7 +185,7 @@ describe('the maintenance list the store reads', () => {
   });
 });
 
-describe('the Try tab for an entry under maintenance', () => {
+describe('the Try it section for an entry under maintenance', () => {
   it('shows the unavailable fallback with the entry’s recording, and the live demo otherwise', () => {
     const recorded = RECORDINGS.find((recording) => recording.lang === 'en');
     expect(recorded).toBeDefined();

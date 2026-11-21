@@ -1,5 +1,5 @@
 /**
- * The Try tab's and the sign-in page's words and rules (spec "How Try it works", "Email-link
+ * The Try it section's and the sign-in page's words and rules (spec "How Try it works", "Email-link
  * sign-in"): which sentence each platform refusal gets, which cap shows which fallback reason, and
  * how the allowance reads. Pure modules, so they run here.
  */
@@ -139,6 +139,11 @@ describe('the demo fallback', () => {
       reason: 'cost',
       scope: 'run',
     });
+    // A typed answer that missed the entry's schema ends that answer, in the visitor's words.
+    expect(fallbackReasonOf({ code: 'output_schema_unsatisfied' })).toEqual({
+      reason: 'format',
+      scope: 'run',
+    });
     // max_budget is not a named cap in the contract, so it is not a fallback.
     expect(fallbackReasonOf({ stopReason: 'max_budget' })).toBeNull();
     expect(fallbackReasonOf({ code: 'agent_not_found', stopReason: 'end_turn' })).toBeNull();
@@ -164,6 +169,9 @@ describe('the demo fallback', () => {
     expect(runStopText('cost', 'en')).toMatch(/single run/u);
     expect(runStopText('cost', 'en')).not.toMatch(/store|today/iu);
     expect(runStopText('count', 'en')).not.toMatch(/runs for today/iu);
+    expect(runStopText('format', 'en')).toMatch(/expected form/u);
+    expect(runStopText('format', 'ja')).toMatch(/形式/u);
+    expect(runStopText('format', 'en')).not.toMatch(/schema|output_schema/iu);
   });
 
   it('replaces the whole chat only when no runs are left; a run stop shows its fallback beside it', () => {

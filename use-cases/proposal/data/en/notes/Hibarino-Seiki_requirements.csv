@@ -1,0 +1,7 @@
+Requirement ID,Requirement,Priority,Remarks
+R-01,Record daily inspections on a tablet,Must,Same items as today's paper checklist
+R-02,Notify the Maintenance Section the same day a fault is recorded,Must,Email is fine
+R-03,Import the equipment register from the production management system,Must,It exports CSV
+R-04,Send inspection results back to the production management system,Want,CSV is fine
+R-05,See the part replacement plan as a list,Want,
+R-06,Start the trial on one line at the head plant,Must,Machine count to follow

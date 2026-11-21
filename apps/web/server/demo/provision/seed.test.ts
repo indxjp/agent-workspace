@@ -9,9 +9,11 @@ import {
   DemoTemplateSeedSchema,
   type DemoTemplateSeed,
 } from '@indx-workspace/contracts/demo-operator';
+import { needsApproval } from '@indx-workspace/contracts/agents';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildSeed, liveEntries } from '../../../../../tests/store/seed/build.ts';
+import { approvalGatesForRun } from '../../compose/run-request-approval-gates';
 import { checkSeed, DemoSeedRefusal, templateOwnerEmail } from './seed';
 import type { DemoSandbox } from './ports';
 import type { DemoTemplatesWorld } from './templates.contract';
@@ -20,6 +22,7 @@ import {
   openPostgresTemplatesWorld,
 } from './templates.world.test-support';
 import { isTemplateOwnerEmail } from './template-owner';
+import { readRecordsServerState } from './records-server';
 
 const NOW = new Date('2026-11-16T09:00:00.000Z');
 const encode = (text: string): string => Buffer.from(text, 'utf8').toString('base64');
@@ -181,6 +184,36 @@ function describeSeeding(
       expect(policy.limits).toEqual({ maxTurns: 12, maxBudgetUsd: 0.6 });
     });
 
+    it('stores an approval gate by the connector id, so a rename after seeding keeps the write waiting (#2439)', async () => {
+      const world = await make();
+      const entry = world.entry('agent');
+      const base = seedOf();
+      const policy = base.definition.policy;
+      if (!('tools' in policy)) throw new Error('the seed policy is not on the Claude arm');
+      await seed(world, entry, {
+        ...base,
+        definition: {
+          ...base.definition,
+          policy: { ...policy, requireApproval: ['mcp__crm__contact_update'] },
+        },
+      });
+      const id = (await world.templateId(entry)) ?? '';
+      const [agent] = await world.agents(id);
+      const [crm] = await world.connectors(id);
+      const stored = agent?.policy;
+      if (stored === undefined || stored === null || !('tools' in stored))
+        throw new Error('no policy');
+      expect(stored.requireApproval).toEqual([`mcp__connector-${crm?.id}__contact_update`]);
+      // The template's connector renamed after seeding: a run keys it by its new name.
+      const renamed = 'crm-renamed';
+      const gates = approvalGatesForRun(stored.requireApproval ?? [], {
+        mcpServers: { [renamed]: { type: 'http', url: 'https://crm.example.test/mcp' } },
+        connectorNames: { [renamed]: renamed },
+        connectorKeys: { [crm?.id ?? '']: renamed },
+      });
+      expect(needsApproval(gates, `mcp__${renamed}__contact_update`)).toBe(true);
+    });
+
     it('makes a folder the agent is granted that no sample file is under, empty, and a copy gets it too', async () => {
       const world = await make();
       const entry = world.entry('scratch');
@@ -292,6 +325,39 @@ function describeSeeding(
       ]);
       // The write is demo-only, as in every copy.
       expect(JSON.stringify(crm.args)).toContain(DEMO_SEND_RESULT.en);
+    });
+
+    it('carries the writes a seed records into the copy: a records stand-in that keeps them (ADR-0169)', async () => {
+      const world = await make();
+      const entry = world.entry('recorded');
+      const base = seedOf();
+      await seed(world, entry, {
+        ...base,
+        connectors: [
+          {
+            name: 'crm',
+            reads: ['contact_list', 'contact_get', 'task_list'],
+            writes: ['contact_update', 'task_create'],
+            recorded: [{ write: 'task_create', kind: 'task', read: 'task_list' }],
+          },
+        ],
+      });
+      const guest = await world.newGuest();
+      await world.templates.copyInto({
+        entry,
+        workspaceId: guest.workspaceId,
+        guestUserId: guest.userId,
+        limits: { maxTurns: 5, maxBudgetUsd: 0.2 },
+        now: NOW,
+      });
+      const [crm] = await world.connectors(guest.workspaceId);
+      if (crm === undefined || crm.transport !== 'stdio') throw new Error('no stand-in');
+      const state = readRecordsServerState(crm);
+      expect(state?.recorded).toEqual([{ write: 'task_create', kind: 'task', read: 'task_list' }]);
+      expect(state?.writes).toEqual(['contact_update', 'task_create']);
+      // The read the write answers with is offered with no sample record of its own.
+      expect(state?.reads['task_list']).toEqual([]);
+      expect(state?.written).toEqual([]);
     });
 
     it('makes each skill the definition names, assigns them to the agent, and a copy gets them', async () => {

@@ -42,6 +42,31 @@ describe('validateAgentVersion', () => {
     });
   });
 
+  it('stores an approval gate written against an MCP connector name by the connector id (#2439)', async () => {
+    const tracker = '00000000-0000-4000-8000-0000000000a3';
+    const result = await validate(
+      versionRequest({
+        policy: {
+          ...FIXTURE_POLICY,
+          requireApproval: ['mcp__tracker__create_task', 'mcp__pets-tool__adopt', 'Write'],
+        },
+      }),
+      {
+        references: {
+          connector: [
+            { id: tracker, name: 'tracker' },
+            { id: '00000000-0000-4000-8000-0000000000a2', name: 'pets-tool', tool: true },
+          ],
+        },
+      },
+    );
+    // Left on the name, the gate would match no tool once the connector is renamed or its run key
+    // falls back to connector-<id>, and the write would run without approval.
+    expect(result.ok && result.policyToStore).toMatchObject({
+      requireApproval: [`mcp__connector-${tracker}__create_task`, 'mcp__pets-tool__adopt', 'Write'],
+    });
+  });
+
   it('accepts a valid body and hands back the normalised request and the stored policy', async () => {
     const result = await validate(versionRequest());
     expect(result.ok).toBe(true);

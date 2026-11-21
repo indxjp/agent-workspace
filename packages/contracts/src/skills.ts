@@ -13,11 +13,13 @@ export const SKILL_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 export const SKILL_NAME_MAX_LENGTH = 64;
 
 /**
- * The skills the platform ships with every workspace. A definition names one with the SDK's
- * `builtinSkill()`; the control plane installs its files into the workspace on demand, as an
- * ordinary skill, so the run path needs no special case.
+ * The skills the platform ships with every workspace: `office-reader` reads PDF, Excel, Word and
+ * DXF files, and `office-writer` writes Word, PowerPoint and Excel files from a typed model
+ * (ADR-0167). A definition names one with the SDK's `builtinSkill()`; the control plane installs
+ * its files into the workspace on demand, as an ordinary skill, so the run path needs no special
+ * case.
  */
-export const BUILTIN_SKILL_NAMES = ['office-reader'] as const;
+export const BUILTIN_SKILL_NAMES = ['office-reader', 'office-writer'] as const;
 export type BuiltinSkillName = (typeof BUILTIN_SKILL_NAMES)[number];
 
 export function isBuiltinSkillName(name: string): name is BuiltinSkillName {

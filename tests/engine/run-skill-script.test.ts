@@ -18,23 +18,29 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 
 import { nodeSkillScriptHost } from '@agent-workspace/engine-claude-agent-sdk/testing';
+import { builtinSkillFiles } from '@agent-workspace/skills-office';
+import { isBuiltinSkillName } from '@indx-workspace/contracts/skills';
 import {
+  BUILTIN_IMPORTS,
+  BUILTIN_SKILL_PACKAGE,
   SKILL_SCRIPT_LIMITS,
   runSkillScript,
   type SkillScriptOutcome,
   type SkillScriptSetup,
 } from '@agent-workspace/engine';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 const SKILLS = '.claude/skills';
 
 let root = '';
 
-function write(relative: string, content: string): void {
+function write(relative: string, content: string | Buffer): void {
   const target = join(root, relative);
   mkdirSync(join(target, '..'), { recursive: true });
   writeFileSync(target, content);
@@ -415,5 +421,144 @@ describe('hard links made by the harness', () => {
     script('hard.mjs', attempt(`fs.writeFileSync('drafts/hard.txt', 'pwn')`));
     expect(answered(await run('hard.mjs', [], { writable: ['drafts'] })).stdout.trim()).toBe('OK');
     expect(readFileSync(join(root, 'contracts/signed.txt'), 'utf8')).toBe('pwn');
+  });
+});
+
+describe('a built-in skill’s module, imported by its package path (ADR-0173)', () => {
+  const TABLE = `${BUILTIN_SKILL_PACKAGE}/office-reader/scripts/lib/table.mjs`;
+  const CLI = `${BUILTIN_SKILL_PACKAGE}/office-reader/scripts/lib/cli.mjs`;
+
+  /** Place the shipped office-reader as the runner would: beside the script's own skill. */
+  function placeOfficeReader(): void {
+    for (const file of builtinSkillFiles('office-reader'))
+      write(`${SKILLS}/office-reader/${file.path}`, Buffer.from(file.contentBase64, 'base64'));
+  }
+
+  /** A use case's script: only its calculation, over the shipped table reader and command line. */
+  const SUM = `import { readTable } from '${TABLE}';
+import { runWhenMain } from '${CLI}';
+const spec = { usage: 'sum.mjs <file>', positionals: ['file'] };
+runWhenMain(import.meta.url, spec, ({ positionals }) => {
+  const columns = { amount: { names: ['金額', 'amount'], type: 'whole' } };
+  const { rows } = readTable(positionals.file, { columns });
+  return { total: rows.reduce((total, row) => total + row.amount, 0) };
+});
+`;
+
+  /** The one JSON line a refused import prints on stderr. */
+  function refusalLine(stderr: string): unknown {
+    expect(stderr.trim().split('\n')).toHaveLength(1);
+    return JSON.parse(stderr);
+  }
+
+  it('lists the shipped digest of every file each importable module loads, and the package exports each module', () => {
+    const manifest = z
+      .object({ exports: z.record(z.string(), z.unknown()) })
+      .parse(
+        JSON.parse(
+          readFileSync(
+            new URL('../../packages/skills-office/package.json', import.meta.url),
+            'utf8',
+          ),
+        ),
+      );
+    expect(Object.keys(BUILTIN_IMPORTS)).toStrictEqual(['office-reader']);
+    for (const [skill, { modules, sha256 }] of Object.entries(BUILTIN_IMPORTS)) {
+      if (!isBuiltinSkillName(skill)) throw new Error(`${skill} is not a built-in skill`);
+      const shipped = new Map(
+        builtinSkillFiles(skill).map((file) => [
+          file.path,
+          Buffer.from(file.contentBase64, 'base64'),
+        ]),
+      );
+      const digests = Object.fromEntries(
+        Object.keys(sha256).map((file) => [
+          file,
+          createHash('sha256')
+            .update(shipped.get(file) ?? '')
+            .digest('hex'),
+        ]),
+      );
+      // On a mismatch, copy the received digests into BUILTIN_IMPORTS (packages/engine).
+      expect(sha256).toStrictEqual(digests);
+      // Every relative import of a listed file is listed too, so no unchecked file is loaded.
+      for (const file of Object.keys(sha256)) {
+        const text = String(shipped.get(file));
+        for (const [, relative = ''] of text.matchAll(/^import .* from '(\.{1,2}\/[^']+)';$/gmu))
+          expect(Object.keys(sha256)).toContain(posix.join(posix.dirname(file), relative));
+      }
+      for (const module of modules) {
+        expect(Object.keys(sha256)).toContain(module);
+        expect(Object.keys(manifest.exports)).toContain(`./${skill}/${module}`);
+      }
+    }
+  });
+
+  it('resolves to the placed office-reader, under the permission model, with no node_modules', async () => {
+    placeOfficeReader();
+    script('sum.mjs', SUM);
+    write('data/amounts.csv', '﻿金額\r\n"1,200"\r\n34\r\n');
+    const outcome = answered(await run('sum.mjs', ['data/amounts.csv']));
+    expect(outcome).toMatchObject({ exitCode: 0, stderr: '' });
+    expect(JSON.parse(outcome.stdout)).toStrictEqual({ total: 1234 });
+  });
+
+  it('prints the reader’s refusal and exits 1: a stray quote is never swallowed', async () => {
+    placeOfficeReader();
+    script('sum.mjs', SUM);
+    write('data/amounts.csv', 'amount\n1\n2"x\n3\n');
+    const outcome = answered(await run('sum.mjs', ['data/amounts.csv']));
+    expect(outcome.exitCode).toBe(1);
+    expect(JSON.parse(outcome.stderr)).toMatchObject({ error: 'stray_quote', row: 3 });
+  });
+
+  it('refuses when office-reader is not granted, never loading a workspace node_modules', async () => {
+    script('sum.mjs', SUM);
+    write('data/amounts.csv', 'amount\n1\n');
+    write(
+      `node_modules/${BUILTIN_SKILL_PACKAGE}/office-reader/scripts/lib/table.mjs`,
+      `console.log('SHADOWED');\nexport const readTable = () => ({ rows: [] });\n`,
+    );
+    const outcome = answered(await run('sum.mjs', ['data/amounts.csv']));
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stdout).toBe('');
+    expect(refusalLine(outcome.stderr)).toStrictEqual({
+      error: 'builtin_skill_not_granted',
+      message: `${TABLE} needs the built-in skill office-reader, which this run does not grant: the agent grants builtinSkill('office-reader')`,
+    });
+  });
+
+  it('refuses a skill named office-reader that is not the shipped one: a person’s own copy is not imported', async () => {
+    placeOfficeReader();
+    write(`${SKILLS}/office-reader/scripts/ooxml.mjs`, `console.log('EDITED');\n`);
+    script('sum.mjs', SUM);
+    write('data/amounts.csv', 'amount\n1\n');
+    const outcome = answered(await run('sum.mjs', ['data/amounts.csv']));
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stdout).toBe('');
+    expect(refusalLine(outcome.stderr)).toStrictEqual({
+      error: 'builtin_skill_modified',
+      message: `the skill office-reader in this run is not the built-in one (scripts/ooxml.mjs differs), so ${TABLE} is not imported`,
+    });
+  });
+
+  it('refuses any other path of the package with one line: a dot segment, an unlisted file, a skill that is not built in, the bare name', async () => {
+    placeOfficeReader();
+    script('a.mjs', `console.log('RAN');\n`);
+    for (const specifier of [
+      `${BUILTIN_SKILL_PACKAGE}/office-reader/scripts/lib/../../../review/scripts/a.mjs`,
+      `${BUILTIN_SKILL_PACKAGE}/office-reader/scripts/ooxml.mjs`,
+      `${BUILTIN_SKILL_PACKAGE}/office-writer/scripts/write.mjs`,
+      `${BUILTIN_SKILL_PACKAGE}/review/scripts/a.mjs`,
+      `${BUILTIN_SKILL_PACKAGE}/office-reader`,
+      BUILTIN_SKILL_PACKAGE,
+    ]) {
+      script('import.mjs', `await import(${JSON.stringify(specifier)});\n`);
+      const outcome = answered(await run('import.mjs'));
+      expect(outcome.exitCode).toBe(1);
+      expect(outcome.stdout).toBe('');
+      expect(refusalLine(outcome.stderr)).toMatchObject({ error: 'not_importable' });
+      expect(outcome.stderr).toContain(`${specifier} is not a module a built-in skill offers`);
+    }
   });
 });

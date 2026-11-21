@@ -63,9 +63,9 @@ describe('store-deploy.yml', () => {
 
   it('reads only metadata of the Anthropic key secret and never its value', () => {
     const accesses = [...code.matchAll(/gcloud secrets versions access[^\n]*/gu)].map((m) => m[0]);
-    expect(accesses).toHaveLength(3);
+    expect(accesses).toHaveLength(4);
     expect(accesses.filter((access) => access.includes('store-demo-operator-token'))).toHaveLength(
-      2,
+      3,
     );
     expect(accesses.filter((access) => access.includes('store-oidc-client-secret'))).toHaveLength(
       1,
@@ -119,6 +119,7 @@ describe('store-deploy.yml', () => {
     expect(users.map((step) => /name: (.*)/u.exec(step)?.[1])).toEqual([
       'Check the platform reaches the Anthropic API with the key',
       'Seed the demo templates',
+      'Refresh the staging verification workspace',
     ]);
     for (const step of users) expect(step).toContain('echo "::add-mask::$token"');
     expect(stepWith('tests/store/deploy/readiness.ts')).toContain(
@@ -142,6 +143,35 @@ describe('store-deploy.yml', () => {
     expect(at[0]).toBeLessThan(at[1] ?? 0);
     expect(at[1]).toBeLessThan(at[3] ?? 0);
     expect(at[3]).toBeLessThan(at[4] ?? 0);
+  });
+
+  it('seeds every entry with a source in staging and the live entries in production', () => {
+    const seed = stepWith('name: Seed the demo templates');
+    expect(seed).toContain(
+      "          STORE_SEED_ENVIRONMENT: ${{ startsWith(github.ref, 'refs/tags/store-v') && 'production' || 'staging' }}\n",
+    );
+  });
+
+  it('refreshes the staging verification workspace after seeding, and skips with a notice without its id', () => {
+    const refresh = stepWith('name: Refresh the staging verification workspace');
+    expect(refresh).toContain("if: github.ref == 'refs/heads/main'");
+    // The id is a repository variable, read into this step only; it is no secret and never a job env.
+    expect(refresh).toContain(
+      '          STORE_VERIFICATION_WORKSPACE_ID: ${{ vars.STORE_STAGING_VERIFICATION_WORKSPACE_ID }}\n',
+    );
+    const jobEnv = /^ {4}env:\n((?: {6}.*\n)+)/mu.exec(code)?.[1] ?? '';
+    expect(jobEnv).not.toContain('VERIFICATION_WORKSPACE');
+    // Unset: a notice and a clean exit before the token is read, so the deploy does not fail.
+    const skip = refresh.indexOf('if [ -z "${STORE_VERIFICATION_WORKSPACE_ID:-}" ]; then');
+    expect(skip).toBeGreaterThan(-1);
+    expect(refresh.slice(skip)).toMatch(/^[^\n]*\n {12}echo "::notice::[^\n]*"\n {12}exit 0\n/u);
+    expect(skip).toBeLessThan(refresh.indexOf('gcloud secrets versions access'));
+    expect(refresh).toContain(
+      'STORE_OPERATOR_TOKEN="$token" node tests/store/seed/verification.ts',
+    );
+    // It runs after the seed, the last step, so R1 finds what this deploy seeded.
+    expect(code.indexOf('seed/run.ts')).toBeLessThan(code.indexOf('seed/verification.ts'));
+    expect(steps.at(-1)).toBe(refresh);
   });
 
   it('builds every package the app images pack before it builds an app image', () => {

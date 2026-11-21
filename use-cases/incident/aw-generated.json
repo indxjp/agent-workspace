@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "entries": {
+    "project:tr": {
+      "files": {
+        "agent-workspace.yaml": "911601cdcfa3a0ae3bd9c84b19763f59d80138863e88051b9e2f43b66127e317",
+        "agents/incident.md": "7fda2b41dd7540490395f9c69306df941be81b1ea7e58c878e183cb1bbe91964",
+        "agents/incident.ts": "7225a4ceaebdd90b1620b91237ed5e51d9a97b986f32316526a0bec408fe4f7e",
+        "evals/incident.yaml": "1841eedbeb247162c9f70721d5af50b26952115cb6d70af75053e99c1c8ff98a",
+        "skills/incident/SKILL.md": "21e26e0a19e3f978ba4c6a51070db76c8ed2445d52704d2e48b445f40f08b314",
+        "surfaces/main.ts": "b5a59a9a73deb1aa8d0cd2472c3384041b327ffd0cb65ab58ea3ac1b35588dac",
+        "triggers/incident.json": "48ecc5987d7986e638753a29c70118c2259eea435aa4abe2056ed41ef664f084"
+      },
+      "edits": []
+    }
+  }
+}

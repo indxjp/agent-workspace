@@ -1,0 +1,7 @@
+opportunity_id,account,name,owner,stage,amount,close_date,days_in_stage,days_since_activity,next_step
+OPP-1101,Aosagi Seiki Co.,Production scheduler deployment,Hina Hiwatari,Proposal,4800000,2026-12-18,52,19,Send the revised quote
+OPP-1102,Hamanasu Logistics Inc.,Delivery management cloud deployment,Ren Torigoe,Negotiation,7200000,2026-12-25,12,3,Final check of the contract terms
+OPP-1103,Yunagi Foods Ltd.,Inventory management: extra licences,Hina Hiwatari,Proposal,1500000,2026-11-20,30,6,Check where the internal approval stands
+OPP-1104,Katakuri Electric Co.,Maintenance contract renewal,Ren Torigoe,Negotiation,960000,2026-12-10,8,2,Send the renewal documents
+OPP-1105,Misora Construction Co.,Site photo management deployment,Yuzu Usami,Qualification,2100000,2027-02-26,9,4,Agree the dates of an on-site trial
+OPP-1106,Hamayu Chemical Co.,Digital quality records,Yuzu Usami,Closed Won,3300000,2026-10-30,25,22,

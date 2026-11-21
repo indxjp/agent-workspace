@@ -1,7 +1,7 @@
 /**
  * The store's two languages (spec "The store app"): the default is `theme.locale` (Japanese; the
- * apps lane writes it `en` for its English journeys), and the switch at top right sets the
- * `store_lang` cookie. Every screen picks its words with `pick`, from the `{ ja, en }` pairs the
+ * apps lane writes it `en` for its English journeys), and `?lang=ja|en` on any page (the switch at
+ * top right, and the URLs the sitemap and `hreflang` name) sets the `store_lang` cookie (`proxy.ts`). Every screen picks its words with `pick`, from the `{ ja, en }` pairs the
  * catalog and each screen's strings hold.
  */
 import { theme } from './theme.ts';

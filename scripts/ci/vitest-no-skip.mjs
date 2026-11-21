@@ -8,12 +8,13 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 
 // A report lives in the root of every project whose Nx test target writes one: each directory under
-// apps/ and packages/, and the tests/ tree's projects (tests/projects.mjs: `tests` itself and
-// tests/<dir>). The repository root has no test target. Discover them rather than list them, so a
+// apps/ and packages/, the tests/ tree's projects (tests/projects.mjs: `tests` itself and
+// tests/<dir>), and the top-level `use-cases` project. The repository root has no test target. Discover them rather than list them, so a
 // new project's report is read by default (a hard-coded list once left nine packages unread, and a
 // run that touched only those failed with "no report" although every test had passed).
 const roots = [
   'tests',
+  'use-cases',
   ...['apps', 'packages', 'tests'].flatMap((dir) =>
     existsSync(dir) ? readdirSync(dir).map((name) => `${dir}/${name}`) : [],
   ),

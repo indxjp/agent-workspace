@@ -7,7 +7,9 @@ export default {
   order: 5,
   title: 'Agent Store',
   reference: false,
-  budget: 5200,
+  // 5310 since 2026-11-21 (Owner decision, was 5200): the room for the landing pages' search and
+  // social metadata, social cards and screenshots (use-cases plan §6.3, unit L3).
+  budget: 5310,
   // The generated files this app made its own code; Handwritten counts each in full (a test not).
   takenOver: [
     'app/chat/page.tsx',
@@ -29,7 +31,7 @@ export default {
       evidence: 'lane',
       file: 'examples/store/e2e/store.e2e.mjs',
       ref: 'J1: a visitor finds an agent on the shelf and reaches the sign-up gate',
-      note: "in en and ja, a visitor opens an agent from its area's shelf, reaches the Try tab's sign-up gate, is refused without consent, and is told it is not available yet once the platform has no sender; the filters, the Customize preview, Under the hood, /platform, /privacy, /contact, the language switch and a role-and-name check of every screen run beside it",
+      note: "in en and ja, a visitor opens an agent from its area's shelf, reaches the sign-up gate of its Try it section, is refused without consent, and is told it is not available yet once the platform has no sender; the filters, the Customize preview, Under the hood, a live and a coming-soon landing page, /platform, /privacy, /contact, the language switch and a role-and-name check of every screen run beside it",
     },
     agentOnData: {
       verdict: 'gap',

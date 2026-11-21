@@ -7,7 +7,7 @@
 import { z } from 'zod';
 
 // @public
-export const BUILTIN_SKILL_NAMES: readonly ["office-reader"];
+export const BUILTIN_SKILL_NAMES: readonly ["office-reader", "office-writer"];
 
 // @public (undocumented)
 export type BuiltinSkillName = (typeof BUILTIN_SKILL_NAMES)[number];

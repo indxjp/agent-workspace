@@ -16,6 +16,13 @@ export interface FileCopyDependencies {
 
 type FileOwner = Visitor;
 
+/**
+ * What a copy does with a sample file an earlier copy left at its path: a visitor's demo keeps it
+ * (its runs may have changed it, and it is theirs), the verification workspace resets it to the
+ * template's bytes so a real-model run starts from what the deployment seeded.
+ */
+export type SampleFileMode = 'keep' | 'reset';
+
 /** The files a row stands for: itself, or for a folder the files under it. */
 function filesUnder(row: CatalogFile, template: TemplateSource): readonly CatalogFile[] {
   if (row.kind !== 'folder') return [row];
@@ -40,6 +47,7 @@ async function copyFile(
   file: CatalogFile,
   template: TemplateSource,
   owner: FileOwner,
+  mode: SampleFileMode,
 ): Promise<void> {
   const opened = await deps.storage.open({ workspaceId: template.workspaceId }, file);
   if (opened === null) return;
@@ -49,7 +57,7 @@ async function copyFile(
     body: opened.body,
     maxBytes: DEMO_SAMPLE_FILE_MAX_BYTES,
     contentType: file.contentType,
-    replace: false,
+    replace: mode === 'reset',
   });
   // A file already at its path is a copy made before; any other refusal is a defect.
   if (!saved.ok && saved.code !== 'path_taken') {
@@ -63,6 +71,7 @@ async function copyRow(
   row: CatalogFile,
   template: TemplateSource,
   visitor: Visitor,
+  mode: SampleFileMode,
 ): Promise<void> {
   const owner = {
     workspaceId: visitor.workspaceId,
@@ -71,16 +80,21 @@ async function copyRow(
   };
   if (row.kind === 'folder') await createFolderCopy(deps, owner, row.path);
   for (const file of filesUnder(row, template)) {
-    await copyFile(deps, file, template, owner);
+    await copyFile(deps, file, template, owner, mode);
   }
 }
 
-/** The visitor's file assignments for the template agent's: the same paths, the visitor's rows. */
+/**
+ * The visitor's file assignments for the template agent's: the same paths, the visitor's rows. A
+ * file the template holds and the visitor's workspace does not is copied; one it holds is kept or
+ * reset by `mode`.
+ */
 export async function copyFiles(
   deps: FileCopyDependencies,
   assigned: AgentResourceAssignments['files'],
   template: TemplateSource,
   visitor: Visitor,
+  mode: SampleFileMode,
 ): Promise<AgentResourceAssignments['files']> {
   const copied: { fileId: string; access: 'read' | 'read-write' }[] = [];
   const visitorCatalog = await deps.catalogs(visitor.workspaceId);
@@ -88,7 +102,7 @@ export async function copyFiles(
     const row = template.rows.find((candidate) => candidate.id === grant.fileId);
     // The deployment's own folder (records, digest) is never sample data a copy carries.
     if (row === undefined || isReservedPath(row.path)) continue;
-    await copyRow(deps, row, template, visitor);
+    await copyRow(deps, row, template, visitor, mode);
     const made = await visitorCatalog.get(row.path);
     if (made !== null) copied.push({ fileId: made.id, access: grant.access });
   }

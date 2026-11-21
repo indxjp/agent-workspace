@@ -1,0 +1,9 @@
+id,preferred,avoid,rule,definition,note
+TERM-01,sign in,log on / log in,replace,The action of starting to use Shigino Link with an account,Matches the "Sign in" button on screen
+TERM-02,administrator,admin / superuser,replace,A user with the right to change the organisation's settings and add users,
+TERM-03,dashboard,home screen / dash board,replace,The screen listing the readings that opens first after signing in,
+TERM-04,sensor,sensing unit,replace,A device that measures temperature or humidity and sends the readings,
+TERM-05,alert,alarm / warning,judge by context,The notification sent when a reading crosses a threshold,"Use ""alarm"" only for an alarm device fitted to the equipment"
+TERM-06,threshold,trigger level / limit value,replace,The reading at which an alert is sent,
+TERM-07,user,end user,judge by context,A person who uses Shigino Link,"Use ""end user"" only when quoting a label on screen"
+TERM-08,Shigino Link,ShiginoLink,replace,The name of the company's measurement data service,Two words with a space

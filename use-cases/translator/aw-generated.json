@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "d164081fce499a9f24179376f5dcdd3ac3ee3ee12cc0aa9613040153295d5570",
+        "agents/translator.md": "11a35934812113b61668cacfe51a498ce1ee3d8b67a48d2b92b82af9b14eb5b4",
+        "agents/translator.ts": "13764986d6abbdd22f72748029864282dbdb1ad939d85fb765ea7c1eefa9af58",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/translator.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/translator/SKILL.md": "431969670112601029fdae1c1777ea4cfa2f098e1a39f0f66e07c8034bf27eb6",
+        "surfaces/main.ts": "12654664159bb260b452d58d1147aea90db6584bf3da222f5db61e5af6d3c2eb"
+      },
+      "edits": []
+    }
+  }
+}

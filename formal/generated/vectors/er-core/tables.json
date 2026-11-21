@@ -4178,6 +4178,7 @@
      {"type": "text", "notNull": false, "name": "default_model"},
      {"type": "timestamp with time zone", "notNull": false, "name": "archived_at"},
      {"type": "timestamp with time zone", "notNull": false, "name": "demo_expires_at"},
+     {"type": "timestamp with time zone", "notNull": false, "name": "demo_verification_at"},
      {"type": "timestamp with time zone", "notNull": true, "name": "created_at"},
      {"type": "timestamp with time zone", "notNull": true, "name": "updated_at"}],
     "checks":

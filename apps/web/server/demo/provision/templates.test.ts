@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe } from 'vitest';
 
 import type { DemoSandbox } from './ports';
+import { describeRecordedWrites } from './templates.recorded.test-support';
 import { describeDemoTemplatesConformance, type DemoTemplatesWorld } from './templates.contract';
 import {
   createMemoryTemplatesWorld,
@@ -14,6 +15,7 @@ import {
 describeDemoTemplatesConformance('the memory world', (sandbox) =>
   Promise.resolve(createMemoryTemplatesWorld(sandbox)),
 );
+describeRecordedWrites(() => Promise.resolve(createMemoryTemplatesWorld()));
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -31,4 +33,5 @@ describe.skipIf(!hasDatabase)('DemoTemplates over a real PostgreSQL', () => {
   const world = (sandbox?: Partial<DemoSandbox>): Promise<DemoTemplatesWorld> =>
     opened.world(sandbox);
   describeDemoTemplatesConformance('the PostgreSQL world', world);
+  describeRecordedWrites(world);
 });

@@ -170,7 +170,7 @@ export default defineConfig({
     ],
   },
   test: {
-    // Mirrors the `packages:` globs in pnpm-workspace.yaml (apps/*, packages/*)
+    // Mirrors the `packages:` globs in pnpm-workspace.yaml (apps/*, packages/*, use-cases)
     // so a workspace member added later is tested by default instead of being
     // silently skipped, which is what a hardcoded list caused.
     //
@@ -187,6 +187,7 @@ export default defineConfig({
     projects: [
       'apps/*',
       'packages/*',
+      'use-cases',
       ...testsProjects().map((project) => `${project.projectRoot}/vitest.config.ts`),
     ],
     // Playwright specs use a different runner and must never be imported as Vitest suites.

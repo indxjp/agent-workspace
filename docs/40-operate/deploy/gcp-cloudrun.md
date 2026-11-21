@@ -23,7 +23,11 @@ The deployment is private by default. Every deploy creates its own network (or u
   Load Balancer, a private address on your network (plain HTTP inside the network).
 - Each sandbox is an internal Cloud Run service on the sandbox subnet. Its firewall allows one
   destination, the gateway's internal load balancer; everything else is denied, Google's private
-  ranges (`199.36.153.8/30` and `199.36.153.4/30`) included. There is no NAT.
+  ranges (`199.36.153.8/30` and `199.36.153.4/30`) included. There is no NAT. The same load balancer
+  sends four of `web`'s routes to `web`, the ones a sandbox's runner uses to save the run's
+  transcript and search its files (`/api/sessions/<id>/state-entries`, `state-streams`,
+  `state-blobs` and `file-search`, each gated by the run's own token), and every other path to the
+  gateway ([ADR-0172](../../adr/0172-a-cloud-run-sandbox-reaches-the-control-plane-run-routes-at-the-gateway-address.md)).
 - `web`, the gateway and the runner manager reach the database and each other over the private
   network (Direct VPC egress for private ranges only; Private Google Access and a private `run.app`
   DNS zone).
@@ -581,8 +585,9 @@ own Cloud Run service, `<name>-app-<app>`:
 
 Limits today:
 
-- **Agents cannot call an app's MCP endpoint on Cloud Run yet.** Sandboxes reach only the gateway,
-  and MCP connectors are dialled from the sandbox.
+- **Agents cannot call an app's MCP endpoint on Cloud Run yet.** Sandboxes reach only the gateway
+  (and `web`'s four run routes behind the same address), and MCP connectors are dialled from the
+  sandbox.
 
 ### Connecting an app to its workspace
 

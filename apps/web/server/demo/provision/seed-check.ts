@@ -80,6 +80,7 @@ function checkRecordsFit(seed: DemoTemplateSeed): void {
         reads: connector.reads,
         writes: connector.writes,
         sets: seed.records.filter((set) => set.connector === connector.name),
+        ...(connector.recorded === undefined ? {} : { recorded: connector.recorded }),
       });
     } catch (error) {
       if (error instanceof RecordsTooLargeError) {

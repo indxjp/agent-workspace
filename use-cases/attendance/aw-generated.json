@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "265ce724b143db5638e06e53e2d8352d4080c0923f7e07254c9188981be32f8e",
+        "agents/attendance.md": "986914b28a1413119f37b060ec0b0e6bd91148d4a9f6da775b3ab45b2ca41d50",
+        "agents/attendance.ts": "68249debd03dbb4a3231e94d0078a7d03100916f9d1e54ffef4b8b11a76577a1",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/attendance.yaml": "098df1f8547c3b42920e9a9d74d9f689571e6b0c3f2f755f6481d05a623b46e4",
+        "skills/attendance/SKILL.md": "66684c6caf497ef4f41c9e68f709bd931913324fd0e1d4665b878bc05af0d810",
+        "surfaces/main.ts": "293125ea6c07cbe0f36a8161e05237a13af7904198ffafb2d06de136bfe7e74b",
+        "triggers/attendance.json": "482add0c3672b8ba96e149513c70294ae9b846ddff06e527c498a11290d6a2b9"
+      },
+      "edits": []
+    }
+  }
+}

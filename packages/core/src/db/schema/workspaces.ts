@@ -83,6 +83,14 @@ export const workspaces = pgTable(
      * only of one marked here. A demo workspace is told apart from a real one by this column alone.
      */
     demoExpiresAt: timestamp('demo_expires_at', { withTimezone: true, mode: 'date' }),
+    /**
+     * `NULL` for every ordinary workspace. Set by the Agent Store's verification fill
+     * (`PUT /api/demo/verification/{workspaceId}`) to the moment it first filled this workspace
+     * with every demo template, and left as it is by a later fill. A workspace marked here keeps
+     * an approved write to a demo records stand-in as a visitor's demo does (ADR-0169 D3), so the
+     * real-model verification sees what a visitor sees. It is never a demo: nothing sweeps it.
+     */
+    demoVerificationAt: timestamp('demo_verification_at', { withTimezone: true, mode: 'date' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

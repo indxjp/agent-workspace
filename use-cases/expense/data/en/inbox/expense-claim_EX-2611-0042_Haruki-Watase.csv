@@ -1,0 +1,8 @@
+claim_no,claimant,department,line_no,date,category,description,amount_claimed,receipt_amount,receipt_attached,prior_approval_no,attendees,remarks
+EX-2611-0042,Haruki Watase,Sales Dept. 2,1,2026-11-10,Transport,Shinkansen Tokyo to Nagoya ordinary reserved seat,11300,11300,yes,,,
+EX-2611-0042,Haruki Watase,Sales Dept. 2,2,2026-11-10,Lodging,Nagoya business hotel 1 night,14800,14800,yes,,,
+EX-2611-0042,Haruki Watase,Sales Dept. 2,3,2026-11-10,Transport,Taxi Nagoya Station to Misosazai Koki Co. Ltd.,2860,2860,yes,,,
+EX-2611-0042,Haruki Watase,Sales Dept. 2,4,2026-11-10,Meeting,Lunch with a client,6600,6600,yes,,,
+EX-2611-0042,Haruki Watase,Sales Dept. 2,5,2026-11-11,Transport,Shinkansen Nagoya to Tokyo Green Car,16560,16560,yes,,,
+EX-2611-0042,Haruki Watase,Sales Dept. 2,6,2026-11-11,Supplies,Stationery (ballpoint pens),1980,1780,yes,,,
+EX-2611-0042,Haruki Watase,Sales Dept. 2,7,2026-11-11,Miscellaneous,Souvenirs (for family),3240,3240,yes,,,

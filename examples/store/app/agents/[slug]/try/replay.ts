@@ -1,13 +1,15 @@
 /**
- * What the Try tab's fallback and the home page's featured chat show of a {@link Recording}: its
+ * What the Try it section's fallback and the home page's featured chat show of a {@link Recording}: its
  * steps in order, the approval waits among them, and the label that says honestly how it was made.
  * Pure, so `tests/store/try-fallback.test.ts` runs it.
  */
 import { canonicalCall } from '@indx-workspace/contracts/agents';
 import type { RunApprovalCall } from '@indx-workspace/contracts/runs';
+import type { ResultChart } from '@indx-workspace/contracts/surfaces';
 
 import type { RecordedTurn, Recording } from '../../../../catalog/recording.ts';
 import { pick, type Lang } from '../../../lang.ts';
+import { chartsFor } from './charts.ts';
 import type { ToolStep } from './transcript.ts';
 
 /** A value of a structured answer as one line: a finding's text with its citations, or `key: value` pairs. */
@@ -120,6 +122,9 @@ export type FallbackContent =
       readonly label: string;
       readonly prompt: string;
       readonly parts: readonly ReplayPart[];
+      /** The recorded typed answer, and the entry's charts drawn from it under the answer. */
+      readonly structured: unknown;
+      readonly charts: readonly ResultChart[];
     }
   | { readonly kind: 'coming'; readonly text: string };
 
@@ -135,5 +140,7 @@ export function fallbackContent(recording: Recording | null, lang: Lang): Fallba
     label: untranslated ? `${label}; ${pick(IN_JAPANESE, lang)}` : label,
     prompt: recording.turn.prompt,
     parts: replayOf(recording.turn),
+    structured: recording.turn.structured ?? null,
+    charts: chartsFor(recording.slug, recording.turn.structured),
   };
 }

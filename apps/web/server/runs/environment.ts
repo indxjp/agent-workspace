@@ -31,6 +31,7 @@ import type { RunStartProblemCode } from '@indx-workspace/contracts/runs';
 import type { SurfaceLimitProblemCode } from '@indx-workspace/contracts/surfaces';
 import type { CeilingFor } from '../agents';
 import type { DailyCostCap } from '../usage/daily-cost';
+import type { DemoApprovedWrites } from './demo-approved-writes';
 import type { DemoRunGate } from './demo-run-gate';
 import type { PrincipalKind, TokenScope, Via } from '../identity';
 import type { ResolvedAttachment } from './attachments';
@@ -418,6 +419,12 @@ export interface RunStartEnvironment {
    * `demo_expires_at` per start and no start is ever gated. Absent only where a test leaves it out.
    */
   readonly demoRunGate?: DemoRunGate;
+  /**
+   * The Agent Store demo's records stand-ins (ADR-0169): keep the calls an approval admitted, for a
+   * continuation, before it launches. The composition root always wires it; absent only where a
+   * test leaves it out.
+   */
+  readonly demoApprovedWrites?: DemoApprovedWrites;
   /** What a new run of the agent would use, for the composer (issue #393); `null` if unknown. */
   readonly describeRunTarget?: (
     workspaceId: string,

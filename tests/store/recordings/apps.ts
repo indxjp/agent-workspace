@@ -256,7 +256,7 @@ async function recordApp(recording: AppRecording) {
       {},
       { requireApproval: gatedCalls(agent) },
     );
-    return await playTurn(workspace, ask.prompt);
+    return await playTurn(workspace, ask);
   } finally {
     resetAppRuntimeForTests();
   }

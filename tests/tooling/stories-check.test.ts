@@ -233,6 +233,27 @@ describe('stories:check', () => {
     expect(check(dir, '--base', 'HEAD~1').status).toBe(0);
   });
 
+  it('base comparison reads the files on disk: an uncommitted deletion or comment-out fails', () => {
+    const dir = repoWith({
+      'tests/a.test.ts': tagged(TAG),
+      'tests/b.test.ts': tagged('[US-STO-03][api][cli]'),
+      'tests/c.test.ts': '',
+    });
+    rmSync(path.join(dir, 'tests/a.test.ts'));
+    writeFileSync(path.join(dir, 'tests/b.test.ts'), `// ${tagged('[US-STO-03][api][cli]')}`);
+    const run = check(dir, '--base', 'HEAD');
+    expect(run.status).toBe(1);
+    expect(run.stdout).toContain('lost: US-STO-03 sdk:api');
+    expect(run.stdout).toContain('lost: US-STO-03 cli:api');
+  });
+
+  it('a repository without any tag reports every gap and passes', () => {
+    const dir = repoWith({ 'tests/a.test.ts': "it('x')", 'packages/x/a.ts': 'export {};' });
+    const run = check(dir, '--base', 'HEAD');
+    expect(run.status).toBe(0);
+    expect(run.stdout).toMatch(/22 stories with gaps · 59 missing tests$/m);
+  });
+
   it('--report never fails on a lost cell, and an unknown flag exits 2', () => {
     const dir = repoWith({ 'tests/a.test.ts': tagged(TAG) }, { 'tests/a.test.ts': null });
     expect(check(dir, '--report').status).toBe(0);

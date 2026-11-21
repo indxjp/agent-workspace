@@ -33,6 +33,11 @@ const CREDENTIAL_GRACE_SECONDS = 300;
  * it, so every upload would fail. `/tmp` is writable, and on Cloud Run it is in memory.
  */
 const CLOUD_RUN_TOOL_HOST_DIR = '/tmp/tool-host';
+/**
+ * The variable `apps/runner` reads the control plane's address from (`MIRROR_URL_ENV` in
+ * `apps/runner/src/session.ts`); a package cannot import an app, so the name is repeated here.
+ */
+const SESSION_MIRROR_URL_ENV = 'AW_SESSION_MIRROR_URL';
 /** A tool host serves parallel MCP calls and file intakes; Cloud Run caps an instance at 1000. */
 const TOOL_HOST_CONCURRENCY = 80;
 
@@ -139,10 +144,14 @@ function runtimeServiceSpec(
 ): CloudRunServiceSpec {
   const { project, region, network, subnetwork, serviceAccount, serviceIdPrefix, fileIntake, now } =
     environment;
-  const { id, image, env, intakeKey, tags } = deployment;
+  const { id, image, intakeKey, tags } = deployment;
   const spec = config.runSpec;
   const serviceId = `${serviceIdPrefix}${id}`;
   const timeoutSeconds = spec?.timeoutSeconds ?? DEFAULT_SERVICE_TIMEOUT_SECONDS;
+  const env =
+    environment.sessionMirrorUrl === undefined
+      ? deployment.env
+      : { ...deployment.env, [SESSION_MIRROR_URL_ENV]: environment.sessionMirrorUrl };
   const serviceEnv =
     intakeKey === undefined
       ? env

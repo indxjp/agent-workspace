@@ -36,6 +36,9 @@ const SCREENS = [
 /** Numeric literals below this are ordinary code; in text every forbidden number counts. */
 const SMALLEST_FORBIDDEN_LITERAL = 11;
 
+/** The largest base `toString` and `parseInt` take; a larger literal is never a radix. */
+const LARGEST_RADIX = 36;
+
 /** Every number the catalog and the benchmark compute, as a visitor would read it. */
 function computedNumbers(): ReadonlySet<number> {
   const numbers = [
@@ -49,6 +52,26 @@ function computedNumbers(): ReadonlySet<number> {
   ];
   // 0 and 1 are not counts a page could be caught typing: "0 runs" and "1 agent" are grammar.
   return new Set(numbers.filter((value) => value > 1));
+}
+
+/**
+ * Whether `node` is the radix of `n.toString(radix)` or `parseInt(text, radix)`: a base, not a
+ * count, even when it equals one (16 live entries and a hex escape).
+ */
+function isRadix(node: ts.NumericLiteral): boolean {
+  if (Number(node.text) > LARGEST_RADIX) return false;
+  const call = node.parent;
+  if (!ts.isCallExpression(call)) return false;
+  const callee = call.expression;
+  const name = ts.isPropertyAccessExpression(callee)
+    ? callee.name.text
+    : ts.isIdentifier(callee)
+      ? callee.text
+      : '';
+  return (
+    (name === 'toString' && call.arguments[0] === node) ||
+    (name === 'parseInt' && call.arguments[1] === node)
+  );
 }
 
 /** A typed-in number: `where` in `file`, line `line`. */
@@ -91,7 +114,7 @@ function typedInNumbers(file: string, source: string, forbidden: ReadonlySet<num
       }
     } else if (ts.isNumericLiteral(node)) {
       const value = Number(node.text);
-      if (value >= SMALLEST_FORBIDDEN_LITERAL && forbidden.has(value)) {
+      if (value >= SMALLEST_FORBIDDEN_LITERAL && forbidden.has(value) && !isRadix(node)) {
         offences.push({ file, line: at(node), value, where: 'literal' });
       }
     }
@@ -132,9 +155,13 @@ describe('the Agent Store screens type no count in', () => {
       `export const b = '${live}本が今すぐ試せる';`,
       `export const c = \`of \${n} — ${total} in all\`;`,
       `export const d = ${total};`,
+      // Not a radix: the number parsed, a padding width, a base no call takes.
+      `export const e = parseInt(${live});`,
+      `export const f = x.padStart(${live});`,
+      `export const g = n.toString(${total});`,
     ].join('\n');
     expect(typedInNumbers('planted.tsx', source, forbidden).map(({ line }) => line)).toEqual([
-      1, 2, 3, 4,
+      1, 2, 3, 4, 5, 6, 7,
     ]);
   });
 
@@ -144,6 +171,12 @@ describe('the Agent Store screens type no count in', () => {
       'export const a = <p>{COUNTS.total} agents</p>;',
       `export const b = '¥1,${String(COUNTS.total)},000';`,
       'export const c = parseInt(value, 10);',
+      ...[...forbidden]
+        .filter((value) => value >= SMALLEST_FORBIDDEN_LITERAL && value <= LARGEST_RADIX)
+        .map(
+          (value, index) =>
+            `export const r${String(index)} = n.toString(${String(value)}) + parseInt(t, ${String(value)});`,
+        ),
     ].join('\n');
     expect(typedInNumbers('fine.tsx', source, forbidden)).toEqual([]);
   });

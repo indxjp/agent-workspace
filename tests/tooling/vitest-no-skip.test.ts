@@ -47,6 +47,15 @@ describe('the no-skip gate finds every project report', () => {
     expect(run(root)).toContain('Every one of the 2 collected tests ran.');
   });
 
+  // use-cases/ is one top-level Nx project; a run whose shard held only it failed with "no report".
+  it('reads the report of the top-level use-cases project', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'aw-no-skip-'));
+    temporaryRoots.push(root);
+    await mkdir(path.join(root, 'use-cases'), { recursive: true });
+    await writeFile(path.join(root, 'use-cases/.vitest-report.json'), JSON.stringify(report));
+    expect(run(root)).toContain('Every one of the 1 collected tests ran.');
+  });
+
   it('still fails when no report exists', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'aw-no-skip-'));
     temporaryRoots.push(root);

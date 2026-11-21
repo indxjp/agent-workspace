@@ -8,6 +8,7 @@ import { createLeadStore } from '../../demo/adapters/leads/store';
 import { createDemoRunAdmissions } from '../../demo/caps/adapters/admissions/store';
 import { createDemoSpend } from '../../demo/caps/adapters/spend/store';
 import { createDemoRunGate } from '../../demo/caps/transport/gate';
+import { createDemoApprovedWrites } from '../../demo/records/approved-writes';
 import {
   createDemoWorkspaceFiles,
   type DemoStorage,
@@ -18,6 +19,27 @@ import type { DemoWorkspaceFiles } from '../../demo/sweep/ports';
 import { createDemoSweep } from '../../demo/sweep/transport/sweep';
 import type { WorkspaceObjectStoreProvider } from '../../files/store';
 import type { RunApiWiring } from './run-api';
+
+/**
+ * The Agent Store demo's records stand-ins for the run API (`RunApiEnvironment.demoApprovedWrites`,
+ * ADR-0169): an approved write to one is kept in a visitor's own demo workspace (one with a demo
+ * end, `workspaces.demo_expires_at`) and in the verification workspace
+ * (`workspaces.demo_verification_at`). None where the
+ * deployment serves no connectors, since there is then no stand-in to keep it in.
+ */
+export function wireRunDemoApprovedWrites({
+  root,
+  connectors,
+}: Pick<RunApiWiring, 'root' | 'connectors'>) {
+  return connectors.kind === 'serving'
+    ? {
+        demoApprovedWrites: createDemoApprovedWrites({
+          connectors: connectors.runtime.connectors,
+          keepsDemoWrites: (workspaceId) => root.demoCaps.keepsDemoWrites(workspaceId),
+        }),
+      }
+    : {};
+}
 
 /**
  * The Agent Store demo's run caps for the run API (`RunApiEnvironment.demoRunGate`): the gate over

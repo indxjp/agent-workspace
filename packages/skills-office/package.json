@@ -15,6 +15,14 @@
       "types": "./office-reader/scripts/dxf.d.mts",
       "default": "./office-reader/scripts/dxf.mjs"
     },
+    "./office-reader/scripts/lib/cli.mjs": {
+      "types": "./office-reader/scripts/lib/cli.d.mts",
+      "default": "./office-reader/scripts/lib/cli.mjs"
+    },
+    "./office-reader/scripts/lib/table.mjs": {
+      "types": "./office-reader/scripts/lib/table.d.mts",
+      "default": "./office-reader/scripts/lib/table.mjs"
+    },
     "./office-reader/scripts/ooxml.mjs": {
       "types": "./office-reader/scripts/ooxml.d.mts",
       "default": "./office-reader/scripts/ooxml.mjs"

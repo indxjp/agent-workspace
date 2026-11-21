@@ -32,7 +32,7 @@ describe('parseLinkFragment', () => {
 });
 
 describe('afterSignInPath', () => {
-  it("goes to the entry's Try tab, or to the shelves", () => {
+  it("goes to the entry's Try it section, or to the shelves", () => {
     expect(afterSignInPath('ringi-review')).toBe('/agents/ringi-review#try');
     expect(afterSignInPath(undefined)).toBe('/');
   });

@@ -1,5 +1,8 @@
 // The `plan` job of ci.yml: which of the Nx jobs (`build`, `build-embedded`, `typecheck-lint`,
-// `heavy-checks`) this run needs, and which test shards (docs/adr/0053, Amendment 2026-11-19b).
+// `heavy-checks`) this run needs, and which test shards (docs/adr/0053, Amendment 2026-11-19b); and
+// which suites of the `coverage` job, which is the heavy tier's but for the use cases' suite: a
+// change that reaches the use cases' tests runs that suite on its pull request too (the Agent Store
+// 100-use-case plan, §7).
 // A pull request and a merge-queue group ask Nx which tasks their diff reaches (`nx affected
 // --explain`, task-based, which runs nothing); a job none of whose tasks is reached is skipped, and
 // `CI success` accepts that skip only when this plan said `false` for it. A push to `main` builds (it
@@ -7,8 +10,9 @@
 // (`PLAN_FULL=true`) run everything, so neither ever asks Nx.
 //
 // Usage (ci.yml): DIFF_BASE=<base or empty> PLAN_FULL=<true|false> node scripts/ci/ci-plan.mjs
-// It appends `build`, `build-embedded`, `typecheck-lint`, `heavy-checks` (each `true` or `false`)
-// and `test-shards` (the heavy-checks matrix, JSON) to $GITHUB_OUTPUT, or prints them without it.
+// It appends `build`, `build-embedded`, `typecheck-lint`, `heavy-checks`, `coverage` (each `true`
+// or `false`), `test-shards` (the heavy-checks matrix, JSON) and `coverage-suites` (the coverage
+// matrix, JSON) to $GITHUB_OUTPUT, or prints them without it.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import process from 'node:process';
@@ -18,6 +22,79 @@ import { testsProjects } from '../../tests/projects.mjs';
 
 /** The project build-embedded builds and tests; no other job runs its tasks. */
 export const EMBEDDED_PROJECT = '@indx-workspace/embedded';
+
+/**
+ * The use cases (`use-cases/`). Its `test` target's inputs are `use-cases/**` and everything the kit
+ * reads (use-cases/project.json), so a diff reaches that task exactly when it can change a use case's
+ * verdict, and then the use cases' coverage suite runs beside the tests.
+ */
+export const USE_CASES_PROJECT = '@agent-workspace/use-cases';
+
+/**
+ * The `coverage` job's suites, in its matrix's shape: the Vitest script, its config and summary for
+ * the floors-only-go-up ratchet (`ratchet`), whether it needs the S3 test server (`s3`), and whether
+ * the use cases' scoreboard is checked against the summary (`scoreboard`). The use cases' floor is 100
+ * per file, pinned by use-cases/kit/coverage.test.ts, so there is no floor below it to ratchet. The
+ * gallery's floors start at its measured totals and are ratcheted until they reach 100 (the Agent
+ * Store 100-use-case plan, §5.2); like every suite but the use cases', it runs in the heavy tier.
+ * @typedef {{
+ *   name: string,
+ *   script: string,
+ *   config: string,
+ *   summary: string,
+ *   s3: boolean,
+ *   ratchet: boolean,
+ *   scoreboard: boolean,
+ * }} CoverageSuite
+ * @type {readonly CoverageSuite[]}
+ */
+export const COVERAGE_SUITES = [
+  {
+    name: 'critical packages',
+    script: 'test:coverage',
+    config: 'vitest.coverage.config.ts',
+    summary: 'coverage/coverage-summary.json',
+    s3: true,
+    ratchet: true,
+    scoreboard: false,
+  },
+  {
+    name: 'apps',
+    script: 'test:coverage:apps',
+    config: 'vitest.apps.coverage.config.ts',
+    summary: 'coverage/apps/coverage-summary.json',
+    s3: true,
+    ratchet: true,
+    scoreboard: false,
+  },
+  {
+    name: 'ui-cli',
+    script: 'test:coverage:ui-cli',
+    config: 'vitest.ui-cli.coverage.config.ts',
+    summary: 'coverage/ui-cli/coverage-summary.json',
+    s3: false,
+    ratchet: true,
+    scoreboard: false,
+  },
+  {
+    name: 'use-cases',
+    script: 'test:coverage:use-cases',
+    config: 'vitest.use-cases.coverage.config.ts',
+    summary: 'coverage/use-cases/coverage-summary.json',
+    s3: false,
+    ratchet: false,
+    scoreboard: true,
+  },
+  {
+    name: 'gallery',
+    script: 'test:coverage:gallery',
+    config: 'vitest.gallery.coverage.config.ts',
+    summary: 'coverage/gallery/coverage-summary.json',
+    s3: false,
+    ratchet: true,
+    scoreboard: false,
+  },
+];
 
 /**
  * The heavy-checks shards, by measured time (main, 2026-10-15, seconds on a 16-vCPU runner): the
@@ -44,7 +121,9 @@ export const TEST_SHARDS = [
  *   'build-embedded': boolean,
  *   'typecheck-lint': boolean,
  *   'heavy-checks': boolean,
+ *   coverage: boolean,
  *   'test-shards': ShardLeg[],
+ *   'coverage-suites': CoverageSuite[],
  * }} Plan
  */
 
@@ -87,7 +166,9 @@ export function decidePlan({ diffBase, full, affectedTasks = [], testProjects = 
       'build-embedded': true,
       'typecheck-lint': true,
       'heavy-checks': legs.length > 0,
+      coverage: true,
       'test-shards': legs,
+      'coverage-suites': [...COVERAGE_SUITES],
     };
   }
   if (diffBase === '') {
@@ -97,7 +178,9 @@ export function decidePlan({ diffBase, full, affectedTasks = [], testProjects = 
       'build-embedded': true,
       'typecheck-lint': false,
       'heavy-checks': false,
+      coverage: false,
       'test-shards': [],
+      'coverage-suites': [],
     };
   }
   const tasks = affectedTasks.map((id) => {
@@ -108,6 +191,12 @@ export function decidePlan({ diffBase, full, affectedTasks = [], testProjects = 
     tasks.filter(({ target }) => target === 'test').map(({ project }) => project),
   );
   const typecheckLint = tasks.some(({ target }) => target === 'typecheck' || target === 'lint');
+  // Only the use cases' suite runs below the heavy tier; it needs `build`, which its test task plans.
+  const suites = tasks.some(
+    ({ project, target }) => project === USE_CASES_PROJECT && target === 'test',
+  )
+    ? COVERAGE_SUITES.filter(({ name }) => name === 'use-cases')
+    : [];
   return {
     // `build` hands every other job its packages. `formal`, which also needs them, runs only in the
     // full tier since ADR-0053 Amendment 2026-11-19c (plan A), and a full run always builds.
@@ -119,7 +208,9 @@ export function decidePlan({ diffBase, full, affectedTasks = [], testProjects = 
     'build-embedded': tasks.some(({ project }) => project === EMBEDDED_PROJECT),
     'typecheck-lint': typecheckLint,
     'heavy-checks': legs.length > 0,
+    coverage: suites.length > 0,
     'test-shards': legs,
+    'coverage-suites': suites,
   };
 }
 
@@ -168,7 +259,9 @@ export function outputLines(plan) {
     `build-embedded=${String(plan['build-embedded'])}`,
     `typecheck-lint=${String(plan['typecheck-lint'])}`,
     `heavy-checks=${String(plan['heavy-checks'])}`,
+    `coverage=${String(plan.coverage)}`,
     `test-shards=${JSON.stringify(plan['test-shards'])}`,
+    `coverage-suites=${JSON.stringify(plan['coverage-suites'])}`,
     '',
   ].join('\n');
 }

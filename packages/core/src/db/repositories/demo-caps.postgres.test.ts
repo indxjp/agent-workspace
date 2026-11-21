@@ -1,7 +1,11 @@
+import crypto from 'node:crypto';
+
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { demoDailyCosts } from '../schema/demo-daily-costs.js';
 import { demoRunAdmissions } from '../schema/demo-run-admissions.js';
+import { workspaces } from '../schema/workspaces.js';
 import { createDatabaseDemoCapsRepository } from './demo-caps.js';
 import { insertDemoWorkspace } from './demo-workspace.test-support.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
@@ -32,6 +36,36 @@ describe.skipIf(!hasDatabase)('migration 0107: the demo run caps repository', ()
       personLimit,
       clientLimit,
     });
+
+  it('keeps demo writes in a demo workspace and a verification workspace, and in no other (ADR-0169)', async () => {
+    const caps = createDatabaseDemoCapsRepository(isolated.db);
+    const demo = await insertDemoWorkspace(isolated, {
+      createdAt: T0,
+      demoExpiresAt: new Date(T0.getTime() + 60_000),
+    });
+    const ordinary = await insertDemoWorkspace(isolated, { createdAt: T0, demoExpiresAt: null });
+    const verification = await insertDemoWorkspace(isolated, {
+      createdAt: T0,
+      demoExpiresAt: null,
+    });
+    expect(await caps.keepsDemoWrites(demo.workspaceId)).toBe(true);
+    expect(await caps.keepsDemoWrites(ordinary.workspaceId)).toBe(false);
+    expect(await caps.keepsDemoWrites(verification.workspaceId)).toBe(false);
+    expect(await caps.keepsDemoWrites(crypto.randomUUID())).toBe(false);
+
+    await caps.markVerificationWorkspace(verification.workspaceId, T0);
+    expect(await caps.keepsDemoWrites(verification.workspaceId)).toBe(true);
+    expect(await caps.keepsDemoWrites(ordinary.workspaceId)).toBe(false);
+    // A later fill leaves the first mark as it is.
+    await caps.markVerificationWorkspace(verification.workspaceId, new Date(T0.getTime() + 1_000));
+    const [row] = await isolated.db
+      .select({ at: workspaces.demoVerificationAt })
+      .from(workspaces)
+      .where(eq(workspaces.id, verification.workspaceId));
+    expect(row?.at?.toISOString()).toBe(T0.toISOString());
+    // Marking is not a demo: nothing sweeps the workspace.
+    expect(await caps.demoExpiresAt(verification.workspaceId)).toBeNull();
+  });
 
   it('admits at the last place and refuses past it, per person', async () => {
     const { userId } = await insertDemoWorkspace(isolated, { createdAt: T0, demoExpiresAt: null });

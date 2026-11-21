@@ -1,0 +1,29 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: incident
+engine: claude-agent-sdk
+# Intake and triage (TR). An event arrives at the platform's webhook trigger, declared in
+# triggers/incident.json: its prompt hands the event to the agent ({{body}}, ADR-0144) and its
+# outputSchema types every run it starts (ADR-0154). Create it once the agent is pushed; the URL
+# secret is shown once:
+#   aw triggers create --file triggers/incident.json --agent <agent id>
+# Add --subject <caller> when its runs must act for one caller (ADR-0156).
+# The routing write goes through the `tracker` connector and waits for a person's approval.
+policy:
+  permissions:
+    # search_files reads the granted reference folder only.
+    readFiles: true
+    writeFiles: false
+    runCommands: false
+    unrestrictedNetwork: false
+  # The only connector any agent in this project may use.
+  tools: [tracker]
+  limits:
+    maxBudgetUsd: 0.5
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

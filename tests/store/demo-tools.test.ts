@@ -3,7 +3,7 @@
  * does with each (the provisioner: `apps/web/server/demo/provision/outside-tools.ts`). A tool that
  * only reads is left out of the copy; a tool that could send or write is replaced by a stand-in
  * that answers `DEMO_SEND_RESULT` and does nothing. The table below is the reviewed inventory of
- * the 14 live entries: a new tool in any source fails this test until someone has decided which
+ * the live entries: a new tool in any source fails this test until someone has decided which
  * of the two it is.
  */
 import { readFileSync } from 'node:fs';
@@ -40,6 +40,8 @@ const EXPECTED: Readonly<Record<string, Inventory>> = {
   'team-chat': { standIn: ['team-chat'], omitted: [] },
   wiki: { standIn: ['wiki'], omitted: [] },
   'service-desk': { standIn: ['service-desk'], omitted: [] },
+  'policy-qa': NONE,
+  nda: NONE,
 };
 
 interface DefinedTools {

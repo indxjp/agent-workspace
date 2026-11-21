@@ -1,3 +1,247 @@
 {
-  "runs": []
+  "runs": [
+    {
+      "entry": "crm-sales",
+      "runId": "33cbfb73-731b-4752-a684-4d507779ce79",
+      "date": "2026-11-21T07:13:34.059Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e0c0f2f78a919b337aaaaa4fbb5254ed559b4476b5f752819abd933ed85410dc"
+    },
+    {
+      "entry": "quotation",
+      "runId": "0bac9e16-4a59-4791-a730-268c8b0e7c74",
+      "date": "2026-11-21T07:14:15.757Z",
+      "result": "fail",
+      "reason": "createQuote did not wait for approval",
+      "environment": "staging",
+      "sourceHash": "a0f9ca8bc5233200d50156f35c69807a58df321268e014ba26c3afed62a33b40"
+    },
+    {
+      "entry": "customer-inquiry",
+      "runId": "1201be3d-56cf-47ef-8f10-9aff6e170625",
+      "date": "2026-11-21T07:14:45.509Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "c90fba5890c2ff2ac64c9a9f37a0f216e0e962fe8a7c16807f9ac5aec3232728"
+    },
+    {
+      "entry": "service-desk",
+      "runId": "80dae2b6-1d43-4f48-91ab-1cc52527b385",
+      "date": "2026-11-21T07:15:05.375Z",
+      "result": "fail",
+      "reason": "ticket_update was not called and answered",
+      "environment": "staging",
+      "sourceHash": "0a2e0d7bdd88d47c3d7c02a09eed459f3995bd4df6dadddc2ca789c22cdc6c00"
+    },
+    {
+      "entry": "manual-search",
+      "runId": "9bc50723-2b10-4367-8745-ebffeb141d92",
+      "date": "2026-11-21T07:15:22.928Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "9c70f77d08879ecced0a4aec475b2bcad94f964d6551d744b2884850e0d141ba"
+    },
+    {
+      "entry": "wiki",
+      "runId": "047b40f5-5dcf-424e-a9d2-9695a62b1e7d",
+      "date": "2026-11-21T07:15:46.641Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "eafcce5085611ed2fc82198e8c0d2428bcb90d700ee24e429a9529a6e1737db8"
+    },
+    {
+      "entry": "cad-drafting",
+      "runId": "53ae4c4b-0b75-4cc9-8f95-a327effa5fc0",
+      "date": "2026-11-21T07:16:07.216Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "9692381cedc4937ce46887fe1742dc88dbe235310861151a015907a52bba0174"
+    },
+    {
+      "entry": "quality-defect",
+      "runId": "1e9e8f23-f5d9-4d0f-b22d-9574a94fc3e5",
+      "date": "2026-11-21T07:16:44.856Z",
+      "result": "fail",
+      "reason": "searchDefects was not called and answered",
+      "environment": "staging",
+      "sourceHash": "d71a63a22679da3f9fa68f6f374a08b944941980814dfec3cd30c7080d37f285"
+    },
+    {
+      "entry": "maintenance",
+      "runId": "b22ccd76-0983-46d7-9593-6b0848da3b66",
+      "date": "2026-11-21T07:17:01.297Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "8b649afb9835e6f1c3d03aec430dcd59377b3863e13d32c214d3b7644e7359fb"
+    },
+    {
+      "entry": "contract-review",
+      "runId": "cdda89a6-9efc-4dee-b053-c1cf91805bc6",
+      "date": "2026-11-21T07:17:25.158Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "177a499e3ecf73be6539f5e15ee3497a4c615187434fa0f7a19ce5bd05012db1"
+    },
+    {
+      "entry": "ringi-review",
+      "runId": "b05a3b1b-146f-4079-a030-06a10efd6ca4",
+      "date": "2026-11-21T07:18:22.551Z",
+      "result": "fail",
+      "reason": "check_authority was not called and answered",
+      "environment": "staging",
+      "sourceHash": "e73cf7daf0afea6144ff5710109a282b6f8ce6f8efbddefde757c76a1c32c87e"
+    },
+    {
+      "entry": "excel-consolidation",
+      "runId": "fab10a12-5dd1-4af4-b1d1-24f8737daff6",
+      "date": "2026-11-21T07:18:49.870Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "1f704c1b3246a7618528667d0737463f298613a529b5618f2d25d92a0a7b7897"
+    },
+    {
+      "entry": "team-chat",
+      "runId": "65cca81f-6480-42f3-96d9-3d2890c862c2",
+      "date": "2026-11-21T07:20:09.934Z",
+      "result": "fail",
+      "reason": "message_list was not called and answered",
+      "environment": "staging",
+      "sourceHash": "e19f33e5885a0404da899de9cb10a82fa916aca6a3883681d90545081218edc3"
+    },
+    {
+      "entry": "meeting-minutes",
+      "runId": "7f9313e6-a51d-4060-abc0-b72bdf95009e",
+      "date": "2026-11-21T07:20:19.430Z",
+      "result": "fail",
+      "reason": "list_members was not called and answered",
+      "environment": "staging",
+      "sourceHash": "6fa7053da23595ef694a24634f6d77da3f57ff125627a60b86e738ce23c88de5"
+    },
+    {
+      "entry": "quotation",
+      "runId": "416790e6-83ad-4963-9509-2155c46f9937",
+      "date": "2026-11-21T09:56:41.748Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "a0f9ca8bc5233200d50156f35c69807a58df321268e014ba26c3afed62a33b40"
+    },
+    {
+      "entry": "customer-inquiry",
+      "runId": "67031ccf-ad8c-4690-99c9-0d1a7b54afd7",
+      "date": "2026-11-21T10:00:05.872Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "c90fba5890c2ff2ac64c9a9f37a0f216e0e962fe8a7c16807f9ac5aec3232728"
+    },
+    {
+      "entry": "service-desk",
+      "runId": "f2979895-f5c7-4c26-afa8-645a8b974e1b",
+      "date": "2026-11-21T10:00:27.570Z",
+      "result": "fail",
+      "reason": "ticket_update was not called and answered",
+      "environment": "staging",
+      "sourceHash": "0a2e0d7bdd88d47c3d7c02a09eed459f3995bd4df6dadddc2ca789c22cdc6c00"
+    },
+    {
+      "entry": "manual-search",
+      "runId": "e64f4d50-f051-46cd-9e9d-bf8a8d80a93d",
+      "date": "2026-11-21T10:01:24.330Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9c70f77d08879ecced0a4aec475b2bcad94f964d6551d744b2884850e0d141ba"
+    },
+    {
+      "entry": "cad-drafting",
+      "runId": "eaf596f3-527c-4ede-bd80-04ed012fcf1f",
+      "date": "2026-11-21T10:02:03.340Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9692381cedc4937ce46887fe1742dc88dbe235310861151a015907a52bba0174"
+    },
+    {
+      "entry": "quality-defect",
+      "runId": "538351f7-747f-4e16-bd31-bf0d0b6041de",
+      "date": "2026-11-21T10:02:38.660Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "d71a63a22679da3f9fa68f6f374a08b944941980814dfec3cd30c7080d37f285"
+    },
+    {
+      "entry": "maintenance",
+      "runId": "83c5ef34-775a-4bd7-8f5c-b3f27aaafd9f",
+      "date": "2026-11-21T10:03:07.812Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "8b649afb9835e6f1c3d03aec430dcd59377b3863e13d32c214d3b7644e7359fb"
+    },
+    {
+      "entry": "ringi-review",
+      "runId": "4965c854-b385-4c39-b554-5bd585d713dd",
+      "date": "2026-11-21T10:04:22.279Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e73cf7daf0afea6144ff5710109a282b6f8ce6f8efbddefde757c76a1c32c87e"
+    },
+    {
+      "entry": "excel-consolidation",
+      "runId": "ebb427cc-c9fc-4144-89ef-5fd6a0691a74",
+      "date": "2026-11-21T10:05:02.126Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "1f704c1b3246a7618528667d0737463f298613a529b5618f2d25d92a0a7b7897"
+    },
+    {
+      "entry": "team-chat",
+      "runId": "043ce2d1-195c-4823-ade3-2dd2be9497ce",
+      "date": "2026-11-21T10:07:36.033Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e19f33e5885a0404da899de9cb10a82fa916aca6a3883681d90545081218edc3"
+    },
+    {
+      "entry": "meeting-minutes",
+      "runId": "0bfde521-b818-4f70-9eae-da2d384e7911",
+      "date": "2026-11-21T10:07:55.036Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "6fa7053da23595ef694a24634f6d77da3f57ff125627a60b86e738ce23c88de5"
+    },
+    {
+      "entry": "policy-qa",
+      "runId": "d582239a-801c-49c7-8a94-d6277b0d42f9",
+      "date": "2026-11-21T10:01:44.906Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "dc50f68f802632947fd7dae9dc21c1bca1467bdaeec0b9b910f4a9f46ad6239f"
+    },
+    {
+      "entry": "nda",
+      "runId": "c1303d0f-1721-466a-9668-edb93b482748",
+      "date": "2026-11-21T10:03:35.086Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "0c1b9bc37439578f2ddefaf361e9af225e51c6be63c5c7d2f4fc44de40ec31ca"
+    }
+  ]
 }

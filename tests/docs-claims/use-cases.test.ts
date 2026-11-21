@@ -1,4 +1,12 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +21,7 @@ import {
   chatFailedRunId,
   failedRuns,
   fileSetupCommands,
+  skillPublishCommands,
   firstPrompt,
   identityEnvironment,
   identityTargets,
@@ -173,6 +182,22 @@ describe('what a project needs before aw check', () => {
     expect(playbook[1]).toBe(
       "aw files upload 'playbook/PB-01-liability-cap.md' 'data/playbook/PB-01-liability-cap.md'",
     );
+  });
+
+  it('publishes revision 1 of a pinned skill before aw push, as the tutorial does', () => {
+    expect(skillPublishCommands(dir('contract-review'))).toEqual([
+      "aw skills publish 'contract-playbook' './skills/contract-playbook'",
+    ]);
+    expect(skillPublishCommands(dir('manual-search'))).toEqual([]);
+    const work = mkdtempSync(path.join(tmpdir(), 'pin-'));
+    try {
+      cpSync(dir('contract-review'), work, { recursive: true });
+      const agent = path.join(work, 'agents', 'contract-review.ts');
+      writeFileSync(agent, readFileSync(agent, 'utf8').replace('revision: 1', 'revision: 2'));
+      expect(() => skillPublishCommands(work)).toThrow('pinned to revision 2, not 1');
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   });
 
   it('uploads the three Word drafts into contracts/<deal-team>/ and a .gitkeep into each drafts/<deal-team>/', () => {

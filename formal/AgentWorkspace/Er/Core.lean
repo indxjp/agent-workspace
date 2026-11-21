@@ -1966,6 +1966,7 @@ def catalogue : Schema
       ⟨"default_model", .text, false⟩,
       ⟨"archived_at", .timestamptz, false⟩,
       ⟨"demo_expires_at", .timestamptz, false⟩,
+      ⟨"demo_verification_at", .timestamptz, false⟩,
       ⟨"created_at", .timestamptz, true⟩,
       ⟨"updated_at", .timestamptz, true⟩]
     foreignKeys := [

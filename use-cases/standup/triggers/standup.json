@@ -1,0 +1,32 @@
+{
+  "kind": "schedule",
+  "name": "standup",
+  "prompt": "今日の朝会まとめを作成して、standup-reports フォルダに保存してください。 / Write today's stand-up digest and save it to the standup-reports folder.",
+  "cron": "0 9 * * 1-5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "covers", "people", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "covers": { "type": "string" },
+      "people": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["person", "yesterday", "today", "blockers", "sources"],
+          "properties": {
+            "person": { "type": "string" },
+            "yesterday": { "type": "array", "items": { "type": "string" } },
+            "today": { "type": "array", "items": { "type": "string" } },
+            "blockers": { "type": "array", "items": { "type": "string" } },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

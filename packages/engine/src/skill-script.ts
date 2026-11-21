@@ -14,6 +14,9 @@
  * has no `@types/node`, and each adapter hands over ten lines of `node:child_process` and
  * `node:fs/promises`.
  *
+ * A script may import a built-in skill's module by its package path (ADR-0173,
+ * {@link builtinImportHook}); the process's one `--import` maps it to the placed built-in skill.
+ *
  * The script must resolve — symbolic links included — inside the placed skill's `scripts/`
  * directory. The permission model follows links that already exist, so the containment check is
  * ours; it is the second check after the runner refusing to place a link at all.
@@ -22,6 +25,88 @@ import { normaliseGrants } from './path-grant.js';
 import type { EngineRunRequest } from './port.js';
 
 export const RUN_SKILL_SCRIPT_TOOL = 'run_skill_script';
+
+/**
+ * The package name a skill script imports a built-in skill's module by (ADR-0173):
+ * `<package>/<skill>/scripts/lib/<file>.mjs`. In this repository, the use cases install the
+ * skills-office package under this name, so the path resolves through `node_modules`. A run's
+ * sandbox has no `node_modules`, so {@link builtinImportHook} maps the same path to the built-in
+ * skill as it is placed beside the script's own skill: one specifier, both places. The name is in
+ * the platform's own npm scope, so no package someone else publishes can answer to it.
+ */
+export const BUILTIN_SKILL_PACKAGE = '@indx-workspace/builtin-skills';
+
+/**
+ * What a skill script may import from each built-in skill, and the sha256 of every file those
+ * modules load, as this platform ships them (ADR-0173). A skill a person imported or edited under a
+ * built-in's name is theirs (`apps/web/server/skills/builtin.ts`), so the hook imports from a placed
+ * built-in only when each of these files is byte for byte the shipped one.
+ * `tests/engine/run-skill-script.test.ts` fails when a shipped file and this table differ.
+ */
+export const BUILTIN_IMPORTS: Readonly<
+  Record<
+    string,
+    { readonly modules: readonly string[]; readonly sha256: Readonly<Record<string, string>> }
+  >
+> = {
+  'office-reader': {
+    modules: ['scripts/lib/cli.mjs', 'scripts/lib/table.mjs'],
+    sha256: {
+      'scripts/lib/cli.mjs': '58723c51defa158b7610d24334abc3737b265b4743720f27af4809c524a6ed67',
+      'scripts/lib/table.mjs': 'ee5c8534533cbe449fe3f86f137780d399327250ff3f04c5ee442348718777e0',
+      'scripts/ooxml.mjs': 'b45288c1cd8d486b578f7c94499d4070fc2b7249d3a0165f72be51f492a4bd85',
+    },
+  },
+};
+
+/**
+ * The `--import` argument that installs, before the script runs, a resolve hook for
+ * {@link BUILTIN_SKILL_PACKAGE}. `<package>/<skill>/<module>`, for a module {@link BUILTIN_IMPORTS}
+ * lists, resolves to `<skillsRoot>/<skill>/<module>`, a placed file the process may already read,
+ * once every file the table lists for that skill hashes to the shipped digest. Otherwise the
+ * script stops with one JSON line on stderr and exit code 1, as a refused script does:
+ *
+ * - `not_importable`: any other specifier of the package, so none falls through to a
+ *   `node_modules` folder the workspace could hold;
+ * - `builtin_skill_not_granted`: the skill is not placed, because the run does not grant it;
+ * - `builtin_skill_modified`: the placed skill is a person's own under the built-in's name.
+ *
+ * The hook is a `data:` module (`module.registerHooks`, Node 22.15 and later), so it needs no
+ * permission of its own; it reads only placed files.
+ *
+ * @param skillsRoot the absolute directory skills are placed in.
+ */
+export function builtinImportHook(skillsRoot: string): string {
+  const offered = Object.entries(BUILTIN_IMPORTS)
+    .flatMap(([skill, { modules }]) => modules.map((module) => `${skill}/${module}`))
+    .join(', ');
+  const source = [
+    `import{registerHooks}from'node:module';import{pathToFileURL}from'node:url';`,
+    `import{readFileSync}from'node:fs';import{createHash}from'node:crypto';`,
+    `const root=${JSON.stringify(skillsRoot)};`,
+    `const imports=${JSON.stringify(BUILTIN_IMPORTS)};`,
+    `const name=${JSON.stringify(BUILTIN_SKILL_PACKAGE)};`,
+    `const offered=${JSON.stringify(offered)};`,
+    `const checked=new Set();`,
+    `const refuse=(error,message)=>{process.stderr.write(JSON.stringify({error,message})+String.fromCharCode(10));process.exit(1);};`,
+    `registerHooks({resolve(specifier,context,nextResolve){`,
+    `if(specifier!==name&&!specifier.startsWith(name+'/'))return nextResolve(specifier,context);`,
+    `const rest=specifier.slice(name.length+1);const slash=rest.indexOf('/');`,
+    `const skill=rest.slice(0,slash);const module=rest.slice(slash+1);`,
+    `const entry=slash>0&&Object.hasOwn(imports,skill)?imports[skill]:undefined;`,
+    `if(entry===undefined||!entry.modules.includes(module))`,
+    `refuse('not_importable',specifier+' is not a module a built-in skill offers ('+name+'/: '+offered+')');`,
+    `if(!checked.has(skill)){for(const[file,digest]of Object.entries(entry.sha256)){let bytes;`,
+    `try{bytes=readFileSync(root+'/'+skill+'/'+file);}catch{`,
+    `refuse('builtin_skill_not_granted',specifier+" needs the built-in skill "+skill+", which this run does not grant: the agent grants builtinSkill('"+skill+"')");}`,
+    `if(createHash('sha256').update(bytes).digest('hex')!==digest)`,
+    `refuse('builtin_skill_modified','the skill '+skill+' in this run is not the built-in one ('+file+' differs), so '+specifier+' is not imported');}`,
+    `checked.add(skill);}`,
+    `return{url:pathToFileURL(root+'/'+skill+'/'+module).href,shortCircuit:true};`,
+    `}});`,
+  ].join('');
+  return `--import=data:text/javascript,${encodeURIComponent(source)}`;
+}
 
 /** The limits one call runs under. */
 export type SkillScriptLimits = {
@@ -441,6 +526,7 @@ export async function runSkillScript(
         `--allow-fs-read=${scratch}`,
         `--allow-fs-write=${scratch}`,
         ...setup.writable.map((grant) => `--allow-fs-write=${path.join(root, grant)}`),
+        builtinImportHook(path.join(root, setup.skillsDirectory)),
         realScript,
         ...input.args,
       ],

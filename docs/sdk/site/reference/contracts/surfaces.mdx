@@ -3,7 +3,187 @@ title: "surfaces"
 description: "The @indx-workspace/contracts/surfaces exports, sorted alphabetically."
 ---
 
-<Note>This page is generated from `packages/contracts/src/attachment-limits.ts`, `packages/contracts/src/surfaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+<Note>This page is generated from `packages/contracts/src/attachment-limits.ts`, `packages/contracts/src/surface-result-charts.ts`, `packages/contracts/src/surfaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## bareToolName
+
+A run's tool name without its engine prefix: the part after the last `__`, so Claude's
+`mcp__<connector>__find_files` is `find_files` (issue #1276). `null` when the name has no `__`.
+A single `_` is never a separator: Mastra's `<server>_<tool>` is ambiguous.
+
+```ts
+bareToolName(toolName: string): string | null
+```
+
+## namesTool
+
+Whether a run's tool `toolName` is the tool a definition names `name`: the exact name, or `name`
+equal to its `bareToolName`. So `search_files` names Claude's
+`mcp__agent-workspace__search_files`, and the prefixed name still names itself.
+
+```ts
+namesTool(name: string, toolName: string): boolean
+```
+
+## RESULT_CHART_KEY_PATTERN
+
+A key of the typed output, or of one of its rows: a JSON property name as a JSON Schema
+`properties` key usually is — a letter or `_`, then letters, digits or `_`, at most 64.
+
+Value: `/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u`
+
+## RESULT_CHART_KINDS
+
+The chart forms a result card draws (ADR-0168 D2).
+
+- `'bar'`
+- `'line'`
+
+## RESULT_CHART_LABEL_MAX_LENGTH
+
+The longest chart title or axis label, in characters (ADR-0168 D2).
+
+Value: `80`
+
+## RESULT_CHART_POINTS_MAX
+
+The most rows one chart draws; a longer array is refused, never cut (ADR-0168 D3).
+
+Value: `60`
+
+## RESULT_CHART_VALUE_MAX
+
+The largest magnitude a charted value may have. Beyond it the axis span of two extreme values
+can overflow to `Infinity` and the scale to `NaN`, so such a row is refused (ADR-0168 D3).
+
+Value: `1e15`
+
+## RESULT_CHARTS_MAX
+
+The most charts one surface may declare (ADR-0168 D2).
+
+Value: `4`
+
+## ResultChart
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"bar" \| "line"` | Yes |  |
+| `field` | `string` | Yes |  |
+| `label` | `string` | Yes |  |
+| `value` | `string` | Yes |  |
+| `title` | `ResultChartTextPair` | Yes |  |
+| `axes` | `Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>` | Yes |  |
+
+## resultChartData
+
+Read `chart`'s rows from a run's typed output (ADR-0168 D3). Pure, so the control plane, a
+customer's page and a test read a chart the same way.
+
+```ts
+resultChartData(chart: ResultChart, structured: unknown): ResultChartData
+```
+
+## ResultChartData
+
+What a chart reads from a run's typed output (ADR-0168 D3): the points, or why the output does
+not fit the spec. A mismatch is reported, not drawn around, so a spec that names the wrong field
+shows as such on the card instead of as an empty chart.
+
+- `{ readonly kind: "points"; readonly points: readonly ResultChartPoint[]; }`
+- `{ readonly kind: "mismatch"; readonly reason: "no_field" | "empty" | "too_many_rows" | "bad_row"; }`
+
+## ResultChartKind
+
+- `"bar"`
+- `"line"`
+
+## ResultChartKindSchema
+
+`RESULT_CHART_KINDS` as a schema (ADR-0168 D2).
+
+- `"bar"`
+- `"line"`
+
+## ResultChartPoint
+
+One row a chart draws: its category as text and its finite number (ADR-0168 D3).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `label` | `string` | Yes |  |
+| `value` | `number` | Yes |  |
+
+## ResultChartSchema
+
+One declared chart (ADR-0168 D2): `field` is the top-level property of the typed output that
+holds the rows, `label` the key of each row's category and `value` the key of its number. The
+title and both axis labels are bilingual; the axis labels also head the data table a screen
+reader reads.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"bar" \| "line"` | Yes |  |
+| `field` | `string` | Yes |  |
+| `label` | `string` | Yes |  |
+| `value` | `string` | Yes |  |
+| `title` | `ResultChartTextPair` | Yes |  |
+| `axes` | `Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>` | Yes |  |
+
+## ResultChartsSchema
+
+A surface's `resultCharts`: 1–`RESULT_CHARTS_MAX` charts (ADR-0168 D2).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>[]): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]; (...items: (Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }> \| ConcatArray<Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>)[]): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => value is S, thisArg?: any): S[]; (predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentIndex: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>; (callbackfn: (previousValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentIndex: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, initialValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>; <U>(callbackfn: (previousValue: U, currentValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentIndex: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentIndex: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>; (callbackfn: (previousValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentIndex: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, initialValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>; <U>(callbackfn: (previousValue: U, currentValue: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, currentIndex: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, obj: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, obj: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }> \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, obj: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }> \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }> \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, index: number, array: readonly Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>, b: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>) => number) \| undefined) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]; (start: number, deleteCount?: number): Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>) => Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<Readonly<{ kind: "bar" \| "line"; field: string; label: string; value: string; title: Readonly<{ ja: string; en: string; }>; axes: Readonly<{ label: Readonly<{ ja: string; en: string; }>; value: Readonly<{ ja: string; en: string; }>; }>; }>>` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## ResultChartTextPair
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ja` | `string` | Yes |  |
+| `en` | `string` | Yes |  |
+
+## ResultChartTextPairSchema
+
+A label in both languages the platform speaks, Japanese first (ADR-0168 D2).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ja` | `string` | Yes |  |
+| `en` | `string` | Yes |  |
 
 ## SURFACE_AGENT_SWITCHER_MAX
 
@@ -315,6 +495,7 @@ A parsed surface definition (ADR-0108, ADR-0101; issue #440).
 | `layout` | `undefined \| "dock" \| "side" \| "page" \| "inline"` | No |  |
 | `parts` | `undefined \| SurfaceParts` | No |  |
 | `toolResults` | `undefined \| Readonly<Record<string, "text" \| "card" \| "table">>` | No |  |
+| `resultCharts` | `undefined \| readonly ResultChart[]` | No | The charts a run's result card draws from the run's typed output, 1–`RESULT_CHARTS_MAX` (ADR-0168): no use case draws a chart of its own. |
 | `allowedOrigins` | `undefined \| readonly string[]` | No |  |
 | `limits` | `undefined \| SurfaceLimits` | No |  |
 
@@ -331,6 +512,7 @@ What `SurfaceDefinitionSchema` accepts; equal to its output, since nothing trans
 | `layout` | `undefined \| "dock" \| "side" \| "page" \| "inline"` | No |  |
 | `parts` | `undefined \| SurfaceParts` | No |  |
 | `toolResults` | `undefined \| Readonly<Record<string, "text" \| "card" \| "table">>` | No |  |
+| `resultCharts` | `undefined \| readonly ResultChart[]` | No | The charts a run's result card draws from the run's typed output, 1–`RESULT_CHARTS_MAX` (ADR-0168): no use case draws a chart of its own. |
 | `allowedOrigins` | `undefined \| readonly string[]` | No |  |
 | `limits` | `undefined \| SurfaceLimits` | No |  |
 
@@ -338,8 +520,8 @@ What `SurfaceDefinitionSchema` accepts; equal to its output, since nothing trans
 
 One surface as code: what `defineSurface()` returns (C3) and what each entry of a version's
 `surfaces` holds (ADR-0101). It accepts ADR-0108's rungs ① and ②, rung ② complete with
-`toolResults` (SD10; issue #537), and the embedding keys `allowedOrigins` and `limits` (issue
-#622); `audience` and any other key are refused by the strict object (issues #440, #537).
+`toolResults` (SD10; issue #537), the embedding keys `allowedOrigins` and `limits` (issue
+#622) and the result card's `resultCharts` (ADR-0168); `audience` and any other key are refused by the strict object (issues #440, #537).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -350,6 +532,7 @@ One surface as code: what `defineSurface()` returns (C3) and what each entry of 
 | `layout` | `undefined \| "dock" \| "side" \| "page" \| "inline"` | No |  |
 | `parts` | `undefined \| SurfaceParts` | No |  |
 | `toolResults` | `undefined \| Readonly<Record<string, "text" \| "card" \| "table">>` | No |  |
+| `resultCharts` | `undefined \| readonly ResultChart[]` | No | The charts a run's result card draws from the run's typed output, 1–`RESULT_CHARTS_MAX` (ADR-0168): no use case draws a chart of its own. |
 | `allowedOrigins` | `undefined \| readonly string[]` | No |  |
 | `limits` | `undefined \| SurfaceLimits` | No |  |
 
@@ -632,8 +815,7 @@ Which built-in component each named tool's result renders as: tool names in
 ## toolResultFor
 
 The component `toolResults` names for a run's tool: the exact key first, else the key equal to
-the part after the last `__`, so `find_files` matches Claude's `mcp__<connector>__find_files`
-(issue #1276). A single `_` is never a separator: Mastra's `<server>_<tool>` is ambiguous.
+its `bareToolName` (issue #1276).
 
 ```ts
 toolResultFor(toolName: string, toolResults: z.infer<typeof SurfaceToolResultsSchema> | undefined): SurfaceToolResultComponent | undefined

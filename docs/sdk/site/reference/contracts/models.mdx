@@ -169,9 +169,9 @@ optional `location`. A `baseUrl` must be an absolute URL the workspace's egress 
 
 - `"apiVersion"`
 - `"baseUrl"`
+- `"location"`
 - `"deployment"`
 - `"projectId"`
-- `"location"`
 
 ## ModelConnectionConfigInput
 
@@ -266,8 +266,8 @@ The `502` carries this outcome, not the error envelope: an unreachable provider 
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `allowed` | `readonly ("apiVersion" \| "baseUrl" \| "deployment" \| "projectId" \| "location")[]` | Yes | The config keys the server accepts for this provider; any other key is an `invalid_body`. |
-| `required` | `readonly ("apiVersion" \| "baseUrl" \| "deployment" \| "projectId" \| "location")[]` | Yes | The subset that must be present for the connection to be `ready` (with a credential). |
+| `allowed` | `readonly ("apiVersion" \| "baseUrl" \| "location" \| "deployment" \| "projectId")[]` | Yes | The config keys the server accepts for this provider; any other key is an `invalid_body`. |
+| `required` | `readonly ("apiVersion" \| "baseUrl" \| "location" \| "deployment" \| "projectId")[]` | Yes | The subset that must be present for the connection to be `ready` (with a credential). |
 | `credential` | `"api-key" \| "workload-identity"` | Yes | How the connection authenticates: `api-key` stores a write-only credential; `workload-identity` stores none and the gateway uses the identity it runs as. |
 
 ## RotateModelConnectionCredentialInput

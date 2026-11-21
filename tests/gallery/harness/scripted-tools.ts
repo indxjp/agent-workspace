@@ -139,7 +139,11 @@ export function createScriptContext(settings: {
       return record(`mcp__agent-workspace__${tool}`, args, () => answer(args, { fileScope }));
     },
     native: (name, input) =>
-      record(name, input, () => Promise.resolve({ text: 'ok', isError: false })),
+      record(
+        name,
+        input,
+        () => options.native?.(name, input) ?? Promise.resolve({ text: 'ok', isError: false }),
+      ),
     handoff: (reason) => {
       if (options.handoff !== true) throw new Error('this agent has no handoff_to_person tool');
       return record(HANDOFF_TOOL_NAME, { reason }, () => {

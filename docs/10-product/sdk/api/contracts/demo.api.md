@@ -19,7 +19,7 @@ export const DEMO_ALLOWANCE_PROBLEM_CODES: {
 export const DEMO_ENTRY_SLUG_MAX_LENGTH = 64;
 
 // @public
-export const DEMO_FALLBACK_REASONS: readonly ["count", "cost", "load", "unavailable"];
+export const DEMO_FALLBACK_REASONS: readonly ["count", "cost", "load", "unavailable", "format"];
 
 // @public
 export const DEMO_RUN_START_PROBLEM_CODES: {
@@ -75,6 +75,7 @@ export function demoFallbackReason(code: string): DemoFallbackReason | null;
 
 // @public (undocumented)
 export const DemoFallbackReasonSchema: z.ZodEnum<{
+    format: "format";
     count: "count";
     cost: "cost";
     load: "load";

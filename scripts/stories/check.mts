@@ -106,6 +106,12 @@ const TEST_TAG_CANDIDATE = /\[?\b(?:US-)?(?:STO|BLD)-[^\s'"`]*/gi;
 const CODE_TAG_CANDIDATE = /@story\b[ \t]*\S*/gi;
 // Its in-memory fixtures hold deliberately malformed and covering tags.
 const SELF_TEST = 'tests/tooling/stories-check.test.ts';
+// Cheap prefilters (#2394): every match of TEST_TAG / TEST_TAG_CANDIDATE holds `STO-` or `BLD-`, and
+// every match of CODE_TAG / CODE_TAG_CANDIDATE holds `@story`, in any case. A test title is a slice
+// of the source with comments blanked to spaces, which cannot create either text, so a file without
+// one cannot add an error or a hit and skips the lexer and the tag regular expressions.
+const MAY_HOLD_TEST_TAG = /(?:STO|BLD)-/i;
+const MAY_HOLD_CODE_TAG = /@story/i;
 
 const isEntry = (s: string): s is Entry => Object.hasOwn(ACCEPTS, s);
 const TEST_TYPES: readonly string[] = ['unit', 'contract', 'api', 'browser', 'load', 'two-server'];
@@ -181,8 +187,11 @@ function coverageCells(hits: ReadonlyMap<string, ReadonlySet<string>>): Cell[] {
 export function scan(files: ReadonlyMap<string, string>): Report {
   const collected: Collected = { errors: [], codeTags: {}, hits: new Map() };
   for (const [file, text] of files) {
-    if (TEST_FILE.test(file)) collectTestFile(file, text, collected);
-    else if (PRODUCTION_FILE.test(file)) collectProductionFile(file, text, collected);
+    if (TEST_FILE.test(file)) {
+      if (MAY_HOLD_TEST_TAG.test(text)) collectTestFile(file, text, collected);
+    } else if (PRODUCTION_FILE.test(file) && MAY_HOLD_CODE_TAG.test(text)) {
+      collectProductionFile(file, text, collected);
+    }
   }
   return {
     cells: coverageCells(collected.hits),
@@ -224,24 +233,65 @@ const isScanned = (file: string): boolean => SCANNED.test(file) && file !== SELF
 const git = (args: string[], input?: string): Buffer =>
   execFileSync('git', args, { input, maxBuffer: 512 * 1024 * 1024 });
 
-/** Tracked files as they are on disk now, so an uncommitted deletion counts. */
+/**
+ * The tracked files (of `ref`, or on disk without one) that hold `STO-`, `BLD-` or `@story` in any
+ * case: the same texts as MAY_HOLD_TEST_TAG and MAY_HOLD_CODE_TAG, so every other file would scan to
+ * nothing. One `git grep` reads them faster than reading and decoding every file in Node (#2394).
+ */
+function mayHoldTags(ref?: string): Set<string> {
+  const prefix = ref === undefined ? '' : `${ref}:`;
+  const args = [
+    'grep',
+    '-l',
+    '-z',
+    '--text',
+    '-i',
+    '-F',
+    '-e',
+    'STO-',
+    '-e',
+    'BLD-',
+    '-e',
+    '@story',
+  ];
+  try {
+    const out = git([...args, ...(ref === undefined ? [] : [ref]), '--', ...ROOTS]);
+    return new Set(
+      out
+        .toString('utf8')
+        .split('\0')
+        .filter((f) => f.startsWith(prefix))
+        .map((f) => f.slice(prefix.length)),
+    );
+  } catch (error) {
+    // `git grep` exits 1 when no file matches.
+    if ((error as { status?: unknown }).status === 1) return new Set();
+    throw error;
+  }
+}
+
+/** Tracked files that can hold a tag, as they are on disk now, so an uncommitted deletion counts. */
 export function readHead(): Map<string, string> {
+  const candidates = mayHoldTags();
   const tracked = git(['ls-files', '-z', '--', ...ROOTS])
     .toString('utf8')
     .split('\0');
   return new Map(
-    tracked.filter((f) => isScanned(f) && existsSync(f)).map((f) => [f, readFileSync(f, 'utf8')]),
+    tracked
+      .filter((f) => isScanned(f) && candidates.has(f) && existsSync(f))
+      .map((f) => [f, readFileSync(f, 'utf8')]),
   );
 }
 
-/** The scanned files of `ref`: one `ls-tree`, then every blob through one `cat-file --batch`. */
+/** The scanned files of `ref` that can hold a tag: one `ls-tree`, then one `cat-file --batch`. */
 export function readTree(ref: string): Map<string, string> {
+  const candidates = mayHoldTags(ref);
   const blobs = git(['ls-tree', '-r', '-z', ref, '--', ...ROOTS])
     .toString('utf8')
     .split('\0')
     .flatMap((line) => {
       const m = /^\d+ blob ([0-9a-f]+)\t(.*)$/su.exec(line);
-      return m?.[2] !== undefined && m[1] !== undefined && isScanned(m[2])
+      return m?.[2] !== undefined && m[1] !== undefined && isScanned(m[2]) && candidates.has(m[2])
         ? [{ oid: m[1], file: m[2] }]
         : [];
     });

@@ -60,7 +60,40 @@ describe('workflow validator', () => {
     [
       'a ci-success that accepts any skip of a planned job',
       (ci: string) => ci.replace('($edited or $plan[.key] == "false")', '(true)'),
-      'ci-success must accept a skipped build, build-embedded, typecheck-lint or heavy-checks only where the plan said "false" for it',
+      'ci-success must accept a skipped build, build-embedded, typecheck-lint, heavy-checks or coverage only where the plan said "false" for it',
+    ],
+    [
+      'a coverage job that runs whatever the plan says',
+      (ci: string) =>
+        ci.replace(
+          "    if: needs.plan.outputs.coverage == 'true'\n",
+          "    if: github.event_name == 'schedule'\n",
+        ),
+      "coverage must need plan and run only if: needs.plan.outputs.coverage == 'true'",
+    ],
+    [
+      'a coverage job with its own suite list',
+      (ci: string) =>
+        ci.replace(
+          '        suite: ${{ fromJSON(needs.plan.outputs.coverage-suites) }}\n',
+          '        suite:\n          - { name: apps, script: test:coverage:apps }\n',
+        ),
+      'coverage must include',
+    ],
+    [
+      'a coverage job that no longer checks the scoreboard against the summary',
+      (ci: string) =>
+        ci.replace(
+          '        run: pnpm vitest run --project use-cases kit/scoreboard.test.ts\n',
+          '        run: echo skipped\n',
+        ),
+      'coverage must include',
+    ],
+    [
+      'a plan that does not hand on the coverage suites',
+      (ci: string) =>
+        ci.replace('      coverage-suites: ${{ steps.plan.outputs.coverage-suites }}\n', ''),
+      'plan must include',
     ],
   ])('rejects %s', async (_case, mutate, message) => {
     const workflows = await repositoryWorkflowDocuments();

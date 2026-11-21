@@ -7,6 +7,121 @@
 import { z } from 'zod';
 
 // @public
+export function bareToolName(toolName: string): string | null;
+
+// @public
+export function namesTool(name: string, toolName: string): boolean;
+
+// @public
+export const RESULT_CHART_KEY_PATTERN: RegExp;
+
+// @public
+export const RESULT_CHART_KINDS: readonly ["bar", "line"];
+
+// @public
+export const RESULT_CHART_LABEL_MAX_LENGTH = 80;
+
+// @public
+export const RESULT_CHART_POINTS_MAX = 60;
+
+// @public
+export const RESULT_CHART_VALUE_MAX = 1000000000000000;
+
+// @public
+export const RESULT_CHARTS_MAX = 4;
+
+// @public (undocumented)
+export type ResultChart = z.infer<typeof ResultChartSchema>;
+
+// @public
+export type ResultChartData = {
+    readonly kind: 'points';
+    readonly points: readonly ResultChartPoint[];
+} | {
+    readonly kind: 'mismatch';
+    readonly reason: 'no_field' | 'empty' | 'too_many_rows' | 'bad_row';
+};
+
+// @public
+export function resultChartData(chart: ResultChart, structured: unknown): ResultChartData;
+
+// @public (undocumented)
+export type ResultChartKind = (typeof RESULT_CHART_KINDS)[number];
+
+// @public
+export const ResultChartKindSchema: z.ZodEnum<{
+    bar: "bar";
+    line: "line";
+}>;
+
+// @public
+export interface ResultChartPoint {
+    // (undocumented)
+    readonly label: string;
+    // (undocumented)
+    readonly value: number;
+}
+
+// @public
+export const ResultChartSchema: z.ZodReadonly<z.ZodObject<{
+    kind: z.ZodEnum<{
+        bar: "bar";
+        line: "line";
+    }>;
+    field: z.ZodString;
+    label: z.ZodString;
+    value: z.ZodString;
+    title: z.ZodReadonly<z.ZodObject<{
+        ja: z.ZodString;
+        en: z.ZodString;
+    }, z.core.$strict>>;
+    axes: z.ZodReadonly<z.ZodObject<{
+        label: z.ZodReadonly<z.ZodObject<{
+            ja: z.ZodString;
+            en: z.ZodString;
+        }, z.core.$strict>>;
+        value: z.ZodReadonly<z.ZodObject<{
+            ja: z.ZodString;
+            en: z.ZodString;
+        }, z.core.$strict>>;
+    }, z.core.$strict>>;
+}, z.core.$strict>>;
+
+// @public
+export const ResultChartsSchema: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+    kind: z.ZodEnum<{
+        bar: "bar";
+        line: "line";
+    }>;
+    field: z.ZodString;
+    label: z.ZodString;
+    value: z.ZodString;
+    title: z.ZodReadonly<z.ZodObject<{
+        ja: z.ZodString;
+        en: z.ZodString;
+    }, z.core.$strict>>;
+    axes: z.ZodReadonly<z.ZodObject<{
+        label: z.ZodReadonly<z.ZodObject<{
+            ja: z.ZodString;
+            en: z.ZodString;
+        }, z.core.$strict>>;
+        value: z.ZodReadonly<z.ZodObject<{
+            ja: z.ZodString;
+            en: z.ZodString;
+        }, z.core.$strict>>;
+    }, z.core.$strict>>;
+}, z.core.$strict>>>>;
+
+// @public (undocumented)
+export type ResultChartTextPair = z.infer<typeof ResultChartTextPairSchema>;
+
+// @public
+export const ResultChartTextPairSchema: z.ZodReadonly<z.ZodObject<{
+    ja: z.ZodString;
+    en: z.ZodString;
+}, z.core.$strict>>;
+
+// @public
 export const SURFACE_AGENT_SWITCHER_MAX = 6;
 
 // @public
@@ -209,6 +324,29 @@ export const SurfaceDefinitionSchema: z.ZodReadonly<z.ZodObject<{
         card: "card";
         table: "table";
     }>>>>;
+    resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+        kind: z.ZodEnum<{
+            bar: "bar";
+            line: "line";
+        }>;
+        field: z.ZodString;
+        label: z.ZodString;
+        value: z.ZodString;
+        title: z.ZodReadonly<z.ZodObject<{
+            ja: z.ZodString;
+            en: z.ZodString;
+        }, z.core.$strict>>;
+        axes: z.ZodReadonly<z.ZodObject<{
+            label: z.ZodReadonly<z.ZodObject<{
+                ja: z.ZodString;
+                en: z.ZodString;
+            }, z.core.$strict>>;
+            value: z.ZodReadonly<z.ZodObject<{
+                ja: z.ZodString;
+                en: z.ZodString;
+            }, z.core.$strict>>;
+        }, z.core.$strict>>;
+    }, z.core.$strict>>>>>;
     allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
         turnsPerConversation: z.ZodOptional<z.ZodInt>;

@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, lt, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
 import { demoDailyCosts } from '../schema/demo-daily-costs.js';
@@ -27,6 +27,17 @@ export interface DemoSpendWindow {
 export interface DemoCapsRepository {
   /** When the workspace's demo ends, or `null` for a real workspace or one that does not exist. */
   demoExpiresAt(workspaceId: string): Promise<Date | null>;
+  /**
+   * Whether an approved write to a demo records stand-in is kept in the workspace (ADR-0169 D3): a
+   * visitor's demo workspace (`demo_expires_at`) or the verification workspace
+   * (`demo_verification_at`). `false` for any other workspace and one that does not exist.
+   */
+  keepsDemoWrites(workspaceId: string): Promise<boolean>;
+  /**
+   * Mark `workspaceId` as the verification workspace at `now` (`PUT /api/demo/verification`): sets
+   * `demo_verification_at` the first time and leaves it as it is after that.
+   */
+  markVerificationWorkspace(workspaceId: string, now: Date): Promise<void>;
   /**
    * Count the person's and the client's admissions at or after `since` and record one at `now`
    * only if both are under their limits, in one transaction. Both counts are taken under
@@ -63,6 +74,24 @@ export function createDatabaseDemoCapsRepository(db: Database): DemoCapsReposito
         .from(workspaces)
         .where(eq(workspaces.id, workspaceId));
       return row?.demoExpiresAt ?? null;
+    },
+    async keepsDemoWrites(workspaceId) {
+      const [row] = await db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.id, workspaceId),
+            or(isNotNull(workspaces.demoExpiresAt), isNotNull(workspaces.demoVerificationAt)),
+          ),
+        );
+      return row !== undefined;
+    },
+    async markVerificationWorkspace(workspaceId, now) {
+      await db
+        .update(workspaces)
+        .set({ demoVerificationAt: sql`coalesce(${workspaces.demoVerificationAt}, ${now})` })
+        .where(eq(workspaces.id, workspaceId));
     },
     async countAdmissionsSince(userId, since) {
       const [row] = await db

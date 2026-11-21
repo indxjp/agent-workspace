@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "06b9a2b3d2cc3172fcf26ace53c19a0417e650cba1bf54f1c1013699b0c61abe",
+        "agents/policy-qa.md": "0ae89c717f445fb374ab09eb82b6730d69d0709fe7324d1c3b37ca267a7bdf7d",
+        "agents/policy-qa.ts": "b3447a6447f9dbd4fb17b14920bc0351f45bedd787ff1bd63ca85a79c3698540",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/policy-qa.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/policy-qa/SKILL.md": "642ec5b9c5acbdc79d163f2e8d926b804553486baa6e9353acc56ecf847ca169",
+        "surfaces/main.ts": "bd29f0ec72206f36e929e85eeca15aaab87739aee00b6d9d4af92f4b36a28f6a"
+      },
+      "edits": []
+    }
+  }
+}

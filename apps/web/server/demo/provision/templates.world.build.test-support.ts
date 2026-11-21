@@ -114,6 +114,7 @@ function worldReaders(
       return (await readRows(workspaceId)).find((row) => row.id === fileId)?.path ?? null;
     },
     connectors: (workspaceId) => parts.connectors.forWorkspace(workspaceId).list(),
+    connectorStores: parts.connectors,
     models: (workspaceId) => parts.models.forWorkspace(workspaceId),
     profiles: (workspaceId) => parts.runtimeProfiles.forWorkspace(workspaceId).list(),
     profileStore: (workspaceId) => parts.runtimeProfiles.forWorkspace(workspaceId),
@@ -123,6 +124,9 @@ function worldReaders(
     granted: (workspaceId, agentId) =>
       parts.grants.forWorkspace(workspaceId).listPrincipalIds(agentId),
     skills: (workspaceId) => skills.list(workspaceId),
+    skillsDomain: skills,
+    skillRevisions: async (workspaceId, name) =>
+      (await (await parts.skillCatalogs(workspaceId)).listSkillRevisions(name)).length,
     async skillFiles(workspaceId, name) {
       const files = await skills.files(workspaceId, name);
       return files === null

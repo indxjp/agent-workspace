@@ -8,8 +8,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CLAIMS, plannedMarker } from '../../examples/store/app/claims.ts';
-import { featuresUsed, safetyTags } from '../../examples/store/app/labels.ts';
+import { featureNames, safetyTags } from '../../examples/store/app/labels.ts';
+import { defineLanding } from '../../examples/store/catalog/define.ts';
 import { CATALOG, FEATURED } from '../../examples/store/catalog/index.ts';
+import { LANDING } from '../../examples/store/catalog/landing.generated.ts';
 
 const root = resolve(__dirname, '../..');
 
@@ -83,7 +85,74 @@ describe('the safety claims', () => {
       'Acts only within the asking person’s access',
       'Writes can wait for approval',
     ]);
-    expect(featuresUsed(FEATURED, 'en')).toContain('Structured output');
+    expect(featureNames(FEATURED.safety, 'en')).toContain('Structured output');
     if (soon !== undefined) expect(safetyTags(soon, 'en')).toEqual([]);
+  });
+
+  it('lets no landing field hold an unmeasured quantity, and still lets copy name things', () => {
+    const [slug, page] = Object.entries(LANDING)[0] ?? [];
+    if (slug === undefined || page === undefined) throw new Error('no landing copy');
+    const withHeadline = (text: string) => () =>
+      defineLanding({ [slug]: { ...page, headline: { ...page.headline, ja: text } } });
+    for (const claim of [
+      '作業を3時間短くする',
+      '工数を３０％減らす',
+      '二十四時間動く',
+      '三割の手間',
+      '２倍の速さ',
+      '数時間かかる確認',
+      'Saves five hours a week',
+      'Answers 3x as many',
+      '50 percent fewer errors',
+    ]) {
+      expect(withHeadline(claim), claim).toThrow(/unmeasured number/u);
+    }
+    for (const name of [
+      'ISO 27001 の要求事項',
+      'Step 1 から始める',
+      '第1条から順に読む',
+      '36協定の確認',
+      'Excel 2019 のファイル',
+      '十分に確認する',
+      '一人ひとりの申請',
+      '一件ずつ確認する',
+      '役割と割り当て',
+    ]) {
+      expect(withHeadline(name), name).not.toThrow();
+    }
+  });
+
+  /** Wording of a measured result or a quote that needs no numeral; ordinary Japanese stays allowed. */
+  const UNMEASURED_WORDING =
+    /[一二三四五六七八九十数]割|[0-9０-９一二三四五六七八九十数]+倍|(?:時間|工数|手間)を(?:削減|短縮|半減)|お客様の声|導入企業|saves? (?:time|hours)|(?:twice|times) as (?:fast|many|much)|faster|percent|testimonial|customers say|[“”]/iu;
+
+  it('tells measured-result wording from ordinary words', () => {
+    for (const ordinary of [
+      '役割',
+      '割り当て',
+      '分割',
+      '確認に時間をとられる',
+      'saves a redline',
+    ]) {
+      expect(ordinary).not.toMatch(UNMEASURED_WORDING);
+    }
+    for (const claim of ['三割', '２倍', '時間を削減', 'saves time', 'twice as fast', '“great”']) {
+      expect(claim).toMatch(UNMEASURED_WORDING);
+    }
+  });
+
+  it('words no landing copy as a measured result or a customer quote, in either language', () => {
+    for (const [slug, page] of Object.entries(LANDING)) {
+      const texts = [
+        page.headline,
+        page.audience,
+        page.problem,
+        ...page.steps.map((step) => step.text),
+        ...page.outputs,
+        ...page.faq.flatMap(({ q, a }) => [q, a]),
+        ...page.limits,
+      ].flatMap(({ ja, en }) => [ja, en]);
+      for (const text of texts) expect(text, slug).not.toMatch(UNMEASURED_WORDING);
+    }
   });
 });

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "a22f4782414baf12752aae7dca941b4614f718413aef1dd8c51aa1208f25b33c",
+        "agents/glossary.md": "37f666287816bfae6a862b67915f073b7c8df7f7fde6ed767e3dcd50f78eb7d0",
+        "agents/glossary.ts": "56774fdc9d1f6927b5f8505c12abd4b7c79e9be0aad7f0e5dad28b7da6e86bcf",
+        "evals/glossary.yaml": "6fa70d34af7e72721fe537ce78f5aa6994cb7d9e074f75f2f581fa9f394e428f",
+        "skills/glossary/SKILL.md": "6a7dff874736a3de7ad7ff3f48845ee3256a1114cca7dd8d382b92025c97e23c",
+        "surfaces/main.ts": "c34bf54b29cecbb517ebed66a83867b60d36efcf8f359ea0789055c8dc5fa614"
+      },
+      "edits": []
+    }
+  }
+}

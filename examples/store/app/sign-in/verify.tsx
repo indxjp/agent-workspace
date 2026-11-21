@@ -1,7 +1,7 @@
 'use client';
 /**
  * The email link's landing: read the fragment once, take it out of the address bar, send it to the
- * platform to open the visitor's demo workspace, and go to the entry's Try tab. A refusal says
+ * platform to open the visitor's demo workspace, and go to the entry's Try it section. A refusal says
  * what happened and links back.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -48,7 +48,7 @@ export function VerifyLink({
     }).then((answer) => {
       if (answer.ok) window.location.replace(afterSignInPath(link.entry));
       else {
-        // The visitor re-enters the address where the form is: the entry's Try tab.
+        // The visitor re-enters the address where the form is: the entry's Try it section.
         setState({ failed: verifyRefusalMessage(answer, lang), back: afterSignInPath(link.entry) });
       }
     });

@@ -1,0 +1,6 @@
+lot_no,part_no,item_id,item,sample_1,sample_2,sample_3,unit,instrument_no,inspector,checker,inspected_on,remarks
+2611-07,BK-210,INS-01,Outer diameter,20.01,19.98,20.03,mm,MC-0412,Yuzuru Hamabe,Tomoe Mashiba,2026-11-18,
+2611-07,BK-210,INS-02,Hole pitch,45.04,45.12,44.97,mm,MC-0412,Yuzuru Hamabe,Tomoe Mashiba,2026-11-18,
+2611-07,BK-210,INS-03,Plate thickness,3.21,,3.18,mm,MM-0107,Yuzuru Hamabe,Tomoe Mashiba,2026-11-18,sample 2 not measured
+2611-07,BK-210,INS-04,Hardness,32,35,33,HRC,HT-0003,Yuzuru Hamabe,,2026-11-18,
+2611-07,BK-210,INS-05,Appearance,good,defect,good,-,visual,Yuzuru Hamabe,Tomoe Mashiba,2026-11-18,burr on the edge of sample 2

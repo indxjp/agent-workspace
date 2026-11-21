@@ -226,6 +226,12 @@ The surface is then served at three addresses:
   matches the tool's exact name in the run, or the bare name after the last `__`, so
   `toolResults: { find_files: 'table' }` also matches Claude's `mcp__<connector>__find_files`. A
   single `_` is not a separator, so Mastra's `<server>_<tool>` needs the full name.
+- `resultCharts`: up to 4 charts a run's result card draws from the run's typed output (the run
+  asked for an `outputSchema`). Each names a `kind` (`bar` or `line`), the top-level array `field`
+  of the output, and in each row the `label` key and the numeric `value` key, with a `title` and
+  `axes.label` / `axes.value` in `ja` and `en`. The run detail panel draws the chart and gives a
+  screen reader the same rows as a table; a result that does not fit the chart says why. At most
+  60 rows are drawn.
 - `allowedOrigins` and `limits.turnsPerConversation`: [below](#allow-the-sites-that-may-embed-it).
 - Anything else is refused: the schema is strict. Every bound is on
   [surfaces](/reference/contracts/surfaces).

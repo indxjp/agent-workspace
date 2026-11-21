@@ -8,6 +8,12 @@
 # by default (but still diffable on demand - no `-diff`).
 pnpm-lock.yaml text eol=lf linguist-generated=true
 
+# Written by scripts and kept current by staleness tests (each fails when the committed file differs
+# from a fresh generation), so they are generated: review UIs collapse them and the PR size gate
+# (scripts/ci/check-pr-size.mjs) leaves them out.
+*.generated.ts linguist-generated=true
+use-cases/SCOREBOARD.md linguist-generated=true
+
 # Binary assets: never translate line endings or attempt a text diff.
 *.png binary
 *.jpg binary

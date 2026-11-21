@@ -11,7 +11,8 @@
  * Which workspace may be filled: one with an Owner and no member that a demo or a template has. A
  * visitor's demo workspace (it has a guest) and a template (its members are template-owner
  * accounts) are refused, so this never writes over either. The copy is made for the first Owner, who
- * then owns the agents, the stand-ins and the files, and is the agents' one grant.
+ * then owns the agents, the stand-ins and the files, and is the agents' one grant. A filled
+ * workspace is marked (`demo_verification_at`), and keeps approved demo writes (ADR-0169 D3).
  */
 import type { DemoEntrySlug } from '@indx-workspace/contracts/demo';
 
@@ -27,6 +28,12 @@ export function createDemoVerification(deps: {
   readonly directory: Pick<DirectoryRoot, 'forWorkspace'>;
   /** The visitor's caps (`AW_DEMO_MAX_TURNS_PER_RUN`, `AW_DEMO_MAX_COST_PER_RUN_USD`). */
   readonly limits: DemoRunLimits;
+  /**
+   * Mark the workspace as the verification workspace (`workspaces.demo_verification_at`, kept from
+   * the first fill), so an approved write to a records stand-in is kept there as in a visitor's
+   * demo (ADR-0169 D3).
+   */
+  readonly markVerificationWorkspace: (workspaceId: string, now: Date) => Promise<void>;
 }): DemoVerificationOperations {
   return {
     async fill({ workspaceId, now }) {
@@ -37,6 +44,7 @@ export function createDemoVerification(deps: {
       );
       const owner = members.find((member) => member.role === 'owner');
       if (isDemoOrTemplate || owner === undefined) return { kind: 'workspace-refused' };
+      await deps.markVerificationWorkspace(workspaceId, now);
       const entries: DemoEntrySlug[] = [];
       for (const entry of await deps.templateEntries()) {
         if (!(await deps.templates.exists(entry))) continue;

@@ -45,7 +45,11 @@ import {
   claudeRulePath,
   needsApproval,
 } from '@indx-workspace/contracts/agents';
-import type { AgentPermissions, AgentToolPolicy } from '@indx-workspace/contracts/agents';
+import type {
+  AgentPermissions,
+  AgentSkillPolicy,
+  AgentToolPolicy,
+} from '@indx-workspace/contracts/agents';
 import { normaliseGrants, type EngineFileGrant } from '@agent-workspace/engine';
 
 export { CLAUDE_APPROVABLE_TOOLS, splitApprovals, unapprovableRules } from './approval-rules.js';
@@ -254,4 +258,32 @@ const CLAUDE_WORKSPACE_KEPT: readonly string[] = [
  */
 export function claudeWriteFilesDenials(cwd: string): readonly string[] {
   return CLAUDE_WORKSPACE_KEPT.map((path) => `Edit(/${claudeRulePath(cwd)}/${path})`);
+}
+
+/** The built-in skill that writes Office files through `run_skill_script` (ADR-0167). */
+const OFFICE_WRITER_SKILL = 'office-writer';
+/** Where a completed run's files are collected into its record (ADR-0137, ADR-0163). */
+const RUN_OUTPUTS_FOLDER = 'outputs';
+
+/**
+ * The deny rule an agent that grants `office-writer` gets: `['Edit(//<cwd>/outputs/**)']`, else `[]`.
+ *
+ * Such an agent writes its document model with `Write` (Write files allows it without asking, see
+ * {@link claudeWriteFilesApprovals}) and renders the deliverable with `office-writer`'s script, whose
+ * `run_skill_script` call waits for a person's approval (ADR-0167 D5, #2388). Without this rule the
+ * same `Write` could put a file straight into `outputs/`, which the run returns as its result, with
+ * nobody approving it. An `Edit` rule covers `Write`, `Edit` and `NotebookEdit`, and a deny wins over
+ * the workspace allow rule and over an approval. The script writes under Node's permission model, not
+ * through these tools, so the approved render still reaches `outputs/`.
+ */
+export function claudeOfficeWriterOutputDenials(
+  skills: AgentSkillPolicy,
+  assigned: readonly { readonly name: string }[],
+  cwd: string,
+): readonly string[] {
+  const granted =
+    skills.mode === 'all'
+      ? assigned.some((skill) => skill.name === OFFICE_WRITER_SKILL)
+      : skills.names.includes(OFFICE_WRITER_SKILL);
+  return granted ? [`Edit(/${claudeRulePath(cwd)}/${RUN_OUTPUTS_FOLDER}/**)`] : [];
 }

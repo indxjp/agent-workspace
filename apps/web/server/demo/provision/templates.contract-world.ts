@@ -3,12 +3,16 @@
  * the fixtures every group of `templates.contract.ts` shares.
  */
 import type { DemoEntrySlug } from '@indx-workspace/contracts/demo';
-import type { DemoSampleRecords } from '@indx-workspace/contracts/demo-operator';
+import type { DemoRecordedWrite, DemoSampleRecords } from '@indx-workspace/contracts/demo-operator';
 import type { AgentResourceAssignments } from '@indx-workspace/contracts/agents';
 
-import type { AgentRecord } from '../../agents';
+import type { AgentRecord, WorkspaceSkills } from '../../agents';
 import type { DirectoryRoot } from '../../identity';
-import type { AnyConnectorResource, WorkspaceModelsStore } from '../../integrations';
+import type {
+  AnyConnectorResource,
+  ConnectorsStoreProvider,
+  WorkspaceModelsStore,
+} from '../../integrations';
 import type { RuntimeProfileRecord, RuntimeProfileStoreProvider } from '../../execution';
 import type { DemoTemplateOperations } from '../operator';
 import type { DemoRunLimits, DemoSandbox, DemoTemplates } from './ports';
@@ -25,6 +29,8 @@ export type SeedConnector =
       readonly name: string;
       readonly reads: readonly string[];
       readonly writes: readonly string[];
+      /** The writes the demo keeps once a person approved them (ADR-0169). */
+      readonly recorded?: readonly DemoRecordedWrite[];
     };
 
 export interface TemplateSpec {
@@ -102,6 +108,8 @@ export interface DemoTemplatesWorld {
   /** The path of the row with `fileId` in the workspace, or `null`. */
   pathOf(workspaceId: string, fileId: string): Promise<string | null>;
   connectors(workspaceId: string): Promise<readonly AnyConnectorResource[]>;
+  /** The connectors domain itself, as the run API's demo wiring hands it to the recorder (ADR-0169). */
+  readonly connectorStores: Pick<ConnectorsStoreProvider, 'forWorkspace'>;
   /** The workspace's model connections store, as the models domain hands it out. */
   models(workspaceId: string): WorkspaceModelsStore;
   /** The workspace's runtime profiles. */
@@ -114,6 +122,10 @@ export interface DemoTemplatesWorld {
   granted(workspaceId: string, agentId: string): Promise<readonly string[] | null>;
   /** The workspace's skills, as the skills domain lists them. */
   skills(workspaceId: string): Promise<readonly { readonly id: string; readonly name: string }[]>;
+  /** The skills domain the world's copies go through, to call it as another caller would. */
+  readonly skillsDomain: WorkspaceSkills;
+  /** How many complete revisions the skill `name` of the workspace has. */
+  skillRevisions(workspaceId: string, name: string): Promise<number>;
   /** The text of each file of the skill `name`, by path, or `null` when there is no such skill. */
   skillFiles(workspaceId: string, name: string): Promise<Readonly<Record<string, string>> | null>;
 }

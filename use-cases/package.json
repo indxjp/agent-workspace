@@ -1,0 +1,15 @@
+{
+  "name": "@agent-workspace/use-cases",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@indx-workspace/builtin-skills": "workspace:@agent-workspace/skills-office@*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.5"
+  }
+}

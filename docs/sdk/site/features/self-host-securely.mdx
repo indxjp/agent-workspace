@@ -383,7 +383,7 @@ Each runtime profile states its network policy. It is a required, explicit choic
 
 | Policy       | Meaning                                                                                                                                                                          |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `none`       | The model gateway and nothing else. On `docker` the sandbox sits on a dedicated egress network that reaches only the gateway; on `kubernetes` it is a default-deny NetworkPolicy |
+| `none`       | The model gateway and nothing else. On `docker` the sandbox sits on a dedicated egress network that reaches only the gateway; on `kubernetes` it is a default-deny NetworkPolicy; on Cloud Run a firewall allows one private address, which also serves the control plane's routes for the run's transcript and file search (gated by the run's token), and no internet |
 | `restricted` | The gateway plus the profile's `allowedDomains`, through an allowlist proxy. `docker` and `kubernetes` accept it only when the deployment sets the proxy image; Cloud Run only with `gcp.sandboxInternet: true` (see below) |
 | `open`       | Everything. Choose it deliberately                                                                                                                                               |
 
@@ -632,7 +632,9 @@ Read these before you plan a production rollout.
   - **On Google Cloud Run, DNS is still an open channel under every network policy.** Each
   sandbox is an internal Cloud Run service on your sandbox subnet. A firewall denies all its egress
   except plain HTTP to one private address: the gateway's internal load balancer, the only thing a
-  sandbox reaches. Google's private ranges (`private.googleapis.com` and
+  sandbox reaches. It serves the model gateway and four control-plane routes the sandbox's runner
+  uses to save the run's transcript and search its files, each gated by the run's own token, and
+  nothing else of the control plane. Google's private ranges (`private.googleapis.com` and
   `restricted.googleapis.com`) are denied on every port, so a sandbox reaches no Google API and no
   `run.app` service, its own install's included. The live workflow proves from inside the VPC that
   a `none` sandbox gets no answer from a public host, a private address, either Google range or the

@@ -15,6 +15,7 @@ import {
   claudeCommandApprovalRules,
   claudeWriteFilesApprovals,
   claudeWriteFilesDenials,
+  claudeOfficeWriterOutputDenials,
 } from './tools.js';
 
 type ParsedPolicy = ReturnType<typeof ClaudeRunPolicy.parse>;
@@ -45,10 +46,15 @@ export function compileToolsWithWriteApprovals(
     request.cwd,
   );
   const writeDenials = writeApprovals.length === 0 ? [] : claudeWriteFilesDenials(request.cwd);
+  const outputDenials = claudeOfficeWriterOutputDenials(
+    portable.skills,
+    request.resources?.skills ?? [],
+    request.cwd,
+  );
   return {
     ...compiledTools,
     autoApprove: [...compiledTools.autoApprove, ...writeApprovals],
-    deny: [...new Set([...compiledTools.deny, ...writeDenials])],
+    deny: [...new Set([...compiledTools.deny, ...writeDenials, ...outputDenials])],
   };
 }
 

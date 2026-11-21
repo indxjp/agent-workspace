@@ -36,6 +36,7 @@ export function failedRuns(
 ): { name: string; runId: string; failures: string[] }[];
 export function chatFailedRunId(chatOutput: string): string | undefined;
 export function fileSetupCommands(dir: string): string[];
+export function skillPublishCommands(dir: string): string[];
 export function pointApisAtLoopback(dir: string, port: number): void;
 export function parseArguments(argv: readonly string[]): { version: string; registry: string };
 export function installSteps(

@@ -2,8 +2,9 @@
 .store-header nav { display: flex; align-items: center; gap: 1rem; margin-inline-start: auto; }
 .store-logo { font-weight: 700; text-decoration: none; }
 .store-lang { display: flex; gap: 0.25rem; }
-.store-lang button[aria-pressed='true'] { font-weight: 700; text-decoration: underline; }
+.store-lang [aria-current='true'] { font-weight: 700; text-decoration: underline; }
 .store-main { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
+.store-main img { max-width: 100%; height: auto; }
 .store-footer { padding: 1.5rem; text-align: center; }
 .store-hero { display: grid; gap: 1rem; padding-block: 1.5rem; }
 .store-numbers { display: flex; flex-wrap: wrap; gap: 1.5rem; list-style: none; padding: 0; }
@@ -13,9 +14,6 @@
 .store-shelf { margin-block: 2rem; }
 .store-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; list-style: none; padding: 0; }
 .store-featured { border: 1px solid currentColor; border-radius: 0.5rem; padding: 1rem; overflow-x: auto; }
-.store-tabs [role='tablist'] { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid currentColor; margin-block: 1rem; }
-.store-tabs [role='tab'] { padding: 0.5rem 1rem; background: none; border: 0; border-bottom: 3px solid transparent; cursor: pointer; color: inherit; font: inherit; }
-.store-tabs [role='tab'][aria-selected='true'] { border-bottom-color: currentColor; font-weight: 700; }
 .store-customize { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
 .store-code { overflow-x: auto; padding: 1rem; border: 1px solid currentColor; border-radius: 0.5rem; }
 .store-bar { display: block; width: 100%; height: 0.75rem; }

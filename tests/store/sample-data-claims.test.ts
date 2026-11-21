@@ -217,16 +217,28 @@ const COUNTED_FILES: Readonly<
   'meeting-minutes': [
     [/文字起こし(\d+)本/u, /(\d+) meeting transcripts/u, (e) => seededFiles(e).length],
   ],
+  nda: [
+    [
+      /サンプル(\d+)通/u,
+      /(\d+) sample incoming NDAs/u,
+      (e) => seededFiles(e).filter((file) => file.includes(`${path.sep}inbox${path.sep}`)).length,
+    ],
+  ],
 };
+
+/**
+ * The live entries whose sample files the card describes without a count: contract-review's and
+ * policy-qa's data are documents named by kind, not a number the card states.
+ */
+const UNCOUNTED = new Set(['contract-review', 'policy-qa']);
 
 describe('what an entry with sample files says about its data', () => {
   const counted = live.filter((entry) => COUNTED_FILES[entry.slug] !== undefined);
 
   it('covers every live entry that has sample files and no records, bar the ones with no count', () => {
     const seeded = live.filter((entry) => entry.demo.seed.length > 0).map((e) => e.slug);
-    // contract-review's data is a document and a standard, not a count the card states.
     expect(Object.keys(COUNTED_FILES).sort()).toEqual(
-      seeded.filter((slug) => slug !== 'contract-review').sort(),
+      seeded.filter((slug) => !UNCOUNTED.has(slug)).sort(),
     );
   });
 

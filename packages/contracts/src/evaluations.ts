@@ -56,8 +56,9 @@ const NeedlesSchema = z
 
 /**
  * What a case's answer must satisfy (issue #618). Six checks and nothing else: `contains` and
- * `notContains` are case-sensitive substrings of the final answer, `tool` is the exact name of a
- * tool the run called, `output` is a part of the run's structured output, `judge` is a rubric a
+ * `notContains` are case-sensitive substrings of the final answer, `tool` names a tool the run
+ * called, exactly or without the engine's prefix (`namesTool`, so `search_files` names
+ * `mcp__agent-workspace__search_files`), `output` is a part of the run's structured output, `judge` is a rubric a
  * model grades the answer against, and `awaitsApproval` says the run must stop at an approval
  * pause. At least one.
  *

@@ -846,6 +846,13 @@ resource "google_cloud_run_v2_service" "runner_manager" {
         value = local.sandbox_subnet_id
       }
       env {
+        # ADR-0172: every sandbox gets this as AW_SESSION_MIRROR_URL, so its run is mirrored to web
+        # and can search its files. The gateway's internal load balancer, the one address a sandbox
+        # reaches; its URL map sends only web's run routes to web (network.tf).
+        name  = "RUNTIME_SESSION_MIRROR_URL"
+        value = local.gateway_internal_url
+      }
+      env {
         # A brand-new Cloud Run service's default URL needs longer than the 30s default to become
         # reachable end-to-end (routing/DNS, not just the revision reporting ready) — unlike
         # docker/kubernetes, where the manager reaches an address on a network it is already on.
@@ -930,7 +937,7 @@ resource "google_secret_manager_secret_iam_member" "web_setting_access" {
 }
 
 resource "google_cloud_run_v2_service" "web" {
-  name                = "${var.name}-web"
+  name                = local.web_service_name
   location            = var.region
   project             = var.project_id
   ingress             = var.domain == "" ? "INGRESS_TRAFFIC_ALL" : "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"

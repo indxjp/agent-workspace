@@ -48,6 +48,7 @@ import {
   type RunReferenceCatalogs,
 } from './run-detail-sections';
 import { loadRunDetail, type DetailLoad } from './run-requests-model';
+import { RunResultCard } from './run-result-card';
 import type { RunTree } from './run-tree-model';
 import { TeamCard } from './run-team-card';
 import { runsStrings } from './runs-messages';
@@ -185,6 +186,7 @@ export function RunDetailBody({ run, tree, catalogs, locale }: RunDetailBodyProp
         ceilingStrings={ceilingStrings}
       />
       <OverviewCard run={run} words={words} statusText={statusText} catalogs={catalogs} />
+      <RunResultCard run={run} locale={locale} />
 
       {tree.children.length === 0 ? null : (
         <TeamCard

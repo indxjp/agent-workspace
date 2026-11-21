@@ -5,14 +5,17 @@
 ```ts
 
 import { ComponentType } from 'react';
+import { JSX } from 'react';
 import { ReactNode } from 'react';
+import { ResultChart as ResultChart_2 } from '@indx-workspace/contracts/surfaces';
+import { ResultChartPoint } from '@indx-workspace/contracts/surfaces';
 import { RunApprovalCall } from '@indx-workspace/contracts/runs';
 import { RunApprovalDecision } from '@indx-workspace/contracts/runs';
 import type { RunFeedbackRating } from '@indx-workspace/contracts/feedback';
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 import type { SurfaceDensity } from '@indx-workspace/contracts/surfaces';
 import type { SurfaceLayout } from '@indx-workspace/contracts/surfaces';
-import type { SurfaceLocale } from '@indx-workspace/contracts/surfaces';
+import { SurfaceLocale } from '@indx-workspace/contracts/surfaces';
 import type { SurfaceThemeMode } from '@indx-workspace/contracts/surfaces';
 import type { SurfaceToolResultComponent } from '@indx-workspace/contracts/surfaces';
 import type { SurfaceToolTraceMode } from '@indx-workspace/contracts/surfaces';
@@ -288,6 +291,37 @@ interface RailGroup {
     readonly items: readonly string[];
     // (undocumented)
     readonly label: string;
+}
+
+// @public
+export const RESULT_CHART_TICK_MAX_CHARACTERS = 14;
+
+// @public
+export function ResultChart(input: ResultChartProps): JSX.Element;
+
+// @public
+export interface ResultChartGeometry {
+    // (undocumented)
+    readonly band: number;
+    // (undocumented)
+    readonly high: number;
+    // (undocumented)
+    readonly low: number;
+    // (undocumented)
+    readonly x: (index: number) => number;
+    // (undocumented)
+    readonly y: (value: number) => number;
+}
+
+// @public
+export function resultChartGeometry(points: readonly ResultChartPoint[]): ResultChartGeometry;
+
+// @public (undocumented)
+export interface ResultChartProps {
+    readonly chart: ResultChart_2;
+    // (undocumented)
+    readonly locale: SurfaceLocale;
+    readonly structured: unknown;
 }
 
 // @public

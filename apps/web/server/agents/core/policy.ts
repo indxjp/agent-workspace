@@ -227,10 +227,16 @@ export const CONNECTOR_SERVER_PREFIX = 'connector-';
 
 const CONNECTOR_ID_SERVER = /^connector-/u;
 
+/** Every tool rule of `policy` that can name a connector: its three tool lists and its gates. */
 function policyRules(policy: AgentPolicy): readonly string[] {
   if (!('tools' in policy)) return [];
   const { base, autoApprove, deny } = policy.tools;
-  return [...(base === 'claude_code_preset' ? [] : base), ...autoApprove, ...deny];
+  return [
+    ...(base === 'claude_code_preset' ? [] : base),
+    ...autoApprove,
+    ...deny,
+    ...(policy.requireApproval ?? []),
+  ];
 }
 
 /**
@@ -256,6 +262,10 @@ export function mcpRuleServerNames(policy: AgentPolicy): readonly string[] {
  * transfer to whichever connector next takes the name. Stored by id, compose points the rule at the
  * connector's key in that run (`withRunConnectorKeys`, `../compose/run-request.ts`). A name no MCP
  * connector has is left as written.
+ *
+ * The approval gates (`requireApproval`) are stored by id too (ADR-0145 D3, #2439): a gate left on
+ * the name would match no tool after a rename or a fallback to `connector-<id>`, and the write it
+ * guards would run without a person's approval.
  */
 export function withStoredConnectorIds(
   policy: AgentPolicy,
@@ -272,7 +282,7 @@ export function withStoredConnectorIds(
       ),
     ),
   ];
-  const { tools } = policy;
+  const { tools, requireApproval } = policy;
   return {
     ...policy,
     tools: {
@@ -281,11 +291,12 @@ export function withStoredConnectorIds(
       autoApprove: rewrite(tools.autoApprove),
       deny: rewrite(tools.deny),
     },
+    ...(requireApproval === undefined ? {} : { requireApproval: rewrite(requireApproval) }),
   };
 }
 
 /**
- * Every `connector-<id>` server a rule of `policy` names (a rule stored by connector id,
+ * Every `connector-<id>` server a rule or approval gate of `policy` names (stored by connector id,
  * ADR-0113 SD13), de-duplicated: the connectors whose current names a view looks up.
  */
 export function storedConnectorServers(policy: AgentPolicy): readonly string[] {

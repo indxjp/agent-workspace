@@ -391,6 +391,23 @@ describe('mcpRuleServerNames / withStoredConnectorIds (ADR-0113 SD13, #1109)', (
     });
   });
 
+  it('stores an approval gate by the id its name has, and names its server for the lookup (#2439)', () => {
+    const written = policy('claude_code_preset');
+    if (!('tools' in written)) throw new Error('the policy is not on the Claude arm');
+    const gated: AgentPolicy = {
+      ...written,
+      requireApproval: ['mcp__tracker__create_task', 'mcp__unknown__send', 'Write'],
+    };
+    expect(mcpRuleServerNames(gated)).toContain('tracker');
+    const stored = withStoredConnectorIds(gated, new Map([['tracker', B]]));
+    expect('tools' in stored && stored.requireApproval).toEqual([
+      `mcp__connector-${B}__create_task`,
+      'mcp__unknown__send',
+      'Write',
+    ]);
+    expect(storedConnectorServers(stored)).toContain(`connector-${B}`);
+  });
+
   it('leaves a name no MCP connector has, and the preset base, as written', () => {
     const written = policy('claude_code_preset');
     expect(withStoredConnectorIds(written, new Map([['other', A]]))).toEqual(written);

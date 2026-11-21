@@ -1,5 +1,5 @@
 /**
- * The recordings the Try tab replays when a cap stops the live chat, and the home page's featured
+ * The recordings the Try it section replays when a cap stops the live chat, and the home page's featured
  * mini chat (spec, "How Try it works"). Each is one turn of a live entry's first suggested prompt,
  * made by running the entry's real agent against the platform's scripted model, never written by
  * hand. This test is the generator and the drift check: `STORE_RECORDINGS_WRITE=1` rewrites
@@ -22,6 +22,7 @@ import {
   type Recording,
 } from '../../examples/store/catalog/recording.ts';
 import { RECORDINGS } from '../../examples/store/catalog/recordings.generated.ts';
+import { RESULT_CHARTS } from '../../examples/store/catalog/charts.generated.ts';
 import { recordTurn } from './proof/record-turn.ts';
 import { normalize } from './recordings/normalize.ts';
 import { RECORDERS } from './recordings/index.ts';
@@ -38,6 +39,20 @@ const writing = process.env['STORE_RECORDINGS_WRITE'] === '1';
 let freshText = '';
 /** The entries whose recorder failed, with why: they get no recording, and their test says so. */
 const failed = new Map<string, string>();
+
+/**
+ * The recordings of an entry with result charts that kept no typed answer, as `<slug> <lang>`: their
+ * replay could draw no chart, so the entry's recorder did not start its run with the schema.
+ */
+function untypedCharted(
+  recordings: readonly Recording[],
+  charts: Readonly<Record<string, readonly unknown[]>>,
+): string[] {
+  return recordings
+    .filter((recording) => (charts[recording.slug] ?? []).length > 0)
+    .filter((recording) => recording.turn.structured === undefined)
+    .map((recording) => `${recording.slug} ${recording.lang}`);
+}
 
 /** The generated module: one recording per line, as JSON, so the store's line count stays small. */
 function render(recordings: readonly Recording[]): string {
@@ -85,6 +100,7 @@ beforeAll(async () => {
                 prompt,
                 ja: first.ja,
                 records: records === undefined ? null : path.join(ROOT, entry.source, records),
+                outputSchema: entry.demo.outputSchema ?? null,
               }),
             ),
           }),
@@ -132,6 +148,17 @@ describe('the recordings of the live entries', () => {
   // Read after the optional write, so the write run compares the file it just made and still runs.
   it('equals a fresh recording of every live entry (drift)', () => {
     expect(readFileSync(GENERATED, 'utf8')).toBe(freshText);
+  });
+
+  it("keeps the typed answer of every charted entry's recording, for its replay's charts", () => {
+    expect(untypedCharted(RECORDINGS, RESULT_CHARTS)).toEqual([]);
+    const turn = { prompt: 'q', steps: [], stopReason: null };
+    const recording: Recording = { slug: 'x', lang: 'ja', recordedWith: 'scripted-model', turn };
+    expect(untypedCharted([recording], { x: [{}] })).toEqual(['x ja']);
+    expect(
+      untypedCharted([{ ...recording, turn: { ...turn, structured: {} } }], { x: [{}] }),
+    ).toEqual([]);
+    expect(untypedCharted([recording], {})).toEqual([]);
   });
 
   it('has a recorder for every live entry and none for another', () => {

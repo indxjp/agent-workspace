@@ -37,6 +37,42 @@ GALLERY_WRITE=1 pnpm vitest run --project tests-gallery tests/gallery/benchmark.
 - **Live tier.** `aw dev`, `aw push` and `aw eval` on a real workspace and model. It is run by you,
   never claimed by CI.
 
+## Coverage
+
+`pnpm test:coverage:gallery` runs this project under `vitest.gallery.coverage.config.ts`, which
+measures each project's `agents/`, `backend/`, `mcp/`, `tools/`, `apis/`, `surfaces/` and `lib/`
+code, its skill scripts, and `shared/`. Its floors sit one point under the measured totals, are
+never lowered (`scripts/check-coverage-ratchet.mjs` in the coverage job, and
+`use-cases/kit/coverage-floors.test.ts` on every run against `origin/main`), and are raised until
+every file is at 100%, where the use cases already are. Most of what is not covered is skill
+scripts and MCP servers the tests start as child processes, which v8 does not see.
+
+## Handwritten lines
+
+Each project counted by the counter the apps and the use cases share (`harness/line-counts.ts`),
+against a ceiling of 150 lines, the largest use-case budget. The count leaves out Markdown, the eval
+YAML, `data/` and `sample-data/`, tests and test support, `benchmark.ts`, and the fake external
+systems (`<system>/fake-<system>.mjs`) that stand in for the customer's own; it adds every file in
+`shared/` a counted file imports. Report-only for now: `benchmark.test.ts` keeps the table current
+and fails nothing for a count over the ceiling.
+
+<!-- line-counts:start -->
+
+| Use case | Handwritten lines | Over 150 | Largest files |
+| --- | --- | --- | --- |
+| manual-search | 283 | +133 | `../shared/run-answer.ts` 141, `backend/ask.ts` 95, `agent-workspace.yaml` 18 |
+| cad-drafting | 967 | +817 | `skills/dxf-draft/scripts/dxf.mjs` 410, `backend/draft.ts` 295, `../shared/run-answer.ts` 141 |
+| quotation | 1062 | +912 | `backend/quote.ts` 403, `apis/erp.openapi.json` 218, `skills/cost-model/scripts/estimate.mjs` 178 |
+| ringi-review | 901 | +751 | `backend/review-run.ts` 229, `../shared/mcp-server.mjs` 166, `../shared/run-answer.ts` 141 |
+| customer-inquiry | 518 | +368 | `../shared/run-answer.ts` 141, `apis/crm.openapi.json` 123, `backend/chat.ts` 103 |
+| excel-consolidation | 1227 | +1077 | `backend/consolidate.ts` 444, `skills/excel-consolidate/scripts/consolidate.mjs` 315, `skills/excel-consolidate/scripts/xlsx.mjs` 171 |
+| contract-review | 980 | +830 | `skills/contract-playbook/scripts/clauses.mjs` 458, `backend/review.ts` 266, `../shared/run-answer.ts` 141 |
+| meeting-minutes | 999 | +849 | `backend/minutes.ts` 349, `../shared/mcp-server.mjs` 166, `../shared/run-answer.ts` 141 |
+| maintenance-troubleshooting | 814 | +664 | `backend/diagnose.ts` 299, `backend/inspect-turn.ts` 148, `../shared/run-answer.ts` 141 |
+| quality-defect | 1087 | +937 | `backend/analyse.ts` 342, `apis/qms.openapi.json` 309, `skills/eight-d/scripts/eightd.mjs` 178 |
+
+<!-- line-counts:end -->
+
 ## Adding a use case
 
 Create `tests/gallery/<id>/` with a `benchmark.ts` (`order` is its place in the gallery) and a

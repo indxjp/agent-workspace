@@ -5,8 +5,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BUILTIN_IMPORTS,
+  BUILTIN_SKILL_PACKAGE,
   RUN_SKILL_SCRIPT_INPUT_JSON_SCHEMA,
   SKILL_SCRIPT_LIMITS,
+  builtinImportHook,
   executeRunSkillScript,
   parseRunSkillScriptInput,
   runSkillScript,
@@ -285,6 +288,29 @@ describe('parseRunSkillScriptInput', () => {
   });
 });
 
+describe('builtinImportHook', () => {
+  const sourceOf = (argument: string): string => {
+    const prefix = '--import=data:text/javascript,';
+    expect(argument.startsWith(prefix)).toBe(true);
+    return decodeURIComponent(argument.slice(prefix.length));
+  };
+
+  it('is one --import of a data: module that maps the built-in package to the placed skills', () => {
+    const source = sourceOf(builtinImportHook('/work/.engine-config/skills'));
+    expect(BUILTIN_SKILL_PACKAGE).toBe('@indx-workspace/builtin-skills');
+    expect(source).toContain(`const root="/work/.engine-config/skills";`);
+    expect(source).toContain(`const imports=${JSON.stringify(BUILTIN_IMPORTS)};`);
+    expect(source).toContain(`createHash(`);
+    expect(source).toContain(`const name="@indx-workspace/builtin-skills";`);
+    expect(source).toContain('registerHooks({resolve(');
+  });
+
+  it('carries the skills directory as a JSON string, whatever characters it holds', () => {
+    const root = String.raw`/work/it's "odd"\dir,%20`;
+    expect(sourceOf(builtinImportHook(root))).toContain(`const root=${JSON.stringify(root)};`);
+  });
+});
+
 describe('runSkillScript', () => {
   it('runs node under --permission with read on the root and write on the scratch and the writable grants only', async () => {
     const { host, calls, removed } = fakeHost();
@@ -303,6 +329,7 @@ describe('runSkillScript', () => {
           '--allow-fs-read=/scratch/call-1',
           '--allow-fs-write=/scratch/call-1',
           '--allow-fs-write=/work/drafts',
+          builtinImportHook('/work/.engine-config/skills'),
           '/work/.engine-config/skills/review/scripts/check.mjs',
           'a.docx',
           '--flag',

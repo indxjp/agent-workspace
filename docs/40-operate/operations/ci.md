@@ -15,7 +15,11 @@ the release gate, which `publish-packages.yml` and `images.yml` call with
 `full: true` before they publish; a push to `main` only builds and writes the cache. A failed nightly
 opens or updates an issue (`nightly-alarm.yml`). The label `ci:full` on a pull request runs the heavy
 tier early, from the next push after it is added. A body edit re-runs the fast checks only, even on a
-`ci:full` pull request.
+`ci:full` pull request. One coverage suite runs below the heavy tier: the use cases'
+(`pnpm test:coverage:use-cases`, 100% per file) runs on the pull request and in the queue whenever
+the diff reaches the use cases' tests, with the check that `use-cases/SCOREBOARD.md` claims no
+coverage its summary does not show; the `plan` job decides it (`scripts/ci/ci-plan.mjs`,
+`COVERAGE_SUITES`), and `CI success` requires the `coverage` job wherever the plan names it.
 
 The workflows beside `ci.yml` start only where their work is (ADR-0053, Amendment 2026-11-19e).
 `quality.yml` (the Helm render) runs when `infra/helm/**` changes, `internal-checks.yml` when the

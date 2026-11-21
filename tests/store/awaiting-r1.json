@@ -1,0 +1,4 @@
+{
+  "why": "Live entries that went live before the R1 record existed: the 14 wave-1 entries, whose real-model runs are unit F4 of the Agent Store 100-use-case plan. Shrink-only: tests/store/catalog.test.ts fails when this list holds an entry the base branch's list does not, when its length differs from AWAITING_R1_CEILING there, or when a listed entry has its record or is no longer live.",
+  "entries": ["service-desk"]
+}

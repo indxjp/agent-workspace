@@ -14,7 +14,7 @@ import {
   StorePrivacyFactsSchema,
   demoTemplateWorkspaceSlug,
 } from './demo.js';
-import { RUN_BUDGET_REACHED, RUN_START_PROBLEM_CODES } from './runs.js';
+import { OUTPUT_SCHEMA_UNSATISFIED, RUN_BUDGET_REACHED, RUN_START_PROBLEM_CODES } from './runs.js';
 
 describe('the demo caps', () => {
   it('pins the spec’s 20 runs per person and the 24-hour window', () => {
@@ -46,6 +46,7 @@ describe('demoFallbackReason', () => {
     expect(demoFallbackReason('demo_expired')).toBe('unavailable');
     expect(demoFallbackReason(RUN_BUDGET_REACHED)).toBe('cost');
     expect(demoFallbackReason('max_turns')).toBe('count');
+    expect(demoFallbackReason(OUTPUT_SCHEMA_UNSATISFIED)).toBe('format');
     for (const code of Object.keys(DEMO_RUN_START_PROBLEM_CODES)) {
       expect(DEMO_FALLBACK_REASONS).toContain(demoFallbackReason(code));
     }

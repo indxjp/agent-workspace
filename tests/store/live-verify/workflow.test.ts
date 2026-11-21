@@ -31,4 +31,27 @@ describe('store-live-verify.yml', () => {
     );
     expect(ci).not.toContain('store-live-verify');
   });
+
+  it('keeps the typed spend gate, INDXDev only, and takes the entries as data, never as code', () => {
+    expect(code).toContain(
+      "if: github.repository_owner == 'INDXDev' && (inputs.approve_spend == 'spend-approved')",
+    );
+    expect(code).toMatch(/^ {6}entries:\n(?: {8}.*\n)*? {8}required: false\n/mu);
+    // The slugs reach the harness through the environment, which validates them; no `run:` line
+    // interpolates an input.
+    expect(code).toContain('          STORE_LIVE_VERIFY_ENTRIES: ${{ inputs.entries }}\n');
+    const runs = code.split('\n').filter((line) => /^\s*run:/u.test(line));
+    expect(runs.filter((line) => line.includes('${{'))).toEqual([]);
+  });
+
+  it('hands the harness the commit the latest successful staging deploy seeded from', () => {
+    expect(code).toContain(
+      '--workflow store-deploy.yml --branch main --event push --status success',
+    );
+    expect(code).toContain(
+      '          STORE_LIVE_VERIFY_DEPLOYED_COMMIT: ${{ steps.deployed.outputs.commit }}\n',
+    );
+    expect(code).toMatch(/^permissions:\n {2}contents: read\n {2}actions: read\n\n/mu);
+    expect(code).toContain('          fetch-depth: 0\n');
+  });
 });

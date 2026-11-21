@@ -1,6 +1,6 @@
 // `CI success`'s gate script, run as written in ci.yml against fixed `needs` contexts: which skips
-// it accepts (docs/adr/0053, Amendment 2026-11-19b). The four Nx jobs the `plan` job decides on
-// (build, build-embedded, typecheck-lint, heavy-checks) pass skipped only where the plan answered
+// it accepts (docs/adr/0053, Amendment 2026-11-19b). The jobs the `plan` job decides on (build,
+// build-embedded, typecheck-lint, heavy-checks and coverage) pass skipped only where the plan answered
 // "false" for them, or on a body/title edit; every other job keeps the tier rule (a skip passes on a
 // pull request, a push and in the queue, never on the nightly, a dispatch or the release gate).
 // Usage: node --test scripts/ci/ci-success.test.mjs (needs bash and jq, as the job does).
@@ -91,7 +91,9 @@ const DOCS_ONLY_PLAN = {
   'build-embedded': 'false',
   'typecheck-lint': 'false',
   'heavy-checks': 'true',
+  coverage: 'false',
   'test-shards': '[{"shard":"tests","projects":"agent-workspace"}]',
+  'coverage-suites': '[]',
 };
 
 test('a docs-only pull request passes with the jobs its plan skipped', () => {
@@ -168,6 +170,7 @@ test('the nightly fails on a skipped heavy-tier job, as before', () => {
     'build-embedded': 'true',
     'typecheck-lint': 'true',
     'heavy-checks': 'true',
+    coverage: 'true',
   };
   const results = Object.fromEntries(JOBS.map((job) => [job, 'success']));
   assert.ok(gate({ event: 'schedule', needs: needs(results, allTrue) }).ok);
@@ -189,8 +192,25 @@ test('a push to main passes with the build only, as its plan says', () => {
         'build-embedded': 'true',
         'typecheck-lint': 'false',
         'heavy-checks': 'false',
+        coverage: 'false',
       },
     ),
   });
   assert.ok(ok, output);
+});
+
+// The use cases' coverage suite runs on the pull request that reaches their tests (the Agent Store
+// 100-use-case plan, §7), so there a skipped coverage job fails like any other planned job.
+test('coverage is required on a pull request whose plan names it, and only there', () => {
+  const useCasesPlan = { ...DOCS_ONLY_PLAN, coverage: 'true' };
+  const ran = { 'fast-checks': 'success', build: 'success', 'heavy-checks': 'success' };
+  for (const event of ['pull_request', 'merge_group']) {
+    const skipped = gate({ event, needs: needs(ran, useCasesPlan) });
+    assert.ok(!skipped.ok, `${event} passed without the planned coverage`);
+    assert.match(skipped.output, /coverage: skipped/u);
+    const failed = gate({ event, needs: needs({ ...ran, coverage: 'failure' }, useCasesPlan) });
+    assert.ok(!failed.ok, `${event} passed with a failed coverage`);
+    assert.ok(gate({ event, needs: needs({ ...ran, coverage: 'success' }, useCasesPlan) }).ok);
+    assert.ok(gate({ event, needs: needs(ran, DOCS_ONLY_PLAN) }).ok);
+  }
 });

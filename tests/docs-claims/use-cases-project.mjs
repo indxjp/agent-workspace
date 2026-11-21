@@ -23,6 +23,7 @@ import {
   fileSetupCommands,
   listening,
   pointApisAtLoopback,
+  skillPublishCommands,
   startServer,
 } from './use-cases-server.mjs';
 import { storeSecretsAsOwner } from './use-cases-console.mjs';
@@ -39,6 +40,7 @@ const STEPS = [
   'aw dev',
   'secrets, in the console as the Owner',
   'aw files',
+  'aw skills publish',
   'aw push',
   'MCP servers, with ids',
   'aw check',
@@ -194,6 +196,14 @@ async function uploadFiles({ aw, dir }) {
 }
 
 /** @param {Session} session */
+async function publishPinnedSkills({ aw, dir }) {
+  // The tutorial publishes a pinned skill's revision before aw push (aw dev only imports it).
+  const commands = skillPublishCommands(dir);
+  if (commands.length === 0) return 'no pinned skill revision to publish';
+  return (await aw(commands.join(' && '), { times: commands.length })).output;
+}
+
+/** @param {Session} session */
 async function restartVerifyingServers({ aw, dir, running }) {
   // A server that verifies the caller assertion was started with the project file's
   // `<tool-id>` and `<workspace-id>`; the ids exist only now that aw push registered them.
@@ -247,6 +257,7 @@ async function runJourney(session, tracer, prompt) {
   await step('aw dev', () => startDev(session));
   await step('secrets, in the console as the Owner', () => addSecrets(session));
   await step('aw files', () => uploadFiles(session));
+  await step('aw skills publish', () => publishPinnedSkills(session));
   await step('aw push', async () => (await aw('aw push --yes', { env: devEnv })).output);
   await step('MCP servers, with ids', () => restartVerifyingServers(session));
   await step('aw check', async () => (await aw('aw check')).output);

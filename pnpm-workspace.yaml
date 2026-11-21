@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # The Agent Store's agent entries, one folder per catalog slug (use-cases/README.md).
+  - use-cases
 
 # `@agent-workspace/contracts` declares zod as a peer (one instance for a published consumer) and
 # pins it only as a devDependency. A workspace package is linked, not injected, so its peer is

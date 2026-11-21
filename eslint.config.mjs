@@ -189,6 +189,8 @@ export default tseslint.config(
             'vitest.coverage.config.ts',
             'vitest.apps.coverage.config.ts',
             'vitest.ui-cli.coverage.config.ts',
+            'vitest.use-cases.coverage.config.ts',
+            'vitest.gallery.coverage.config.ts',
             'playwright.config.ts',
           ],
           defaultProject: 'tsconfig.root.json',
@@ -198,7 +200,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'],
+    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}', 'use-cases/**/*.{ts,tsx}'],
     ignores: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/acceptance/**'],
     rules: {
       // Review tripwires set at today's production maximum; do not raise them for new code.
@@ -210,7 +212,7 @@ export default tseslint.config(
   },
   {
     // F-06: cleanup failures are retained, never discarded. Baseline: eslint-suppressions.json.
-    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'],
+    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}', 'use-cases/**/*.{ts,tsx}'],
     ignores: TEST_FILES,
     rules: { 'no-restricted-syntax': ['error', ...cleanupSyntax] },
   },

@@ -218,6 +218,14 @@ floors ratchet the other way: `scripts/check-coverage-ratchet.mjs` (run in the C
 fails a pull request that lowers a floor in a `vitest*.coverage.config.ts`, and warns when one trails the measured value by more than 5
 points, so a floor is raised with the code and never lowered.
 
+Narrow exception, shrink-only: the Agent Store's promotion check (`tests/store/catalog.test.ts`)
+requires every `live` catalog entry to have a passing real-model (R1) record for the current hash of
+its source. The 14 wave-1 entries went live before that record existed; they are listed in
+`tests/store/awaiting-r1.json`, whose length must equal `AWAITING_R1_CEILING` in that test (14),
+until unit F4 of the 100-use-case plan commits their records. The test fails when a listed entry has
+its record or is no longer live, when the length and the ceiling differ, or when the list holds an
+entry the base branch's list does not: an entry that goes live from now on needs its record.
+
 ## Sources
 
 - [_Beautiful Code: Leading Programmers Explain How They Think_](https://www.oreilly.com/library/view/beautiful-code/9780596510046/)

@@ -273,6 +273,28 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "tsconfig.json"
     ]
   },
+  "policy-qa": {
+    "agentFile": "use-cases/policy-qa/agents/policy-qa.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Grounded answers (QA), read-only by construction: it searches its own folder, `policy-qa`, with\n// the platform's `search_files`, reads PDF, Word and Excel files through `office-reader`, and cites\n// every fact. A caller narrows each run to what that person may read with\n// `runs.start({ fileScope })` (ADR-0147). No write, no network.\nexport default defineAgent({\n  name: 'policy-qa',\n  instructions: { file: './policy-qa.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops these read-only calls on a prompt.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('policy-qa')],\n  files: [files('policy-qa', 'read')],\n  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  policy-qa.md",
+      "  policy-qa.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  policy-qa.yaml",
+      "policy-qa.test.ts",
+      "skills/",
+      "  policy-qa/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
   "cad-drafting": {
     "agentFile": "tests/gallery/cad-drafting/agents/cad-drafting.ts",
     "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\nexport default defineAgent({\n  name: 'cad-drafting',\n  instructions: { file: './cad-drafting.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.\n  // The one thing a designer decides is the change set: the agent saves it with `Write`, and the run\n  // waits there for an approval (ADR-0145) before it drafts. The base drawing is saved by the\n  // office-reader script (`dxf.mjs <file> <out.json>`), so that `Write` is the run's only gated call.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__run_skill_script', 'mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  // Similar drawings are found with the platform's `search_files`, which the backend narrows to the\n  // designer's drawing series with `runs.start({ fileScope })`: no index server of ours.\n  // It runs the skill's script to write a draft, so it needs commands and file writes; the grants\n  // below keep the writes to `drafts` (and `outputs/`, which a `writeFiles` agent may write): past drawings\n  // are read-only.\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // office-reader reads the base drawing; dxf-draft only derives and writes the draft.\n  skills: [builtinSkill('office-reader'), skill('dxf-draft')],\n  files: [files('drawings', 'read'), files('drafts', 'read-write')],\n  limits: { maxTurns: 20, maxBudgetUsd: 1 },\n});",
@@ -411,6 +433,28 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "  contract-playbook/",
       "surfaces/",
       "  legal-desk.ts"
+    ]
+  },
+  "nda": {
+    "agentFile": "use-cases/nda/agents/nda.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `nda/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `nda/standards`, and writes the report to `nda-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`nda-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'nda',\n  instructions: { file: './nda.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('nda')],\n  files: [files('nda', 'read'), files('nda-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  nda.md",
+      "  nda.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  nda.yaml",
+      "nda.test.ts",
+      "skills/",
+      "  nda/",
+      "surfaces/",
+      "  main.ts"
     ]
   },
   "ringi-review": {

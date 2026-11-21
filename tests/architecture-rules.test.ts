@@ -38,11 +38,11 @@ const reportSchema = z.object({
   }),
 });
 
-/** Runs the real dependency-cruiser config over `apps` and `packages` under `cwd`. */
+/** Runs the real dependency-cruiser config over `apps`, `packages` and `use-cases` under `cwd`. */
 function cruise(cwd: string): z.infer<typeof reportSchema> {
   const result = spawnSync(
     process.execPath,
-    [cruiseBin, '--config', cruiseConfig, '--output-type', 'json', 'apps', 'packages'],
+    [cruiseBin, '--config', cruiseConfig, '--output-type', 'json', 'apps', 'packages', 'use-cases'],
     { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
   );
   if (result.error !== undefined || result.stdout.trim() === '') {
@@ -293,6 +293,25 @@ describe('dependency-cruiser fires on planted violations: domain cores and conte
   });
 });
 
+describe('dependency-cruiser fires on planted violations: use-cases', () => {
+  it("a use case's or template's own file imports neither an app, the kit nor a test; tests and the kit may", () => {
+    expect(edgesOf('use-cases-reach-the-platform-through-its-packages')).toStrictEqual([
+      'use-cases/sample-entry/agents/sample-entry.ts -> apps/web/server/agents/ctx-target.ts',
+      'use-cases/sample-entry/agents/sample-entry.ts -> use-cases/kit/index.ts',
+      'use-cases/templates/qa/agents/qa.ts -> use-cases/kit/index.ts',
+    ]);
+    expect(edgesOf('production-does-not-import-tests')).toStrictEqual([
+      'use-cases/sample-entry/agents/sample-entry.ts -> use-cases/sample-entry/sample-entry.test-support.ts',
+    ]);
+  });
+
+  it('one use case does not import another', () => {
+    expect(edgesOf('use-cases-do-not-import-each-other')).toStrictEqual([
+      'use-cases/sample-entry/agents/sample-entry.ts -> use-cases/faq/agents/faq.ts',
+    ]);
+  });
+});
+
 describe('dependency-cruiser reports nothing else on the planted tree', () => {
   it('reports nothing else: the allowed edges stay allowed and every import resolves', () => {
     // 5 earlier + 7 F-15 + the cli and create fence rules firing on the same planted imports
@@ -303,8 +322,10 @@ describe('dependency-cruiser reports nothing else on the planted tree', () => {
     // + 2 app kit fence (#1500) + its application import, which the library rule also reports
     // + 2 imports of the app kit + react's fence on one of them + 5 domain core imports
     // + 4 context direction (part 04) + 1 deep import into identity (part 04, step 7)
+    // + 3 use-case and template imports of an app or the kit + 1 use-case import of a test file
+    // + 1 use case importing another
     expect(violations).toHaveLength(
-      2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3 + 4 + 2 + 1 + 2 + 1 + 5 + 4 + 1,
+      2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3 + 4 + 2 + 1 + 2 + 1 + 5 + 4 + 1 + 3 + 1 + 1,
     );
   });
 });

@@ -11,7 +11,7 @@ import type {
 // Part 09 step 7 characterization: splitting the run API into named slices keeps exactly these
 // members, each with its own optionality; only the names a caller asks for change.
 describe('the run API environment', () => {
-  it('has exactly its 24 members', () => {
+  it('has exactly its 25 members', () => {
     expectTypeOf<keyof RunApiEnvironment>().toEqualTypeOf<
       | 'authenticate'
       | 'findAgent'
@@ -23,6 +23,7 @@ describe('the run API environment', () => {
       | 'ceilingFor'
       | 'dailyCostCap'
       | 'demoRunGate'
+      | 'demoApprovedWrites'
       | 'describeRunTarget'
       | 'ownsRun'
       | 'store'

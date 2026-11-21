@@ -36,6 +36,10 @@ export interface DemoTemplateWiring {
 export interface WorkspaceRepositoryView {
   readonly workspaces: TemplateWorkspaceRepository;
   listWorkspaceIds(): Promise<readonly string[]>;
+  /** Where the verification fill marks its workspace (ADR-0169 D3). */
+  readonly demoCaps: {
+    markVerificationWorkspace(workspaceId: string, now: Date): Promise<void>;
+  };
 }
 
 /** The two workspace repository calls a template is made and found with. */
@@ -154,5 +158,7 @@ export function wireDemoVerification(
       maxTurns: input.settings.demo.maxTurnsPerRun,
       maxBudgetUsd: input.settings.demo.maxCostPerRunUsd,
     },
+    markVerificationWorkspace: (workspaceId, now) =>
+      input.workspaces.demoCaps.markVerificationWorkspace(workspaceId, now),
   });
 }

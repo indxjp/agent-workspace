@@ -67,7 +67,7 @@ generated file is a Generated gap.
 | [Wiki](./wiki/) | yes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 59 / 100 |
 | [CRM](./crm/) | yes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 141 / 200 |
 | [Service desk](./service-desk/) | yes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 246 / 250 |
-| [Agent Store](./store/) | no | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | 5200 / 5200 |
+| [Agent Store](./store/) | no | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | 3731 / 5310 |
 
 Declared gaps:
 

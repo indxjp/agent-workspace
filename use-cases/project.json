@@ -1,0 +1,44 @@
+{
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "name": "@agent-workspace/use-cases",
+  "implicitDependencies": ["@indx-workspace/contracts", "@indx-workspace/sdk"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p use-cases/tsconfig.json"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint use-cases --max-warnings 0"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --project use-cases --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+        "env": {
+          "NODE_OPTIONS": "--unhandled-rejections=strict",
+          "VITEST_MAX_WORKERS": "4"
+        }
+      },
+      "inputs": [
+        "default",
+        "^production",
+        "vitestConfig",
+        "{workspaceRoot}/examples/**/*",
+        "{workspaceRoot}/scripts/check-coverage-ratchet.mjs",
+        "{workspaceRoot}/scripts/release/pack-packages.mjs",
+        "{workspaceRoot}/tests/apps/benchmark.ts",
+        "{workspaceRoot}/tests/apps/handwritten.ts",
+        "{workspaceRoot}/packages/skills-office/**/*",
+        "{workspaceRoot}/tests/gallery/**/*",
+        "{workspaceRoot}/tests/store/live-verify/source-hash.ts",
+        "{workspaceRoot}/vitest.use-cases.coverage.config.ts",
+        "{workspaceRoot}/vitest.gallery.coverage.config.ts"
+      ]
+    }
+  }
+}

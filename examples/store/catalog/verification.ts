@@ -24,6 +24,8 @@ export const realModelRunSchema = z.strictObject({
   reason: z.string().trim().min(1).max(500),
   /** R1 runs in staging only. */
   environment: z.literal('staging'),
+  /** The sha256 of the entry's source folder it ran on (`tests/store/live-verify/source-hash.ts`). */
+  sourceHash: z.string().regex(/^[0-9a-f]{64}$/u),
 });
 export type RealModelRun = z.infer<typeof realModelRunSchema>;
 

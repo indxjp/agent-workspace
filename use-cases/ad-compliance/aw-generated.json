@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "c14e2b05609c131c9c7b6c85d2b02409f5a08d9ce0f3201512054bcf8392a762",
+        "agents/ad-compliance.md": "b2ee2eb89f77acf33e8bce4cfda4eb9bd31e5ede16d3a63405df11114b071c95",
+        "agents/ad-compliance.ts": "22ec604bb6e7ca4b000cc1e084abfabf1ea282baa8c4bb87cc09c87046ec4d05",
+        "evals/ad-compliance.yaml": "303ad32d1a5c9185d3add9e7f9a5f4759d70483108aee09845f0037d01340d44",
+        "skills/ad-compliance/SKILL.md": "8093d0dfefb61674303ea34c6f8ab92c482bd9456649419647250214ade6731d",
+        "surfaces/main.ts": "53bbebbbbda1ec1425241e4e066a9791e367ff48db4129e36bc0332b85524f32"
+      },
+      "edits": []
+    }
+  }
+}

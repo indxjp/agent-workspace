@@ -36,12 +36,14 @@ Value: `64`
 ## DEMO_FALLBACK_REASONS
 
 Why the store shows the recording instead of a live run, in the words the visitor reads: the
-person's or the run's count, the cost, the load from one address, or the demo being unavailable.
+person's or the run's count, the cost, the load from one address, the demo being unavailable, or
+a run's answer that did not come back in the form its `outputSchema` asked for (`format`).
 
 - `'count'`
 - `'cost'`
 - `'load'`
 - `'unavailable'`
+- `'format'`
 
 ## DEMO_RUN_START_PROBLEM_CODES
 
@@ -133,8 +135,9 @@ Value: `'demo-template-'`
 
 ## demoFallbackReason
 
-The reason to show for a demo start refusal code, or for a run that stopped at a per-run cap
-(`run_budget_reached`, `max_turns`); `null` for anything else, which is not a cap.
+The reason to show for a demo start refusal code, for a run that stopped at a per-run cap
+(`run_budget_reached`, `max_turns`), or for one whose answer missed its schema
+(`output_schema_unsatisfied`); `null` for anything else.
 
 ```ts
 demoFallbackReason(code: string): DemoFallbackReason | null
@@ -142,6 +145,7 @@ demoFallbackReason(code: string): DemoFallbackReason | null
 
 ## DemoFallbackReason
 
+- `"format"`
 - `"count"`
 - `"cost"`
 - `"load"`
@@ -149,6 +153,7 @@ demoFallbackReason(code: string): DemoFallbackReason | null
 
 ## DemoFallbackReasonSchema
 
+- `"format"`
 - `"count"`
 - `"cost"`
 - `"load"`

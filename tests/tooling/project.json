@@ -97,6 +97,7 @@
         "{workspaceRoot}/tests/app-kit/run.mjs",
         "{workspaceRoot}/tests/apps/app-image.mjs",
         "{workspaceRoot}/tests/apps/benchmark.ts",
+        "{workspaceRoot}/tests/apps/handwritten.ts",
         "{workspaceRoot}/tests/apps/lane.mjs",
         "{workspaceRoot}/tests/apps/package-server.mjs",
         "{workspaceRoot}/tests/apps/regenerate.mjs",

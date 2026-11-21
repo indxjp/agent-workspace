@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "4cb4e59746a10764415244cac4907a5e098dbce2d214cf72a5764a945cec9fd6",
+        "agents/sla-watch.md": "a0205d11145bd17e5dbb8be29f3108ebd5a82c092653381ddd0157c8b4505eed",
+        "agents/sla-watch.ts": "213a36660c2eb0659a405be4a4ba9b26ed2bb5eb93ec91a1292a38d620c1765b",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/sla-watch.yaml": "2be40c0b54c86dc3d9f103bda3709c60131101678246653f2ccc20e69c6397f6",
+        "skills/sla-watch/SKILL.md": "ad4ffb262aaa72672c6dcc8c881dda8eeb763d626a2af7433bbbd04c31fcb63d",
+        "surfaces/main.ts": "bd08c6b72b087b5b6cbef456b80f3587e2bb2cc5183e1540955320083b7503c3",
+        "triggers/sla-watch.json": "a8dfa86966c458aeed633b8b5467f8c823b760086a7d1e7737a6d7ab08e7106c"
+      },
+      "edits": []
+    }
+  }
+}
