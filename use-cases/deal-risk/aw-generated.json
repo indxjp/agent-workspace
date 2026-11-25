@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "bb93d2272744021a7ebf9213dcea962ad3c16d90c8294d4863579efb636926ab",
+        "agents/deal-risk.md": "bae84a2de1a93b4bef93cfc038a8bd4ea43107ca900c6a31aa7ac437eb5327ef",
+        "agents/deal-risk.ts": "98e57ccaa99a71481183a576649bc9ee9d3b8042e3e0da6f397703133bcb9105",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/deal-risk.yaml": "44f58532cf33a404786197ee38d534a87e7e6dd300101b0e53dc425eb54e24b5",
+        "skills/deal-risk/SKILL.md": "4ce815e8f68c8fcbae7de4b344cdf45ae8357d1c667b1ea076734f297e2c9917",
+        "surfaces/main.ts": "48774aaa198dc755619b5bd2fae02011a7a36f2b36cc867c91b0a68eb9d395c9",
+        "triggers/deal-risk.json": "95984859a7def9c32f3e5d8e7529d0d1e07d647b280963de1c0da3608e60e2a4"
+      },
+      "edits": []
+    }
+  }
+}

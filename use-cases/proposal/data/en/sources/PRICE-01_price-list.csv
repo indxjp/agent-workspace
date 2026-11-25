@@ -1,0 +1,4 @@
+Item ID,Item,Unit,Unit price (JPY excl. tax),Remarks
+P-01,Hakuseki Equipment Inspection App (PRD-01),per machine per month,800,Includes PRD-03 Data Exchange
+P-02,Hakuseki Maintenance Planning (PRD-02),per machine per month,400,Requires PRD-01
+P-03,Onboarding (checklists and equipment register import),per line (one-off),300000,First time only

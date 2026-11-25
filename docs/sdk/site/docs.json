@@ -316,7 +316,7 @@
         "groups": [
           {
             "group": "Use cases",
-            "pages": ["tutorials/index", "tutorials/your-stack", "concepts/use-cases"]
+            "pages": ["features/agent-store", "tutorials/index", "tutorials/your-stack", "concepts/use-cases"]
           },
           {
             "group": "Enterprise use-case gallery",

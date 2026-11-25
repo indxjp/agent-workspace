@@ -1,0 +1,18 @@
+{
+  "alert": {
+    "id": "SEC-0501",
+    "source": "EDR",
+    "rule": "Obfuscated PowerShell started by an Office app",
+    "detected_at": "2026-11-21T09:47:12+09:00",
+    "host": "FIN-LT-014",
+    "user": "hazama.nao",
+    "vendor_severity": "high",
+    "description": "An Excel macro started powershell.exe with -EncodedCommand. Right after, there was one connection to an outside address. The file is \"Invoice_November.xlsm\", opened from an email attachment.",
+    "evidence": {
+      "parent_process": "EXCEL.EXE",
+      "process": "powershell.exe -NoProfile -EncodedCommand SQBFAFgA...",
+      "file": "Invoice_November.xlsm",
+      "remote_address": "203.0.113.77:443"
+    }
+  }
+}

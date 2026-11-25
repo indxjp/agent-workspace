@@ -14,13 +14,17 @@ import {
 } from '@indx-workspace/contracts/features';
 
 import { formatIssues, problem, type ApiResult } from '../http/result';
+import type { Caller } from '../rbac/principal';
 import type { WorkspaceFeatureStore, WorkspaceFeaturesAuditEvent } from './features-runtime';
 
-export interface WorkspaceFeaturesActor {
-  readonly principalId: string;
+/**
+ * Who switches a feature: the fields of the one {@link Caller} type this use case reads (part 06
+ * step 9). `userId` stays narrowed to a string: the route refuses a caller with no membership in
+ * the path workspace before it gets here, and the audit row's actor is that member.
+ */
+type WorkspaceFeaturesCaller = Pick<Caller, 'principalId' | 'userId' | 'label'> & {
   readonly userId: string;
-  readonly label: string;
-}
+};
 
 export interface UpdateWorkspaceFeaturesInput {
   readonly deployment: readonly FeatureId[];
@@ -29,7 +33,7 @@ export interface UpdateWorkspaceFeaturesInput {
   /** Ensure the workspace's Builder; called after a write that switched `builder` on. */
   readonly provisionBuilder: () => Promise<void>;
   readonly workspaceId: string;
-  readonly actor: WorkspaceFeaturesActor;
+  readonly actor: WorkspaceFeaturesCaller;
   readonly body: unknown;
 }
 

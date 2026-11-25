@@ -1,4 +1,4 @@
-// The Try tab's words and rules (spec "How Try it works"): what the sign-up form submits, which
+// The Try it section's words and rules (spec "How Try it works"): what the sign-up form submits, which
 // cap stopped the demo and in which words, and what the sign-in page does with its link.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -50,7 +50,7 @@ test('a run stop falls back only once the platform says no runs are left', () =>
   assert.equal(chatFallback('cost', false, allowance), 'cost');
 });
 
-test('the sign-in link is read from the fragment, and the way back is the entry Try tab', () => {
+test('the sign-in link is read from the fragment, and the way back is the entry’s Try it section', () => {
   assert.ok('failed' in signInStep('', 'en'));
   const step = signInStep(`#token=${TOKEN}&email=a%40example.com&entry=crm-sales`, 'en');
   assert.ok('request' in step);

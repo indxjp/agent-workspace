@@ -1,0 +1,6 @@
+voucher_no,invoice_no,supplier,invoice_date,row,item,account,tax_code,voucher_total_incl_tax
+J-2611-0215,KK-1187,Kakesu Stationery Co.,2026-11-10,1,A4 copy paper,Supplies,P10,32310
+J-2611-0215,KK-1187,Kakesu Stationery Co.,2026-11-10,2,Meeting lunch boxes,Meetings,P10,32310
+J-2611-0215,KK-1187,Kakesu Stationery Co.,2026-11-10,3,Shipping,Freight,P10,32310
+J-2611-0248,MS-0932,Mozu Cleaning Service,2026-11-30,1,Regular office cleaning,Building upkeep,P10,55000
+J-2611-0248,MS-0932,Mozu Cleaning Service,2026-11-30,2,Floor waxing,Building upkeep,P10,55000

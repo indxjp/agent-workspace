@@ -24,6 +24,7 @@ import {
   type AgentPolicy,
 } from '../../contracts/agents';
 import { problem, type ApiResult } from '../http/result';
+import type { Caller } from '../identity';
 import { engineForStoredPolicy } from '../execution';
 import type { DeploymentDefaultModels } from '../integrations';
 
@@ -57,13 +58,8 @@ export type CeilingFor = (request: Request, workspaceId: string) => RequestCeili
 export type DeploymentCeiling =
   { readonly kind: 'enforced'; readonly ceilingFor: CeilingFor } | { readonly kind: 'disabled' };
 
-/** Who acts, as the composition root's principal identity reports it. */
-export interface CeilingActor {
-  readonly workspaceId: string;
-  readonly principalId: string;
-  readonly userId: string | null;
-  readonly label: string;
-}
+/** Who acts: the fields of the one {@link Caller} type this domain reads (part 06 step 9). */
+type CeilingCaller = Pick<Caller, 'workspaceId' | 'principalId' | 'userId' | 'label'>;
 
 export interface CeilingAuditEvent {
   readonly workspaceId: string;
@@ -80,7 +76,7 @@ export interface CeilingDependencies {
   readonly deploymentDefaultModels: DeploymentDefaultModels;
   modelProvider(workspaceId: string, connectionId: string): Promise<ModelProvider | null>;
   connectorName(workspaceId: string, connectorId: string): Promise<string | null>;
-  identifyActor(request: Request): Promise<CeilingActor | null>;
+  identifyActor(request: Request): Promise<CeilingCaller | null>;
   recordAuditEvent(event: CeilingAuditEvent): Promise<void>;
 }
 

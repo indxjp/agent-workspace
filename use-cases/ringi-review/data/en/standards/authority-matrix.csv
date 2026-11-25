@@ -1,0 +1,15 @@
+category,limit (yen ex tax),approver,co-review,clause,standard
+capital investment,3000000,Department Head,,Authority Rules Schedule §3.1,GR-003 §3.1
+capital investment,30000000,Division Head,,Authority Rules Schedule §3.1,GR-003 §3.1
+capital investment,,Board of Directors,,Authority Rules Schedule §3.1,GR-003 §3.1
+outsourcing,5000000,Department Head,,Authority Rules Schedule §3.2,GR-003 §3.2
+outsourcing,50000000,Division Head,,Authority Rules Schedule §3.2,GR-003 §3.2
+outsourcing,,President,,Authority Rules Schedule §3.2,GR-003 §3.2
+IT investment,1000000,Department Head,Head of IT,Authority Rules Schedule §3.3,GR-003 §3.3
+IT investment,10000000,Division Head,Head of IT,Authority Rules Schedule §3.3,GR-003 §3.3
+IT investment,,Board of Directors,Head of IT,Authority Rules Schedule §3.3,GR-003 §3.3
+donation,1000000,President,Head of General Affairs,Authority Rules Schedule §3.4,GR-003 §3.4
+donation,,Board of Directors,Head of General Affairs,Authority Rules Schedule §3.4,GR-003 §3.4
+entertainment,100000,Department Head,,Authority Rules Schedule §3.5,GR-003 §3.5
+entertainment,1000000,Division Head,,Authority Rules Schedule §3.5,GR-003 §3.5
+entertainment,,President,,Authority Rules Schedule §3.5,GR-003 §3.5

@@ -25,8 +25,7 @@ import { callerHeaders, installRbacHarness } from '../../rbac/testing';
 import { createInMemoryCatalogStore } from '../../resources/catalog-store.memory';
 import { createInMemoryRuntimeConnectionStoreProvider } from '../../runtimes/connections';
 import { createInMemoryRuntimeProfileStoreProvider } from '../../runtimes/memory-store';
-import { listSkillsWithIds } from '../../skills/service';
-import { importSkill } from '../../skills/handlers';
+import { importSkillWithId, listSkillsWithIds } from '../../skills/service';
 import { createSkillRowsWorld } from '../../skills/rows-fixture';
 import { createAuthorization } from '../adapters/authorization/production';
 import { createCatalog } from '../adapters/catalog/production';
@@ -127,8 +126,13 @@ beforeEach(async () => {
     catalog.forWorkspaceSync(WORKSPACE),
     { principalId: OWNER.principalId, userId: null },
   );
-  const seeded = await importSkill(
+  // Through the service, as POST /api/skills imports: the catalog row first, then the files. The
+  // handler alone writes no row, and a skill without one is listed nowhere (STO-602 removed the
+  // marker-object listing that used to find it).
+  const seeded = await importSkillWithId(
     objects.forWorkspace(WORKSPACE),
+    await catalog.forWorkspace(WORKSPACE),
+    { ownerPrincipalId: OWNER.principalId, userId: null },
     {
       name: 'triage',
       files: [
@@ -165,7 +169,7 @@ beforeEach(async () => {
             workspaceId: WORKSPACE,
             principalId: OWNER.principalId,
             userId: null,
-            userLabel: OWNER.name,
+            label: OWNER.name,
             role: 'owner',
             scope: null,
           }),

@@ -47,7 +47,7 @@ export function createModelHttpFixture() {
               workspaceId: WORKSPACE_ID,
               principalId: '99999999-9999-4999-8999-999999999999',
               userId: '22222222-2222-4222-8222-222222222222',
-              userLabel: 'Operator',
+              label: 'Operator',
               role: 'owner',
               scope: null,
             }),
@@ -133,7 +133,7 @@ export function createModelAuthorizationFixture() {
               workspaceId: request.headers.get(WORKSPACE_HEADER) ?? WORKSPACE_A,
               principalId: '99999999-9999-4999-8999-999999999999',
               userId: '44444444-4444-4444-8444-444444444444',
-              userLabel: 'Matrix operator',
+              label: 'Matrix operator',
               role: role as Role,
               scope: null,
             });

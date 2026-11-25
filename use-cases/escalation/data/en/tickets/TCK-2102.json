@@ -1,0 +1,14 @@
+{
+  "ticket": {
+    "id": "TCK-2102",
+    "created_at": "2026-11-20T11:20:00+09:00",
+    "channel": "web",
+    "subject": "How to add a user",
+    "description": "A new member of staff joins next month, so we would like to add one more user who can sign in. Which screen do we add them from?",
+    "priority": "normal",
+    "status": "new",
+    "tags": ["account", "how-to"],
+    "requester": { "name": "Mei Narahashi", "email": "narahashi@kotonoha.example" },
+    "organization": { "name": "Kotonoha Books" }
+  }
+}

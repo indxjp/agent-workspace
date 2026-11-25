@@ -40,4 +40,4 @@ npm create @indx-workspace@latest acme-ai -- --cloud gcp
 npm reads every option before `--` as its own: `npm create @indx-workspace acme-ai --yes` gives
 `--yes` to npm, not to the generator. Put the generator's flags after `--`, as above.
 
-Released in lock-step with `@indx-workspace/contracts`, `sdk`, `aw` and `cli` (ADR-0082).
+Released in lock-step with the other published `@indx-workspace` packages (ADR-0082).

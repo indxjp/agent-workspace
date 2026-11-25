@@ -266,7 +266,7 @@ const ACTOR = {
   principalId: '00000000-0000-4000-8000-000000000004',
   ownerPrincipalId: '00000000-0000-4000-8000-000000000004',
   userId: '00000000-0000-4000-8000-000000000003',
-  userLabel: 'Publisher',
+  label: 'Publisher',
 } as const;
 
 function publishInput(value: unknown, what: string): PublishShareInput {
@@ -460,7 +460,7 @@ describe('GET /api/shares lists against the model', () => {
             principalId: viewer,
             ownerPrincipalId: viewer,
             userId: null,
-            userLabel: 'Listing vector key',
+            label: 'Listing vector key',
             role,
           }),
         forWorkspace: () => Promise.resolve(sharing),

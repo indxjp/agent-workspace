@@ -41,15 +41,6 @@ export type { ModelResolution } from '../compose/run-request';
 export type { RuntimeLaunchTarget, RuntimeRunResolver } from '../compose/runtime-profile';
 export type { StorageWriteBackRun } from '../compose/storage-writeback';
 export { enforceCeiling, type CeilingFor } from '../policy-ceiling/ceiling';
-export {
-  SKILL_FILES_PREFIX,
-  SKILL_META_PREFIX,
-  SKILL_REVISIONS_PREFIX,
-  SKILL_ROWS_ROOT,
-  skillNameFromMetaKey,
-  skillRevisionRowFolder,
-  skillRowFolder,
-} from '../skills/keys';
 export type {
   WorkspaceSkillFile,
   WorkspaceSkillOwner,

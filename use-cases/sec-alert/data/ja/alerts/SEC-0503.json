@@ -1,0 +1,25 @@
+{
+  "alert": {
+    "id": "SEC-0503",
+    "source": "IdP",
+    "rule": "ありえない移動（離れた国からの続けてのサインイン）",
+    "detected_at": "2026-11-21T03:22:05+09:00",
+    "host": "IDP-CLOUD",
+    "user": "adm-tsuzuki",
+    "vendor_severity": "high",
+    "description": "管理者アカウント adm-tsuzuki が、東京からサインインした四十分後に、別の国からサインインに成功しました。二回目は多要素認証のプッシュ通知が承認されています。",
+    "evidence": {
+      "first_signin": {
+        "time": "2026-11-21T02:42:10+09:00",
+        "country": "JP",
+        "address": "192.0.2.41"
+      },
+      "second_signin": {
+        "time": "2026-11-21T03:22:05+09:00",
+        "country": "XX",
+        "address": "203.0.113.160"
+      },
+      "mfa": "push approved"
+    }
+  }
+}

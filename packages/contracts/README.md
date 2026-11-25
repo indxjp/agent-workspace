@@ -63,4 +63,4 @@ const { run } = z.object({ run: RunResourceSchema }).parse(body);
 - Nothing here carries a credential. A response that would (an API key at mint time, an
   invitation token) is documented as shown-once on its own schema.
 
-The design, the migration plan and the feature map are in the repository's `docs/sdk/`.
+The design, the migration plan and the feature map are in the repository's `docs/10-product/sdk/`; the developer documentation is at https://docs.agentworkspace.indx.jp.

@@ -7,15 +7,18 @@ published [`@indx-workspace/sdk`](https://www.npmjs.com/package/@indx-workspace/
 [`@indx-workspace/react`](https://www.npmjs.com/package/@indx-workspace/react), and is released in
 lock-step with them. The root subpath holds `defineResource`, `defineApp`, the field types and
 `allows`; `./db` holds the resource store and the app's tables and migrations, `./server` the
-generated routes and `currentPerson`, `./testing` the in-memory twin and `setAppRuntimeForTests`;
-the rest of each subpath is filled by later releases. A resource is one
+generated routes and `currentPerson`, `./testing` the in-memory twin and `setAppRuntimeForTests`. A resource is one
 `defineResource({ name, fields, access, agents, search })` call whose fields come from the builders
 (`text({ max: 200 })`, `enumOf(['new', 'closed'])`, `person()`, …).
+
+A project made with `npm create @indx-workspace` and `aw generate app <name>` already depends on it;
+elsewhere, `npm install @indx-workspace/app`. Its `aw-app` command (`aw-app migrate`, which
+`aw dev` runs for you) applies the app's migrations.
 
 A definition with mistakes throws `DefinitionError` listing every one. The app kit's `files()` is a
 record attachment field; `@indx-workspace/sdk/define`'s `files()` is an agent file grant.
 
-| Subpath                       | What it will export                                               | Runs in                       |
+| Subpath                       | What it exports                                                   | Runs in                       |
 | ----------------------------- | ----------------------------------------------------------------- | ----------------------------- |
 | `@indx-workspace/app`         | `defineApp`, `defineResource`, the field types, `defineRecipe`    | anywhere                      |
 | `@indx-workspace/app/server`  | `resourceRoutes`, `mcpEndpoint`, `currentPerson`, `recipeRunner`  | Node (Next.js route handlers) |

@@ -3,7 +3,7 @@
  * API key is configured, and whether the Anthropic API answers a model listing with it. A listing
  * spends no tokens. The key is sent as the request's credential and is never returned or logged.
  */
-import { guardedFetch, loadEgressPolicyFromEnv } from '@agent-workspace/core';
+import { guardedFetch, loadEgressPolicyFromEnv, type EgressResolver } from '@agent-workspace/core';
 
 import type { DemoReadinessCheck } from '../operator';
 
@@ -19,8 +19,10 @@ export function createDemoReadinessCheck(input: {
   readonly apiKey: string | null;
   readonly request?: typeof fetch;
   readonly timeoutMs?: number;
+  /** How the egress guard resolves the API's host; the system resolver unless a test supplies one. */
+  readonly resolve?: EgressResolver;
 }): DemoReadinessCheck {
-  const { apiKey, request = fetch, timeoutMs = READINESS_TIMEOUT_MS } = input;
+  const { apiKey, request = fetch, timeoutMs = READINESS_TIMEOUT_MS, resolve } = input;
   return {
     async check() {
       if (apiKey === null) return { apiKeyConfigured: false, apiReachable: false };
@@ -34,6 +36,7 @@ export function createDemoReadinessCheck(input: {
           },
           loadEgressPolicyFromEnv(),
           request,
+          resolve,
         );
         return { apiKeyConfigured: true, apiReachable: response.ok };
       } catch {

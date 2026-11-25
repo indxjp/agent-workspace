@@ -1,0 +1,22 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: invoice
+engine: claude-agent-sdk
+# Review to a standard (archetype RV): the document under review is in `invoice/inbox`, the
+# standard in `invoice/standards`, and the report goes to `invoice-reports` only once a person
+# approves the `Write`. Every folder is the entry's own, so two entries never share one:
+#   for f in $(cd data/ja && find . -type f); do aw files upload "invoice/${f#./}" "data/ja/${f#./}"; done
+policy:
+  permissions:
+    writeFiles: true
+    runCommands: true
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 0.5
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

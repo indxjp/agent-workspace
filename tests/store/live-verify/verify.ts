@@ -12,14 +12,15 @@
  * The credential is one workspace API key (never printed: {@link redact} cleans every message that
  * leaves this module). Least privilege: a key with the `builder` role (it can start runs and decide
  * their approvals, and nothing else of an owner's) in a dedicated verification workspace of the
- * staging project that holds a copy of each live entry's agent under the entry's `demo.agent` name,
+ * staging project that holds a copy of each seeded entry's agent under the entry's `demo.agent` name,
  * as a visitor's demo workspace does, and nothing else: no connector secret, no member, no real data.
  */
+import type { AgentResource } from '@indx-workspace/contracts/agents';
 import { createClient, type AgentWorkspaceClient } from '@indx-workspace/sdk';
 import type { RunEventFrame } from '@indx-workspace/sdk/events';
 
-import type { LiveEntry } from '../../../examples/store/catalog/define.ts';
-import { judgeMoment } from '../../../examples/store/catalog/recording.ts';
+import type { SourcedEntry } from '../../../examples/store/catalog/define.ts';
+import { judgeMoment, type RecordedTurn } from '../../../examples/store/catalog/recording.ts';
 import {
   realModelEvidenceSchema,
   type RealModelEvidence,
@@ -44,6 +45,17 @@ export interface LiveVerifyEnv {
   readonly STORE_LIVE_VERIFY_URL?: string | undefined;
   /** The verification workspace's API key. */
   readonly STORE_LIVE_VERIFY_API_KEY?: string | undefined;
+  /**
+   * The entries a staging run verifies, as comma-separated slugs (`store-live-verify.yml`'s
+   * `entries` input); empty for every entry with a source and no passing record for that source.
+   */
+  readonly STORE_LIVE_VERIFY_ENTRIES?: string | undefined;
+  /**
+   * The commit the staging deployment last seeded its demo templates from (the head of the latest
+   * successful staging deploy, which `store-live-verify.yml` looks up). A staging run verifies only
+   * entries whose source is the same there as in the checkout.
+   */
+  readonly STORE_LIVE_VERIFY_DEPLOYED_COMMIT?: string | undefined;
 }
 
 /** Where a run is made: R1 in staging, the daily production test in production. */
@@ -113,8 +125,50 @@ export function clientFor(settings: Settings): LiveClient {
   });
 }
 
-/** One run's record: the committed evidence's record in staging, the same fields in production. */
-export type LiveRun<E extends LiveEnvironment> = Omit<RealModelRun, 'environment'> & {
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+/**
+ * The entries a staging run verifies, out of `live`: the entries with a source, live or coming soon
+ * with its code merged (R1 comes before the flip). Named (`STORE_LIVE_VERIFY_ENTRIES`,
+ * comma-separated slugs): exactly those, so a batch verifies only its own entries; a slug that is not
+ * an entry with a source is refused before anything is spent. Not named: every one for which
+ * `passed` says there is no passing record for its current source yet.
+ */
+export function entriesToVerify(
+  live: readonly SourcedEntry[],
+  named: string | undefined,
+  passed: (entry: SourcedEntry) => boolean,
+): SourcedEntry[] {
+  const slugs = [
+    ...new Set(
+      (named ?? '')
+        .split(',')
+        .map((slug) => slug.trim())
+        .filter((slug) => slug !== ''),
+    ),
+  ];
+  if (slugs.length === 0) return live.filter((entry) => !passed(entry));
+  const unknown = slugs.filter(
+    (slug) => !SLUG.test(slug) || !live.some((entry) => entry.slug === slug),
+  );
+  if (unknown.length > 0) {
+    // A slug is safe to echo; anything else is not repeated.
+    const shown = unknown.map((slug) => (SLUG.test(slug) ? slug : '(not a slug)')).join(', ');
+    throw new LiveVerifyRefusal(
+      `refused: STORE_LIVE_VERIFY_ENTRIES names what is not an entry with a source: ${shown}`,
+    );
+  }
+  return live.filter((entry) => slugs.includes(entry.slug));
+}
+
+/**
+ * One run's record as the core makes it: the committed evidence's fields but the source hash, which
+ * `run.ts` adds from the checkout (`./source-hash.ts`), in staging; the same fields in production.
+ */
+export type LiveRun<E extends LiveEnvironment> = Omit<
+  RealModelRun,
+  'environment' | 'sourceHash'
+> & {
   readonly environment: E;
 };
 
@@ -122,11 +176,42 @@ export interface VerifyInput<E extends LiveEnvironment> {
   readonly client: LiveClient;
   /** Every string a message must never carry; the API key at least. */
   readonly secrets: readonly string[];
-  readonly entries: readonly LiveEntry[];
+  readonly entries: readonly SourcedEntry[];
   /** The clock the records' dates come from. */
   readonly now: () => Date;
   /** Where the run is made: staging for the live-verify command, production for the daily test. */
   readonly environment: E;
+  /**
+   * The instructions the deployed template of each entry gives its agent (the seed `run.ts` builds
+   * from the checkout, which `refuseUndeployed` has matched to the deployed commit). When given, a
+   * workspace copy with other instructions refuses the run before anything is spent: a workspace not
+   * refilled since the deploy would otherwise have a changed entry's old copy verified.
+   */
+  readonly expectedInstructions?: (entry: SourcedEntry) => string;
+}
+
+/** The part of a workspace agent the harness reads. */
+type WorkspaceAgent = Pick<AgentResource, 'id' | 'name' | 'instructions'>;
+
+/**
+ * Refuses, before anything is spent, when the workspace's copy of any of `entries` is not what its
+ * deployed template holds (`expected`): its instructions differ. An entry with no copy is left to
+ * the run, which reports it as not run.
+ */
+export function refuseStaleCopies(
+  entries: readonly SourcedEntry[],
+  agents: readonly WorkspaceAgent[],
+  expected: (entry: SourcedEntry) => string,
+): void {
+  const stale = entries.filter((entry) => {
+    const copy = agents.find((candidate) => candidate.name === entry.demo.agent);
+    return copy !== undefined && copy.instructions !== expected(entry);
+  });
+  if (stale.length > 0) {
+    throw new LiveVerifyRefusal(
+      `refused: the verification workspace holds an older copy of ${stale.map((entry) => entry.slug).join(', ')}; refill it from the deployed templates first (PUT /api/demo/verification, or re-run the deploy)`,
+    );
+  }
 }
 
 export interface VerifyOutcome<E extends LiveEnvironment = 'staging'> {
@@ -150,13 +235,16 @@ export async function verifyLive<E extends LiveEnvironment>(
   const { client, secrets, entries, now, environment } = input;
   const records: LiveRun<E>[] = [];
   const unrun: { entry: string; reason: string }[] = [];
-  let agents: readonly { readonly id: string; readonly name: string }[];
+  let agents: readonly WorkspaceAgent[];
   try {
     agents = await client.agents.list();
   } catch (error) {
     throw new LiveVerifyRefusal(
       `the deployment's agents could not be listed: ${oneLine(redact(describe(error), secrets))}`,
     );
+  }
+  if (input.expectedInstructions !== undefined) {
+    refuseStaleCopies(entries, agents, input.expectedInstructions);
   }
   for (const entry of entries) {
     const check = entry.demo.check;
@@ -175,7 +263,12 @@ export async function verifyLive<E extends LiveEnvironment>(
     const date = now().toISOString();
     let runId: string | null = null;
     try {
-      const started = await client.runs.start(agent.id, { prompt });
+      // As the Try it section starts it: with the entry's output schema, when it declares one.
+      const { outputSchema } = entry.demo;
+      const started = await client.runs.start(agent.id, {
+        prompt,
+        ...(outputSchema === undefined ? {} : { outputSchema }),
+      });
       runId = started.run.id;
       const runs: RecordedRun[] = [];
       let current = runId;
@@ -192,13 +285,16 @@ export async function verifyLive<E extends LiveEnvironment>(
         runs.push({ frames, decision: 'approved' });
         current = answer.run.id;
       }
-      const verdict = judgeMoment(recordTurn(prompt, runs), check);
+      const turn = recordTurn(prompt, runs);
+      const verdict = judgeMoment(turn, check);
       records.push({
         entry: entry.slug,
         runId,
         date,
         result: verdict.pass ? 'pass' : 'fail',
-        reason: verdict.pass ? 'the moment happened' : oneLine(redact(verdict.reason, secrets)),
+        reason: verdict.pass
+          ? 'the moment happened'
+          : oneLine(redact(`${verdict.reason} (${trailOf(turn)})`, secrets)),
         environment,
       });
     } catch (error) {
@@ -219,8 +315,151 @@ export async function verifyLive<E extends LiveEnvironment>(
   return { records, unrun };
 }
 
+/**
+ * What a failed turn did, short enough for a record's reason: the tools it called in order (the
+ * part after `__`, a repeat counted, a failed call marked `!` with the code its answer names, such
+ * as `run_skill_script!(output_not_writable)`), the calls that waited for a person, and the engine's
+ * stop reason, then whether the closing answer, when the turn ended on one, asked a question. The
+ * evidence keeps no transcript, so this is what tells an agent that stopped early from one that
+ * skipped a tool or a write that ran unasked.
+ */
+export function trailOf(turn: RecordedTurn): string {
+  const names: string[] = [];
+  const counts: number[] = [];
+  for (const step of turn.steps) {
+    if (step.kind === 'answer') continue;
+    const base = step.kind === 'tool' ? step.name : step.toolName;
+    const cut = base.lastIndexOf('__');
+    const short = cut === -1 ? base : base.slice(cut + 2);
+    const label =
+      step.kind === 'tool'
+        ? step.isError
+          ? `${short}!${errorCodeOf(step.output)}`
+          : short
+        : `wait:${short}`;
+    const last = names.length - 1;
+    if (names[last] === label) counts[last] = (counts[last] ?? 1) + 1;
+    else {
+      names.push(label);
+      counts.push(1);
+    }
+  }
+  const called = names
+    .map((label, at) => ((counts[at] ?? 1) > 1 ? `${label}x${String(counts[at])}` : label))
+    .join(', ');
+  const trail = `called: ${called === '' ? 'nothing' : called}; stop: ${turn.stopReason ?? 'none'}`;
+  const last = turn.steps.at(-1);
+  return last?.kind === 'answer' ? `${trail}; ended on ${closingOf(last.text)}` : trail;
+}
+
+/**
+ * Whether a sentence asks something: a question mark ending a word or clause (`?`, `？`), or a
+ * Japanese sentence that ends as a question (`ますか。`, `ですか。`, `でしょうか`).
+ */
+const ASKS = /[?？](?=[\s"'」』)）]|$)|(?:ますか|ですか|でしょうか)(?=[。．\s]|$)/u;
+
+/**
+ * Whether a turn's closing answer asks anything, anywhere in it, in words and never its text (a
+ * record, like a maintenance reason, carries no model output): an agent that asked for a go-ahead
+ * in prose, even before an entry's fixed closing sentence, is told from one that showed its result
+ * and stopped.
+ */
+function closingOf(text: string): string {
+  return ASKS.test(text) ? 'a question' : 'a statement';
+}
+
+/**
+ * Where a failed call's answer states why in a code, the code: a script's refusal
+ * (a line starting `{"error":"output_not_writable",…}`), the tool's own refusal (a line starting
+ * `refused (timeout): …`) or the platform's (`approval_required: …`, a leading code with an
+ * underscore). Only a short lower-case code is ever taken, never the text around it, and a code
+ * quoted mid-line (inside a document's content, say) is not one, so a record carries no file
+ * content. Empty when the answer states none.
+ */
+const ERROR_CODES = [
+  /^\{"error"\s*:\s*"([a-z][a-z0-9_]{0,39})"/mu,
+  /^refused \(([a-z][a-z0-9_]{0,39})\)/mu,
+  /^\s*([a-z][a-z0-9]{0,19}(?:_[a-z0-9]{1,19}){1,3}):/u,
+];
+
+/** `(code)` for a failed call whose answer names one, else empty (see {@link ERROR_CODES}). */
+export function errorCodeOf(output: string | null): string {
+  if (output === null) return '';
+  for (const pattern of ERROR_CODES) {
+    const code = pattern.exec(output)?.[1];
+    if (code !== undefined) return `(${code})`;
+  }
+  return '';
+}
+
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown error';
+}
+
+/** The deployed commit `env` names, or a refusal: a staging run cannot check its code without it. */
+export function deployedCommitOf(env: LiveVerifyEnv): string {
+  const commit = env.STORE_LIVE_VERIFY_DEPLOYED_COMMIT?.trim() ?? '';
+  if (!/^[0-9a-f]{40}$/u.test(commit)) {
+    throw new LiveVerifyRefusal(
+      'refused: STORE_LIVE_VERIFY_DEPLOYED_COMMIT must name the commit staging was deployed from',
+    );
+  }
+  return commit;
+}
+
+/**
+ * Refuses, before anything is spent, when any of `entries` is not what the deployment runs: a
+ * record must verify the code the run exercised, so the template staging seeded must have been
+ * built from the same source and catalog entry as the checkout whose hash the record carries.
+ */
+export function refuseUndeployed(
+  entries: readonly SourcedEntry[],
+  differs: (entry: SourcedEntry) => string | null,
+): void {
+  const problems = entries.flatMap((entry) => {
+    const why = differs(entry);
+    return why === null ? [] : [`${entry.slug}: ${why}`];
+  });
+  if (problems.length > 0) {
+    throw new LiveVerifyRefusal(
+      `refused: staging does not run the code checked out; deploy it first (${problems.join('; ')})`,
+    );
+  }
+}
+
+/**
+ * The source hash of each entry, taken before anything is spent: an entry with no source to hash
+ * cannot get a record that verifies it, so the run is refused.
+ */
+export function sourceHashesOf(
+  entries: readonly SourcedEntry[],
+  hashOf: (entry: SourcedEntry) => string | null,
+): ReadonlyMap<string, string> {
+  const hashes = new Map<string, string>();
+  for (const entry of entries) {
+    const hash = hashOf(entry);
+    if (hash === null) {
+      throw new LiveVerifyRefusal(
+        `refused: ${entry.slug} has no source to hash at ${entry.source}`,
+      );
+    }
+    hashes.set(entry.slug, hash);
+  }
+  return hashes;
+}
+
+/** The staging records as the committed evidence keeps them, each with its entry's source hash. */
+export function withSourceHashes(
+  records: readonly LiveRun<'staging'>[],
+  hashes: ReadonlyMap<string, string>,
+): RealModelRun[] {
+  return records.map((record) => {
+    const sourceHash = hashes.get(record.entry);
+    if (sourceHash === undefined) {
+      throw new LiveVerifyRefusal(`refused: ${record.entry} ran with no source hash taken`);
+    }
+    return { ...record, sourceHash };
+  });
 }
 
 /** The evidence with `records` after its earlier records, which are never rewritten. */

@@ -4,7 +4,7 @@ import { createCaseFoldGuard } from './keys';
 import type { SkillObjects } from '../storage-and-sharing';
 import type { ApiResult } from '../http/result';
 import { json, problem } from './result';
-import { ensureSkillRows, skillWriter, type SkillRowsWriter, type SkillWriter } from './tree';
+import { skillWriter, type SkillRowsWriter, type SkillWriter } from './tree';
 import { decodeSkillFiles, type ReplacedFile } from './skill-content';
 import { describeSkill } from './skill-description';
 import { readSkillMeta, writeSkillMeta, type SkillMetaRecord } from './skill-metadata';
@@ -49,15 +49,7 @@ export async function patchSkill(
     );
   }
 
-  // Migrate legacy files before checking aliases against the complete existing file set.
-  if ((files?.length ?? 0) + (removeFiles?.length ?? 0) > 0) {
-    try {
-      await ensureSkillRows(store, rows, name);
-    } catch (error) {
-      return writeRefusedProblem(error);
-    }
-  }
-  const writer = skillWriter(store, rows, name);
+  const writer = skillWriter(rows, name);
   const pathProblem = await patchPathProblem(writer, files ?? []);
   if (pathProblem !== null) return pathProblem;
 
@@ -75,7 +67,7 @@ export async function patchSkill(
   };
   await writeSkillMeta(store, updated);
 
-  return json(200, { skill: await describeSkill(store, updated, rows) });
+  return json(200, { skill: await describeSkill(updated, rows) });
 }
 
 async function patchPathProblem(

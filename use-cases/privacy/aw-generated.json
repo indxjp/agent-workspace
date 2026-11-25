@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "2f3338d6b47bcfcf46c83927742b78641bf38a195e2d98e8987944a796758fdd",
+        "agents/privacy.md": "78cdea2cc3cdfd478e4811b22d57d1a163b7363aaf1a798f4842f40368354251",
+        "agents/privacy.ts": "af781ff76585f016196bbe5d666a19173955d5872c29799c33129c032fa64d2b",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/privacy.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/privacy/SKILL.md": "b125bbce9ffb449cc8699a38b15761f50ac912396b897878b9706e95c42c41bd",
+        "surfaces/main.ts": "7df957caaa5fb1d153be0ed419f2892800d2a32fc2d740f24138d707a57c65e3"
+      },
+      "edits": []
+    }
+  }
+}

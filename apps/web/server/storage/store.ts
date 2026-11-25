@@ -11,7 +11,6 @@ import type {
   ResourceCatalogRepository,
   ResourceCatalogRepositoryProvider,
   SessionStateRepository,
-  StorageMigrationRunRepository,
   WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import {
@@ -27,7 +26,7 @@ import type {
 
 export { listCatalogFiles } from '@agent-workspace/core/db-model';
 
-export type { CatalogFile, CatalogPort, CatalogSkill, LockOutcome } from '@agent-workspace/core/db';
+export type { CatalogFile, CatalogPort, LockOutcome } from '@agent-workspace/core/db';
 
 export type { SessionStateBlobClaim } from '@agent-workspace/core/db';
 
@@ -81,12 +80,6 @@ export function isPathPending(error: unknown): boolean {
 export function isPathTaken(error: unknown): boolean {
   return error instanceof CatalogPathTakenError;
 }
-
-/** What the skills adopt stage needs of the catalog: it lists skills and fills their rows. */
-export type SkillsAdoptCatalog = ResourceCatalogRepository;
-
-/** The log of the skills adopt passes. */
-export type MigrationRuns = StorageMigrationRunRepository;
 
 /** A listed skill object. */
 export type SkillObjectEntry = ObjectListEntry;

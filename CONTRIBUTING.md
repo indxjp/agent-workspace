@@ -10,7 +10,12 @@ you write code. Small fixes (typos, obvious bugs) can go straight to a pull requ
 ## Development setup
 
 - Node.js 24 and pnpm 12 (`corepack enable` provides the pinned pnpm).
-- Docker, which `pnpm test` uses to provision its databases.
+- Docker is recommended. `pnpm test` starts PostgreSQL 18 and an S3-compatible store in Docker
+  when it can, and otherwise falls back to an embedded PostgreSQL and a downloaded, checksum-verified
+  SeaweedFS binary; without Docker the few suites that drive real containers skip, and CI runs them.
+
+Read [`AGENTS.md`](AGENTS.md) and [`docs/README.md`](docs/README.md) first: they say which module
+owns which code and which document to read for each kind of change.
 
 ```sh
 corepack enable
@@ -31,7 +36,8 @@ pnpm test
 pnpm build
 ```
 
-Tests that exercise the complete repository require `TEST_DATABASE_URL` pointing to PostgreSQL 18.
+`pnpm test` sets `TEST_DATABASE_URL` itself. To run a single test file against your own database,
+point `TEST_DATABASE_URL` at PostgreSQL 18.
 
 The repository's `compose.yaml` runs PostgreSQL 18 (ADR-0159). A `postgres-data` volume that
 PostgreSQL 17 initialised does not start under 18. Remove it to start empty
@@ -55,7 +61,10 @@ Do not weaken a quality gate, broaden an ignore or add a suppression to make a c
 
 ## Pull requests
 
-Fill in the pull request template.
+Fill in the pull request template. Do not edit a `CHANGELOG.md`: a change worth an entry adds a
+fragment under [`changes/`](changes/README.md), and the release collects them. A pull request of
+more than 3000 changed lines (generated files excluded) needs a
+`Large PR justification: <why it cannot be split>` line in its body.
 
 ## Commit and merge
 

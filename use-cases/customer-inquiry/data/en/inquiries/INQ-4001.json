@@ -1,0 +1,13 @@
+{
+  "id": "INQ-4001",
+  "received_at": "2026-11-18T10:12:00+09:00",
+  "channel": "form",
+  "from": {
+    "name": "Kotone Shiomi",
+    "email": "kotone.shiomi@mail.example"
+  },
+  "subject": "Part of order MS-30417 has not arrived",
+  "text": "From order MS-30417, placed on 14 November, the blanket arrived but the stainless kettle has not. When will it come?",
+  "order_id": "MS-30417",
+  "to": "support@midori-kurashikan.example"
+}

@@ -1,0 +1,9 @@
+enquiry_id,received,channel,product,subject,body,customer,email,phone
+Q-1001,2026-10-02,email,Rice cooker RC-5,How to set the timer,"I read the manual, but I cannot work out how to set the start time on the timer.",Sayuri Shinonome,sayuri.shinonome@example.com,090-0000-4127
+Q-1002,2026-10-04,phone,Electric kettle KT-20,Water leaks from the spout,Water drips from the base of the spout when I pour and wets the table.,Omi Yomogida,omi.yomogida@example.com,080-0000-3381
+Q-1003,2026-10-07,chat,Electric kettle KT-20,The box arrived crushed,The corner of the outer box was crushed on arrival. The kettle itself has no scratch.,Ruri Mashiba,ruri.mashiba@example.com,070-0000-5562
+Q-1004,2026-10-09,email,Rice cooker RC-5,Buying a spare inner pot,I want to buy only a new inner pot. What is the part number?,Kengo Hiwatashi,kengo.hiwatashi@example.com,090-0000-7714
+Q-1005,2026-10-15,phone,Rice cooker RC-5,The timer does not work as shown,"I set the timer, but the rice is ready at a different time from the display. I cannot find where the manual explains it.",Izumi Yunoki,izumi.yunoki@example.com,080-0000-9035
+Q-1006,2026-10-21,chat,Electric kettle KT-20,Delivery later than planned,"It did not arrive on the day I chose, and came two days late.",Toru Ashihara,toru.ashihara@example.com,070-0000-2248
+Q-1007,2026-10-28,email,Electric kettle KT-20,Water seeps from the spout gap,"When it is full, water seeps from the gap at the spout.",Chihiro Hayase,chihiro.hayase@example.com,090-0000-6650
+Q-1008,2026-09-30,phone,Rice cooker RC-5,Checking the warranty,I want to know how many years the warranty lasts.,Ryo Mitsuya,ryo.mitsuya@example.com,080-0000-1179

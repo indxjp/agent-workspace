@@ -101,8 +101,32 @@ export async function startRunOnSession(
     if (input.sessionId === null) await discardOpenedSession(env, principal, session.id, 'failed');
     return createRefusal(error);
   }
+  await keepDemoApprovedWrites(env, principal, input);
   handoffQueuedRun({ ...context, session }, run);
   return { kind: 'started', run, session };
+}
+
+/**
+ * ADR-0169 D3: once the row that consumed an approval is in, the demo's records stand-ins keep the
+ * approved calls, before the launcher reads the stand-in. A failure is logged and does not undo the
+ * decision; the stand-in then answers that nothing was kept, which is true.
+ */
+async function keepDemoApprovedWrites(
+  env: RunStartEnvironment,
+  principal: RunPrincipal,
+  input: RunStartInput,
+): Promise<void> {
+  const calls = input.decides?.approvedToolCalls ?? [];
+  if (env.demoApprovedWrites === undefined || calls.length === 0) return;
+  try {
+    await env.demoApprovedWrites.keep({ workspaceId: principal.workspaceId, calls });
+  } catch (error) {
+    log.error('[runs] the demo could not keep an approved write', {
+      workspaceId: principal.workspaceId,
+      runId: input.decides?.runId,
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+  }
 }
 
 /**

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:tr": {
+      "files": {
+        "agent-workspace.yaml": "ce23e4b5c7a1ae8167217cea0035f59337f28070761c6ea8513768c43efa1557",
+        "agents/sec-alert.md": "eeba2bc1a95b3d86457643ce1e000855ef14345ebd145fc1bd3f7b6e1b7aea0d",
+        "agents/sec-alert.ts": "5cf7799f15327b546314f4795090e92a2009176367d6e44b07b93bde1bd84a67",
+        "data/en/event.json": "248885839cc8daad2e06cb2bfba4cc468aada1c72a8af40a6180eeaf0d7b325a",
+        "data/ja/event.json": "9559947d26c25853d0fa05c41fb7693e479263ebde2b66da65c057682c6d6d13",
+        "evals/sec-alert.yaml": "1841eedbeb247162c9f70721d5af50b26952115cb6d70af75053e99c1c8ff98a",
+        "skills/sec-alert/SKILL.md": "55837f1c001f304c04cb3820bf5e8404935280247f45a57fae07f2825895248d",
+        "surfaces/main.ts": "69bc017cf051cacbbd4b638043240f7d525c499921cedea15258deee2c79b03b",
+        "triggers/sec-alert.json": "8ac5e91ce75573bf8361952c50b3862a4ae53d8a658da69c29be871cf8eb6c97"
+      },
+      "edits": []
+    }
+  }
+}

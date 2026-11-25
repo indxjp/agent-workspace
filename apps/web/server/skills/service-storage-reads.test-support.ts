@@ -1,11 +1,11 @@
 import { listCatalogFiles } from '@agent-workspace/core/db';
+import { listAll } from '@agent-workspace/core/storage/streams';
 import { expect, it } from 'vitest';
 import { deleteSkill } from './delete';
-import { exportSkill, getSkill } from './handlers';
-import { seedBareSkill } from './rows-fixture';
+import { exportSkill } from './handlers';
+import { withSkillMetaColumn } from './meta-column';
 import { getSkillWithId, importSkillWithId, publishSkillRevisionWithId } from './service';
 import { importBody, runSh, skillMd } from './service-storage-fixture.test-support';
-import { walkFiles } from './tree';
 
 import type { RowsWorldFactory } from './service-storage-fixture.test-support';
 export function registerStorageReadsTests(rowsWorld: RowsWorldFactory): void {
@@ -20,7 +20,7 @@ export function registerStorageReadsTests(rowsWorld: RowsWorldFactory): void {
       '.skills/dup/SKILL.md': skillMd('A'),
       '.skills/dup/scripts/run.sh': runSh('A'),
     });
-    expect(await walkFiles(shared, 'skills')).toEqual([]);
+    expect(await listAll(shared, 'skills')).toEqual([]);
     const got = await getSkillWithId(shared, catalogs[0], principal, 'dup', rows);
     expect(got).toMatchObject({
       status: 200,
@@ -31,7 +31,7 @@ export function registerStorageReadsTests(rowsWorld: RowsWorldFactory): void {
   // @story US-STO-08
   it('[US-STO-08][api][sdk] GET /api/skills/:name reads a skill stored as rows (sizes, source, export)', async () => {
     const { principal, catalogs, shared, rows, saveRow } = await rowsWorld();
-    await seedBareSkill(shared, importBody('old'));
+    await importSkillWithId(shared, catalogs[0], principal, importBody('old'), rows);
     await saveRow('.skills/dup/SKILL.md', skillMd('rows'));
     await saveRow('.skills/dup/scripts/run.sh', runSh('rows'));
     await saveRow('.skills/dup/references/more.md', 'more');
@@ -51,23 +51,18 @@ export function registerStorageReadsTests(rowsWorld: RowsWorldFactory): void {
         },
       },
     });
-    const exported = await exportSkill(shared, 'dup', rows);
+    const exported = await exportSkill(withSkillMetaColumn(shared, catalogs[0]), 'dup', rows);
     expect(exported).toMatchObject({ status: 200 });
     const paths = (exported.body as { skill: { files: { path: string }[] } }).skill.files.map(
       (f) => f.path,
     );
     expect(paths).toEqual(['SKILL.md', 'references/more.md', 'scripts/run.sh']);
-    // Without the service the same skill still reads from its prefix.
-    expect(await getSkill(shared, 'dup')).toMatchObject({
-      body: { skill: { source: skillMd('old'), fileCount: 2 } },
-    });
   });
 
   // @story US-STO-08
   it("[US-STO-08][api][sdk] delete removes a skill's rows, its revision rows and their objects", async () => {
     const { principal, catalogs, shared, objects, rows, saveRow } = await rowsWorld();
-    await seedBareSkill(shared, importBody('old'));
-    await getSkillWithId(shared, catalogs[0], principal, 'dup');
+    await importSkillWithId(shared, catalogs[0], principal, importBody('old'), rows);
     expect(
       (
         await publishSkillRevisionWithId(
@@ -93,15 +88,14 @@ export function registerStorageReadsTests(rowsWorld: RowsWorldFactory): void {
 
     const left = (await listCatalogFiles(catalogs[0])).filter((row) => row.kind === 'file');
     expect(left.map((row) => row.path)).toEqual(['.skills/dup-two/SKILL.md']);
-    expect(await walkFiles(shared, 'skills')).toEqual([]);
+    expect(await listAll(shared, 'skills')).toEqual([]);
     expect((await objects.listPage('', { recursive: true })).entries).toHaveLength(1);
   });
 
   // @story US-STO-08
   it('[US-STO-08][api][sdk] delete removes the rows of a pending revision too', async () => {
     const { principal, catalogs, shared, rows, saveRow } = await rowsWorld();
-    await seedBareSkill(shared, importBody('old'));
-    await getSkillWithId(shared, catalogs[0], principal, 'dup');
+    await importSkillWithId(shared, catalogs[0], principal, importBody('old'), rows);
     let started!: () => void;
     const writing = new Promise<void>((resolve) => (started = resolve));
     let release!: () => void;

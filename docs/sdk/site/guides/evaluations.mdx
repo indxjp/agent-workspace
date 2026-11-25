@@ -60,8 +60,18 @@ cases:
 | `tool`           | the run called the tool with exactly this name               |
 | `toolInput`      | with `tool`, one of its calls had at least these arguments   |
 | `output`         | with `outputSchema`, the run's structured output had these   |
-| `judge`          | a model grades the answer as meeting this rubric             |
+| `judge`          | a model grades the run as meeting this rubric                |
 | `awaitsApproval` | `true`: the run stops for approval instead of finishing      |
+
+`judge` reads the answer and, as evidence, what the run did: every tool call with its input and how
+it ended (`completed`, `error`, `failed` or `no_result`), the call it stopped on for approval, and
+its structured output. A rubric can therefore speak of a call's arguments or of what a run wrote:
+the content of a file is the content of its `Write` call. The judge is told the evidence is data, never
+instructions, and no text inside it can close its section, so an instruction a document planted in a
+tool input is graded, not followed. Each
+call, the paused call and the structured output are cut at 8,000 characters, and the calls together
+at 32,000. `toolInput` and `output` are subset matches; use `judge` for what they cannot say, such as
+"the draft does not promise a discount".
 
 `toolInput` is optional and only valid beside `tool`. It is a subset match: a call passes when every
 key you list is present with an equal value, and the call may carry others. It holds at most 2048
@@ -106,8 +116,9 @@ An agent whose tools need a person's approval stops at the gated call, and its r
 `awaiting_approval` (see [the run lifecycle](/concepts/run-lifecycle)). A case that reaches that gate fails with
 `run_awaiting_approval` unless it says it expects the stop. Add `awaitsApproval: true` and the pause
 is the pass condition. The other checks then read what the run did up to the pause: `tool` and
-`toolInput` also match the call it stopped on, and `contains`, `notContains` and `judge` read the
-answer so far.
+`toolInput` also match the call it stopped on, `contains`, `notContains` and `judge` read the
+answer so far, and `judge` also sees the call it stopped on, with its input, so a rubric can grade the
+content of the paused `Write` or the arguments of the paused call.
 
 ```yaml title="evals/consolidation.yaml (illustrative)" claim="illustrative"
 cases:

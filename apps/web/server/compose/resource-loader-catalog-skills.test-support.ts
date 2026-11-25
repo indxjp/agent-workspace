@@ -5,9 +5,6 @@ import {
   createInMemoryObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import { expect, it } from 'vitest';
-import { skillPayloadFile } from '../skills/fixtures';
-import { seedBareSkill } from '../skills/rows-fixture';
-import { patchSkillWithId } from '../skills/service';
 import { createStorageService } from '../storage/service';
 import { createAgentRunResourceLoader, skillInboxPath } from './resource-loader';
 import { bytesOf, ctxOf, noLog, sourceText, type World } from './resource-loader.test-support';
@@ -109,54 +106,6 @@ export function defineCatalogSkillsCases(setup: () => Promise<World>): void {
         storageGrants: [],
       }),
     ).rejects.toThrow('disappeared before the run was composed');
-  });
-
-  // @story US-STO-08
-  it('[US-STO-08][api][sdk] a legacy skill (prefix only, no rows) is still delivered to a run', async () => {
-    const { world, skills, saveRow, loadFiles } = await skillWorld();
-    const store = skills.forWorkspace(world.a.workspaceId);
-    await store.write('skills/demo/SKILL.md', Buffer.from('# legacy'), {});
-    await store.write('skills/demo/scripts/run.sh', Buffer.from('echo legacy'), {});
-
-    expect(await loadFiles()).toEqual({
-      'SKILL.md': '# legacy',
-      'scripts/run.sh': 'echo legacy',
-    });
-
-    // The rows win once they exist: a leftover prefix is never merged into them.
-    await saveRow('.skills/demo/SKILL.md', '# from rows');
-    expect(await loadFiles()).toEqual({ 'SKILL.md': '# from rows' });
-  });
-
-  // @story US-STO-08
-  it('[US-STO-08][api][sdk] a patched legacy skill is migrated to rows and the run receives the patch', async () => {
-    const { world, skills, storage, loadFiles } = await skillWorld();
-    const store = skills.forWorkspace(world.a.workspaceId);
-    await seedBareSkill(store, {
-      name: 'demo',
-      files: [
-        { path: 'SKILL.md', contentBase64: Buffer.from('# legacy').toString('base64') },
-        { path: 'scripts/run.sh', contentBase64: Buffer.from('echo legacy').toString('base64') },
-      ],
-    });
-    const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-
-    const patched = await patchSkillWithId(
-      store,
-      catalog,
-      { ownerPrincipalId: world.a.principalId, userId: world.a.userId },
-      'demo',
-      {
-        files: [skillPayloadFile('SKILL.md', '# patched')],
-      },
-      { storage, workspaceId: world.a.workspaceId },
-    );
-
-    expect(patched.status, JSON.stringify(patched.body)).toBe(200);
-    expect(await loadFiles()).toEqual({
-      'SKILL.md': '# patched',
-      'scripts/run.sh': 'echo legacy',
-    });
   });
 
   // @story US-STO-08

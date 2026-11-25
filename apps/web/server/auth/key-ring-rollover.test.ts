@@ -1,7 +1,7 @@
 /**
- * Part 06 step 5: every signed cookie is signed with its own purpose key, a cookie signed for one
- * purpose is refused for every other, and a cookie signed the old way (with the raw secret) still
- * verifies during the roll-over, so a deploy signs nobody out.
+ * Part 06 step 5: every signed cookie is signed with its own purpose key, and a cookie signed for
+ * one purpose is refused for every other. Part 06 step 6 ended the roll-over: a cookie signed the
+ * old way (with the raw secret) is refused.
  */
 import { hkdfSync } from 'node:crypto';
 
@@ -96,8 +96,8 @@ describe.each(cases)('the $name cookie', ({ purpose, other, mint, verifies }) =>
     expect(await verifies(await resigned(await mint(), purposeKey(other)))).toBe(false);
   });
 
-  it('still verifies when signed the old way, during the roll-over', async () => {
-    expect(await verifies(await resigned(await mint(), LEGACY))).toBe(true);
+  it('is refused when signed the old way, with the raw secret (roll-over ended, step 6)', async () => {
+    expect(await verifies(await resigned(await mint(), LEGACY))).toBe(false);
   });
 
   it('is refused when signed with neither key', async () => {

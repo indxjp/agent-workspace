@@ -1,0 +1,41 @@
+{
+  "kind": "schedule",
+  "name": "sla-watch",
+  "prompt": "今日のSLA監視レポートを作成して、sla-watch-reports フォルダに保存してください。 / Write today's SLA watch report and save it to the sla-watch-reports folder.",
+  "cron": "0 9 * * *",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "tickets", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "tickets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ticket",
+            "subject",
+            "sla",
+            "minutesLeftAtExport",
+            "owner",
+            "nextStep",
+            "sources"
+          ],
+          "properties": {
+            "ticket": { "type": "string" },
+            "subject": { "type": "string" },
+            "sla": { "type": "string", "enum": ["over", "near"] },
+            "minutesLeftAtExport": { "type": "integer" },
+            "owner": { "type": "string" },
+            "nextStep": { "type": "string" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

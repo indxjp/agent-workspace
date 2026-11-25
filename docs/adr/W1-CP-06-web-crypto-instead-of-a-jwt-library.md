@@ -9,13 +9,13 @@ Scope: `apps/web/server/auth/session.ts`
 
 Two rules apply to this task and they point in opposite directions.
 
-- **Spec §40, restated in this task's brief**: *"anything cryptographic here uses a mature library.
-  Do not hand-roll session signing, password hashing or CSRF protection."*
+- **Spec §40, restated in this task's brief**: _"anything cryptographic here uses a mature library.
+  Do not hand-roll session signing, password hashing or CSRF protection."_
   `docs/30-reference/policies/dependency-policy.md` §1 repeats it: cryptography is one of the five categories where a
-  mature library is *mandatory*, not merely permitted.
+  mature library is _mandatory_, not merely permitted.
 - **[ADR-0009](0009-pnpm-lock-ownership-exception.md)**: `pnpm-lock.yaml` is owned by the wave's
-  first task. *"A later task in the same wave that needs a new dependency escalates rather than
-  editing it in parallel."* W1-CP-06 is a later task in Wave 1. Its `Owns` globs are
+  first task. _"A later task in the same wave that needs a new dependency escalates rather than
+  editing it in parallel."_ W1-CP-06 is a later task in Wave 1. Its `Owns` globs are
   `apps/web/server/auth/**`, `apps/web/middleware.ts`, `tests/auth.test.ts` and
   `docs/adr/W1-CP-06-*.md`. Neither `pnpm-lock.yaml` nor `apps/web/package.json` is among them,
   and the file-ownership gate in CI fails a PR that touches a file outside its declared globs.
@@ -24,15 +24,15 @@ So the obvious implementation — `pnpm --filter @agent-workspace/web add jose`,
 or `@node-rs/argon2` — is not available to this task. It is not a matter of preference: the PR
 would fail CI on ownership before anyone read the code.
 
-Earlier versions of this record added *"`apps/web` today depends on `next`, `react` and
-`react-dom` and on nothing else. It cannot even import `@agent-workspace/core`."* That was true
+Earlier versions of this record added _"`apps/web` today depends on `next`, `react` and
+`react-dom` and on nothing else. It cannot even import `@agent-workspace/core`."_ That was true
 against the old base and is **false** on this one: W1-DEP-01 added
 `"@agent-workspace/core": "workspace:*"` to `apps/web/package.json`, and the sentence is withdrawn.
-It never carried this decision — the reason a *new third-party* dependency is unavailable is the
+It never carried this decision — the reason a _new third-party_ dependency is unavailable is the
 lockfile rule above, and that rule is untouched by a workspace link that already exists. Adding
 `jose` still means `pnpm --filter @agent-workspace/web add jose`, still means editing
 `apps/web/package.json` and `pnpm-lock.yaml`, and still fails the ownership gate. What the
-withdrawn sentence *was* load-bearing for is the tenant claim, and that decision has been re-taken
+withdrawn sentence _was_ load-bearing for is the tenant claim, and that decision has been re-taken
 from the facts as they now stand in
 [W1-CP-06 — the session carries the workspace slug](W1-CP-06-session-carries-the-workspace-slug.md).
 
@@ -52,7 +52,7 @@ Three properties are deliberate and each closes a class of attack that a JWT wou
    `alg: none`, algorithm confusion and `kid`-injection have nothing to aim at.
 2. **The MAC is checked before the payload is parsed.** No attacker-controlled JSON reaches
    `JSON.parse` on the strength of a bad signature.
-3. **Nothing compares two secrets by hand.** `crypto.subtle.verify` *is* the constant-time
+3. **Nothing compares two secrets by hand.** `crypto.subtle.verify` _is_ the constant-time
    comparison, which is why the signature check is written as a verify rather than as a
    sign-then-compare, and why the credential check in the same file MACs both strings and verifies
    rather than using `===`.
@@ -71,11 +71,11 @@ middleware can run in, which a Node-only package is not.
   parallel is how a wave loses a day.
 - **A random opaque session id with a server-side store.** Better in every way except the two that
   matter here. The §27 schema has no table an auth session could be written to — its `sessions`
-  table is *"one conversation with one agent"* (`packages/core/src/db/schema/sessions.ts:2`), not
+  table is _"one conversation with one agent"_ (`packages/core/src/db/schema/sessions.ts:2`), not
   a login. So the store would have to be process memory: it would not survive a restart or a
   second `web` replica, and Next.js
   middleware may run in an isolate that does not share memory with the route handlers. A stateless
-  token has neither problem. (`apps/web` *can* reach Postgres through `@agent-workspace/core` on
+  token has neither problem. (`apps/web` _can_ reach Postgres through `@agent-workspace/core` on
   this base — that is not the obstacle; the missing table is, and adding one is W1-DB-01's schema
   to change, not this task's.)
 - **Node's `crypto.createHmac` + `timingSafeEqual`.** Equivalent cryptographically and unavailable
@@ -130,6 +130,11 @@ outlives the deploy by more than twelve hours (the session's absolute lifetime; 
 minutes), and part 06 step 6, the single token codec, removes the fallback. The visitor key has no
 roll-over: its prefix moved from `v1_` to `v2_`, and runnable links are still off (release gate
 D-06).
+
+**The roll-over ended (part 06 step 6, after 0.6.13).** Verifiers no longer accept the raw secret:
+every token is verified only with its purpose key. 0.6.13 shipped the roll-over, and no token
+signed the old way outlives a 0.6.13 deploy by more than twelve hours. A deployment that upgrades
+from 0.6.12 or earlier straight to a later release signs its users out once.
 
 Rotation is still not implemented: changing `SESSION_SECRET` still changes every derived key at
 once.

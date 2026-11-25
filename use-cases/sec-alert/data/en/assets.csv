@@ -1,0 +1,6 @@
+host,type,department,criticality,note
+FIN-LT-014,Laptop,Finance,high,Used to approve payments
+VPN-GW-01,VPN gateway,IT,high,The way in from outside
+IDP-CLOUD,Identity provider,IT,high,Single sign-on for the whole company
+MAIL,Email,IT,medium,Company email
+GA-LT-031,Laptop,General Affairs,medium,Shared laptop of General Affairs

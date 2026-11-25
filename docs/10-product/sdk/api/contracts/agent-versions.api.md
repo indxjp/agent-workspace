@@ -305,6 +305,29 @@ export const AgentVersionBodySchema: z.ZodReadonly<z.ZodObject<{
             card: "card";
             table: "table";
         }>>>>;
+        resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            kind: z.ZodEnum<{
+                bar: "bar";
+                line: "line";
+            }>;
+            field: z.ZodString;
+            label: z.ZodString;
+            value: z.ZodString;
+            title: z.ZodReadonly<z.ZodObject<{
+                ja: z.ZodString;
+                en: z.ZodString;
+            }, z.core.$strict>>;
+            axes: z.ZodReadonly<z.ZodObject<{
+                label: z.ZodReadonly<z.ZodObject<{
+                    ja: z.ZodString;
+                    en: z.ZodString;
+                }, z.core.$strict>>;
+                value: z.ZodReadonly<z.ZodObject<{
+                    ja: z.ZodString;
+                    en: z.ZodString;
+                }, z.core.$strict>>;
+            }, z.core.$strict>>;
+        }, z.core.$strict>>>>>;
         allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
             turnsPerConversation: z.ZodOptional<z.ZodInt>;
@@ -538,6 +561,29 @@ export const AgentVersionDraftSchema: z.ZodReadonly<z.ZodObject<{
                 card: "card";
                 table: "table";
             }>>>>;
+            resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                kind: z.ZodEnum<{
+                    bar: "bar";
+                    line: "line";
+                }>;
+                field: z.ZodString;
+                label: z.ZodString;
+                value: z.ZodString;
+                title: z.ZodReadonly<z.ZodObject<{
+                    ja: z.ZodString;
+                    en: z.ZodString;
+                }, z.core.$strict>>;
+                axes: z.ZodReadonly<z.ZodObject<{
+                    label: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                    value: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>>;
+            }, z.core.$strict>>>>>;
             allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
                 turnsPerConversation: z.ZodOptional<z.ZodInt>;
@@ -789,6 +835,29 @@ export const AgentVersionListResponseSchema: z.ZodReadonly<z.ZodObject<{
                     card: "card";
                     table: "table";
                 }>>>>;
+                resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                    kind: z.ZodEnum<{
+                        bar: "bar";
+                        line: "line";
+                    }>;
+                    field: z.ZodString;
+                    label: z.ZodString;
+                    value: z.ZodString;
+                    title: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                    axes: z.ZodReadonly<z.ZodObject<{
+                        label: z.ZodReadonly<z.ZodObject<{
+                            ja: z.ZodString;
+                            en: z.ZodString;
+                        }, z.core.$strict>>;
+                        value: z.ZodReadonly<z.ZodObject<{
+                            ja: z.ZodString;
+                            en: z.ZodString;
+                        }, z.core.$strict>>;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>>>>>;
                 allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
                 limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
                     turnsPerConversation: z.ZodOptional<z.ZodInt>;
@@ -1070,6 +1139,29 @@ export const AgentVersionResourceSchema: z.ZodReadonly<z.ZodObject<{
                 card: "card";
                 table: "table";
             }>>>>;
+            resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                kind: z.ZodEnum<{
+                    bar: "bar";
+                    line: "line";
+                }>;
+                field: z.ZodString;
+                label: z.ZodString;
+                value: z.ZodString;
+                title: z.ZodReadonly<z.ZodObject<{
+                    ja: z.ZodString;
+                    en: z.ZodString;
+                }, z.core.$strict>>;
+                axes: z.ZodReadonly<z.ZodObject<{
+                    label: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                    value: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>>;
+            }, z.core.$strict>>>>>;
             allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
                 turnsPerConversation: z.ZodOptional<z.ZodInt>;
@@ -1340,6 +1432,29 @@ export const CreateAgentFromVersionRequestSchema: z.ZodReadonly<z.ZodObject<{
                     card: "card";
                     table: "table";
                 }>>>>;
+                resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                    kind: z.ZodEnum<{
+                        bar: "bar";
+                        line: "line";
+                    }>;
+                    field: z.ZodString;
+                    label: z.ZodString;
+                    value: z.ZodString;
+                    title: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                    axes: z.ZodReadonly<z.ZodObject<{
+                        label: z.ZodReadonly<z.ZodObject<{
+                            ja: z.ZodString;
+                            en: z.ZodString;
+                        }, z.core.$strict>>;
+                        value: z.ZodReadonly<z.ZodObject<{
+                            ja: z.ZodString;
+                            en: z.ZodString;
+                        }, z.core.$strict>>;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>>>>>;
                 allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
                 limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
                     turnsPerConversation: z.ZodOptional<z.ZodInt>;
@@ -1613,6 +1728,29 @@ export const CreateAgentFromVersionResponseSchema: z.ZodReadonly<z.ZodObject<{
                     card: "card";
                     table: "table";
                 }>>>>;
+                resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                    kind: z.ZodEnum<{
+                        bar: "bar";
+                        line: "line";
+                    }>;
+                    field: z.ZodString;
+                    label: z.ZodString;
+                    value: z.ZodString;
+                    title: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                    axes: z.ZodReadonly<z.ZodObject<{
+                        label: z.ZodReadonly<z.ZodObject<{
+                            ja: z.ZodString;
+                            en: z.ZodString;
+                        }, z.core.$strict>>;
+                        value: z.ZodReadonly<z.ZodObject<{
+                            ja: z.ZodString;
+                            en: z.ZodString;
+                        }, z.core.$strict>>;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>>>>>;
                 allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
                 limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
                     turnsPerConversation: z.ZodOptional<z.ZodInt>;
@@ -1842,6 +1980,29 @@ export const CreateAgentVersionRequestSchema: z.ZodReadonly<z.ZodObject<{
                 card: "card";
                 table: "table";
             }>>>>;
+            resultCharts: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                kind: z.ZodEnum<{
+                    bar: "bar";
+                    line: "line";
+                }>;
+                field: z.ZodString;
+                label: z.ZodString;
+                value: z.ZodString;
+                title: z.ZodReadonly<z.ZodObject<{
+                    ja: z.ZodString;
+                    en: z.ZodString;
+                }, z.core.$strict>>;
+                axes: z.ZodReadonly<z.ZodObject<{
+                    label: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                    value: z.ZodReadonly<z.ZodObject<{
+                        ja: z.ZodString;
+                        en: z.ZodString;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>>;
+            }, z.core.$strict>>>>>;
             allowedOrigins: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             limits: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
                 turnsPerConversation: z.ZodOptional<z.ZodInt>;

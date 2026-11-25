@@ -104,7 +104,7 @@ data-layer decision of the refactoring programme) calls for them.
 
 ### P-6 A published release with signed images and the installer
 
-**Today:** the `@indx-workspace/{contracts,sdk,aw,cli,embedded,create,react}` packages are on npm and the platform images are published (`ghcr.io/indxjp/agent-workspace/*` for every release after 0.6.10, `ghcr.io/indxdev/agent-workspace/*` up to it), and the
+**Today:** the `@indx-workspace/{contracts,platforms,sdk,react,app,aw,cli,embedded,create}` packages are on npm and the platform images are published (`ghcr.io/indxjp/agent-workspace/*` for every release after 0.6.10, `ghcr.io/indxdev/agent-workspace/*` up to it), and the
 `create-agent-workspace` generator (published as `@indx-workspace/cli`, run by
 `npm create @indx-workspace@latest`) pins those images by digest and refuses to write a project
 whose images it cannot resolve to a verified digest ([Self-host Agent
@@ -157,7 +157,7 @@ procedure per backend.
 ### D-4 A verified managed-cloud sandbox per cloud
 
 **Today:** `local`, `docker` and `kubernetes` are implemented;
-`aca-sessions` and `cloud-run-service` are implemented but not exercised by the live driver
+`cloud-run-service` is the `gcp-cloudrun` default and has a live isolation proof under `none` (runs 42141442053 and 42199357493), and its `sandbox-internet` allow-list lane for `restricted` and `open` is green (run 42452148886); `aca-sessions` is implemented but not exercised by the live driver
 suite; `sandbox-runtime`, `gke-agent-sandbox`, `aws-agentcore`, `aws-ecs` and
 `cloud-run-sandbox` are named in the contract with no implementation (`sandbox-runtime` is no longer
 offered by the CLI or chosen as a default; a project that names it runs on `local`). **Available
@@ -179,8 +179,8 @@ project `aw deploy` writes does not), and refuse `restricted` without it; the is
 workflow's docker and kind lanes verify `restricted` (allowed host reachable, other host refused),
 refusal of the metadata address and no DNS egress. An agent without
 `unrestrictedNetwork` gets a network floor instead of `open`, and a run is refused with
-`network_policy_unenforceable` where the driver cannot enforce it. Cloud Run and ACA sessions still
-refuse `restricted`, and neither `cloud-run-service` nor `aca-sessions` has a live proof. The
+`network_policy_unenforceable` where the driver cannot enforce it. Cloud Run takes `restricted` and `open` through its shared egress proxy when the project file sets
+`gcp.sandboxInternet: true`; ACA sessions still refuse `restricted` and have no live proof. The
 `aw deploy` Kubernetes target runs agent sessions on the `kubernetes` driver with the in-cluster
 ServiceAccount, checked on a kind cluster in CI (the `kind-deploy` lane); a managed cluster is not
 proven.

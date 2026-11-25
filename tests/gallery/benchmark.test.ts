@@ -23,6 +23,7 @@ import {
   renderStandingTable,
   scoreOf,
 } from './harness/benchmark.ts';
+import { countGalleryProject, renderLineCountTable } from './harness/line-counts.ts';
 import { PROBES } from './harness/probes.ts';
 import { assertContractEvidence } from './harness/benchmark-evidence.ts';
 import { GALLERY_DIR, loadUseCases, REPOSITORY_ROOT, TUTORIALS_DIR } from './harness/registry.ts';
@@ -36,13 +37,17 @@ const LANDING_SCORE = /<!-- benchmark:score ([a-z-]+) -->\d*<!-- benchmark:end -
 const useCases = loadUseCases();
 
 /** Replace the text between the markers in `file` with `content`, or check that it is there. */
-async function generated(file: string, content: string): Promise<void> {
+async function generated(
+  file: string,
+  content: string,
+  [open, close] = [START, END],
+): Promise<void> {
   const text = await readFile(file, 'utf8');
-  const start = text.indexOf(START);
-  const end = text.indexOf(END);
-  expect(start, `${file} has no ${START} marker`).toBeGreaterThanOrEqual(0);
-  expect(end, `${file} has no ${END} marker after ${START}`).toBeGreaterThan(start);
-  const expected = `${text.slice(0, start + START.length)}\n\n${content}\n\n${text.slice(end)}`;
+  const start = text.indexOf(open);
+  const end = text.indexOf(close);
+  expect(start, `${file} has no ${open} marker`).toBeGreaterThanOrEqual(0);
+  expect(end, `${file} has no ${close} marker after ${open}`).toBeGreaterThan(start);
+  const expected = `${text.slice(0, start + open.length)}\n\n${content}\n\n${text.slice(end)}`;
   if (WRITE) {
     await writeFile(file, expected);
     return;
@@ -155,6 +160,16 @@ describe('gallery benchmarks', () => {
       path.join(TUTORIALS_DIR, 'index.mdx'),
       renderOverviewTable(useCases.map(({ benchmark }) => benchmark)),
     );
+  });
+
+  // Report-only (the Agent Store 100-use-case plan, §4): the counts are measured and shown, and a
+  // count over the ceiling fails nothing yet.
+  it("the README shows every project's handwritten lines", async () => {
+    const counts = await Promise.all(useCases.map(({ dir }) => countGalleryProject(dir)));
+    await generated(path.join(GALLERY_DIR, 'README.md'), renderLineCountTable(counts), [
+      '<!-- line-counts:start -->',
+      '<!-- line-counts:end -->',
+    ]);
   });
 
   it('the landing page shows every score the benchmarks give', async () => {

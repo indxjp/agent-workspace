@@ -139,7 +139,7 @@ describe('the input schema', () => {
     openai: OPENAI_AGENTS_SKILL_SCRIPT_INPUT,
   };
 
-  it('declares the engine’s three fields on every adapter', () => {
+  it('declares the engine’s four fields on every adapter', () => {
     for (const [name, input] of Object.entries(declared)) {
       expect(Object.keys(input.shape).sort(), name).toEqual(Object.keys(schema.properties).sort());
     }
@@ -149,6 +149,7 @@ describe('the input schema', () => {
     const valid = [
       { skill: 'review', script: 'check.mjs', args: ['a.docx'] },
       { skill: 'review', script: 'check.mjs', args: [] },
+      { skill: 'review', script: 'check.mjs', args: [], input: { fromToolUse: 'toolu_1' } },
     ];
     const invalid = [
       { skill: 'review' },
@@ -156,10 +157,22 @@ describe('the input schema', () => {
       { skill: 'review', script: 'check.mjs', args: 'a.docx' },
       { skill: 'review', script: 'check.mjs', args: [1] },
       { skill: 1, script: 'check.mjs', args: [] },
+      { skill: 'review', script: 'check.mjs', args: [], input: 'toolu_1' },
+      { skill: 'review', script: 'check.mjs', args: [], input: {} },
+      { skill: 'review', script: 'check.mjs', args: [], input: { fromToolUse: 1 } },
+      {
+        skill: 'review',
+        script: 'check.mjs',
+        args: [],
+        input: { fromToolUse: 'toolu_1', path: '/etc/passwd' },
+      },
     ];
     for (const [name, input] of Object.entries(declared)) {
-      for (const call of valid)
-        expect(input.safeParse(call).success, `${name} ${JSON.stringify(call)}`).toBe(true);
+      // OpenAI's strict schema has no optional field: a call without a reference sends `input: null`.
+      for (const call of valid) {
+        const sent = name === 'openai' ? { input: null, ...call } : call;
+        expect(input.safeParse(sent).success, `${name} ${JSON.stringify(sent)}`).toBe(true);
+      }
       for (const call of invalid)
         expect(input.safeParse(call).success, `${name} ${JSON.stringify(call)}`).toBe(false);
     }
@@ -169,9 +182,9 @@ describe('the input schema', () => {
     const noArgs = { skill: 'review', script: 'check.mjs' };
     expect(CLAUDE_SKILL_SCRIPT_INPUT.safeParse(noArgs).success).toBe(true);
     expect(MASTRA_SKILL_SCRIPT_INPUT.safeParse(noArgs).success).toBe(true);
-    expect(OPENAI_AGENTS_SKILL_SCRIPT_INPUT.safeParse({ ...noArgs, args: null }).success).toBe(
-      true,
-    );
+    expect(
+      OPENAI_AGENTS_SKILL_SCRIPT_INPUT.safeParse({ ...noArgs, args: null, input: null }).success,
+    ).toBe(true);
     expect(schema.required).toEqual(['skill', 'script']);
   });
 });

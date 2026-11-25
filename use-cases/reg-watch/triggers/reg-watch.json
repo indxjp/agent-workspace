@@ -1,0 +1,33 @@
+{
+  "kind": "schedule",
+  "name": "reg-watch",
+  "prompt": "今週の法改正ウォッチレポートを作成して、reg-watch-reports フォルダに保存してください。 / Write this week's regulation watch report and save it to the reg-watch-reports folder.",
+  "cron": "0 9 * * 1",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "asOf", "notices", "savedTo"],
+    "properties": {
+      "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "asOf": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "notices": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["notice", "watch", "effectiveDate", "commentDeadline", "changes", "dept"],
+          "properties": {
+            "notice": { "type": "string", "pattern": "^[A-Z]{3}-\\d{4}-\\d{3}$" },
+            "watch": { "type": "string", "pattern": "^W-\\d{2}$" },
+            "effectiveDate": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+            "commentDeadline": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+            "changes": { "type": "string" },
+            "dept": { "type": "string" }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

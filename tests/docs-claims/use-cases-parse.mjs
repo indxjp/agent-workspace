@@ -274,3 +274,42 @@ export function chatFailedRunId(chatOutput) {
   const id = /\brun (\S+) failed\b/u.exec(chatOutput)?.[1];
   return id !== undefined && RUN_ID.test(id) ? id : undefined;
 }
+
+/**
+ * The run a `aw chat -p` paused on (`error: run_awaiting_approval: run <uuid> failed: the run ended
+ * awaiting_approval`): a use case whose tutorial has a person approve a tool call (cad-drafting's
+ * change set, excel-consolidation's workbook). Undefined for any other failure.
+ *
+ * @param {string} chatOutput
+ * @returns {string | undefined}
+ */
+export function chatPausedRunId(chatOutput) {
+  return /\brun_awaiting_approval:/u.test(chatOutput) ? chatFailedRunId(chatOutput) : undefined;
+}
+
+/**
+ * The run `aw runs approve <id> --json` (`{ run, events }`) or `aw runs wait <id> --json` (the run)
+ * prints: its id, status and answer text. Throws when the output is not such a run, or its id is
+ * not a UUID (it is put in the next command).
+ *
+ * @param {string} stdout
+ * @returns {{ id: string, status: string, text: string }}
+ */
+export function printedRun(stdout) {
+  const parsed = parseJson(stdout);
+  const record = isRecord(parsed) && isRecord(parsed['run']) ? parsed['run'] : parsed;
+  if (!isRecord(record) || typeof record['id'] !== 'string' || !RUN_ID.test(record['id'])) {
+    throw new Error(`not a run: ${stdout.slice(0, 200)}`);
+  }
+  const output = isRecord(record['output']) ? record['output'] : {};
+  return {
+    id: record['id'],
+    status: String(record['status']),
+    text: typeof output['text'] === 'string' ? output['text'] : '',
+  };
+}
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

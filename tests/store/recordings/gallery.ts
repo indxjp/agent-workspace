@@ -217,7 +217,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
     const scripts = skillScripts(() => cad.work, {
       'dxf-draft/dxf.mjs': path.join(cad.DIR, 'skills', 'dxf-draft', 'scripts', 'dxf.mjs'),
     });
-    return playTurn(cad.desk(model, scripts), ask.prompt, { subject: cad.DESIGNER });
+    return playTurn(cad.desk(model, scripts), ask, { subject: cad.DESIGNER });
   },
 
   'contract-review': (ask) => {
@@ -252,7 +252,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
       'office-reader/ooxml.mjs': skills('office-reader', 'ooxml.mjs'),
       'contract-playbook/clauses.mjs': skills('contract-playbook', 'clauses.mjs'),
     });
-    return playTurn(contract.reviewWorkspace(model, scripts), ask.prompt, {
+    return playTurn(contract.reviewWorkspace(model, scripts), ask, {
       subject: contract.SALES_MEMBER,
       attachments: [{ fileId: file.id }],
     });
@@ -272,7 +272,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
       const best = sentence === undefined ? '' : `${sentence}。`;
       return inquiry.answer(`お問い合わせいただきありがとうございます。${best}`);
     };
-    return playTurn(inquiry.workspaceFor(model), ask.prompt, { subject: 'C-1001' });
+    return playTurn(inquiry.workspaceFor(model), ask, { subject: 'C-1001' });
   },
 
   'excel-consolidation': (ask) => {
@@ -301,13 +301,13 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
     const scripts = skillScripts(() => excel.work, {
       'excel-consolidate/consolidate.mjs': excel.CONSOLIDATE,
     });
-    return playTurn(excel.workspaceFor(model, scripts), ask.prompt, { subject: excel.PLANNER });
+    return playTurn(excel.workspaceFor(model, scripts), ask, { subject: excel.PLANNER });
   },
 
   maintenance: (ask) =>
     playTurn(
       maintenance.workspaceFor(reading(maintenance.pressDiagnosis, ask.prompt, ask.ja)),
-      ask.prompt,
+      ask,
       { subject: maintenance.TECHNICIAN },
     ),
 
@@ -318,7 +318,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
         {},
         { search_files: manual.search.call },
       ),
-      ask.prompt,
+      ask,
       { subject: manual.ENGINEER },
     ),
 
@@ -341,7 +341,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
       },
       minutes.connectorsOf(await minutes.startTracker()),
     );
-    return playTurn(workspace, ask.prompt, { subject: minutes.CLERK });
+    return playTurn(workspace, ask, { subject: minutes.CLERK });
   },
 
   'quality-defect': (ask) =>
@@ -349,7 +349,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
       defect.qualityWorkspace(
         reading(defect.followInstructions(), ask.prompt, ask.ja.replaceAll('／', '\n')),
       ),
-      ask.prompt,
+      ask,
       { subject: defect.QA_LEAD },
     ),
 
@@ -400,7 +400,7 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
         },
         COST_MODEL,
       );
-      return await playTurn(workspace, ask.prompt, {
+      return await playTurn(workspace, ask, {
         subject: quotation.SALES_LEAD,
         attachments: [{ fileId: quotation.DRAWING_ID }],
       });
@@ -416,6 +416,6 @@ export const GALLERY: Readonly<Record<string, Recorder>> = {
     const desk = await ringi.hook(
       reading(ringi.reviewer(), ask.prompt, `${ask.ja}\n${JSON.stringify(ringi.CONVEYOR)}`),
     );
-    return playTurn(desk, ask.prompt, { subject: ringi.SUBMITTER });
+    return playTurn(desk, ask, { subject: ringi.SUBMITTER });
   },
 };

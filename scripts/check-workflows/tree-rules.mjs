@@ -6,6 +6,7 @@
 import path from 'node:path';
 
 import { WORKFLOWS_DIRECTORY } from './ci-text.mjs';
+import { checkServiceImages } from './docker-hub.mjs';
 
 const HOSTED = /^(?:ubuntu|windows|macos)-(?:latest|\d+(?:\.\d+)?)(?:-arm)?$/u;
 export const ACTIONLINT_CONFIG = '.github/actionlint.yaml';
@@ -227,6 +228,7 @@ export function validateWorkflowTree(failures, workflows, actionlintConfig) {
   for (const [relativePath, source] of workflows) {
     checkAwBuildsPlatforms(failures, relativePath, source);
     checkCloudRunEnv(failures, relativePath, source);
+    checkServiceImages(failures, relativePath, source);
   }
   const preview = workflows.get(PREVIEW);
   if (preview !== undefined) checkPreviewIamProbe(failures, preview);

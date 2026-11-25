@@ -58,7 +58,7 @@ ignoredStorageVariables(env: StorageEnv): string[]
 
 ## LegacyAreaPrefix
 
-Where one area's objects sit in the old per-area naming: list `prefix` (no trailing slash) in
+Where one area's objects sat in the old per-area naming: list `prefix` (no trailing slash) in
 the store `location` opens as a root. Each key beneath it is `workspaces/<id>/<storage key>`.
 
 | Name | Type | Required | Description |
@@ -69,9 +69,9 @@ the store `location` opens as a root. Each key beneath it is `workspaces/<id>/<s
 
 ## legacyAreaPrefixes
 
-The old object layouts a deployment may still hold (the storage design, §06 "Moving existing
-files safely"): one entry per area. A bucket or a `file://` root keeps each area under its own
-directory. Pure, so the server's adopt stage and `agent-workspace doctor` read one list.
+The old object layouts a deployment may have held (the storage design, §06 "Moving existing
+files safely"): one entry per area. A bucket or a `file://` root kept each area under its own
+directory.
 
 ```ts
 legacyAreaPrefixes(settings: StorageSettings): readonly LegacyAreaPrefix[]

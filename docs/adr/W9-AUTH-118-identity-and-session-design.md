@@ -90,3 +90,9 @@ decided to drop it. This amendment is the release-safe first half of that.
 
 **Next release.** `sessionClaimsAt` stops writing `role`. That is safe once no running build
 requires it, which this release guarantees. Cookies minted before it keep verifying.
+
+**Landed after 0.6.13 (part 06 step 9).** `signInSessionClaimsAt` no longer writes `role`. 0.6.13,
+the release that stopped requiring it, is out, so a rollback to 0.6.13 accepts the new cookies; a
+rollback to 0.6.12 or earlier would refuse them and sign people out once. A cookie that 0.6.13 or
+earlier minted, with `role: 'owner'`, still verifies until it expires (at most twelve hours), and
+`session-golden.test.ts` pins both the new bytes and that old token.

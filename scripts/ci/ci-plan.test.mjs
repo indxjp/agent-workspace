@@ -11,8 +11,10 @@ import { test } from 'node:test';
 import { URL } from 'node:url';
 
 import {
+  COVERAGE_SUITES,
   EMBEDDED_PROJECT,
   TEST_SHARDS,
+  USE_CASES_PROJECT,
   affectedTasks,
   decidePlan,
   outputLines,
@@ -33,11 +35,13 @@ test('a full run needs every job and spreads every test project but embedded', (
     'build-embedded': true,
     'typecheck-lint': true,
     'heavy-checks': true,
+    coverage: true,
     'test-shards': [
       { shard: 'tests', projects: 'tests' },
       { shard: 'aw-cli', projects: '@indx-workspace/aw' },
       { shard: 'rest', projects: '@indx-workspace/x' },
     ],
+    'coverage-suites': [...COVERAGE_SUITES],
   });
 });
 
@@ -47,7 +51,9 @@ test('a push to main (no diff base) builds both and runs nothing else', () => {
     'build-embedded': true,
     'typecheck-lint': false,
     'heavy-checks': false,
+    coverage: false,
     'test-shards': [],
+    'coverage-suites': [],
   });
 });
 
@@ -57,7 +63,9 @@ test('a diff that reaches no task needs no Nx job', () => {
     'build-embedded': false,
     'typecheck-lint': false,
     'heavy-checks': false,
+    coverage: false,
     'test-shards': [],
+    'coverage-suites': [],
   });
 });
 
@@ -70,7 +78,9 @@ test('a diff that reaches no Nx task needs no Nx job, in the queue as on a pull 
     'build-embedded': false,
     'typecheck-lint': false,
     'heavy-checks': false,
+    coverage: false,
     'test-shards': [],
+    'coverage-suites': [],
   });
 });
 
@@ -148,6 +158,8 @@ test('every job the plan names has its ci.yml needs planned as well', () => {
     ['agent-workspace:lint'],
     ['@agent-workspace/web:typecheck', `${EMBEDDED_PROJECT}:lint`],
     ['@agent-workspace/web:test', `${EMBEDDED_PROJECT}:test`],
+    [`${USE_CASES_PROJECT}:test`],
+    [`${USE_CASES_PROJECT}:lint`],
   ];
   const plans = [
     decidePlan({ diffBase: '', full: false }),
@@ -186,7 +198,9 @@ test('the output is one line per key, the shards as one JSON line', () => {
     'build-embedded=false',
     'typecheck-lint=false',
     'heavy-checks=true',
+    'coverage=false',
     'test-shards=[{"shard":"web-core","projects":"@agent-workspace/web"}]',
+    'coverage-suites=[]',
     '',
   ]);
 });
@@ -281,7 +295,9 @@ test('a docs-only change no test reads needs no Nx job at all', () => {
     'build-embedded': false,
     'typecheck-lint': false,
     'heavy-checks': false,
+    coverage: false,
     'test-shards': [],
+    'coverage-suites': [],
   });
 });
 
@@ -293,4 +309,93 @@ test("a change to embedded's own source needs build-embedded and nothing in the 
   });
   assert.equal(plan['build-embedded'], true);
   assert.ok(plan['test-shards'].every(({ projects }) => !projects.includes(EMBEDDED_PROJECT)));
+});
+
+// The Agent Store 100-use-case plan, §7: the use cases' coverage suite runs on the pull request that
+// reaches their tests; every other suite stays in the heavy tier.
+test("a use case's test task plans the use cases' coverage suite, and only that one", () => {
+  const plan = decidePlan({
+    diffBase: 'base',
+    full: false,
+    affectedTasks: [`${USE_CASES_PROJECT}:test`, '@agent-workspace/web:test'],
+  });
+  assert.equal(plan.coverage, true);
+  assert.deepEqual(
+    plan['coverage-suites'].map(({ name }) => name),
+    ['use-cases'],
+  );
+  assert.equal(plan.build, true);
+  for (const tasks of [[`${USE_CASES_PROJECT}:lint`], ['@agent-workspace/web:test']]) {
+    const other = decidePlan({ diffBase: 'base', full: false, affectedTasks: tasks });
+    assert.equal(other.coverage, false, tasks.join());
+    assert.deepEqual(other['coverage-suites'], [], tasks.join());
+  }
+});
+
+test('every coverage suite is a package.json script over a config that exists', () => {
+  const pkg = /** @type {{ scripts: Record<string, string> }} */ (
+    JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+  );
+  assert.equal(new Set(COVERAGE_SUITES.map(({ name }) => name)).size, COVERAGE_SUITES.length);
+  for (const suite of COVERAGE_SUITES) {
+    const script = pkg.scripts[suite.script] ?? '';
+    assert.match(script, new RegExp(`--config ${suite.config} --coverage`, 'u'), suite.name);
+    const config = readFileSync(new URL(`../../${suite.config}`, import.meta.url), 'utf8');
+    const directory = suite.summary.replace(/\/coverage-summary\.json$/u, '');
+    assert.ok(config.includes(`'${directory}'`) || directory === 'coverage', suite.name);
+  }
+  assert.deepEqual(
+    COVERAGE_SUITES.filter(({ scoreboard }) => scoreboard).map(({ name }) => name),
+    ['use-cases'],
+  );
+});
+
+test('a change touching only use-cases/<slug> runs only the scoped jobs', () => {
+  const plan = decidePlan({
+    diffBase: 'base',
+    full: false,
+    affectedTasks: affectedTasks({ files: ['use-cases/x/agents/x.ts'] }),
+  });
+  assert.deepEqual(
+    { ...plan, 'coverage-suites': plan['coverage-suites'].map(({ name }) => name) },
+    {
+      build: true,
+      'build-embedded': false,
+      'typecheck-lint': true,
+      'heavy-checks': true,
+      coverage: true,
+      // The use cases themselves, and the store's catalog test, which reads every use case folder.
+      'test-shards': [
+        { shard: 'tests', projects: 'tests-store' },
+        { shard: 'rest', projects: USE_CASES_PROJECT },
+      ],
+      'coverage-suites': ['use-cases'],
+    },
+  );
+});
+
+test("a change to what the use cases' kit reads reaches the use cases' tests and coverage", () => {
+  for (const file of [
+    'examples/store/catalog/real-model-runs.json',
+    'tests/apps/handwritten.ts',
+    'tests/store/live-verify/source-hash.ts',
+    // The packages the kit and the use cases import (use-cases/project.json implicitDependencies).
+    'packages/sdk/src/index.ts',
+    'packages/contracts/src/index.ts',
+    // The real coverage config, which use-cases/kit/coverage.test.ts holds to the 100% rule.
+    'vitest.use-cases.coverage.config.ts',
+    'tests/gallery/contract-review/agents/contract-review.md',
+    'examples/wiki/agents/assistant.ts',
+  ]) {
+    const plan = decidePlan({
+      diffBase: 'base',
+      full: false,
+      affectedTasks: affectedTasks({ files: [file] }),
+    });
+    assert.equal(plan.coverage, true, file);
+    assert.ok(
+      plan['test-shards'].some(({ projects }) => projects.split(',').includes(USE_CASES_PROJECT)),
+      file,
+    );
+  }
 });

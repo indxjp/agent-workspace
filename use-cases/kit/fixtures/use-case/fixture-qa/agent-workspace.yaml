@@ -1,0 +1,16 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: fixture-qa
+engine: claude-agent-sdk
+policy:
+  permissions:
+    writeFiles: false
+    runCommands: true
+    unrestrictedNetwork: false
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

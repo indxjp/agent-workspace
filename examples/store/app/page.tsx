@@ -4,14 +4,17 @@ import { cookies } from 'next/headers';
 import { AREAS, CATALOG, COUNTS, FEATURED, type CatalogEntry } from '../catalog/index.ts';
 import { recordingFor } from '../catalog/recording.ts';
 import { RECORDINGS } from '../catalog/recordings.generated.ts';
+import { AgentIcon } from './agent-icon';
 import { RecordingView } from './agents/[slug]/try/recording-view';
 import { filterHref, isFiltered, parseFilter, shelvesOf, type Filter, type Query } from './browse';
 import { LANG_COOKIE, langOf, pick, type Lang } from './lang';
+import { Steps, Strengths } from './pitch';
 import { tr } from './text';
 import { maintenanceSlugs, verificationLabel } from './verification';
 
 export const dynamic = 'force-dynamic';
 
+/** An app-store tile: icon, name, one line, how it was verified, and the button to try it. */
 function Card({
   entry,
   lang,
@@ -22,20 +25,28 @@ function Card({
   readonly maintenance: readonly string[];
 }) {
   const t = tr(lang);
+  const titleId = `card-${entry.slug}`;
   return (
-    <li className="aw-app-card">
-      <h3 className="aw-app-card-title">
-        <a href={`/agents/${entry.slug}`}>{pick(entry.name, lang)}</a>
-      </h3>
-      <p>{pick(entry.summary, lang)}</p>
-      <span className="aw-app-badge">
-        {entry.status === 'live' ? t('今すぐ試せる', 'Try now') : t('近日公開', 'Coming soon')}
-      </span>
+    <li className="store-app">
+      <AgentIcon entry={entry} lang={lang} />
+      <div className="store-app-body">
+        <h3 id={titleId} className="store-app-title">
+          <a href={`/agents/${entry.slug}`}>{pick(entry.name, lang)}</a>
+        </h3>
+        <p className="store-app-summary">{pick(entry.summary, lang)}</p>
+        {entry.status === 'live' ? (
+          <small className="store-verified" data-testid="card-verification">
+            {verificationLabel(entry.slug, lang, maintenance)}
+          </small>
+        ) : null}
+      </div>
       {entry.status === 'live' ? (
-        <small data-testid="card-verification">
-          {verificationLabel(entry.slug, lang, maintenance)}
-        </small>
-      ) : null}
+        <a className="store-get" href={`/agents/${entry.slug}#try`} aria-describedby={titleId}>
+          {t('試す', 'Try')}
+        </a>
+      ) : (
+        <span className="store-get store-get-soon">{t('近日公開', 'Coming soon')}</span>
+      )}
     </li>
   );
 }
@@ -93,39 +104,64 @@ export default async function HomePage({
   return (
     <main className="store-main">
       <section className="store-hero" aria-labelledby="hero-title">
-        <h1 id="hero-title">
-          {t(
-            '自社の仕事に合う AI エージェントを、見つけて、試して、導入する',
-            'Find, try and install AI agents that fit your work',
-          )}
-        </h1>
-        <ul className="store-numbers" aria-label={t('ストアの規模', 'The store in numbers')}>
-          <li>
-            <strong>{COUNTS.total}</strong> {t('エージェント', 'agents')}
-          </li>
-          <li>
-            <strong>{COUNTS.live}</strong> {t('今すぐ試せる', 'to try now')}
-          </li>
-          <li>
-            <strong>{COUNTS.areas}</strong> {t('分野', 'areas')}
-          </li>
-        </ul>
-        <aside className="store-featured" aria-labelledby="featured-title">
-          <p className="aw-app-badge">{t('注目（サンプル）', 'Featured (sample)')}</p>
-          <h2 id="featured-title">
-            <a href={`/agents/${FEATURED.slug}`}>{pick(FEATURED.name, lang)}</a>
-          </h2>
-          <p>{pick(FEATURED.demo.moment, lang)}</p>
-          <p>
+        <div className="store-hero-text">
+          <p className="store-eyebrow">{t('エージェントストア', 'Agent Store')}</p>
+          <h1 id="hero-title">
+            {t(
+              '自社の仕事に合う AI エージェントを、見つけて、試して、導入する',
+              'Find, try and install AI agents that fit your work',
+            )}
+          </h1>
+          <p className="store-lede">
+            {t(
+              'アプリを選ぶように業務のエージェントを選び、その場で動かし、自社向けに設定して、自社のクラウドに入れられます。',
+              'Choose a business agent the way you choose an app: run it on the spot, set it up for your company, and install it in your own cloud.',
+            )}
+          </p>
+          <ul className="store-numbers" aria-label={t('ストアの規模', 'The store in numbers')}>
+            <li>
+              <strong>{COUNTS.total}</strong> {t('エージェント', 'agents')}
+            </li>
+            <li>
+              <strong>{COUNTS.live}</strong> {t('今すぐ試せる', 'to try now')}
+            </li>
+            <li>
+              <strong>{COUNTS.areas}</strong> {t('分野', 'areas')}
+            </li>
+          </ul>
+        </div>
+        <aside
+          className="store-featured"
+          aria-labelledby="featured-title"
+          data-area={FEATURED.area}
+        >
+          <p className="store-eyebrow">{t('注目（サンプル）', 'Featured (sample)')}</p>
+          <div className="store-featured-head">
+            <AgentIcon entry={FEATURED} lang={lang} size="lg" />
+            <div>
+              <h2 id="featured-title">
+                <a href={`/agents/${FEATURED.slug}`}>{pick(FEATURED.name, lang)}</a>
+              </h2>
+              <p>{pick(FEATURED.demo.moment, lang)}</p>
+            </div>
+          </div>
+          <p className="store-ask">
             {t('最初の一言の例：', 'First thing to ask: ')}
             <q>{pick(FEATURED.demo.prompts[0] ?? FEATURED.demo.moment, lang)}</q>
           </p>
-          <RecordingView recording={recordingFor(RECORDINGS, FEATURED.slug, lang)} lang={lang} />
-          <a className="aw-app-button aw-app-primary" href={`/agents/${FEATURED.slug}#try`}>
+          <div className="store-screen">
+            <RecordingView recording={recordingFor(RECORDINGS, FEATURED.slug, lang)} lang={lang} />
+          </div>
+          <a className="store-button store-button-primary" href={`/agents/${FEATURED.slug}#try`}>
             {t('試してみる', 'Try it')}
           </a>
         </aside>
       </section>
+      <Steps lang={lang} />
+      <Strengths lang={lang} />
+      <h2 id="browse-title" className="store-browse-title">
+        {t('エージェントを探す', 'Browse agents')}
+      </h2>
       <Filters filter={filter} lang={lang} />
       {shelves.length === 0 ? (
         <p role="status">
@@ -135,7 +171,7 @@ export default async function HomePage({
       ) : (
         shelves.map(({ area, entries }) => (
           <section key={area.id} className="store-shelf" aria-labelledby={`shelf-${area.id}`}>
-            <h2 id={`shelf-${area.id}`}>
+            <h2 id={`shelf-${area.id}`} data-area={area.id}>
               {pick(area.name, lang)}{' '}
               <small>{t(`${String(entries.length)}件`, `${String(entries.length)} agents`)}</small>
             </h2>

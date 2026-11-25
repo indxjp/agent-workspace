@@ -87,7 +87,7 @@ export function describeSkillCatalogContract(
       expect(await port.deleteSkill('old')).toEqual({ kind: 'not-found' });
     });
 
-    it('marks a delete with the owner and revisions, refuses one in use, and backfills a legacy mark', async () => {
+    it('marks a delete with the owner and revisions, and refuses one in use', async () => {
       const { catalog, ownerA, assign } = await make();
       const port = catalog('a');
       await port.putSkill(input('going', ownerA));
@@ -105,24 +105,16 @@ export function describeSkillCatalogContract(
       const used = await port.putSkill(input('kept', ownerA));
       const agentId = await assign(used);
       expect(await port.markSkillDeleting('kept')).toEqual({ kind: 'in-use', agentIds: [agentId] });
-      const legacy = { ownerPrincipalId: null, revisions: [] };
-      expect(await port.backfillSkillPendingDelete('kept', legacy)).toBe(false);
-
-      await port.putSkill(input('legacy', ownerA));
-      expect(await port.backfillSkillPendingDelete('legacy', legacy)).toBe(true);
-      expect((await port.getSkill('legacy'))?.pendingDelete).toEqual(legacy);
-      expect(await port.backfillSkillPendingDelete('missing', legacy)).toBe(false);
     });
 
-    it('writes the platform record, only into an empty one with onlyIfEmpty, and the built-in digest', async () => {
+    it('writes the platform record and the built-in digest', async () => {
       const { catalog, ownerA } = await make();
       const port = catalog('a');
       expect(await port.setSkillMeta('missing', { a: 1 })).toBe(false);
       await port.putSkill(input('meta', ownerA));
-      expect(await port.setSkillMeta('meta', { first: true }, true)).toBe(true);
-      // `true` names a row; with onlyIfEmpty a row that already has a record keeps it.
-      expect(await port.setSkillMeta('meta', { second: true }, true)).toBe(true);
-      expect((await port.getSkill('meta'))?.meta).toEqual({ first: true });
+      expect(await port.setSkillMeta('meta', { first: true })).toBe(true);
+      expect(await port.setSkillMeta('meta', { second: true })).toBe(true);
+      expect((await port.getSkill('meta'))?.meta).toEqual({ second: true });
       expect(await port.setSkillMeta('meta', null)).toBe(true);
       expect((await port.getSkill('meta'))?.meta).toBeNull();
 

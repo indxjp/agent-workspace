@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AgentPermissions, ShareRecord } from '../store';
 import type { WorkspaceSharing } from '../wiring';
 import { DomainError, type DomainErrorCategory } from '../../errors';
+import type { Caller } from '../../identity';
 
 export function publicPermissions(permissions: AgentPermissions): AgentPermissions {
   return { ...permissions, runCommands: false, writeFiles: false };
@@ -98,14 +99,14 @@ export class RunnableShareService {
   }
   async stop(
     share: ShareRecord,
-    actor: { principalId: string; userId: string | null; userLabel: string },
+    actor: Pick<Caller, 'principalId' | 'userId' | 'label'>,
   ): Promise<boolean> {
     const stopped = await this.sharing.shares.stop(share.id);
     if (stopped)
       await this.sharing.audit.write({
         actorPrincipalId: actor.principalId,
         actorUserId: actor.userId,
-        actorLabel: actor.userLabel,
+        actorLabel: actor.label,
         action: 'runnable-link-stopped',
         subjectId: share.id,
         subjectLabel: share.subjectLabel,

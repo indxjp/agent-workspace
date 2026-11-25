@@ -206,7 +206,7 @@ describe('the device code', () => {
     expect(verifyDeviceCode('v1.BCDFGHJK.100', SECRET, 99).ok).toBe(false);
   });
 
-  it('is signed with the device-code key; the old raw-secret form verifies during the roll-over', () => {
+  it('is signed with the device-code key; the old raw-secret form is refused (step 6)', () => {
     const body = 'v1.BCDFGHJK.100';
     const signedWith = (key: Buffer | string) =>
       `${body}.${createHmac('sha256', key).update(`aw-cli-device-code.${body}`).digest('base64url')}`;
@@ -216,8 +216,8 @@ describe('the device code', () => {
       );
     expect(mintDeviceCode('BCDFGHJK', 100, SECRET)).toBe(signedWith(purposeKey('cli-device-code')));
     expect(verifyDeviceCode(signedWith(SECRET), SECRET, 99)).toEqual({
-      ok: true,
-      userCode: 'BCDFGHJK',
+      ok: false,
+      reason: 'invalid',
     });
     expect(verifyDeviceCode(signedWith(purposeKey('session')), SECRET, 99).ok).toBe(false);
   });

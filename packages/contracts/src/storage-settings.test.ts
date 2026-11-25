@@ -114,6 +114,7 @@ describe('storage settings: the old variables are ignored', () => {
 });
 
 // @story US-STO-13
+// storage-bridge(#1944): the deprecated old per-area naming exports, until the next major release
 describe('storage settings: the old object layouts', () => {
   const prefixesOf = (env: Record<string, string>) =>
     legacyAreaPrefixes(resolveStorageSettings(env)).map(({ area, prefix }) => [area, prefix]);

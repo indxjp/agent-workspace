@@ -2,7 +2,10 @@
 import crypto from 'node:crypto';
 
 import { createInMemoryCatalog } from '@agent-workspace/core/db/unscoped';
-import type { AgentResourceAssignments } from '@indx-workspace/contracts/agents';
+import {
+  AgentResourceAssignmentsSchema,
+  type AgentResourceAssignments,
+} from '@indx-workspace/contracts/agents';
 
 import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
 import type { AgentGrantStoreProvider } from '../../agents/agent-grants-store';
@@ -41,10 +44,10 @@ function memoryGrants(agents: AgentStoreProvider): AgentGrantStoreProvider {
   };
 }
 
-/** The assignments a world keeps in memory, read through the agents that hold them. */
+/** The assignments a world keeps in memory, read and replaced through the agents that hold them. */
 function memoryResources(
   agents: AgentStoreProvider,
-  assignments: ReadonlyMap<string, AgentResourceAssignments>,
+  assignments: Map<string, AgentResourceAssignments>,
 ): AgentResourceStoreProvider {
   return {
     forWorkspace: (workspaceId) => ({
@@ -52,7 +55,14 @@ function memoryResources(
         (await agents.forWorkspace(workspaceId).get(agentId)) === null
           ? null
           : (assignments.get(`${workspaceId}:${agentId}`) ?? null),
-      replace: () => Promise.reject(new Error('the world never replaces assignments')),
+      replace: async (agentId, input) => {
+        if ((await agents.forWorkspace(workspaceId).get(agentId)) === null) {
+          return { kind: 'not-found' as const };
+        }
+        const replaced = AgentResourceAssignmentsSchema.parse(input);
+        assignments.set(`${workspaceId}:${agentId}`, replaced);
+        return { kind: 'updated' as const, assignments: replaced };
+      },
     }),
   };
 }

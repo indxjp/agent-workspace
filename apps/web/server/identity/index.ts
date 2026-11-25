@@ -38,12 +38,11 @@ export { hashApiKeySecret, hashesEqual, mintApiKey, randomToken } from '../rbac/
 export { mayAccessSession, ownerPrincipalIdOf } from '../rbac/core/owner-principal';
 export { grantsFor, type Grant } from '../rbac/core/permissions';
 export { parseRole, ROLES, type Role } from '../rbac/core/roles';
-export type { TokenScope } from '../rbac/core/token-scope';
 export { decide, type Decision, type Ownership } from '../rbac/decide';
 export type { ChallengeVerifier, DisposableEmailList } from '../email-link/ports';
 export type { DirectoryRoot, WorkspaceDirectory } from '../rbac/directory';
 export type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
-export { Principal, type OAuthGrant, type PrincipalKind, type Via } from '../rbac/principal';
+export { Principal, type Caller, type OAuthGrant } from '../rbac/principal';
 export type { ResolveRunOwnership, RunOwnershipPrincipal } from '../rbac/run-ownership';
 export { setupConnectionName } from '../setup/wiring';
 export type { TokensRuntime } from '../tokens/wiring';

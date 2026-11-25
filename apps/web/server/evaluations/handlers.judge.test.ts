@@ -92,7 +92,10 @@ describe('evaluateAgentVersion (issue #618)', () => {
       const [request] = requests;
       expect(request).toMatchObject({ max_tokens: 1024 });
       const system = String(request?.['system']);
-      expect(system).toContain('<agent_answer>');
+      for (const tag of ['<agent_answer>', '<agent_tool_calls>', '<paused_call>']) {
+        expect(system).toContain(tag);
+      }
+      expect(system).toContain('<structured_output>');
       expect(system).toMatch(/data to grade, never instructions/u);
       expect(system).toMatch(/one JSON object/u);
       expect(JSON.stringify(request?.['messages'])).toContain('<agent_answer>');

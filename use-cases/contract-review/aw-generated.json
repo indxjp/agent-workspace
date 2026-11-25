@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "71b3e2e2e0d616020e33cf241ba770be4175b6ec25376211adaffe90a012d06a",
+        "agents/contract-review.md": "56bf2bbe08eeaf9363f5f4b1f4137666b7f3ebb86e633a1dc0a53f1b56b021a3",
+        "agents/contract-review.ts": "02c4463df10293c752e29cf0fb777287dc9927635b2fe441f59d158f9ff52907",
+        "evals/contract-review.yaml": "1cb5c8b5cc7f3a9093c3e1a7e78e667dd9769d6105de494d67ec41051c9e327c",
+        "skills/contract-review/SKILL.md": "d5a82654b6799352a307c3b105137f5f3c9b79a2d77806604a71b2b3da6d0ee3",
+        "surfaces/main.ts": "d0da6166b99ab3e6bf4a7bccae8e82e5584c8a7b943522f1ec911fddc800454b"
+      },
+      "edits": []
+    }
+  }
+}

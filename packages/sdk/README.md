@@ -2,7 +2,8 @@
 
 A typed client for the Agent Workspace control-plane API. Every response is validated against
 [`@indx-workspace/contracts`](https://www.npmjs.com/package/@indx-workspace/contracts) before it is returned, and every failure is
-one of three typed errors, so calling code branches on a status and a stable code — never on prose.
+one of four typed errors (`ApiProblemError`, `ContractViolationError`, `TransportError`, and
+`InvalidArgumentError` for an argument refused before any request), so calling code branches on a status and a stable code — never on prose.
 
 The client uses only Web platform APIs (`fetch`, `Headers`, `URL`, `AbortSignal`,
 `ReadableStream`), so the same import works in a browser bundle, in Node 24, and at the edge.

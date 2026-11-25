@@ -1,0 +1,88 @@
+{
+  "machineId": "PR-02",
+  "name": "Press No. 2",
+  "model": "AP-200",
+  "line": "Press line 1",
+  "records": [
+    {
+      "id": "T-0001",
+      "citation": "[Trouble record T-0001]",
+      "date": "2023-04-12",
+      "symptom": "Pressure will not build. The gauge tops out around 8MPa",
+      "cause": "Low hydraulic oil. Level below the lower line on the oil gauge. Slight leak from the cylinder rod packing",
+      "action": "Topped up ISO VG46 hydraulic oil to the upper line. Ordered a rod packing replacement",
+      "durationMin": 45,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0002",
+      "citation": "[Trouble record T-0002]",
+      "date": "2023-06-03",
+      "symptom": "The slide judders and jolts on the way down",
+      "cause": "Air in the cylinder (not bled after topping up the oil)",
+      "action": "Bled air from the bleed plug. Checked with ten inching strokes",
+      "durationMin": 60,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0003",
+      "citation": "[Trouble record T-0003]",
+      "date": "2023-09-21",
+      "symptom": "Pressure will not build. The pump rattles",
+      "cause": "Cavitation from a clogged suction strainer",
+      "action": "Removed the suction strainer and cleaned it in cleaning oil. Filtered the oil through a filter unit",
+      "durationMin": 90,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0004",
+      "citation": "[Trouble record T-0004]",
+      "date": "2024-01-15",
+      "symptom": "Stopped on an oil temperature fault above 60°C",
+      "cause": "The oil cooler's cooling water inlet valve was left half closed",
+      "action": "Opened the cooling water valve fully. Confirmed the specified flow on the flow meter",
+      "durationMin": 30,
+      "technician": "Ken Shiomi"
+    },
+    {
+      "id": "T-0005",
+      "citation": "[Trouble record T-0005]",
+      "date": "2024-03-08",
+      "symptom": "Pressure does not build when pressing",
+      "cause": "Low hydraulic oil. Seepage from a high-pressure hose joint",
+      "action": "Retightened the hose joint and topped up the oil. Confirmed no leak at the next morning's check",
+      "durationMin": 40,
+      "technician": "Ken Shiomi"
+    },
+    {
+      "id": "T-0006",
+      "citation": "[Trouble record T-0006]",
+      "date": "2024-07-22",
+      "symptom": "The photoelectric safety device trips and stops the slide",
+      "cause": "Oil mist on the emitter and receiver lenses",
+      "action": "Cleaned the lenses and aligned the beam. Confirmed the stop with a blocking test",
+      "durationMin": 25,
+      "technician": "Shota Kashiki"
+    },
+    {
+      "id": "T-0007",
+      "citation": "[Trouble record T-0007]",
+      "date": "2024-11-05",
+      "symptom": "Pressure will not build. Stops at 12MPa with a high whine near the pump",
+      "cause": "Debris caught in the relief valve poppet",
+      "action": "Took the relief valve apart and cleaned it. Rechecked the 21.0 MPa setting on the gauge and recorded it on form AP-F21",
+      "durationMin": 120,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0008",
+      "citation": "[Trouble record T-0008]",
+      "date": "2025-05-19",
+      "symptom": "The slide overruns top dead centre",
+      "cause": "Loose dog on the top dead centre limit switch",
+      "action": "Adjusted and tightened the dog. Confirmed the stop position by inching and a single stroke",
+      "durationMin": 35,
+      "technician": "Shota Kashiki"
+    }
+  ]
+}

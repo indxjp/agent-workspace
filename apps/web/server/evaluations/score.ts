@@ -4,6 +4,7 @@
  */
 import type { EvalExpect } from '@indx-workspace/contracts/evaluations';
 import type { AgentFrame } from '@indx-workspace/contracts/run-events';
+import { namesTool } from '@indx-workspace/contracts/surfaces';
 import { z } from 'zod';
 
 /**
@@ -68,6 +69,39 @@ export function toolCalls(frames: readonly AgentFrame[]): readonly ToolCall[] {
   );
 }
 
+/** How a call the run made ended, as the judge is told it (`agent.tool.result`). */
+export type LoggedCallStatus = 'completed' | 'error' | 'failed' | 'no_result';
+
+export interface LoggedCall extends ToolCall {
+  readonly status: LoggedCallStatus;
+}
+
+/**
+ * Every tool call the run made, in call order, whatever became of it: what the judge reads as the
+ * run's actions (ADR-0175). `completed` and `error` are a result that ran to completion, without and
+ * with the engine's error flag; `failed` did not complete; `no_result` never answered. The last
+ * result for an id is the one that counts, as in {@link toolCalls}.
+ */
+export function toolCallLog(frames: readonly AgentFrame[]): readonly LoggedCall[] {
+  const statuses = new Map<string, LoggedCallStatus>();
+  for (const frame of frames) {
+    if (frame.frame !== 'agent.tool.result') continue;
+    const ended = frame.isError ? 'error' : 'completed';
+    statuses.set(frame.toolCallId, frame.status === 'failed' ? 'failed' : ended);
+  }
+  return frames.flatMap((frame) =>
+    frame.frame === 'agent.tool.call'
+      ? [
+          {
+            name: frame.name,
+            input: frame.input,
+            status: statuses.get(frame.toolCallId) ?? 'no_result',
+          },
+        ]
+      : [],
+  );
+}
+
 const CanonicalCallSchema = z.object({ input: z.unknown() });
 
 /**
@@ -116,7 +150,8 @@ function containsValue(actual: unknown, expected: unknown): boolean {
 
 /**
  * Why the answer fails `contains`, `notContains`, `tool`, `toolInput` and `output`; empty when it
- * passes all that are set. Substrings are case-sensitive and `tool` is one exact name. With
+ * passes all that are set. Substrings are case-sensitive, and `tool` is one name, exact or without
+ * the engine's prefix (`namesTool`). With
  * `toolInput`, one call of that tool must have arguments that contain it; `output` must be contained
  * in `structured`, the run's structured output (`null` when it has none). `judge` is not checked here.
  */
@@ -126,7 +161,10 @@ export function checkCase(
   calls: readonly ToolCall[],
   structured: unknown,
 ): readonly string[] {
-  const named = expect.tool === undefined ? [] : calls.filter((call) => call.name === expect.tool);
+  const { tool } = expect;
+  // `tool: search_files` names Claude's `mcp__agent-workspace__search_files` too, as a surface's
+  // `toolResults` key does; the engine's prefix is the engine's, not the case author's.
+  const named = tool === undefined ? [] : calls.filter((call) => namesTool(tool, call.name));
   const toolFailure = (): readonly string[] => {
     if (expect.tool === undefined) return [];
     if (named.length === 0) return [`tool: ${expect.tool} was not called`];

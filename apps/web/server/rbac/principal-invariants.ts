@@ -4,20 +4,14 @@
  * with the instance frozen and its `#provenance` unnameable, nothing outside `principal.ts` can
  * produce a value that breaks one.
  */
-import type { OAuthGrant, PrincipalKind, Via } from './principal';
+import type { Caller, Via } from './principal';
 import { isEndpointScope, type TokenScope } from './core/token-scope';
 
-/** The fields of a principal the invariants read; `Principal` satisfies it structurally. */
-export interface PrincipalShape {
-  readonly principalId: string;
-  readonly ownerPrincipalId: string;
-  readonly kind: PrincipalKind;
-  readonly userId: string | null;
-  readonly via: Via;
-  readonly apiKeyId: string | null;
-  readonly scope: TokenScope | null;
-  readonly oauth: OAuthGrant | null;
-}
+/** The fields of the one {@link Caller} type the invariants read; `Principal` implements it. */
+export type PrincipalShape = Pick<
+  Caller,
+  'principalId' | 'ownerPrincipalId' | 'kind' | 'userId' | 'via' | 'apiKeyId' | 'scope' | 'oauth'
+>;
 
 /** ADR-0161 D8: an app-backend scope carries its bound agents, and no other scope carries any. */
 function carriesBoundAgentsCorrectly(scope: TokenScope | null): boolean {

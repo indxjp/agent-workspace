@@ -1,0 +1,22 @@
+{
+  "kind": "webhook",
+  "name": "multilingual",
+  "prompt": "海外のお客様から問い合わせが届きました。日本語の要約と、お客様の言語での返信の下書きを作って、担当者に渡してください。 / An enquiry arrived from a customer abroad; summarize it in Japanese, draft the reply in the customer's language and hand it to the owner.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["inquiryId", "language", "category", "summary", "owner", "reply", "reason"],
+    "properties": {
+      "inquiryId": { "type": "string" },
+      "language": { "type": "string" },
+      "category": {
+        "type": "string",
+        "enum": ["shipping", "product", "returns", "billing", "other"]
+      },
+      "summary": { "type": "string" },
+      "owner": { "type": "string" },
+      "reply": { "type": "string" },
+      "reason": { "type": "string" }
+    }
+  }
+}

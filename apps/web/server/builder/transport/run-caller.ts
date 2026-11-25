@@ -10,7 +10,7 @@ import type { AllowedAgent } from './allowed-owner-warning';
 import { isBuilderAgent } from '../agent/is-builder-agent';
 import { awControlAllowed } from '../agent/aw-control-allowed';
 import { verifyActiveRunToken, type RunTokenDatabase } from '../../integrations';
-import type { DirectoryRoot, Role } from '../../identity';
+import type { Caller, DirectoryRoot } from '../../identity';
 
 /** The run a verified token names, with no person behind it. Every field comes from the token. */
 export interface RunIdentity {
@@ -21,13 +21,16 @@ export interface RunIdentity {
   readonly agentId: string;
 }
 
-/** The person behind a run, as the `aw-control` tools see them: the token's run and their membership. */
-export interface RunCallerPrincipal extends Omit<RunIdentity, 'kind'> {
-  readonly kind: 'run-caller';
-  readonly principalId: string;
-  readonly userId: string;
-  readonly role: Role;
-}
+/**
+ * The person behind a run, as the `aw-control` tools see them: the token's run and their membership,
+ * as the fields of the one {@link Caller} type the tools read (part 06 step 9). `userId` is a
+ * string, never `null`: only a member is a person behind a run.
+ */
+export type RunCallerPrincipal = Omit<RunIdentity, 'kind'> &
+  Pick<Caller, 'principalId' | 'userId' | 'role'> & {
+    readonly kind: 'run-caller';
+    readonly userId: string;
+  };
 
 /**
  * `reads: true` is a verified Builder run with no person behind it: read tools may still run for

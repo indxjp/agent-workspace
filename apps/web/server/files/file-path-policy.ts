@@ -1,5 +1,5 @@
 import { toObjectKey, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
-import { SKILL_REVISIONS_PREFIX, SKILL_ROWS_ROOT } from '../agents';
+import { SKILL_REVISIONS_PREFIX, SKILL_ROWS_ROOT } from '../storage/reserved-roots';
 import type { CatalogPort } from '../storage/store';
 import { decodeFileId } from './file-id';
 import { problem, type FileResult } from './file-result';

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "8e73d57e4e71e0d2808eda2cb10f16b9f04b12715ded251f65e6de2c7b039270",
+        "agents/screening-hr.md": "5e92b539373019b5ac660ce90dcf7358fe3bdf4ef52cf860449c7363e5ad2455",
+        "agents/screening-hr.ts": "04aea643a5708654bf69357bbef73992c82816af9ea34399c42a49367a20554c",
+        "evals/screening-hr.yaml": "8fae6b0d8beb6f74d0c19f1566d9e951b8b0f9a317e9bc9d88cd19b83cd99377",
+        "skills/screening-hr/SKILL.md": "56a08c3086467eebe1a7bffe7d2839404cf19f0abb84924359177e4b9459b933",
+        "surfaces/main.ts": "483d4f920d267a257421cffd4295b44f9d42bbcc9375813e61f661d3fd5b57d6"
+      },
+      "edits": []
+    }
+  }
+}

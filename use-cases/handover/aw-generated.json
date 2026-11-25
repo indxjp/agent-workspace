@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "d5c63fd76151f188358019d2bd5a9f1b6b271ead77f21fbb64e2f8de9179b6a8",
+        "agents/handover.md": "2aa934143e5460a51f70fb76b486e61bc4f2d6b836fbb80701bcf9e13b2fbb77",
+        "agents/handover.ts": "a702a2a7d6e085bc304b82194aedb96b106c3eb238217963fa1bd618b9d15831",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/handover.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/handover/SKILL.md": "853e4eaed27befc0b24df33723522fc2a57020023e14bbe0e965396bdef4a4d5",
+        "surfaces/main.ts": "4676f125b42eeb603f4c25d4032807dbacf86915f3a10a0b8dce30a5d5e7a506"
+      },
+      "edits": []
+    }
+  }
+}

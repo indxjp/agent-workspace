@@ -1,0 +1,9 @@
+{
+  "id": "INQ-3002",
+  "received_at": "2026-11-20T14:10:00+09:00",
+  "from": { "name": "Lan Qiaoyun", "email": "lan.qiaoyun@mail.example" },
+  "to": "support@komorebi-goods.example",
+  "subject": "关于电热水壶 KG-12 的电压",
+  "text": "您好！\n\n我想购买贵店的电热水壶 KG-12，寄到上海使用。请问它可以在 220V 的电压下使用吗？如果不行，有没有适合海外电压的型号？\n\n谢谢！\n蓝 巧云",
+  "order_id": null
+}

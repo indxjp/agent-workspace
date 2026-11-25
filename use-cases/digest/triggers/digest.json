@@ -1,0 +1,32 @@
+{
+  "kind": "schedule",
+  "name": "digest",
+  "prompt": "今日までの1週間の調査ダイジェストを作成して、digest-reports フォルダに保存してください。 / Write the research digest for the week up to today and save it to the digest-reports folder.",
+  "cron": "0 9 * * 1",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["weekEnding", "asOf", "items", "savedTo"],
+    "properties": {
+      "weekEnding": { "type": "string" },
+      "asOf": { "type": "string" },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["date", "kind", "title", "summary", "citation"],
+          "properties": {
+            "date": { "type": "string" },
+            "kind": { "type": "string", "enum": ["internal", "public"] },
+            "title": { "type": "string" },
+            "summary": { "type": "string" },
+            "citation": { "type": "string" }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

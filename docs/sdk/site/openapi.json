@@ -4893,6 +4893,168 @@
                             "readOnly": true,
                             "type": "object"
                           },
+                          "resultCharts": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "axes": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "label": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "en": {
+                                          "allOf": [
+                                            {
+                                              "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                            },
+                                            {
+                                              "pattern": "^\\S(?:.*\\S)?$"
+                                            }
+                                          ],
+                                          "maxLength": 80,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "ja": {
+                                          "allOf": [
+                                            {
+                                              "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                            },
+                                            {
+                                              "pattern": "^\\S(?:.*\\S)?$"
+                                            }
+                                          ],
+                                          "maxLength": 80,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "readOnly": true,
+                                      "required": [
+                                        "ja",
+                                        "en"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "value": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "en": {
+                                          "allOf": [
+                                            {
+                                              "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                            },
+                                            {
+                                              "pattern": "^\\S(?:.*\\S)?$"
+                                            }
+                                          ],
+                                          "maxLength": 80,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "ja": {
+                                          "allOf": [
+                                            {
+                                              "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                            },
+                                            {
+                                              "pattern": "^\\S(?:.*\\S)?$"
+                                            }
+                                          ],
+                                          "maxLength": 80,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "readOnly": true,
+                                      "required": [
+                                        "ja",
+                                        "en"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "readOnly": true,
+                                  "required": [
+                                    "label",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                "field": {
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "enum": [
+                                    "bar",
+                                    "line"
+                                  ],
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "en": {
+                                      "allOf": [
+                                        {
+                                          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                        },
+                                        {
+                                          "pattern": "^\\S(?:.*\\S)?$"
+                                        }
+                                      ],
+                                      "maxLength": 80,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "ja": {
+                                      "allOf": [
+                                        {
+                                          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                        },
+                                        {
+                                          "pattern": "^\\S(?:.*\\S)?$"
+                                        }
+                                      ],
+                                      "maxLength": 80,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "readOnly": true,
+                                  "required": [
+                                    "ja",
+                                    "en"
+                                  ],
+                                  "type": "object"
+                                },
+                                "value": {
+                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                                  "type": "string"
+                                }
+                              },
+                              "readOnly": true,
+                              "required": [
+                                "kind",
+                                "field",
+                                "label",
+                                "value",
+                                "title",
+                                "axes"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 4,
+                            "minItems": 1,
+                            "readOnly": true,
+                            "type": "array"
+                          },
                           "theme": {
                             "additionalProperties": false,
                             "properties": {
@@ -6190,6 +6352,168 @@
                       },
                       "readOnly": true,
                       "type": "object"
+                    },
+                    "resultCharts": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "axes": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "label": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "label",
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          "field": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "bar",
+                              "line"
+                            ],
+                            "type": "string"
+                          },
+                          "label": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          },
+                          "title": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "en": {
+                                "allOf": [
+                                  {
+                                    "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                  },
+                                  {
+                                    "pattern": "^\\S(?:.*\\S)?$"
+                                  }
+                                ],
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "ja": {
+                                "allOf": [
+                                  {
+                                    "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                  },
+                                  {
+                                    "pattern": "^\\S(?:.*\\S)?$"
+                                  }
+                                ],
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "ja",
+                              "en"
+                            ],
+                            "type": "object"
+                          },
+                          "value": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          }
+                        },
+                        "readOnly": true,
+                        "required": [
+                          "kind",
+                          "field",
+                          "label",
+                          "value",
+                          "title",
+                          "axes"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 4,
+                      "minItems": 1,
+                      "readOnly": true,
+                      "type": "array"
                     },
                     "theme": {
                       "additionalProperties": false,
@@ -8585,6 +8909,168 @@
                           "readOnly": true,
                           "type": "object"
                         },
+                        "resultCharts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "axes": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "label": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "en": {
+                                        "allOf": [
+                                          {
+                                            "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                          },
+                                          {
+                                            "pattern": "^\\S(?:.*\\S)?$"
+                                          }
+                                        ],
+                                        "maxLength": 80,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ja": {
+                                        "allOf": [
+                                          {
+                                            "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                          },
+                                          {
+                                            "pattern": "^\\S(?:.*\\S)?$"
+                                          }
+                                        ],
+                                        "maxLength": 80,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "readOnly": true,
+                                    "required": [
+                                      "ja",
+                                      "en"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "value": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "en": {
+                                        "allOf": [
+                                          {
+                                            "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                          },
+                                          {
+                                            "pattern": "^\\S(?:.*\\S)?$"
+                                          }
+                                        ],
+                                        "maxLength": 80,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ja": {
+                                        "allOf": [
+                                          {
+                                            "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                          },
+                                          {
+                                            "pattern": "^\\S(?:.*\\S)?$"
+                                          }
+                                        ],
+                                        "maxLength": 80,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "readOnly": true,
+                                    "required": [
+                                      "ja",
+                                      "en"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "label",
+                                  "value"
+                                ],
+                                "type": "object"
+                              },
+                              "field": {
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "bar",
+                                  "line"
+                                ],
+                                "type": "string"
+                              },
+                              "label": {
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                                "type": "string"
+                              },
+                              "title": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                                "type": "string"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "kind",
+                              "field",
+                              "label",
+                              "value",
+                              "title",
+                              "axes"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 4,
+                          "minItems": 1,
+                          "readOnly": true,
+                          "type": "array"
+                        },
                         "theme": {
                           "additionalProperties": false,
                           "properties": {
@@ -9905,6 +10391,168 @@
                       "readOnly": true,
                       "type": "object"
                     },
+                    "resultCharts": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "axes": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "label": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "label",
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          "field": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "bar",
+                              "line"
+                            ],
+                            "type": "string"
+                          },
+                          "label": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          },
+                          "title": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "en": {
+                                "allOf": [
+                                  {
+                                    "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                  },
+                                  {
+                                    "pattern": "^\\S(?:.*\\S)?$"
+                                  }
+                                ],
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "ja": {
+                                "allOf": [
+                                  {
+                                    "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                  },
+                                  {
+                                    "pattern": "^\\S(?:.*\\S)?$"
+                                  }
+                                ],
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "ja",
+                              "en"
+                            ],
+                            "type": "object"
+                          },
+                          "value": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          }
+                        },
+                        "readOnly": true,
+                        "required": [
+                          "kind",
+                          "field",
+                          "label",
+                          "value",
+                          "title",
+                          "axes"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 4,
+                      "minItems": 1,
+                      "readOnly": true,
+                      "type": "array"
+                    },
                     "theme": {
                       "additionalProperties": false,
                       "properties": {
@@ -11056,6 +11704,168 @@
                       },
                       "readOnly": true,
                       "type": "object"
+                    },
+                    "resultCharts": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "axes": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "label": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "en": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "allOf": [
+                                      {
+                                        "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                      },
+                                      {
+                                        "pattern": "^\\S(?:.*\\S)?$"
+                                      }
+                                    ],
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "readOnly": true,
+                                "required": [
+                                  "ja",
+                                  "en"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "label",
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          "field": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "bar",
+                              "line"
+                            ],
+                            "type": "string"
+                          },
+                          "label": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          },
+                          "title": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "en": {
+                                "allOf": [
+                                  {
+                                    "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                  },
+                                  {
+                                    "pattern": "^\\S(?:.*\\S)?$"
+                                  }
+                                ],
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "ja": {
+                                "allOf": [
+                                  {
+                                    "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+                                  },
+                                  {
+                                    "pattern": "^\\S(?:.*\\S)?$"
+                                  }
+                                ],
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "readOnly": true,
+                            "required": [
+                              "ja",
+                              "en"
+                            ],
+                            "type": "object"
+                          },
+                          "value": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                            "type": "string"
+                          }
+                        },
+                        "readOnly": true,
+                        "required": [
+                          "kind",
+                          "field",
+                          "label",
+                          "value",
+                          "title",
+                          "axes"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 4,
+                      "minItems": 1,
+                      "readOnly": true,
+                      "type": "array"
                     },
                     "theme": {
                       "additionalProperties": false,

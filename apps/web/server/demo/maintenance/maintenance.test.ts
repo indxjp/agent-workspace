@@ -9,6 +9,11 @@ import { getDemoReadiness, getStoreDemos, MAX_BODY_BYTES, putDemoMaintenance } f
 const TOKEN = 't'.repeat(40);
 const KEY = 'sk-ant-canary-0123456789abcdefghijklmnopqrstuv';
 const NOW = new Date('2026-11-16T10:00:00.000Z');
+/**
+ * The API host as a public address, without a DNS lookup: the readiness check's egress guard would
+ * otherwise resolve api.anthropic.com for real, which on a CI host can take longer than the test.
+ */
+const PUBLIC_RESOLVE = () => Promise.resolve([{ address: '160.79.104.10', family: 4 as const }]);
 
 function memoryStates(): DemoEntryStates {
   const rows = new Map<string, string>();
@@ -144,7 +149,11 @@ describe('the readiness check', () => {
       expect(new Headers(init?.headers).get('x-api-key')).toBe(KEY);
       return Promise.resolve(new Response('{"data":[]}', { status: 200 }));
     });
-    const result = await createDemoReadinessCheck({ apiKey: KEY, request }).check();
+    const result = await createDemoReadinessCheck({
+      apiKey: KEY,
+      request,
+      resolve: PUBLIC_RESOLVE,
+    }).check();
     expect(result).toEqual({ apiKeyConfigured: true, apiReachable: true });
     expect(request).toHaveBeenCalledWith(expect.stringContaining('/v1/models'), expect.anything());
   });
@@ -163,9 +172,19 @@ describe('the readiness check', () => {
         apiKey: KEY,
         request: failure,
         timeoutMs: 20,
+        resolve: PUBLIC_RESOLVE,
       }).check();
       expect(result).toEqual({ apiKeyConfigured: true, apiReachable: false });
       expect(JSON.stringify(result)).not.toContain(KEY);
     }
+  });
+
+  it('asks the resolver it is given, and is not reachable when the host resolves to a private address', async () => {
+    const request = vi.fn<typeof fetch>();
+    const resolve = vi.fn(() => Promise.resolve([{ address: '10.0.0.7', family: 4 as const }]));
+    const result = await createDemoReadinessCheck({ apiKey: KEY, request, resolve }).check();
+    expect(result).toEqual({ apiKeyConfigured: true, apiReachable: false });
+    expect(resolve).toHaveBeenCalledWith('api.anthropic.com');
+    expect(request).not.toHaveBeenCalled();
   });
 });

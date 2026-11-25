@@ -1,0 +1,6 @@
+opportunity_id,account_id,name,stage,close_date,next_step
+OPP-0101,ACC-001,Production management system: maintenance renewal,Negotiation,2026-12-20,Present renewal terms with a shorter response time
+OPP-0102,ACC-001,Production management system: extra reports,Closed Won,2026-09-30,
+OPP-0201,ACC-002,Warehouse management system: new deployment,Proposal,2027-02-28,Walk through their stock check on site and agree the scope of a trial
+OPP-0301,ACC-003,Handheld devices: additional order,On Hold,2027-03-31,Explain how the late delivery will not recur before reopening the talks
+OPP-0302,ACC-003,Handheld devices: first order,Closed Won,2026-10-15,

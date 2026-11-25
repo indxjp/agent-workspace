@@ -55,22 +55,29 @@ async function signed(payload: string): Promise<string> {
 describe('session token and cookies, pinned', () => {
   it('builds the same claims and mints the same bytes', async () => {
     const claims = newSignInSessionClaims('admin@example.com', 'default', NOW_MS);
+    // Part 06 step 9: the unused role claim is no longer written.
     expect(claims).toEqual({
       sub: 'admin@example.com',
       ws: 'default',
-      role: 'owner',
       iat: NOW_S,
       exp: NOW_S + 43_200,
     });
-    const payload =
-      'aw1.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsIndzIjoiZGVmYXVsdCIsInJvbGUiOiJvd25lciIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ.';
-    // Part 06 step 5: the payload bytes are unchanged; the MAC is now under the session key.
     expect(await mintSignInSessionToken(claims, SECRET)).toBe(
-      `${payload}2vrJRvITvhRxMkbBTWnmPjygzyz_HijT0mD96Y67BLI`,
+      'aw1.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsIndzIjoiZGVmYXVsdCIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ.HNoTu5QSuu9_hnWSrcQdIRblba0jg6tsjlvumshR3ho',
     );
-    // The token this build minted before step 5 still verifies during the roll-over.
-    const before = `${payload}jL-VAltkbyZjbxOKVUvMwSQxukHmr8c06dE_bMuyIRg`;
-    expect((await verifySignInSessionToken(before, SECRET, NOW_MS)).ok).toBe(true);
+    // The token 0.6.13 minted (role written, MAC under the session key) still verifies until it
+    // expires, so an upgrade signs nobody out.
+    const withRole =
+      'aw1.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsIndzIjoiZGVmYXVsdCIsInJvbGUiOiJvd25lciIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ.';
+    const before = await verifySignInSessionToken(
+      `${withRole}2vrJRvITvhRxMkbBTWnmPjygzyz_HijT0mD96Y67BLI`,
+      SECRET,
+      NOW_MS,
+    );
+    expect(before.ok && Object.keys(before.claims)).toEqual(['sub', 'ws', 'iat', 'exp']);
+    // The token minted before step 5 (raw-secret MAC) is refused: step 6 ended the roll-over.
+    const rawSecret = `${withRole}jL-VAltkbyZjbxOKVUvMwSQxukHmr8c06dE_bMuyIRg`;
+    expect((await verifySignInSessionToken(rawSecret, SECRET, NOW_MS)).ok).toBe(false);
     expect(SIGN_IN_SESSION_TTL_SECONDS).toBe(43_200);
   });
 
@@ -92,8 +99,13 @@ describe('session token and cookies, pinned', () => {
       newSignInSessionClaims('a@b.test', 'default', NOW_MS),
       SECRET,
     );
-    const withRole = await verifySignInSessionToken(minted, SECRET, NOW_MS);
-    expect(withRole.ok && Object.keys(withRole.claims)).toEqual(['sub', 'ws', 'iat', 'exp']);
+    const verifiedMinted = await verifySignInSessionToken(minted, SECRET, NOW_MS);
+    expect(verifiedMinted.ok && Object.keys(verifiedMinted.claims)).toEqual([
+      'sub',
+      'ws',
+      'iat',
+      'exp',
+    ]);
   });
 
   it('marks an email-link session, pinned, and carries the mark through verification (P3)', async () => {
@@ -101,13 +113,12 @@ describe('session token and cookies, pinned', () => {
     expect(claims).toEqual({
       sub: 'guest@example.com',
       ws: 'demo-1',
-      role: 'owner',
       via: 'email_link',
       iat: NOW_S,
       exp: NOW_S + 43_200,
     });
     expect(await mintSignInSessionToken(claims, SECRET)).toBe(
-      'aw1.eyJzdWIiOiJndWVzdEBleGFtcGxlLmNvbSIsIndzIjoiZGVtby0xIiwicm9sZSI6Im93bmVyIiwidmlhIjoiZW1haWxfbGluayIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ.BF4A7flFChMisewON2pJpAL2FHzs0hS1FbJDqUemKeg',
+      'aw1.eyJzdWIiOiJndWVzdEBleGFtcGxlLmNvbSIsIndzIjoiZGVtby0xIiwidmlhIjoiZW1haWxfbGluayIsImlhdCI6MTc5NDE5MzIwMCwiZXhwIjoxNzk0MjM2NDAwfQ._WPXQ3rLPOsp704rfK1BmT7pwRvWUm9LuxNXXzr6HTg',
     );
     const verified = await verifySignInSessionToken(
       await mintSignInSessionToken(claims, SECRET),

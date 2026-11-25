@@ -1,0 +1,18 @@
+{
+  "alert": {
+    "id": "SEC-0501",
+    "source": "EDR",
+    "rule": "Office アプリから起動された難読化 PowerShell",
+    "detected_at": "2026-11-21T09:47:12+09:00",
+    "host": "FIN-LT-014",
+    "user": "hazama.nao",
+    "vendor_severity": "high",
+    "description": "Excel のマクロから powershell.exe が -EncodedCommand 付きで起動されました。直後に外部のアドレスへの通信が一回ありました。ファイルは「請求書_11月分.xlsm」で、メールの添付から開かれています。",
+    "evidence": {
+      "parent_process": "EXCEL.EXE",
+      "process": "powershell.exe -NoProfile -EncodedCommand SQBFAFgA...",
+      "file": "請求書_11月分.xlsm",
+      "remote_address": "203.0.113.77:443"
+    }
+  }
+}

@@ -7,7 +7,7 @@ import type { DemoTemplateSeed } from '@indx-workspace/contracts/demo-operator';
 import { isBuiltinSkillName } from '@indx-workspace/contracts/skills';
 
 import type { AgentStoreProvider, WorkspaceSkills } from '../../agents';
-import type { DirectoryRoot } from '../../identity';
+import type { Caller, DirectoryRoot } from '../../identity';
 import type { ConnectorsStoreProvider } from '../../integrations';
 import type { StorageService } from '../../storage-and-sharing';
 import type { Catalog } from './catalog-rows';
@@ -27,10 +27,8 @@ export interface SeedFillDependencies {
   readonly skills: WorkspaceSkills | null;
 }
 
-interface TemplatePrincipal {
-  readonly principalId: string;
-  readonly userId: string | null;
-}
+/** The member a seed's rows are made as: the fields of the one {@link Caller} type it reads. */
+type TemplatePrincipal = Pick<Caller, 'principalId' | 'userId'>;
 
 /** Where a seed is being filled: the workspace and the member the rows are made as. */
 interface FillTarget {
@@ -122,7 +120,7 @@ async function makeConnectors(
         name: connector.name,
         transport: 'stdio',
         command: DEMO_TEMPLATE_CONNECTOR_COMMAND,
-        args: templateConnectorArgs(connector.reads, connector.writes),
+        args: templateConnectorArgs(connector.reads, connector.writes, connector.recorded),
         url: null,
         authType: 'none',
         credential: null,

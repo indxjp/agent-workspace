@@ -54,7 +54,7 @@ async function seedServerConnector(
           name: connector.name,
           transport: 'stdio',
           command: DEMO_TEMPLATE_CONNECTOR_COMMAND,
-          args: templateConnectorArgs(connector.reads, connector.writes),
+          args: templateConnectorArgs(connector.reads, connector.writes, connector.recorded),
           url: null,
           authType: 'none',
           credential: null,

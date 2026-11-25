@@ -8,7 +8,6 @@ import type {
   ConfirmOutcome,
   DeleteCatalogSkillOutcome,
   MarkSkillDeletingOutcome,
-  PendingSkillDelete,
   ReserveOutcome,
   SkillInput,
 } from './resource-catalogs-model.js';
@@ -170,19 +169,8 @@ export interface ResourceCatalogRepository extends CatalogPort {
    * removes it, so an interrupted delete keeps what its retry needs.
    */
   markSkillDeleting(name: string): Promise<MarkSkillDeletingOutcome>;
-  /**
-   * Record a pending delete read from a skill's legacy marker object, unless the row already has
-   * one, under the row's lock and with the in-use rule of {@link markSkillDeleting}: a skill an
-   * agent has assigned is not marked. A missing row is left alone. Answers whether the row now
-   * holds a pending delete.
-   */
-  // storage-bridge(#1699): read skill marker objects written before the columns existed
-  backfillSkillPendingDelete(name: string, pending: PendingSkillDelete): Promise<boolean>;
-  /**
-   * Write the skill's platform record (`null` clears it), or with `onlyIfEmpty` only when the row
-   * has none yet. Answers `false` when no row has that name.
-   */
-  setSkillMeta(name: string, meta: unknown, onlyIfEmpty?: boolean): Promise<boolean>;
+  /** Write the skill's platform record (`null` clears it). Answers `false` when no row has that name. */
+  setSkillMeta(name: string, meta: unknown): Promise<boolean>;
   /** Record the digest of the built-in release installed into the skill's row. */
   setSkillBuiltinDigest(name: string, digest: string): Promise<void>;
   /**

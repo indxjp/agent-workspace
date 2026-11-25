@@ -250,7 +250,9 @@ A stored policy rule written against the old form, `mcp__connector-<id>__…` in
 actual key for that connector, so a `deny` never stops matching. A rule may also be written in the
 slug form, `mcp__<name>__…`, but it is stored by id: every policy save (the version pipeline, which
 `PUT /api/agents/:id/policy` goes through too) rewrites a rule whose server is the name of an MCP
-connector of the workspace to `mcp__connector-<id>__…`. A name is not stable, so a rule kept in the
+connector of the workspace to `mcp__connector-<id>__…`, and an approval gate (`requireApproval`)
+the same way ([ADR-0145](0145-a-run-stops-for-approval-or-handoff-and-continues-in-its-session.md),
+amendment #2439). A name is not stable, so a rule kept in the
 slug form would stop matching when the connector is renamed or falls back to `connector-<id>` beside
 a same-named tool connector, and an `autoApprove` would transfer to whichever connector next takes
 the name. A slug-form rule naming no MCP connector of the workspace at save time (a tool

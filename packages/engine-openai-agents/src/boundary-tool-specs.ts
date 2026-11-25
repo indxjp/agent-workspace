@@ -10,6 +10,7 @@ import {
   executeRunSkillScript,
   RUN_SKILL_SCRIPT_TOOL,
   skillScriptToolDescription,
+  type ToolAnswers,
 } from '@agent-workspace/engine';
 
 import type { OpenAiAgentsCompiled } from './compile.js';
@@ -121,6 +122,7 @@ export function workspaceToolSpec(name: OpenAiAgentsToolName, context: ToolConte
 export function skillScriptToolSpec(
   skillScript: NonNullable<OpenAiAgentsCompiled['skillScript']>,
   signal: AbortSignal,
+  toolAnswers?: ToolAnswers,
 ): ToolSpec {
   return {
     name: RUN_SKILL_SCRIPT_TOOL,
@@ -132,6 +134,7 @@ export function skillScriptToolSpec(
         skillScript,
         input,
         signal,
+        toolAnswers,
       );
       if (isError) throw new Error(text);
       return text;

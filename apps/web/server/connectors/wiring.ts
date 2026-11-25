@@ -15,6 +15,7 @@
  * answers 503 by name; connector credentials never fall back to plaintext or memory.
  * Decision 5 of `docs/adr/W2-CP-05-connectors-and-test-connection.md` records this composition.
  */
+import type { Caller } from '../identity';
 import type { ConnectorsStoreProvider } from './store';
 
 /**
@@ -30,14 +31,11 @@ export type WorkspaceResolution =
 
 /**
  * The one fact `POST /api/connectors` needs about the caller beyond their workspace: the
- * `memberships.user_id` to stamp as `created_by` (issue #117). Named after `recordAudit`'s own
- * existing actor, because it is the same identity, reused rather than re-derived — this adds one
- * field to what the composition root already builds, not a new lookup.
+ * `memberships.user_id` to stamp as `created_by` (issue #117). The fields of the one
+ * {@link Caller} type this domain reads (part 06 step 9); the composition root passes the owner
+ * principal as `principalId`, as `recordAudit`'s own actor does.
  */
-export interface ConnectorActor {
-  readonly principalId: string;
-  readonly userId: string | null;
-}
+type ConnectorCaller = Pick<Caller, 'principalId' | 'userId'>;
 
 /** Everything the connector routes need from the rest of the application, and nothing more. */
 export interface ConnectorsRuntime {
@@ -56,7 +54,7 @@ export interface ConnectorsRuntime {
    * needs this to stamp `created_by`; a `null` here refuses the create rather than fabricating an
    * owner, which `recordAudit`'s own pre-existing behaviour already requires an actor to avoid.
    */
-  identifyActor(request: Request): Promise<ConnectorActor | null>;
+  identifyActor(request: Request): Promise<ConnectorCaller | null>;
 }
 
 /**

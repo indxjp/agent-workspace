@@ -18,7 +18,6 @@ import {
   UnsafeObjectKeyError,
   type ObjectStore,
 } from '@agent-workspace/core/storage';
-import { readWhole } from '@agent-workspace/core/storage/streams';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
@@ -28,13 +27,7 @@ import {
   ensureBuiltinSkills,
   installBuiltinSkillsNamedBy,
 } from './builtin';
-import {
-  skillBuiltinMarkerKey,
-  skillDeleteMarkerKey,
-  skillFilesPrefix,
-  skillFileKey,
-  skillRowFolder,
-} from './keys';
+import { skillRowFolder } from './keys';
 import { createSkillRowsWorld } from './rows-fixture';
 import { getSkillWithId, importSkillWithId } from './service';
 import { skillFiles, skillWriter, type SkillRowsWriter } from './tree';
@@ -67,7 +60,7 @@ afterEach(async () => {
 });
 
 async function bytesOf(relativePath: string): Promise<string | null> {
-  const files = await skillFiles(store, world.rows, skillRowFolder(NAME), skillFilesPrefix(NAME));
+  const files = await skillFiles(world.rows, skillRowFolder(NAME));
   const bytes = await files.find((file) => file.relativePath === relativePath)?.read();
   return bytes === undefined || bytes === null ? null : Buffer.from(bytes).toString('utf8');
 }
@@ -92,9 +85,7 @@ async function installOlderRelease(catalog: ResourceCatalogRepository): Promise<
   const digest = digestOf(
     old.map((file) => ({ path: file.path, bytes: Buffer.from(file.content) })),
   );
-  await store.write(skillBuiltinMarkerKey(NAME), Buffer.from(JSON.stringify({ digest })), {
-    contentType: 'application/json',
-  });
+  await catalog.setSkillBuiltinDigest(NAME, digest);
 }
 
 describe('ensureBuiltinSkills', () => {
@@ -113,10 +104,11 @@ describe('ensureBuiltinSkills', () => {
   it('does nothing the second time and ignores names that are not built in', async () => {
     const { catalog, names } = newCatalog();
     await ensureBuiltinSkills(store, catalog, PRINCIPAL, [NAME, 'my-own-skill', NAME], world.rows);
-    const before = await readWhole(store, skillBuiltinMarkerKey(NAME));
+    const before = (await catalog.getSkill(NAME))?.builtinDigest;
+    expect(before).toEqual(expect.any(String));
     await ensureBuiltinSkills(store, catalog, PRINCIPAL, [NAME], world.rows);
-    expect(await readWhole(store, skillBuiltinMarkerKey(NAME))).toEqual(before);
-    expect(await readWhole(store, skillFileKey('my-own-skill', 'SKILL.md'))).toBeNull();
+    expect((await catalog.getSkill(NAME))?.builtinDigest).toBe(before);
+    expect(await skillFiles(world.rows, skillRowFolder('my-own-skill'))).toEqual([]);
     expect(await names()).toEqual([NAME]);
   });
 
@@ -137,7 +129,7 @@ describe('ensureBuiltinSkills', () => {
   it('leaves an install the user edited after the platform put it there', async () => {
     const { catalog } = newCatalog();
     await installOlderRelease(catalog);
-    await skillWriter(store, world.rows, NAME).put(
+    await skillWriter(world.rows, NAME).put(
       'SKILL.md',
       Buffer.from('---\nname: office-reader\ndescription: mine\n---\nmine\n'),
     );
@@ -166,18 +158,23 @@ describe('ensureBuiltinSkills', () => {
 
     expect(await bytesOf('SKILL.md')).toBe(mine);
     expect(await bytesOf('scripts/pdf.mjs')).toBeNull();
-    expect(await readWhole(store, skillBuiltinMarkerKey(NAME))).toBeNull();
+    expect((await catalog.getSkill(NAME))?.builtinDigest).toBeNull();
   });
 
   it('does not bring back a skill whose delete is pending', async () => {
-    const { catalog, names } = newCatalog();
-    await store.write(skillDeleteMarkerKey(NAME), Buffer.from('{}'), {
-      contentType: 'application/json',
+    const { catalog } = newCatalog();
+    // A delete that removed the skill's record and files but not yet its row.
+    await catalog.putSkill({
+      name: NAME,
+      skillMd: '# going',
+      enabled: true,
+      ownerPrincipalId: PRINCIPAL.ownerPrincipalId,
     });
+    expect(await catalog.markSkillDeleting(NAME)).toMatchObject({ kind: 'marked' });
 
     await ensureBuiltinSkills(store, catalog, PRINCIPAL, [NAME], world.rows);
 
-    expect(await names()).toEqual([]);
+    expect((await catalog.getSkill(NAME))?.pendingDelete).not.toBeNull();
     expect(await bytesOf('SKILL.md')).toBeNull();
   });
 

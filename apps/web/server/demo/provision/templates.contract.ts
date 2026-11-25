@@ -10,6 +10,7 @@ import { describeCopiedAgent } from './templates.contract-agent';
 import { describeCopiedConnectors } from './templates.contract-connectors';
 import { describeCopiedSkills } from './templates.contract-skills';
 import { describeCopyBehaviour } from './templates.contract-copies';
+import { describeCopyRefresh } from './templates.contract-refresh';
 import { describeDeclaredConnectorRecords } from './templates.contract-records';
 import { describeSandboxAndModel } from './templates.contract-sandbox';
 import { describeVerificationCopy } from './templates.contract-verification';
@@ -33,6 +34,7 @@ export function describeDemoTemplatesConformance(
     describeCopyBehaviour(make);
     describeCopiedConnectors(make);
     describeVerificationCopy(make);
+    describeCopyRefresh(make);
     describeSandboxAndModel(make);
     describeDeclaredConnectorRecords(make);
   });

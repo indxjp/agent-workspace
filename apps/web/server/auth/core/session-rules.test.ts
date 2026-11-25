@@ -14,7 +14,6 @@ describe('session rules, on a clock the test controls', () => {
     expect(signInSessionClaimsAt('a@b.test', 'default', 1_999)).toEqual({
       sub: 'a@b.test',
       ws: 'default',
-      role: 'owner',
       iat: 1,
       exp: 1 + SIGN_IN_SESSION_TTL_SECONDS,
     });

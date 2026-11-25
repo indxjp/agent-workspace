@@ -1,5 +1,4 @@
 import { expect, it } from 'vitest';
-import { seedBareSkill } from './rows-fixture';
 import { importSkillWithId, publishSkillRevisionWithId } from './service';
 import {
   gatedFirstWrite,
@@ -80,24 +79,5 @@ export function registerPublishingTests(rowsWorld: RowsWorldFactory): void {
     expect(result).toMatchObject({ status: 404, body: { error: { code: 'skill_not_found' } } });
     await expect(catalogs[0].listSkillRevisions('dup')).resolves.toEqual([]);
     expect(await rowTexts('.skills/dup@1')).toEqual({});
-  });
-
-  // @story US-STO-08
-  it('[US-STO-08][api][sdk] publishing a skill with no catalog row still works', async () => {
-    const { principal, catalogs, shared, rows, rowTexts } = await rowsWorld();
-    await seedBareSkill(shared, importBody('old'));
-
-    const result = await publishSkillRevisionWithId(
-      shared,
-      catalogs[0],
-      principal,
-      'dup',
-      { files: importBody('A').files },
-      rows,
-    );
-
-    expect(result.status, JSON.stringify(result.body)).toBe(201);
-    expect((await catalogs[1].listSkills()).map((row) => row.skillMd)).toEqual([skillMd('A')]);
-    expect((await rowTexts('.skills/dup@1'))['.skills/dup@1/SKILL.md']).toBe(skillMd('A'));
   });
 }

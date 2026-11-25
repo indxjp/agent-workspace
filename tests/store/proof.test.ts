@@ -108,7 +108,36 @@ describe('judgeMoment', () => {
     const noWait = recordTurn('q', [{ frames: [call('t1', 'createQuote'), result('t1', 'Q-1')] }]);
     expect(judgeMoment(noWait, { tools: ['createQuote'], approval: 'createQuote' })).toEqual({
       pass: false,
-      reason: 'createQuote did not wait for approval',
+      reason: 'createQuote did not wait for approval: it ran without one',
+    });
+    const refused = recordTurn('q', [
+      {
+        frames: [
+          call('t1', 'createQuote'),
+          runtime('agent.tool.result', {
+            toolCallId: 't1',
+            status: 'completed',
+            output: 'demo_write_not_recorded',
+            isError: true,
+          }),
+        ],
+      },
+    ]);
+    expect(judgeMoment(refused, { tools: [], approval: 'createQuote' })).toEqual({
+      pass: false,
+      reason: 'createQuote did not wait for approval: it was called but refused or failed',
+    });
+    const unanswered = recordTurn('q', [{ frames: [call('t1', 'createQuote')] }]);
+    expect(judgeMoment(unanswered, { tools: [], approval: 'createQuote' })).toEqual({
+      pass: false,
+      reason: 'createQuote did not wait for approval: it was called but refused or failed',
+    });
+    const neverCalled = recordTurn('q', [
+      { frames: [call('t1', 'getPrices'), result('t1', 'ok')] },
+    ]);
+    expect(judgeMoment(neverCalled, { tools: ['getPrices'], approval: 'createQuote' })).toEqual({
+      pass: false,
+      reason: 'createQuote did not wait for approval: it was never called',
     });
     const stillWaiting = recordTurn('q', [
       { frames: [call('t1', 'createQuote'), asked('t1', 'createQuote')] },
@@ -128,6 +157,9 @@ describe('judgeMoment', () => {
   });
 });
 
+/** A slug no committed record names, so its card's verification never depends on the evidence. */
+const NO_RECORD = 'no-such-entry';
+
 describe('cardVerification', () => {
   const run = (over: Partial<RealModelRun>): RealModelRun => ({
     entry: 'quotation',
@@ -136,27 +168,37 @@ describe('cardVerification', () => {
     result: 'pass',
     reason: 'the quote waited for approval and was written',
     environment: 'staging',
+    sourceHash: 'a'.repeat(64),
     ...over,
   });
 
-  it('starts with no evidence, so every card is verified with the scripted model', () => {
-    expect(REAL_MODEL_EVIDENCE.runs).toEqual([]);
-    expect(cardVerification('quotation')).toEqual({ kind: 'scripted-model' });
+  it('reads the committed evidence when given no runs', () => {
+    for (const { entry } of REAL_MODEL_EVIDENCE.runs) {
+      expect(cardVerification(entry)).toEqual(cardVerification(entry, REAL_MODEL_EVIDENCE.runs));
+    }
+    // An entry with no record at all is verified with the scripted model.
+    expect(cardVerification(NO_RECORD)).toEqual({ kind: 'scripted-model' });
   });
 
   it('is real-model only when the entry has a record and its latest one passed', () => {
-    expect(cardVerification('quotation', [run({})])).toEqual({
+    const hashes = { quotation: 'a'.repeat(64) };
+    expect(cardVerification('quotation', [run({})], hashes)).toEqual({
       kind: 'real-model',
       runId: 'run-1',
       date: '2026-11-20T01:00:00.000Z',
     });
-    expect(cardVerification('wiki', [run({})])).toEqual({ kind: 'scripted-model' });
+    expect(cardVerification('wiki', [run({})], hashes)).toEqual({ kind: 'scripted-model' });
     expect(
-      cardVerification('quotation', [
-        run({}),
-        run({ runId: 'run-2', date: '2026-11-21T01:00:00.000Z', result: 'fail' }),
-      ]),
+      cardVerification(
+        'quotation',
+        [run({}), run({ runId: 'run-2', date: '2026-11-21T01:00:00.000Z', result: 'fail' })],
+        hashes,
+      ),
     ).toEqual({ kind: 'scripted-model' });
+    // A passed record for another source hash does not verify the card.
+    expect(cardVerification('quotation', [run({ sourceHash: 'b'.repeat(64) })], hashes)).toEqual({
+      kind: 'scripted-model',
+    });
   });
 
   it('refuses evidence from anywhere but staging, or with no reason', () => {
@@ -176,7 +218,7 @@ describe('recordingFor', () => {
 
 describe('verificationLabel', () => {
   it('says "verified with the scripted model" while there is no passed real-model record', () => {
-    expect(verificationLabel('quotation', 'en')).toBe('Verified with the scripted model');
-    expect(verificationLabel('quotation', 'ja')).toBe('台本どおりのモデルで検証済み');
+    expect(verificationLabel(NO_RECORD, 'en')).toBe('Verified with the scripted model');
+    expect(verificationLabel(NO_RECORD, 'ja')).toBe('台本どおりのモデルで検証済み');
   });
 });

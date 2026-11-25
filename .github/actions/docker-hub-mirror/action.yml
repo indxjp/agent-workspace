@@ -1,0 +1,56 @@
+name: Docker Hub through a mirror
+description: >-
+  Docker Hub limits anonymous pulls and manifest lookups per address, and several runners behind
+  one address (the MS-A2 host's eight, or a GitHub-hosted pool) exhaust it: the release smoke and
+  the apps lane failed on `429 Too Many Requests` resolving docker.io/library/postgres:18-alpine.
+  This action sends a job's Docker Hub traffic to Google's public pull-through mirror,
+  mirror.gcr.io, which needs no credentials. It exports AW_DOCKER_HUB_MIRROR, so the CLI looks up a
+  Docker Hub image's digest there and still pins the docker.io repository; a pull from Docker Hub
+  verifies the digest. On a GitHub-hosted runner it also adds the mirror to the Docker daemon's
+  registry mirrors, so `docker run`, `docker build` and `docker compose` pull Docker Hub images
+  through it (the daemon falls back to Docker Hub when the mirror cannot answer): there CI trusts
+  mirror.gcr.io for Docker Hub content. A failure to configure the daemon only warns.
+  A self-hosted daemon is shared with other jobs and is configured on the host, never by a job:
+  there the action only reports the mirrors the daemon has. Call it right after checkout, before
+  the first step that reaches Docker Hub. A job's service containers start before any step, so
+  their images name mirror.gcr.io themselves (scripts/check-workflows/docker-hub.mjs).
+
+runs:
+  using: composite
+  steps:
+    - name: Look up Docker Hub digests at the mirror
+      shell: bash
+      run: echo "AW_DOCKER_HUB_MIRROR=mirror.gcr.io" >> "$GITHUB_ENV"
+
+    - name: Pull Docker Hub images through the mirror
+      if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        config=/etc/docker/daemon.json
+        current="$(sudo cat "$config" 2>/dev/null || echo '{}')"
+        # The mirror is an optimisation and never decides whether the job is green: a failed merge
+        # or reload warns, and Docker Hub pulls go direct as before.
+        if echo "$current" \
+          | jq '.["registry-mirrors"] = ((.["registry-mirrors"] // []) + ["https://mirror.gcr.io"] | unique)' \
+          | sudo tee "$config.new" > /dev/null && sudo mv "$config.new" "$config"; then
+          # SIGHUP, not a restart: registry-mirrors is one of the options dockerd reloads, so the
+          # job's service containers keep running.
+          sudo systemctl reload docker || echo "::warning title=Docker Hub mirror::reloading the Docker daemon failed"
+        else
+          echo "::warning title=Docker Hub mirror::could not write $config"
+        fi
+        mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}' || echo '[]')"
+        echo "Docker daemon registry mirrors: $mirrors"
+        # The mirror only spares Docker Hub's limit; without it the pulls still go to Docker Hub.
+        case "$mirrors" in
+          *mirror.gcr.io*) ;;
+          *) echo "::warning title=Docker Hub mirror::the daemon did not take mirror.gcr.io; Docker Hub pulls go direct" ;;
+        esac
+
+    - name: Report the shared daemon's mirrors
+      if: runner.environment != 'github-hosted'
+      shell: bash
+      run: |
+        mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}' 2>/dev/null || echo 'no Docker daemon')"
+        echo "Docker daemon registry mirrors (configured on the host): $mirrors"

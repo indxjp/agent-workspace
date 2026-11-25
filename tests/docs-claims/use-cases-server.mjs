@@ -55,6 +55,33 @@ export function fileSetupCommands(dir) {
 }
 
 /**
+ * The commands that publish the skill revisions a project's agents pin, as its tutorial tells a
+ * user before `aw push`: for each `skill('<name>', { revision: 1 })`, `aw skills publish <name>
+ * ./skills/<name>`. `aw dev` already imported the skill from `skills/<name>` on its first sync, and
+ * a fresh workspace's first publish is revision 1; a pin on a revision that does not exist is
+ * refused with `422 agent_definition_references_missing [skill:<name>@<revision>]`. A pin on a later
+ * revision would need that many publishes, which no tutorial asks for, so it is refused here.
+ *
+ * @param {string} dir a project directory
+ * @returns {string[]}
+ */
+export function skillPublishCommands(dir) {
+  const pins = new Map(
+    agentSources(dir).flatMap((source) =>
+      [
+        ...source.matchAll(/\bskill\(\s*['"]([^'"]+)['"]\s*,\s*\{\s*revision:\s*(\d+)\s*\}\s*\)/gu),
+      ].map((match) => [match[1] ?? '', Number(match[2])]),
+    ),
+  );
+  return [...pins].map(([name, revision]) => {
+    if (revision !== 1) {
+      throw new JourneyFailure(`${name} is pinned to revision ${String(revision)}, not 1`);
+    }
+    return `aw skills publish ${quoted(name)} ${quoted(`./skills/${name}`)}`;
+  });
+}
+
+/**
  * Point the OpenAPI documents of a project (`apis/*.openapi.json`) at a stand-in API on loopback,
  * keeping each document's base path: their `servers` name the company's own host, which cannot be
  * resolved here, and a user trying the project edits the same line.

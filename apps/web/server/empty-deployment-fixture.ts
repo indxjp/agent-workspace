@@ -41,7 +41,7 @@ export function installEmptyDeployment(): void {
       principalId: principal.principalId,
       ownerPrincipalId: principal.ownerPrincipalId,
       userId: principal.userId,
-      userLabel: principal.label,
+      label: principal.label,
       role: principal.role,
     };
   };

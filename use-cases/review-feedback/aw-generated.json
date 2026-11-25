@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "3ed623048641f7c654d5451f7fbabffc2f8471601f30a8fbfd791e48552e3b39",
+        "agents/review-feedback.md": "eca1f6cf2cfb55d143a222f72694edcc98d3797182e5074177cc6c1fb7731700",
+        "agents/review-feedback.ts": "511d3a671686b732a5a70abcd23279e7f2958d00c14d880785071e35fa8469fe",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/review-feedback.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/review-feedback/SKILL.md": "45373f48e26b58725ebb98c94e19f87e1d28bac217b7edfb9899f928d7d47c87",
+        "surfaces/main.ts": "17fd4a950722359c9464626c391a76e7e0db13620f5d4fc191507a7ab0d15053"
+      },
+      "edits": []
+    }
+  }
+}

@@ -2,18 +2,15 @@ import type { ModelDiscovery } from './discovery';
 import type { TestConnectionResult } from './probe';
 import type { VertexDefaults } from './vertex-defaults';
 import type { ModelsStoreProvider, ResolvedModelConnection } from './store';
-// Read-only: `Role` is `rbac/core/roles.ts`'s own closed union of spec §21's four roles. Carrying it
-// here — rather than a bare `string` — is what issue #149's write gate needs: `decide()` takes a
-// `Role`, and a resolution that only ever held a display label had nowhere for one to come from.
-import type { Role, TokenScope } from '../identity';
+// Read-only: `Caller['role']` is `rbac/core/roles.ts`'s own closed union of spec §21's roles.
+// Carrying it here — rather than a bare `string` — is what issue #149's write gate needs: `decide()`
+// takes a `Role`, and a resolution that only ever held a display label had nowhere for one to come
+// from.
+import type { Caller } from '../identity';
 
 export type ModelsActorResolution =
-  | {
+  | (Pick<Caller, 'workspaceId' | 'principalId' | 'userId' | 'label'> & {
       readonly kind: 'workspace';
-      readonly workspaceId: string;
-      readonly principalId: string;
-      readonly userId: string | null;
-      readonly userLabel: string;
       /**
        * The acting membership's role (issue #149). Required, not optional: an actor resolution
        * that could omit it would let a write route fall back to "no role", and `decide()` treats a
@@ -21,15 +18,15 @@ export type ModelsActorResolution =
        * ADR-0031 shape as everywhere else in this program, applied to the one field a Viewer or
        * Builder could otherwise reach `MANAGE`-only routes through.
        */
-      readonly role: Role;
+      readonly role: Caller['role'];
       /**
        * The attenuation a browser-token credential carries (issue #236, SDK-04, S-1), or `null`
        * for a session or an API-key principal. `withModelsRuntime` (`./http.ts`) passes this to
        * `decide()`; `models`/`model-connections` are in no scope's grammar, so any browser token
        * reaching this route is denied `token_out_of_scope` before §21's own table is consulted.
        */
-      readonly scope: TokenScope | null;
-    }
+      readonly scope: Caller['scope'];
+    })
   | { readonly kind: 'unauthenticated'; readonly reason: string }
   | { readonly kind: 'forbidden'; readonly reason: string };
 

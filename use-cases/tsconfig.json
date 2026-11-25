@@ -1,0 +1,16 @@
+{
+  // The type-checking view of every use case: agent and surface files, skill scripts (plain
+  // JavaScript that runs with Node alone in a run's sandbox, so checked as JavaScript) and tests.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    // The kit reuses the test machinery of `tests/` (the gallery's harness, the apps' counter),
+    // whose relative imports end in `.ts`, as `tsconfig.root.json` allows.
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.mjs"],
+  "exclude": ["**/node_modules/**", "**/coverage/**"]
+}

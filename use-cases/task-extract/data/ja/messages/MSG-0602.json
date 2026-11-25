@@ -1,0 +1,10 @@
+{
+  "source": "email",
+  "id": "MSG-0602",
+  "received_at": "2026-11-24T17:40:00+09:00",
+  "from": { "name": "宮守 遼", "email": "miyamori@tono-bungu.example" },
+  "to": [{ "name": "乙部 紗季", "email": "otobe@tono-bungu.example" }],
+  "cc": [{ "name": "千早 陽向", "email": "chihaya@tono-bungu.example" }],
+  "subject": "販促会議のあとの件",
+  "text": "乙部さん\n\n今日の販促会議、おつかれさまでした。二つお願いがあります。\n\n一つめ、会議の議事録を、11月26日（木）までに共有フォルダの「販促会議」に置いてください。\n二つめ、来週の打ち合わせのために、第二会議室を 12月2日（水）の午後で押さえてください。\n\n千早さんは、配った資料の残りを倉庫に戻しておいてください。急ぎません。\n\n宮守"
+}

@@ -39,4 +39,30 @@ export default defineEntry({
     check: { tools: ['search_files'], approval: null },
   },
   safety: ['person', 'trigger'],
+  next: {
+    source: 'use-cases/customer-inquiry',
+    demo: {
+      agent: 'customer-inquiry',
+      prompts: [
+        {
+          ja: '商品が届いてから何日以内なら返品できますか？',
+          en: 'How many days after delivery can I still return an item?',
+        },
+        {
+          ja: '先週返品した商品の代金をすぐ返金してください',
+          en: 'Please refund the item I returned last week right away.',
+        },
+      ],
+      moment: {
+        ja: '問い合わせに、FAQの記載をもとにした返信の下書きができ、担当者へのタスクの登録は承認を待つ。',
+        en: 'An enquiry gets a reply draft grounded in the FAQ, and the task for the owner waits for approval.',
+      },
+      data: {
+        ja: 'FAQ3本・担当者の一覧・架空の問い合わせ',
+        en: '3 FAQ articles, the owners list and fictional enquiries',
+      },
+      seed: [{ collection: 'customer-inquiry', from: 'data/ja' }],
+      check: { tools: ['search_files'], approval: 'create_task' },
+    },
+  },
 });

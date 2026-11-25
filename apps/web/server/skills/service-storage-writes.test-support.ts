@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { importSkillWithId, patchSkillWithId } from './service';
 import { b64, importBody, runSh, skillMd } from './service-storage-fixture.test-support';
-import { walkFiles } from './tree';
+import { listAll } from '@agent-workspace/core/storage/streams';
 
 import type { RowsWorldFactory } from './service-storage-fixture.test-support';
 export function registerStorageWritesTests(rowsWorld: RowsWorldFactory): void {
@@ -33,7 +33,7 @@ export function registerStorageWritesTests(rowsWorld: RowsWorldFactory): void {
       '.skills/dup/references/new.md': 'new',
     });
     expect((await objects.listPage('', { recursive: true })).entries).toHaveLength(2);
-    expect(await walkFiles(shared, 'skills')).toEqual([]);
+    expect(await listAll(shared, 'skills')).toEqual([]);
     expect((await catalogs[0].listSkills()).map((row) => row.skillMd)).toEqual([skillMd('B')]);
   });
 

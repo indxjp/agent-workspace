@@ -14,8 +14,8 @@ import { problem, type ApiResult } from '../http/result';
 import { apiResultResponse } from '../http/json-transport';
 import { readPublicUrl } from '../integrations';
 import { readBoundedJson } from '../http/json-transport';
-import { skillFilesPrefix } from '../skills/keys';
-import { walkFiles } from '../skills/tree';
+import { skillRowFolder } from '../skills/keys';
+import { skillFiles } from '../skills/tree';
 import { exportAgentVersion, exportFileBytes } from './export';
 import type { PortableProjectSources } from './project';
 
@@ -62,9 +62,12 @@ export async function servePlatformExport(
   if (connectors === null) return apiResultResponse(notConfigured('Connectors'));
   const skills = app?.skills.kind === 'serving' ? app.skills.runtime : null;
   if (skills === null) return apiResultResponse(notConfigured('Skills'));
-  const skillStore = skills.store.forWorkspace(principal.workspaceId);
   const filesRuntime = app?.files.kind === 'serving' ? app.files.runtime : null;
   if (filesRuntime === null) return apiResultResponse(notConfigured('Files'));
+  const skillRows =
+    filesRuntime.storage === undefined
+      ? undefined
+      : { storage: filesRuntime.storage, workspaceId: principal.workspaceId };
   const fileStore = filesRuntime.store.forWorkspace(principal.workspaceId);
   const endpointClients = app?.endpointClients ?? null;
   const publicUrl = readPublicUrl(process.env);
@@ -76,17 +79,19 @@ export async function servePlatformExport(
     endpointClients: async () => (await endpointClients?.list(principal.workspaceId)) ?? [],
     publicOrigin: publicUrl.ok ? publicUrl.origin : null,
     skillFiles: async (name) =>
-      (await walkFiles(skillStore, skillFilesPrefix(name))).map((file) => ({
+      (await skillFiles(skillRows, skillRowFolder(name))).map((file) => ({
         path: file.relativePath,
         sizeBytes: file.sizeBytes,
         read: async () => {
-          const object = await readWhole(skillStore, file.key);
-          if (object === null) {
+          const body = await file.read();
+          if (body === null) {
             // Listed a moment ago, gone now: a concurrent delete raced this export. Failing (a 500)
             // rather than exporting a partial skill, as `exportSkill` does (ADR-0015).
-            throw new Error(`The skill file ${file.key} was listed but could not be read back.`);
+            throw new Error(
+              `The skill file ${file.relativePath} was listed but could not be read back.`,
+            );
           }
-          return object.body;
+          return body;
         },
       })),
   };

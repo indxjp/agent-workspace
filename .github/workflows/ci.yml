@@ -61,6 +61,11 @@
 # from the Nx tasks the diff reaches (scripts/ci/ci-plan.mjs), and which test shards. A job the plan
 # answers `false` for is skipped, and `ci-success` accepts the skip of those four ONLY where the plan
 # said `false` (or on a body/title edit, which skips the plan too), never because of the event alone.
+# The plan also decides the `coverage` job's suites: all of them in the heavy tier, and below it only
+# the use cases' suite, when the diff reaches the use cases' tests (the Agent Store 100-use-case plan,
+# §7), so a pull request that touches only `use-cases/<slug>` runs the use cases' tests, their 100%
+# coverage and the scoreboard's check of that coverage, and nothing else of the heavy tier. `coverage`
+# is a planned job like the four: ci-success accepts its skip only where the plan said `false`.
 name: CI
 
 on:
@@ -515,7 +520,9 @@ jobs:
       build-embedded: ${{ steps.plan.outputs.build-embedded }}
       typecheck-lint: ${{ steps.plan.outputs.typecheck-lint }}
       heavy-checks: ${{ steps.plan.outputs.heavy-checks }}
+      coverage: ${{ steps.plan.outputs.coverage }}
       test-shards: ${{ steps.plan.outputs.test-shards }}
+      coverage-suites: ${{ steps.plan.outputs.coverage-suites }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -1015,13 +1022,17 @@ jobs:
     # actually got, so a silent bump to 19 fails a gate instead of being pinned away in a comment
     # nobody re-checks.
     #
+    # The image is Docker Hub's official postgres, pulled through Google's public mirror of Docker
+    # Hub: a service container starts before any step, so .github/actions/docker-hub-mirror cannot
+    # route it, and anonymous Docker Hub pulls from one address are rate limited (429).
+    #
     # The credentials are the defaults for a throwaway container that lives for one job and is
     # reachable only from that job's runner. They are not a secret and must not be treated as
     # one: GitHub withholds secrets from a pull_request build raised on a fork, so a `secrets.`
     # reference here would leave the service unreachable exactly where CI matters most.
     services:
       postgres:
-        image: postgres:18-alpine
+        image: mirror.gcr.io/library/postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -1080,6 +1091,9 @@ jobs:
         with:
           # Full history: the ownership and suppression gates diff base...head.
           fetch-depth: 0
+
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -1358,6 +1372,9 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
+
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
@@ -1429,6 +1446,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
 
       - name: Decide whether the diff reaches an image input
         id: scope
@@ -1791,6 +1811,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
+
       - name: Decide whether the diff reaches an image input
         id: scope
         run: |
@@ -1899,6 +1922,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
 
       - name: Decide whether the diff reaches a generated project
         id: scope
@@ -2140,6 +2166,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
+
       - name: Decide whether the diff reaches an example app
         id: scope
         run: |
@@ -2289,6 +2318,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
+
       - name: Decide whether the diff reaches the developer journey
         id: scope
         run: |
@@ -2428,6 +2460,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
+
       - name: Decide whether the diff reaches a documented claim
         id: scope
         run: |
@@ -2529,6 +2564,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
+
       - name: Decide whether the diff reaches the tool sandbox
         id: scope
         run: |
@@ -2618,6 +2656,9 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
 
       - name: Start freeing disk for the Docker builds
         uses: ./.github/actions/free-disk
@@ -2762,11 +2803,13 @@ jobs:
           docker image rm "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE" || true
 
   # Moved from quality.yml (audit F-14): a floor or a browser lane outside `ci-success` is advisory.
+  # The suites are scripts/ci/ci-plan.mjs's COVERAGE_SUITES: every one in the heavy tier (the plan's
+  # full run has the heavy tier's condition), and the use cases' alone on a pull request or a queue
+  # group whose diff reaches the use cases' tests. ci-success requires it wherever the plan names it.
   coverage:
     name: Coverage floor · ${{ matrix.suite.name }}
-    if: >-
-      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.coverage == 'true'
     runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
@@ -2777,30 +2820,10 @@ jobs:
       # a single run.
       fail-fast: false
       matrix:
-        suite:
-          - {
-              name: critical packages,
-              script: 'test:coverage',
-              config: vitest.coverage.config.ts,
-              summary: coverage/coverage-summary.json,
-              s3: true,
-            }
-          - {
-              name: apps,
-              script: 'test:coverage:apps',
-              config: vitest.apps.coverage.config.ts,
-              summary: coverage/apps/coverage-summary.json,
-              s3: true,
-            }
-          - {
-              name: ui-cli,
-              script: 'test:coverage:ui-cli',
-              config: vitest.ui-cli.coverage.config.ts,
-              summary: coverage/ui-cli/coverage-summary.json,
-            }
+        suite: ${{ fromJSON(needs.plan.outputs.coverage-suites) }}
     services:
       postgres:
-        image: postgres:18-alpine
+        image: mirror.gcr.io/library/postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -2820,6 +2843,8 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Route Docker Hub through a mirror
+        uses: ./.github/actions/docker-hub-mirror
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -2862,8 +2887,10 @@ jobs:
         env:
           VITEST_MAX_WORKERS: '8'
       # Floors only go up (W4-4): on a pull request, no floor may be lower than on its base; a floor
-      # trailing the measured value by more than 5 points is a warning, never a failure.
+      # trailing the measured value by more than 5 points is a warning, never a failure. The use
+      # cases' floor is 100 per file, pinned by use-cases/kit/coverage.test.ts: nothing to ratchet.
       - name: Coverage floors only go up
+        if: matrix.suite.ratchet
         env:
           # The pull request's base branch, or the commit a merge-queue group was built on.
           BASE_REF: ${{ github.base_ref || github.event.merge_group.base_sha }}
@@ -2876,6 +2903,13 @@ jobs:
             export COVERAGE_BASE_REV=FETCH_HEAD
           fi
           node scripts/check-coverage-ratchet.mjs "$CONFIG" "$SUMMARY"
+      # use-cases/SCOREBOARD.md's Coverage column is written with this summary and kept as committed
+      # by `pnpm test`, which has none; here, with the summary, a done cell it does not back fails.
+      - name: The scoreboard claims no coverage the summary does not show
+        if: matrix.suite.scoreboard
+        env:
+          USE_CASES_COVERAGE_SUMMARY: ${{ matrix.suite.summary }}
+        run: pnpm vitest run --project use-cases kit/scoreboard.test.ts
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -2900,7 +2934,7 @@ jobs:
       actions: read
     services:
       postgres:
-        image: postgres:18-alpine
+        image: mirror.gcr.io/library/postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -3068,8 +3102,8 @@ jobs:
           # them like a pull request does, and the nightly and the release gate still require them.
           case "${{ github.event_name }}" in pull_request|push|merge_group) skip_ok=true ;; *) skip_ok=false ;; esac
           if [ "${{ inputs.full }}" = true ]; then skip_ok=false; fi
-          # THE FAST PATH: `plan` must succeed, and build, build-embedded, typecheck-lint and
-          # heavy-checks pass skipped ONLY where the plan's output for that job is "false" (a job's
+          # THE FAST PATH: `plan` must succeed, and build, build-embedded, typecheck-lint,
+          # heavy-checks and coverage pass skipped ONLY where the plan's output for that job is "false" (a job's
           # outputs are in the needs context), never because of the event. The one other such skip
           # is a body or title edit (EDITED), which runs the fast checks only and skips the plan.
           failed=$(echo "$NEEDS_JSON" | jq -r --argjson skip_ok "$skip_ok" --argjson edited "$EDITED" '
@@ -3079,7 +3113,7 @@ jobs:
             | select(
                 if .value.result != "skipped" then true
                 elif .key == "plan" then ($edited | not)
-                elif (.key | IN("build", "build-embedded", "typecheck-lint", "heavy-checks")) then (($edited or $plan[.key] == "false") | not)
+                elif (.key | IN("build", "build-embedded", "typecheck-lint", "heavy-checks", "coverage")) then (($edited or $plan[.key] == "false") | not)
                 else ($skip_ok | not)
                 end)
             | "\(.key): \(.value.result)"')

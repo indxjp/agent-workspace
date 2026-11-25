@@ -7,7 +7,12 @@ vi.mock('node:child_process', async (importOriginal) => ({
 }));
 
 import { resolveDeploymentImages } from './deployment.ts';
-import { REGISTRY_RETRY, isTransientRegistryFailure } from './deployment-images.ts';
+import {
+  REGISTRY_RETRY,
+  dockerHubMirror,
+  dockerHubPath,
+  isTransientRegistryFailure,
+} from './deployment-images.ts';
 import document from './release-images.json' with { type: 'json' };
 import {
   PLATFORM_IMAGE_VERSION,
@@ -201,6 +206,95 @@ describe('the digest lookup retries a transient registry failure', () => {
       'unexpected status from HEAD request: 403 Forbidden (proxy read timed out)',
     ]) {
       expect(isTransientRegistryFailure(stderr), stderr).toBe(false);
+    }
+  });
+});
+
+describe('a Docker Hub image is looked up at the mirror AW_DOCKER_HUB_MIRROR names', () => {
+  const POSTGRES = 'docker.io/library/postgres:18-alpine';
+  const platform = {
+    web: `w@${digest('1')}`,
+    gateway: `g@${digest('2')}`,
+    runner: `r@${digest('3')}`,
+    runtime: `t@${digest('4')}`,
+  };
+  let inspected: string[];
+
+  beforeEach(() => {
+    spawnSync.mockReset();
+    inspected = [];
+    vi.spyOn(REGISTRY_RETRY, 'sleep').mockImplementation(() => undefined);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Docker answering each inspected reference with `answer(reference)`. */
+  const registry = (answer: (reference: string) => { status: number; stderr?: string }) => {
+    spawnSync.mockImplementation((_command: string, args?: readonly string[]) => {
+      const reference = String(args?.[3]);
+      inspected.push(reference);
+      const { status, stderr = '' } = answer(reference);
+      const stdout = status === 0 ? JSON.stringify({ digest: digest('c') }) : '';
+      return { status, stdout, stderr };
+    });
+  };
+
+  it('asks the mirror, never Docker Hub, and still pins the Docker Hub repository', () => {
+    registry(() => ({ status: 0 }));
+    const images = resolveDeploymentImages(
+      'local',
+      { AW_DOCKER_HUB_MIRROR: 'mirror.gcr.io' },
+      platform,
+    );
+    expect(inspected).toEqual(['mirror.gcr.io/library/postgres:18-alpine']);
+    expect(images.postgres).toBe(`docker.io/library/postgres@${digest('c')}`);
+  });
+
+  it('falls back to Docker Hub when the mirror cannot answer', () => {
+    registry((reference) =>
+      reference.startsWith('mirror.gcr.io/') ? { status: 1, stderr: 'not found' } : { status: 0 },
+    );
+    const images = resolveDeploymentImages(
+      'local',
+      { AW_DOCKER_HUB_MIRROR: 'mirror.gcr.io' },
+      platform,
+    );
+    expect(inspected).toEqual(['mirror.gcr.io/library/postgres:18-alpine', POSTGRES]);
+    expect(images.postgres).toBe(`docker.io/library/postgres@${digest('c')}`);
+  });
+
+  it('leaves another registry alone, and asks Docker Hub when no mirror is named', () => {
+    registry(() => ({ status: 0 }));
+    resolveDeploymentImages('aws', {
+      AW_DOCKER_HUB_MIRROR: 'mirror.gcr.io',
+      AW_WEB_IMAGE: 'registry.example/web:mine',
+      AW_GATEWAY_IMAGE: platform.gateway,
+      AW_RUNNER_IMAGE: platform.runner,
+      AW_RUNTIME_IMAGE: platform.runtime,
+    });
+    resolveDeploymentImages('local', {}, platform);
+    expect(inspected).toEqual(['registry.example/web:mine', POSTGRES]);
+  });
+
+  it('refuses a mirror that is not a registry host', () => {
+    for (const value of ['https://mirror.gcr.io', 'mirror.gcr.io/library', 'user@mirror.gcr.io']) {
+      expect(() => dockerHubMirror({ AW_DOCKER_HUB_MIRROR: value }), value).toThrow(
+        /^AW_DOCKER_HUB_MIRROR must be a registry host/u,
+      );
+    }
+    expect(dockerHubMirror({ AW_DOCKER_HUB_MIRROR: 'localhost:5000' })).toBe('localhost:5000');
+    expect(dockerHubMirror({ AW_DOCKER_HUB_MIRROR: ' ' })).toBeUndefined();
+    expect(dockerHubMirror({})).toBeUndefined();
+  });
+
+  it('reads the Docker Hub path of a reference, and none of another registry', () => {
+    expect(dockerHubPath(POSTGRES)).toBe('library/postgres:18-alpine');
+    expect(dockerHubPath('postgres:18-alpine')).toBe('library/postgres:18-alpine');
+    expect(dockerHubPath('chrislusf/seaweedfs:4.47')).toBe('chrislusf/seaweedfs:4.47');
+    expect(dockerHubPath('index.docker.io/chrislusf/seaweedfs:4.47')).toBe(
+      'chrislusf/seaweedfs:4.47',
+    );
+    for (const other of ['ghcr.io/indxjp/web:1', 'localhost/x:1', 'registry:5000/x:1']) {
+      expect(dockerHubPath(other), other).toBeUndefined();
     }
   });
 });

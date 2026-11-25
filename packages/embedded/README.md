@@ -4,7 +4,6 @@ The control plane (web), the model gateway and the runner in **one Node process*
 embedded PostgreSQL 18 and local files. A generated project runs it as `aw dev`, which resolves
 this package's `./launch` export from the project's dependencies and forks it; it never imports
 it (ADR-0109).
-`aw dev` itself is a later unit of the developer journey (S1-13).
 
 The package exports no importable API. Its `exports` are exactly:
 
@@ -31,8 +30,7 @@ eight `@embedded-postgres/*` packages, whose install script restores the binarie
 
 The release smoke (`pnpm release:pack --smoke`) installs the packed tarballs this way and boots the
 runtime from them: `ready`, `credential`, `GET /api/me` answering 200, and exit 0 on SIGINT. The
-first npm publish is the Owner's step (see "Declared gap"), so until then the package is proven
-from tarballs only.
+package is published to npm with the rest of the lock-step set.
 
 ## Two ways to run it
 
@@ -328,15 +326,11 @@ dependencies of the bundle, which knip cannot see. `src/knip-exception.test.ts` 
 that rule, so it cannot over-ignore: every name in it must be a staged dependency or an inlined
 workspace member.
 
-## Declared gap
+## Publishing
 
-ADR-0082 D5: the first version of a new package is published by hand by the Owner (a
-`0.0.0-bootstrap` placeholder, as for the other five) before a trusted publisher can be
-configured. Until then `npm create @indx-workspace` cannot install this package from the public
-registry, and the publish workflow refuses a `packages-v*` release before publishing any package,
-so no partial lock-step set reaches npm; re-running its publish job after the Owner's step finishes
-the release (the repository's release procedure). CI proves the path from
-tarballs only.
+`package.json` says `"private": true` because the workspace manifest is never published: the
+packaging step stages a manifest of its own, and the publish workflow releases that staged package
+in lock-step with the nine published `@indx-workspace` packages (`contracts`, `platforms`, `sdk`, `react`, `app`, `aw`, `cli`, `embedded` and `create`) (ADR-0082).
 
 Follow-up for the bundle build (S1-10): the Next build inlines `import.meta.url` values and page
 source paths as absolute paths of the build machine into about 200 `dist/web/` files. Nothing reads

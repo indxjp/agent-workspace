@@ -37,15 +37,26 @@
  *   key (`AW_DEMO_ANTHROPIC_API_KEY`), made through the models domain, which seals it. The guest
  *   has no grant on connections, secrets or runtimes, so the key is never read by the visitor, and
  *   it goes with the workspace. Without a key there is no connection and a run start is refused.
- * - Its policy, its tool rules pointed at the stand-ins (`policy-remap.ts`, so a write the template
- *   makes wait for approval still waits), with the per-run caps clamped to `limits` (never wider than the template's own),
+ * - Its policy, its tool rules and approval gates pointed at the stand-ins by id (`policy-remap.ts`,
+ *   so a write the template makes wait for approval still waits under whatever name its stand-in has), with the per-run caps clamped to `limits` (never wider than the template's own),
  *   its skill allowlist as the template has it, and no unrestricted network. The policy is applied
  *   every time, to an agent found from an earlier copy too, so a copy that stopped before it was
  *   capped is capped by the next.
  * - A grant for the guest to run it.
  *
- * Copying is safe to repeat: files already at their path are kept, a skill or an agent whose name
- * the workspace holds is found and not made again, and the grant is set to the guest alone.
+ * Copying is safe to repeat, and a repeat brings an earlier copy to the template as it is now
+ * (issue #2407): an agent, a skill or a stand-in whose name the workspace holds is found, not made
+ * again, and given the template's instructions, permissions, assignments, skill files and stand-in
+ * tools and records where they differ; a sample file missing from the copy is copied; and the grant
+ * is set to the guest alone. What earlier runs left is kept in a visitor's demo and reset in the
+ * verification workspace, so every real-model run there starts from the template: a sample file
+ * already at its path (a visitor's runs may have written it), and the approved writes a records
+ * stand-in keeps (ADR-0169; a visitor's are carried while the stand-in still records their write,
+ * ADR-0171 D2).
+ *
+ * Each entry's stand-ins are its own, so two entries that name the same connector both work in one
+ * workspace (`template-copy-connectors.ts`). Folders are shared: two entries granted the same folder
+ * path each see the other's sample files there.
  *
  * The real-model verification workspace gets the same copy (`copyIntoVerification`,
  * `verification.ts`), made for its Owner where a demo has its guest, so R1 and the daily test run
@@ -67,10 +78,14 @@ import type { DirectoryRoot } from '../../identity';
 import type { RuntimeProfileStoreProvider } from '../../execution';
 import type { StorageService } from '../../storage-and-sharing';
 import { allCatalogRows, type Catalog } from './catalog-rows';
-import { withStandInConnectorIds } from './policy-remap';
+import {
+  UnmappedApprovalGateError,
+  unmappedApprovalGates,
+  withStandInConnectorIds,
+} from './policy-remap';
 import type { DemoRunLimits, DemoSandbox, DemoTemplates } from './ports';
 import { standInConnectors } from './template-copy-connectors';
-import { copyFiles } from './template-copy-files';
+import { copyFiles, type SampleFileMode } from './template-copy-files';
 import {
   DEMO_MODEL_CONNECTION_NAME,
   DEMO_RUNTIME_PROFILE_NAME,
@@ -121,10 +136,14 @@ const isActive = (agent: AgentRecord): boolean => agent.archivedAt === undefined
 
 /** What one agent's copy is made in: the template it is read from, who it is for, how it is capped. */
 interface AgentCopyContext {
+  readonly entry: DemoEntrySlug;
   readonly template: TemplateSource;
+  /** The names of the template's agents, which are this entry's copies in the visitor's workspace. */
+  readonly entryAgentNames: ReadonlySet<string>;
   readonly visitor: Visitor;
   readonly limits: DemoRunLimits;
   readonly profileId: string | null;
+  readonly samples: SampleFileMode;
 }
 
 const NO_ASSIGNMENTS = { files: [], skillIds: [], connectorIds: [], storageGrants: [] };
@@ -137,16 +156,47 @@ const templatePolicy = (agent: AgentRecord, skillNames: readonly string[]): Agen
   agent.policy ?? compiledPolicyFor(agent.permissions, skillNames);
 
 /**
- * The copy's policy: the template's, its rules on the stand-ins, its skill allowlist, caps no
- * wider than `limits`.
+ * The stand-ins of a template agent's copy (template connector id to stand-in id) and the name of
+ * every connector the template agent is assigned, a stand-in or not (template id to name).
+ */
+interface CopiedStandIns {
+  readonly ids: ReadonlyMap<string, string>;
+  readonly templateNames: ReadonlyMap<string, string>;
+}
+
+/** The template's name of each connector in `templateIds`, by id; a connector it lacks is left out. */
+async function templateConnectorNames(
+  deps: DemoTemplateDependencies,
+  templateWorkspaceId: string,
+  templateIds: Iterable<string>,
+): Promise<ReadonlyMap<string, string>> {
+  const source = deps.connectors.forWorkspace(templateWorkspaceId);
+  const names = new Map<string, string>();
+  for (const id of templateIds) {
+    const connector = await source.get(id);
+    if (connector !== null) names.set(id, connector.name);
+  }
+  return names;
+}
+
+/**
+ * The copy's policy: the template's, its rules and approval gates on the stand-ins, its skill
+ * allowlist, caps no wider than `limits`.
  */
 function copyPolicy(
   agent: AgentRecord,
   skillNames: readonly string[],
   limits: DemoRunLimits,
-  standIns: ReadonlyMap<string, string>,
+  standIns: CopiedStandIns,
 ): AgentPolicy {
-  const base = withStandInConnectorIds(templatePolicy(agent, skillNames), standIns);
+  const base = withStandInConnectorIds(
+    templatePolicy(agent, skillNames),
+    standIns.ids,
+    standIns.templateNames,
+  );
+  // A gate left on a template connector would match nothing in the visitor's workspace.
+  const unmapped = unmappedApprovalGates(base, standIns.templateNames);
+  if (unmapped.length > 0) throw new UnmappedApprovalGateError(unmapped);
   return {
     ...base,
     limits: {
@@ -229,6 +279,59 @@ interface CopiedResources {
   readonly connectorIds: readonly string[];
 }
 
+/** A copy never has internet, whatever the template agent was built to allow. */
+const copyPermissions = (agent: AgentRecord): AgentRecord['permissions'] => ({
+  ...agent.permissions,
+  unrestrictedNetwork: false,
+});
+
+/** For each connector of the visitor's workspace, the names of the agents assigned it. */
+async function connectorAssignees(
+  deps: DemoTemplateDependencies,
+  workspaceId: string,
+): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
+  const assignees = new Map<string, Set<string>>();
+  const resources = deps.resources.forWorkspace(workspaceId);
+  for (const agent of await deps.agents.forWorkspace(workspaceId).list()) {
+    for (const connectorId of (await resources.get(agent.id))?.connectorIds ?? []) {
+      const names = assignees.get(connectorId) ?? new Set<string>();
+      names.add(agent.name);
+      assignees.set(connectorId, names);
+    }
+  }
+  return assignees;
+}
+
+/**
+ * Bring the visitor's agent an earlier copy made to the template's: its instructions, its
+ * permissions and its assignments (the policy and the sandbox follow in {@link capAgent}).
+ */
+async function refreshAgentCopy(
+  deps: DemoTemplateDependencies,
+  agent: AgentRecord,
+  agentId: string,
+  resources: CopiedResources,
+  ctx: AgentCopyContext,
+): Promise<string> {
+  const { workspaceId } = ctx.visitor;
+  const updated = await deps.agents.forWorkspace(workspaceId).update(agentId, {
+    instructions: agent.instructions,
+    permissions: copyPermissions(agent),
+  });
+  if (updated.kind !== 'updated') {
+    throw new Error(`the demo agent ${agent.name} was not refreshed: ${updated.kind}`);
+  }
+  const assigned = await deps.resources.forWorkspace(workspaceId).replace(agentId, {
+    files: resources.files,
+    skillIds: [...resources.skillIds],
+    connectorIds: [...resources.connectorIds],
+  });
+  if (assigned.kind !== 'updated') {
+    throw new Error(`the demo agent ${agent.name} kept stale resources: ${assigned.kind}`);
+  }
+  return agentId;
+}
+
 /** Make the visitor's agent from the template's, with its copied resources. */
 async function createAgentCopy(
   deps: DemoTemplateDependencies,
@@ -244,8 +347,7 @@ async function createAgentCopy(
       modelConnectionId: null,
       model: null,
       ...(profileId === null ? {} : { runtimeProfileId: profileId }),
-      // A demo sandbox has no internet, whatever the template agent was built to allow.
-      permissions: { ...agent.permissions, unrestrictedNetwork: false },
+      permissions: copyPermissions(agent),
     },
     { principalId: visitor.principalId, userId: visitor.userId },
     {
@@ -269,33 +371,40 @@ async function copyAgent(
   // Found by name when an earlier copy made them, so this is safe to repeat.
   const standIns = await standInConnectors(
     deps,
-    { assignedIds: assigned.connectorIds, template, policy: templatePolicy(agent, skillNames) },
+    {
+      entry: ctx.entry,
+      assignedIds: assigned.connectorIds,
+      template,
+      policy: templatePolicy(agent, skillNames),
+      entryAgentNames: ctx.entryAgentNames,
+      // The verification workspace starts every refill from the template's records.
+      keepsApprovedWrites: ctx.samples === 'keep',
+      assignedTo: await connectorAssignees(deps, visitor.workspaceId),
+    },
     visitor,
   );
+  const resources: CopiedResources = {
+    files: await copyFiles(deps, assigned.files, template, visitor, ctx.samples),
+    skillIds: await copySkills(deps.skills, skillNames, template.workspaceId, visitor),
+    connectorIds: [...standIns.values()],
+  };
+  const copied: CopiedStandIns = {
+    ids: standIns,
+    templateNames: await templateConnectorNames(deps, template.workspaceId, assigned.connectorIds),
+  };
   const capped = (agentId: string) =>
-    capAgent(
-      deps,
-      { agent, agentId, policy: copyPolicy(agent, skillNames, limits, standIns) },
-      ctx,
-    );
+    capAgent(deps, { agent, agentId, policy: copyPolicy(agent, skillNames, limits, copied) }, ctx);
+  const refreshed = async (agentId: string) =>
+    capped(await refreshAgentCopy(deps, agent, agentId, resources, ctx));
   const findByName = async () =>
     (await store.list()).find((candidate) => candidate.name === agent.name);
   const present = await findByName();
-  if (present !== undefined) return capped(present.id);
-  const made = await createAgentCopy(
-    deps,
-    agent,
-    {
-      files: await copyFiles(deps, assigned.files, template, visitor),
-      skillIds: await copySkills(deps.skills, skillNames, template.workspaceId, visitor),
-      connectorIds: [...standIns.values()],
-    },
-    ctx,
-  );
+  if (present !== undefined) return refreshed(present.id);
+  const made = await createAgentCopy(deps, agent, resources, ctx);
   if (made.kind === 'name-conflict') {
     // Another copy of the same entry, running at the same time, made it first.
     const raced = await findByName();
-    if (raced !== undefined) return capped(raced.id);
+    if (raced !== undefined) return refreshed(raced.id);
   }
   if (made.kind !== 'created') {
     throw new Error(`the demo agent ${agent.name} was not copied: ${made.kind}`);
@@ -336,6 +445,7 @@ async function copyFor(
   entry: DemoEntrySlug,
   visitor: Visitor,
   limits: DemoRunLimits,
+  samples: SampleFileMode,
 ): Promise<void> {
   const templateId = await templateWorkspaceId(deps, entry);
   if (templateId === null) throw new Error(`no demo template for ${entry}`);
@@ -344,8 +454,18 @@ async function copyFor(
     rows: await allCatalogRows(deps.catalogs, templateId),
   };
   const profileId = await prepareVisitorWorkspace(deps, visitor);
-  for (const agent of await activeAgents(deps, templateId)) {
-    const agentId = await copyAgent(deps, agent, { template, visitor, limits, profileId });
+  const agents = await activeAgents(deps, templateId);
+  const entryAgentNames = new Set(agents.map((agent) => agent.name));
+  for (const agent of agents) {
+    const agentId = await copyAgent(deps, agent, {
+      entry,
+      template,
+      entryAgentNames,
+      visitor,
+      limits,
+      profileId,
+      samples,
+    });
     await grantVisitorTheAgent(deps, agent, agentId, visitor);
   }
 }
@@ -358,11 +478,13 @@ export function createDemoTemplates(deps: DemoTemplateDependencies): DemoTemplat
     },
 
     async copyInto({ entry, workspaceId, guestUserId, limits }) {
-      await copyFor(deps, entry, await visitorOf(deps, workspaceId, guestUserId, 'guest'), limits);
+      const guest = await visitorOf(deps, workspaceId, guestUserId, 'guest');
+      await copyFor(deps, entry, guest, limits, 'keep');
     },
 
     async copyIntoVerification({ entry, workspaceId, ownerUserId, limits }) {
-      await copyFor(deps, entry, await visitorOf(deps, workspaceId, ownerUserId, 'owner'), limits);
+      const owner = await visitorOf(deps, workspaceId, ownerUserId, 'owner');
+      await copyFor(deps, entry, owner, limits, 'reset');
     },
   };
 }

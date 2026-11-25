@@ -1,0 +1,25 @@
+{
+  "kind": "webhook",
+  "name": "customer-inquiry",
+  "prompt": "お客様から問い合わせが届きました。FAQ にもとづく返信の下書きを作って、担当者に渡してください。 / A customer enquiry arrived; draft a reply from the FAQ and hand it to the owner.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["inquiryId", "category", "answered", "faqIds", "owner", "summary", "reply"],
+    "properties": {
+      "inquiryId": { "type": "string", "pattern": "^(INQ-[0-9]{4}|chat)$" },
+      "category": {
+        "type": "string",
+        "enum": ["refund", "returns", "shipping", "account", "complaint", "other"]
+      },
+      "answered": { "type": "boolean" },
+      "faqIds": {
+        "type": "array",
+        "items": { "type": "string", "pattern": "^FAQ-(RET|SHIP|ACC)-[0-9]{2}$" }
+      },
+      "owner": { "type": "string" },
+      "summary": { "type": "string" },
+      "reply": { "type": "string" }
+    }
+  }
+}

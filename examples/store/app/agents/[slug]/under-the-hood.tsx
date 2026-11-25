@@ -1,11 +1,11 @@
 import { LINE_COUNTS } from '../../../catalog/line-counts.generated.ts';
 import { PUBLIC_REPOSITORY_URL, type LiveEntry } from '../../../catalog/index.ts';
 import { SOURCES } from '../../../catalog/sources.generated.ts';
-import { featuresUsed } from '../../labels';
+import { featureNames } from '../../labels';
 import type { Lang } from '../../lang';
 import { tr } from '../../text';
 
-/** The tab for engineers: real source, its layout, handwritten lines and the features used. */
+/** The section for engineers: real source, its layout, handwritten lines and the features used. */
 export function UnderTheHood({ entry, lang }: { readonly entry: LiveEntry; readonly lang: Lang }) {
   const t = tr(lang);
   const view = SOURCES[entry.slug];
@@ -37,7 +37,7 @@ export function UnderTheHood({ entry, lang }: { readonly entry: LiveEntry; reado
       <section aria-labelledby="features-title">
         <h3 id="features-title">{t('使っている機能', 'Features used')}</h3>
         <ul>
-          {featuresUsed(entry, lang).map((feature) => (
+          {featureNames(entry.safety, lang).map((feature) => (
             <li key={feature}>{feature}</li>
           ))}
         </ul>

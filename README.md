@@ -5,7 +5,9 @@
 Agent Workspace is the self-hosted layer around the Claude Agent SDK: everything an agent needs
 after you write it, as files you commit and screens an admin can use. You choose the engine, the
 model, the skills, the tools, the frontend and where it runs, from a laptop to your own VM, your
-Kubernetes or your cloud. Your data, files and keys stay on your servers.
+Kubernetes or your cloud. Your data, files and keys stay on your servers. And when you would rather
+start from a finished agent than a blank file, the [Agent Store](#the-agent-store) has ready-made
+business agents to try, customize and install.
 
 [![CI](https://github.com/indxjp/agent-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/indxjp/agent-workspace/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@indx-workspace/sdk)](https://www.npmjs.com/package/@indx-workspace/sdk)
@@ -20,6 +22,7 @@ Kubernetes or your cloud. Your data, files and keys stay on your servers.
   <a href="#quickstart-60-seconds">Quick start</a> ·
   <a href="https://docs.agentworkspace.indx.jp">Documentation</a> ·
   <a href="https://docs.agentworkspace.indx.jp/tutorials">Tutorials</a> ·
+  <a href="https://store-staging.indx.jp">Agent Store (preview)</a> ·
   <a href="https://lp.agentworkspace.indx.jp">Website</a>
 </p>
 
@@ -32,17 +35,61 @@ model changes. Three problems come up in every team.
 | The problem                                                                                                                                      | What Agent Workspace does                                                                                                                                                                                                                                              | What you get                                                                         |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | **The configuration lives on someone's laptop.** An administrator cannot see what is running, change it, or prove what it was allowed to do.     | Agents, skills, connectors and runtimes are files in your repository and screens in a web console. `aw push` saves a version; an admin sees and changes the same agent in the browser. Permission, credential, agent and runtime changes are recorded in an audit log. | One source of truth, reviewed like code and visible to the people who answer for it. |
-| **Agents write files and run shell commands.** Where that executes is an operator's decision, yet most implementations compile it into the code. | Each run starts in the sandbox you choose: this machine for development, a Docker container, or a Kubernetes Pod. Provider keys stay in a model gateway; a run gets a per-run token, never the key.                                                                    | Switch the sandbox without touching the agent. A sandbox never holds a provider key. |
-| **The model or the cloud will change.** Procurement picks Azure. A regulator picks a region.                                                     | The model is a setting: Anthropic, OpenAI, Azure OpenAI or a self-hosted model, through one gateway. The same images run on one VM, your Kubernetes or your cloud.                                                                                                     | A provider or region change is a setting, not a rewrite.                             |
+| **Agents write files and run shell commands.** Where that executes is an operator's decision, yet most implementations compile it into the code. | Each run starts in the sandbox you choose: this machine for development, a Docker container, a Kubernetes Pod, a Cloud Run service or an Azure Container Apps session. Provider keys stay in a model gateway; a run gets a per-run token, never the key.               | Switch the sandbox without touching the agent. A sandbox never holds a provider key. |
+| **The model or the cloud will change.** Procurement picks Azure. A regulator picks a region.                                                     | The model is a setting: Anthropic, Claude on Vertex AI, OpenAI, Azure OpenAI or a self-hosted OpenAI- or Anthropic-compatible model, through one gateway. The same images run on one VM, your Kubernetes or your cloud.                                                | A provider or region change is a setting, not a rewrite.                             |
 
-Behind that are three promises:
+### What is different
 
-- **Managed agents, in your own cloud.** Agents, sessions, files, tools and sandboxes, with no
-  proprietary format in between, and the data never leaves your account.
-- **Build the agent; everything around it is one call.** Storage, users, credentials, runs and
-  deployment are resources behind one API, the `aw` command line and a typed SDK.
-- **Switch anything, embed anywhere.** Model, sandbox and cloud are data. Put the agent on your
-  site with one tag, in a React app, or behind your own backend.
+Each point below is something you can check in this repository or try in a few minutes.
+
+- **It runs on your servers, around the Claude Agent SDK.** The control plane, the model gateway
+  and the runner are images you run; PostgreSQL and object storage are yours.
+  [The data plane](https://docs.agentworkspace.indx.jp/concepts/data-plane)
+- **The agent is files in your repository, and screens in an admin console.** `aw push` saves a
+  version; an administrator sees and changes the same agent in the browser.
+  [Agents as code](https://docs.agentworkspace.indx.jp/guides/agents-as-code)
+- **A sandbox never holds a provider key.** The engine reaches the model only through the
+  gateway, with a token that is valid for one run.
+  [Self-host securely](https://docs.agentworkspace.indx.jp/features/self-host-securely)
+- **Any engine, any model.** The Claude Agent SDK by default, or Mastra, the OpenAI Agents SDK or
+  pi, chosen per agent. [Switch the engine](https://docs.agentworkspace.indx.jp/platforms/switch-engine),
+  [engine matrix](docs/30-reference/matrices/engine-matrix.md)
+- **It acts as the person who asked, and asks before it writes.** A tool call can carry the
+  signed-in person, so your API answers only what that person may see. A write through an OpenAPI
+  tool, or any tool listed in `requireApproval`, pauses the run until a person approves that exact
+  call. [Caller identity](https://docs.agentworkspace.indx.jp/guides/caller-identity),
+  [run lifecycle](https://docs.agentworkspace.indx.jp/concepts/run-lifecycle)
+- **It is scored before it is promoted.** `aw eval` runs your cases; `aw promote` refuses a version
+  below the project's `minEvalScore`. [Evaluations](https://docs.agentworkspace.indx.jp/guides/evaluations)
+- **It deploys where you already are.** One VM with Docker Compose, Kubernetes with Helm, Google
+  Cloud Run with `aw deploy`, or Azure Container Apps. [Deploy](https://docs.agentworkspace.indx.jp/guides/deploy) and the
+  [deploy guides](#self-host)
+- **It does not lock the agent in.** Translators export it to Claude Managed Agents, Copilot
+  Studio, Microsoft 365, Microsoft Foundry, Gemini Enterprise and AWS AgentCore, or eject it to
+  plain code, with a report of what each target keeps and drops.
+  [Run it on other platforms](https://docs.agentworkspace.indx.jp/path/platforms)
+
+### The Agent Store
+
+Not every team starts from a blank file. The Agent Store is a store of ready-made business agents
+you can try, customize and install into your own cloud, like an app store for agents:
+
+1. **Browse.** Agents for ten business areas: sales, support, finance, HR, legal, IT, knowledge,
+   collaboration, analytics and manufacturing.
+2. **Try.** A live entry runs in your browser on fictional sample data, with the same approval
+   step the installed agent has before it writes.
+3. **Customize.** Choose the approval rule, the tone, the language and the systems it connects to.
+4. **Install.** Every entry is a complete Agent Workspace project in this repository, in
+   [`use-cases/<slug>/`](use-cases/README.md), [`tests/gallery/<slug>/`](tests/gallery/README.md)
+   or [`examples/<id>/`](examples/README.md). Copy it into a project of your own, run it with
+   `aw dev`, connect it to your systems and deploy it to your own servers.
+
+The preview runs at <https://store-staging.indx.jp>. The store itself is an Agent Workspace app in
+[`examples/store/`](examples/store/), and its catalog is [`examples/store/catalog/`](examples/store/catalog/).
+The ten agents behind the [enterprise use-case gallery](https://docs.agentworkspace.indx.jp/tutorials)
+come with a tutorial each that builds the agent step by step, and the
+[Agent Store guide](https://docs.agentworkspace.indx.jp/features/agent-store) explains how an entry
+goes from the catalog to your cloud.
 
 ### The part that is fun
 
@@ -145,7 +192,9 @@ the key commands for each shell, and that a key is never committed.
 
 ### What you can do next
 
-The documentation follows one path in seven chapters, and each one ends where the next begins.
+The documentation follows one path in seven chapters. Read them in order: each one ends with
+something working and a link to the next, and chapter 7 is optional. The quickstart above is the
+start of chapter 1.
 
 | I want to…                                        | Go to                                                                                      |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -157,6 +206,7 @@ The documentation follows one path in seven chapters, and each one ends where th
 | Run it for a team: users, keys, models, runtimes  | [Chapter 6: Run it for your team](https://docs.agentworkspace.indx.jp/path/operate)        |
 | Move it to another agent platform                 | [Chapter 7: Run it on other platforms](https://docs.agentworkspace.indx.jp/path/platforms) |
 | Build a complete business agent, step by step     | [Tutorials](https://docs.agentworkspace.indx.jp/tutorials)                                 |
+| Start from a ready-made business agent            | [Agent Store](https://docs.agentworkspace.indx.jp/features/agent-store)                    |
 
 ## Architecture
 
@@ -205,6 +255,7 @@ The [self-hosting guide](https://docs.agentworkspace.indx.jp/building/self-hosti
 wizard, ports, API keys and teardown. Deploy guides for operators:
 
 - [Single VM with Docker Compose](docs/40-operate/deploy/single-vm.md)
+- [Google Cloud Run with `aw deploy`](docs/40-operate/deploy/gcp-cloudrun.md) (no Terraform to write)
 - [Small GCP deployment with Terraform](infra/terraform/gcp-small/README.md)
 - [Kubernetes with Helm](docs/40-operate/deploy/kubernetes.md)
 - [Azure Container Apps preview environment](docs/40-operate/deploy/azure-container-apps.md)
@@ -221,6 +272,7 @@ wizard, ports, API keys and teardown. Deploy guides for operators:
 | `@indx-workspace/embedded`  | Local runtime: web, gateway and runner in one Node process.             |
 | `@indx-workspace/create`    | `npm create @indx-workspace`: project generator.                        |
 | `@indx-workspace/platforms` | PlatformTarget port and conformance kit for agent-platform translators. |
+| `@indx-workspace/app`       | App kit for portal apps: `defineApp`, `defineResource`, routes, tables. |
 
 ## Documentation
 

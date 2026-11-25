@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { importSkillWithId, patchSkillWithId, publishSkillRevisionWithId } from './service';
 import { b64, importBody, runSh, skillMd } from './service-storage-fixture.test-support';
-import { walkFiles } from './tree';
+import { listAll } from '@agent-workspace/core/storage/streams';
 
 import type { RowsWorldFactory } from './service-storage-fixture.test-support';
 export function registerRevisionRowsTests(rowsWorld: RowsWorldFactory): void {
@@ -41,8 +41,8 @@ export function registerRevisionRowsTests(rowsWorld: RowsWorldFactory): void {
       '.skills/dup@2/SKILL.md': skillMd('C'),
       '.skills/dup@2/scripts/run.sh': runSh('C'),
     });
-    expect(await walkFiles(shared, 'skills')).toEqual([]);
-    expect(await walkFiles(shared, 'skill-revisions')).toEqual([]);
+    expect(await listAll(shared, 'skills')).toEqual([]);
+    expect(await listAll(shared, 'skill-revisions')).toEqual([]);
   });
 
   // @story US-STO-08

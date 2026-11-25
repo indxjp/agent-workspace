@@ -1,7 +1,9 @@
 // Builds the two public sites into dist/sites/, the asset directories the Cloudflare Workers in
 // infra/cloudflare/ serve:
-//   dist/sites/lp    sites/lp/ as it is, without _partials/ (lp.agentworkspace.indx.jp); the
-//                    build refuses a page whose shared chrome drifted from the partials
+//   dist/sites/lp    sites/lp/ without _partials/ and _i18n/ (lp.agentworkspace.indx.jp), each
+//                    page with its Agent Store slots filled from the store catalog, and its
+//                    Japanese copy under ja/; the build refuses a page whose shared chrome drifted
+//                    from the partials or that has an English string with no Japanese one
 //   dist/sites/docs  a static `mint export` of docs/sdk/site (docs.agentworkspace.indx.jp)
 // Usage: node scripts/sites/build.mjs [lp|docs]   (no argument builds both)
 import { execFileSync } from 'node:child_process';
@@ -20,6 +22,8 @@ import process from 'node:process';
 import { windowsCommandLine } from '../release/pack-packages.mjs';
 import { syncSite } from './chrome.mjs';
 import { siteDiscoveryFiles } from './discovery.mjs';
+import { translateSite, withAlternates } from './i18n.mjs';
+import { renderSlots } from './store-data.mjs';
 
 const MINT_VERSION = '4.2.985';
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -42,7 +46,20 @@ function buildLp() {
   mkdirSync(dir, { recursive: true });
   // og.png is the social card every page's og:image points at; the docs site reuses it.
   const src = join(ROOT, 'sites', 'lp');
-  cpSync(src, dir, { recursive: true, filter: (from) => from !== join(src, '_partials') });
+  const sources = new Set([join(src, '_partials'), join(src, '_i18n')]);
+  cpSync(src, dir, { recursive: true, filter: (from) => !sources.has(from) });
+  const japanese = translateSite();
+  const missing = [...japanese.missing].map(([page, keys]) => `${page}: ${String(keys.length)}`);
+  if (missing.length > 0 || japanese.stale.length > 0)
+    throw new Error(
+      `sites/lp/_i18n/ja is out of date (node scripts/sites/i18n.mjs --missing lists what to add):\n${[...missing, ...japanese.stale].join('\n')}`,
+    );
+  mkdirSync(join(dir, 'ja'), { recursive: true });
+  for (const [page, ja] of japanese.pages) {
+    const en = readFileSync(join(src, page), 'utf8');
+    writeFileSync(join(dir, page), withAlternates(renderSlots(en, 'en'), page));
+    writeFileSync(join(dir, 'ja', page), withAlternates(renderSlots(ja, 'ja'), page));
+  }
 }
 
 function buildDocs() {

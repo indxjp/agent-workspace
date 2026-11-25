@@ -5,8 +5,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BUILTIN_IMPORTS,
+  BUILTIN_SKILL_PACKAGE,
   RUN_SKILL_SCRIPT_INPUT_JSON_SCHEMA,
+  SKILL_SCRIPT_INPUT_ENV,
   SKILL_SCRIPT_LIMITS,
+  builtinImportHook,
   executeRunSkillScript,
   parseRunSkillScriptInput,
   runSkillScript,
@@ -15,7 +19,9 @@ import {
   type SkillScriptHost,
   type SkillScriptSetup,
 } from './skill-script.js';
+import { engineFrameBuilder } from './frames.js';
 import type { EngineRunRequest } from './port.js';
+import { createToolAnswers, type ToolAnswers } from './tool-answers.js';
 
 const CONFIG = '.engine-config';
 
@@ -45,10 +51,22 @@ function fakeHost(
     readonly realpaths?: Readonly<Record<string, string>>;
     readonly existing?: readonly string[];
     readonly exec?: () => Promise<{ stdout: string; stderr: string }>;
+    readonly makeDirectory?: (path: string) => Promise<void>;
+    /** Paths whose `realpath` fails with something other than a missing file. */
+    readonly unreadable?: readonly string[];
   } = {},
-): { readonly host: SkillScriptHost; readonly calls: Recorded[]; readonly removed: string[] } {
+): {
+  readonly host: SkillScriptHost;
+  readonly calls: Recorded[];
+  readonly removed: string[];
+  readonly made: string[];
+  readonly written: { readonly path: string; readonly content: string }[];
+} {
   const calls: Recorded[] = [];
   const removed: string[] = [];
+  const made: string[] = [];
+  const written: { path: string; content: string }[] = [];
+  let scratches = 0;
   const existing = new Set(
     options.existing ?? [
       '/work',
@@ -61,6 +79,8 @@ function fakeHost(
     realpath: (path) => {
       const mapped = options.realpaths?.[path];
       if (mapped !== undefined) return Promise.resolve(mapped);
+      if (options.unreadable?.includes(path) === true)
+        return Promise.reject(Object.assign(new Error('denied'), { code: 'EACCES' }));
       return existing.has(path)
         ? Promise.resolve(path)
         : Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
@@ -76,13 +96,24 @@ function fakeHost(
       return (options.exec ?? (() => Promise.resolve({ stdout: 'ok', stderr: '' })))();
     },
     path: posixPath,
-    makeScratchDirectory: () => Promise.resolve('/scratch/call-1'),
+    makeScratchDirectory: () => {
+      scratches += 1;
+      return Promise.resolve(`/scratch/call-${String(scratches)}`);
+    },
+    writeFile: (path, content) => {
+      written.push({ path, content });
+      return Promise.resolve();
+    },
+    makeDirectory: (path) => {
+      made.push(path);
+      return (options.makeDirectory ?? (() => Promise.resolve()))(path);
+    },
     removeDirectory: (path) => {
       removed.push(path);
       return Promise.resolve();
     },
   };
-  return { host, calls, removed };
+  return { host, calls, removed, made, written };
 }
 
 const SETUP: SkillScriptSetup = {
@@ -90,6 +121,7 @@ const SETUP: SkillScriptSetup = {
   skillsDirectory: `${CONFIG}/skills`,
   skills: [{ name: 'review', scripts: ['check.mjs'] }],
   writable: ['drafts'],
+  writableDirectories: ['drafts'],
 };
 
 function request(
@@ -137,7 +169,22 @@ describe('skillScriptSetup: when the tool is offered', () => {
       skillsDirectory: '.engine-config/skills',
       skills: [{ name: 'review', scripts: ['check.mjs'] }],
       writable: ['drafts', 'outputs'],
+      writableDirectories: ['drafts', 'outputs'],
     });
+  });
+
+  it('names a read-write file grant writable, but never a directory to make', () => {
+    const setup = skillScriptSetup(
+      request({
+        files: [
+          { kind: 'file', path: '.agent-memory/notes.md', access: 'read-write' },
+          { kind: 'directory', path: 'drafts', access: 'read-write' },
+        ],
+      }),
+      CONFIG,
+    );
+    expect(setup?.writable).toEqual(['.agent-memory/notes.md', 'drafts', 'outputs']);
+    expect(setup?.writableDirectories).toEqual(['drafts', 'outputs']);
   });
 
   it('lists only the direct, sorted, unique file names under scripts/ of each skill', () => {
@@ -281,7 +328,62 @@ describe('parseRunSkillScriptInput', () => {
       'skill',
       'script',
       'args',
+      'input',
     ]);
+    expect(RUN_SKILL_SCRIPT_INPUT_JSON_SCHEMA.properties.input).toMatchObject({
+      required: ['fromToolUse'],
+      additionalProperties: false,
+    });
+  });
+
+  it('accepts a reference to an earlier tool call, and reads null or no input as none', () => {
+    const call = { skill: 'review', script: 'check.mjs' };
+    expect(parseRunSkillScriptInput({ ...call, input: { fromToolUse: 'toolu_1' } })).toEqual({
+      ok: true,
+      input: { ...call, args: [], fromToolUse: 'toolu_1' },
+    });
+    expect(parseRunSkillScriptInput({ ...call, input: null, args: null })).toEqual({
+      ok: true,
+      input: { ...call, args: [] },
+    });
+  });
+
+  it.each([
+    ['a string input', 'toolu_1'],
+    ['an input array', ['toolu_1']],
+    ['an input with another key', { fromToolUse: 'toolu_1', path: '/etc/passwd' }],
+    ['an input without the id', {}],
+    ['a non-string id', { fromToolUse: 1 }],
+    ['an empty id', { fromToolUse: '' }],
+    ['an id with NUL', { fromToolUse: 'a\0b' }],
+    ['an oversize id', { fromToolUse: 'x'.repeat(257) }],
+  ])('refuses %s as unusable_arguments', (_name, input) => {
+    expect(parseRunSkillScriptInput({ skill: 'review', script: 'check.mjs', input })).toMatchObject(
+      { ok: false, refusal: 'unusable_arguments' },
+    );
+  });
+});
+
+describe('builtinImportHook', () => {
+  const sourceOf = (argument: string): string => {
+    const prefix = '--import=data:text/javascript,';
+    expect(argument.startsWith(prefix)).toBe(true);
+    return decodeURIComponent(argument.slice(prefix.length));
+  };
+
+  it('is one --import of a data: module that maps the built-in package to the placed skills', () => {
+    const source = sourceOf(builtinImportHook('/work/.engine-config/skills'));
+    expect(BUILTIN_SKILL_PACKAGE).toBe('@indx-workspace/builtin-skills');
+    expect(source).toContain(`const root="/work/.engine-config/skills";`);
+    expect(source).toContain(`const imports=${JSON.stringify(BUILTIN_IMPORTS)};`);
+    expect(source).toContain(`createHash(`);
+    expect(source).toContain(`const name="@indx-workspace/builtin-skills";`);
+    expect(source).toContain('registerHooks({resolve(');
+  });
+
+  it('carries the skills directory as a JSON string, whatever characters it holds', () => {
+    const root = String.raw`/work/it's "odd"\dir,%20`;
+    expect(sourceOf(builtinImportHook(root))).toContain(`const root=${JSON.stringify(root)};`);
   });
 });
 
@@ -303,6 +405,7 @@ describe('runSkillScript', () => {
           '--allow-fs-read=/scratch/call-1',
           '--allow-fs-write=/scratch/call-1',
           '--allow-fs-write=/work/drafts',
+          builtinImportHook('/work/.engine-config/skills'),
           '/work/.engine-config/skills/review/scripts/check.mjs',
           'a.docx',
           '--flag',
@@ -313,6 +416,73 @@ describe('runSkillScript', () => {
       },
     ]);
     expect(removed).toEqual(['/scratch/call-1']);
+  });
+
+  it('makes every writable directory before the process starts, so a missing outputs/ is a folder to Node', async () => {
+    const order: string[] = [];
+    const { host, made } = fakeHost({
+      makeDirectory: (path) => {
+        order.push(`mkdir ${path}`);
+        return Promise.resolve();
+      },
+      exec: () => {
+        order.push('exec');
+        return Promise.resolve({ stdout: 'ok', stderr: '' });
+      },
+    });
+    await runSkillScript(
+      host,
+      { ...SETUP, writable: ['drafts', 'outputs'], writableDirectories: ['drafts', 'outputs'] },
+      { skill: 'review', script: 'check.mjs', args: [] },
+    );
+    expect(made).toEqual(['/work/drafts', '/work/outputs']);
+    expect(order).toEqual(['mkdir /work/drafts', 'mkdir /work/outputs', 'exec']);
+  });
+
+  it('leaves a writable directory that cannot be made to the script, and still runs it', async () => {
+    const { host, calls } = fakeHost({
+      makeDirectory: () => Promise.reject(Object.assign(new Error('exists'), { code: 'EEXIST' })),
+    });
+    const outcome = await runSkillScript(
+      host,
+      { ...SETUP, writable: ['outputs'], writableDirectories: ['outputs'] },
+      { skill: 'review', script: 'check.mjs', args: [] },
+    );
+    expect(outcome).toEqual({ ok: true, exitCode: 0, stdout: 'ok', stderr: '' });
+    expect(calls[0]?.args).toContain('--allow-fs-write=/work/outputs');
+  });
+
+  it('never makes a folder for a missing read-write file grant, though the script may write it', async () => {
+    const { host, calls, made } = fakeHost();
+    await runSkillScript(
+      host,
+      {
+        ...SETUP,
+        writable: ['.agent-memory/notes.md', 'outputs'],
+        writableDirectories: ['outputs'],
+      },
+      { skill: 'review', script: 'check.mjs', args: [] },
+    );
+    expect(made).toEqual(['/work/outputs']);
+    expect(calls[0]?.args).toContain('--allow-fs-write=/work/.agent-memory/notes.md');
+  });
+
+  it('makes nothing under a parent that resolves outside the run directory, or cannot be resolved', async () => {
+    const { host, calls, made } = fakeHost({
+      realpaths: { '/work/linked': '/etc', '/work/inside': '/work/inside' },
+      unreadable: ['/work/locked'],
+    });
+    await runSkillScript(
+      host,
+      {
+        ...SETUP,
+        writable: ['linked/out', 'locked/out', 'inside/out'],
+        writableDirectories: ['linked/out', 'locked/out', 'inside/out'],
+      },
+      { skill: 'review', script: 'check.mjs', args: [] },
+    );
+    expect(made).toEqual(['/work/inside/out']);
+    expect(calls).toHaveLength(1);
   });
 
   it('never puts a read-only path in --allow-fs-write', async () => {
@@ -536,7 +706,252 @@ describe('runSkillScript', () => {
   });
 });
 
+describe('runSkillScript with a referenced tool answer (ADR-0176)', () => {
+  const frames = engineFrameBuilder('demo');
+
+  function answersHolding(
+    ...held: readonly { id: string; name: string; output: string; isError?: boolean }[]
+  ): ToolAnswers {
+    const answers = createToolAnswers({ waitMs: 0, maxRetainedBytes: 1024 * 1024 });
+    for (const answer of held) {
+      answers.observe(
+        frames.toolCall(
+          {
+            frame: 'agent.tool.call',
+            toolCallId: answer.id,
+            name: answer.name,
+            kind: 'mcp',
+            input: {},
+          },
+          null,
+        ),
+      );
+      answers.observe(
+        frames.toolResult(
+          {
+            frame: 'agent.tool.result',
+            toolCallId: answer.id,
+            status: 'completed',
+            output: answer.output,
+            isError: answer.isError ?? false,
+          },
+          null,
+        ),
+      );
+    }
+    return answers;
+  }
+
+  const CALL = { skill: 'review', script: 'check.mjs', args: ['--top', '5'] };
+
+  it('writes the answer into a read-only directory of the call and names it in SKILL_SCRIPT_INPUT', async () => {
+    const { host, calls, removed, written } = fakeHost();
+    const answers = answersHolding({
+      id: 'toolu_1',
+      name: 'mcp__s__public_source',
+      output: '{"a":1}',
+    });
+    const outcome = await runSkillScript(
+      host,
+      SETUP,
+      { ...CALL, fromToolUse: 'toolu_1' },
+      SKILL_SCRIPT_LIMITS,
+      undefined,
+      answers,
+    );
+    expect(outcome).toEqual({ ok: true, exitCode: 0, stdout: 'ok', stderr: '' });
+    expect(written).toEqual([{ path: '/scratch/call-2/tool-answer.txt', content: '{"a":1}' }]);
+    expect(calls[0]?.args).toEqual([
+      '--permission',
+      '--allow-fs-read=/work',
+      '--allow-fs-read=/scratch/call-1',
+      '--allow-fs-read=/scratch/call-2',
+      '--allow-fs-write=/scratch/call-1',
+      '--allow-fs-write=/work/drafts',
+      builtinImportHook('/work/.engine-config/skills'),
+      '/work/.engine-config/skills/review/scripts/check.mjs',
+      '--top',
+      '5',
+    ]);
+    expect(calls[0]?.args.filter((arg) => arg.includes('call-2'))).toEqual([
+      '--allow-fs-read=/scratch/call-2',
+    ]);
+    expect(calls[0]?.env).toEqual({
+      TMPDIR: '/scratch/call-1',
+      [SKILL_SCRIPT_INPUT_ENV]: '/scratch/call-2/tool-answer.txt',
+    });
+    expect(removed).toEqual(['/scratch/call-1', '/scratch/call-2']);
+  });
+
+  it('removes both directories when writing the answer fails, and propagates the failure', async () => {
+    const { host, calls, removed } = fakeHost();
+    const failing: typeof host = {
+      ...host,
+      writeFile: () => Promise.reject(new Error('disk full')),
+    };
+    await expect(
+      runSkillScript(
+        failing,
+        SETUP,
+        { ...CALL, fromToolUse: 'toolu_1' },
+        SKILL_SCRIPT_LIMITS,
+        undefined,
+        answersHolding({ id: 'toolu_1', name: 't', output: 'x' }),
+      ),
+    ).rejects.toThrow('disk full');
+    expect(calls).toEqual([]);
+    expect(removed).toEqual(['/scratch/call-1', '/scratch/call-2']);
+  });
+
+  it('removes both directories after a timeout', async () => {
+    const { host, removed } = fakeHost({
+      exec: () => Promise.reject(Object.assign(new Error('killed'), { killed: true })),
+    });
+    const outcome = await runSkillScript(
+      host,
+      SETUP,
+      { ...CALL, fromToolUse: 'toolu_1' },
+      SKILL_SCRIPT_LIMITS,
+      undefined,
+      answersHolding({ id: 'toolu_1', name: 't', output: 'x' }),
+    );
+    expect(outcome).toMatchObject({ ok: false, refusal: 'timeout' });
+    expect(removed).toEqual(['/scratch/call-1', '/scratch/call-2']);
+  });
+
+  it('still removes the input directory when removing the scratch directory fails', async () => {
+    const { host, removed } = fakeHost();
+    const stuck: typeof host = {
+      ...host,
+      removeDirectory: (path) =>
+        path === '/scratch/call-1' ? Promise.reject(new Error('busy')) : host.removeDirectory(path),
+    };
+    await expect(
+      runSkillScript(
+        stuck,
+        SETUP,
+        { ...CALL, fromToolUse: 'toolu_1' },
+        SKILL_SCRIPT_LIMITS,
+        undefined,
+        answersHolding({ id: 'toolu_1', name: 't', output: 'x' }),
+      ),
+    ).rejects.toThrow('busy');
+    expect(removed).toEqual(['/scratch/call-2']);
+  });
+
+  it('refuses an id this run received no answer to, naming the answers it holds, and runs nothing', async () => {
+    const { host, calls } = fakeHost();
+    const held = Array.from({ length: 22 }, (_, index) => ({
+      id: `t${String(index)}`,
+      name: index === 21 ? '' : 'lookup',
+      output: 'x',
+    }));
+    const outcome = await runSkillScript(
+      host,
+      SETUP,
+      { ...CALL, fromToolUse: 'toolu_other_run' },
+      SKILL_SCRIPT_LIMITS,
+      undefined,
+      answersHolding(...held),
+    );
+    expect(outcome).toMatchObject({ ok: false, refusal: 'unknown_tool_answer' });
+    const reason = outcome.ok ? '' : outcome.reason;
+    expect(reason).toContain('"toolu_other_run"');
+    expect(reason).toContain('t2 (lookup)');
+    expect(reason).toContain('t21 (unnamed)');
+    expect(reason).not.toContain('t1 (');
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a reference in a run that has received no answer, or keeps no record', async () => {
+    const { host } = fakeHost();
+    for (const answers of [answersHolding(), undefined]) {
+      const outcome = await runSkillScript(
+        host,
+        SETUP,
+        { ...CALL, fromToolUse: 'toolu_1' },
+        SKILL_SCRIPT_LIMITS,
+        undefined,
+        answers,
+      );
+      expect(outcome).toEqual({
+        ok: false,
+        refusal: 'unknown_tool_answer',
+        reason:
+          'this run received no answer to a tool call "toolu_1". It has received no tool answer yet.',
+      });
+    }
+  });
+
+  it('refuses an error answer and one over maxInputBytes as unusable_tool_answer', async () => {
+    const { host, calls } = fakeHost();
+    const answers = answersHolding(
+      { id: 'err', name: 'lookup', output: 'not found', isError: true },
+      { id: 'big', name: 'lookup', output: 'éé' },
+    );
+    const refused = async (id: string) =>
+      runSkillScript(
+        host,
+        SETUP,
+        { ...CALL, fromToolUse: id },
+        { ...SKILL_SCRIPT_LIMITS, maxInputBytes: 3 },
+        undefined,
+        answers,
+      );
+    expect(await refused('err')).toMatchObject({
+      ok: false,
+      refusal: 'unusable_tool_answer',
+      reason: expect.stringContaining('is an error') as unknown,
+    });
+    expect(await refused('big')).toMatchObject({
+      ok: false,
+      refusal: 'unusable_tool_answer',
+      reason: expect.stringContaining('is 4 bytes; a script may be handed at most 3') as unknown,
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('checks the skill and the script before it reads a reference', async () => {
+    const { host } = fakeHost();
+    const outcome = await runSkillScript(
+      host,
+      SETUP,
+      { skill: 'other', script: 'check.mjs', args: [], fromToolUse: 'toolu_1' },
+      SKILL_SCRIPT_LIMITS,
+      undefined,
+      answersHolding(),
+    );
+    expect(outcome).toMatchObject({ ok: false, refusal: 'unknown_skill' });
+  });
+});
+
 describe('executeRunSkillScript', () => {
+  it('hands the run’s answers to the call', async () => {
+    const { host, written } = fakeHost();
+    const answers = createToolAnswers({ waitMs: 0, maxRetainedBytes: 1024 });
+    answers.observe(
+      engineFrameBuilder('demo').toolResult(
+        {
+          frame: 'agent.tool.result',
+          toolCallId: 'c',
+          status: 'completed',
+          output: 'v',
+          isError: false,
+        },
+        null,
+      ),
+    );
+    const result = await executeRunSkillScript(
+      host,
+      SETUP,
+      { skill: 'review', script: 'check.mjs', input: { fromToolUse: 'c' } },
+      undefined,
+      answers,
+    );
+    expect(result.isError).toBe(false);
+    expect(written).toEqual([{ path: '/scratch/call-2/tool-answer.txt', content: 'v' }]);
+  });
+
   it('turns a refusal into error text that names it, and an exit 0 into plain text', async () => {
     const { host } = fakeHost();
     const refused = await executeRunSkillScript(host, SETUP, { skill: 'review', script: '../x' });
@@ -551,6 +966,11 @@ describe('executeRunSkillScript', () => {
   });
 
   it('reports the limits it applies', () => {
-    expect(SKILL_SCRIPT_LIMITS).toMatchObject({ timeoutMs: 120_000, maxOutputBytes: 1024 * 1024 });
+    expect(SKILL_SCRIPT_LIMITS).toMatchObject({
+      timeoutMs: 120_000,
+      maxOutputBytes: 1024 * 1024,
+      maxInputBytes: 2 * 1024 * 1024,
+    });
+    expect(SKILL_SCRIPT_INPUT_ENV).toBe('SKILL_SCRIPT_INPUT');
   });
 });

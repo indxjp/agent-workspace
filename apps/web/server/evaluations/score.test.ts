@@ -2,7 +2,15 @@ import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { describe, expect, it } from 'vitest';
 
 import { assistantSays, ORDER_STATUS_FRAMES, toolCall, toolResult } from './fixtures';
-import { checkCase, finalAnswer, pausedCall, score, toolCalls, turnAnswer } from './score';
+import {
+  checkCase,
+  finalAnswer,
+  pausedCall,
+  score,
+  toolCallLog,
+  toolCalls,
+  turnAnswer,
+} from './score';
 
 const answer = turnAnswer(ORDER_STATUS_FRAMES);
 const tools = toolCalls(ORDER_STATUS_FRAMES);
@@ -81,6 +89,33 @@ describe('toolCalls counts successful calls only (EVL-01)', () => {
   });
 });
 
+describe('toolCallLog keeps every call with how it ended (ADR-0175)', () => {
+  it('logs a completed, a failed, an errored and an unanswered call in call order', () => {
+    const frames = [
+      toolCall('ok_tool', 'c1'),
+      toolCall('failed_tool', 'c2'),
+      toolResult('c2', 'failed'),
+      toolResult('c1'),
+      toolCall('refused_tool', 'c3'),
+      toolResult('c3', 'error'),
+      toolCall('unanswered_tool', 'c4'),
+      toolResult('ghost'),
+    ];
+    expect(toolCallLog(frames).map(({ name, status }) => [name, status])).toEqual([
+      ['ok_tool', 'completed'],
+      ['failed_tool', 'failed'],
+      ['refused_tool', 'error'],
+      ['unanswered_tool', 'no_result'],
+    ]);
+    expect(toolCallLog(frames)[0]?.input).toEqual({ orderNumber: '1042' });
+  });
+
+  it('counts the last result for an id', () => {
+    const frames = [toolCall('retried', 'c1'), toolResult('c1', 'error'), toolResult('c1')];
+    expect(toolCallLog(frames).map((call) => call.status)).toEqual(['completed']);
+  });
+});
+
 describe('pausedCall (issue #1569)', () => {
   it('reads the name and the input of the call a run paused on', () => {
     const input = { file_path: 'outputs/plan.json', content: '{}' };
@@ -98,6 +133,29 @@ describe('pausedCall (issue #1569)', () => {
     ]);
     expect(pausedCall(null)).toEqual([]);
     expect(pausedCall(undefined)).toEqual([]);
+  });
+});
+
+describe('checkCase tool names, with or without the engine prefix', () => {
+  const calls = [{ name: 'mcp__agent-workspace__search_files', input: { query: '宿泊費' } }];
+
+  it('matches a bare name to the prefixed call Claude reports', () => {
+    expect(checkCase({ tool: 'search_files' }, '', calls, null)).toEqual([]);
+    expect(
+      checkCase({ tool: 'search_files', toolInput: { query: '宿泊費' } }, '', calls, null),
+    ).toEqual([]);
+  });
+
+  it('still matches the prefixed name exactly, and a bare call by its bare name', () => {
+    expect(checkCase({ tool: 'mcp__agent-workspace__search_files' }, '', calls, null)).toEqual([]);
+    expect(checkCase({ tool: 'lookup' }, '', [{ name: 'lookup', input: {} }], null)).toEqual([]);
+  });
+
+  it('matches neither a partial suffix nor a single-underscore prefix', () => {
+    expect(checkCase({ tool: 'files' }, '', calls, null)).toEqual(['tool: files was not called']);
+    expect(
+      checkCase({ tool: 'search_files' }, '', [{ name: 'server_search_files', input: {} }], null),
+    ).toEqual(['tool: search_files was not called']);
   });
 });
 

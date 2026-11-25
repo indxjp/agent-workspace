@@ -1,0 +1,3 @@
+Defect ID,Found on,Function,What happened,Cause,Status
+BUG-0311,2026-09-02,awardPoints,A 199 yen purchase earned 2 points,The remainder was rounded instead of dropped,Fixed (1 point as in EX-03)
+BUG-0327,2026-10-14,awardPoints,A gold purchase of 300000 yen earned 6000 points,The cap was not checked after the multiplier,Fixed (5000 points as in EX-06)

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "104674b431648f989f61b8fae8a40e6e7669a5f730c5f2d506d3bf80dcd25309",
+        "agents/code-review.md": "4fe1f2945f84a6fbc4e8ba2369020afdd0e81131d36e16a8a4c8d0d56be88dae",
+        "agents/code-review.ts": "3d3e7e5db0ff1cd5eb8777a4366ced7b684cdf67ac7a193c0f578c9419fa141a",
+        "evals/code-review.yaml": "c6b8dbb1403bea52f6bbd7f744295f6f2d213664f246433e08205e1fb2486716",
+        "skills/code-review/SKILL.md": "7befd9a7a2549368dd68151b18621472fe375205df771d135a87ee99cc042e6c",
+        "surfaces/main.ts": "c04dffede034aa36745ad9b943aeaa27630c1b2cc7e18ceec7d9acc7256cc59a"
+      },
+      "edits": []
+    }
+  }
+}

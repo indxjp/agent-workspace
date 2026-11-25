@@ -4,13 +4,20 @@
  * This is deliberately neither a tenant session nor a workspace-selection token. It carries no
  * workspace, role, user id, or grant; it only preserves the identity provider facts the callback
  * already verified until the invitee presents the independently issued invitation token. A
- * distinct version tag makes cross-use with either other signed token fail closed.
+ * distinct version tag makes cross-use with either other signed token fail closed. The format is
+ * the one signed-token codec's (`./core/signed-token.ts`); the claims are checked here.
  */
 
 import { systemClock } from '../clock.ts';
-import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
+import { derivePurposeKey } from './core/key-ring.ts';
+import {
+  importHmacKey,
+  openSignedToken,
+  sealSignedToken,
+  signedTokenRefusal,
+  type SignedTokenFailure,
+} from './core/signed-token.ts';
 
-const encoder = new TextEncoder();
 const TOKEN_VERSION = 'awinv1';
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const CLAIM_NAMES = ['email', 'issuer', 'subject', 'iat', 'exp'] as const;
@@ -36,52 +43,24 @@ export type InvitationIdentityVerifyResult =
   | { readonly ok: true; readonly claims: InvitationIdentityClaims }
   | { readonly ok: false; readonly reason: string };
 
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
-}
-
-function base64UrlDecode(text: string): Uint8Array<ArrayBuffer> | null {
-  if (!/^[A-Za-z0-9_-]+$/u.test(text)) return null;
-  const padding = (4 - (text.length % 4)) % 4;
-  const padded = text.replace(/-/gu, '+').replace(/_/gu, '/') + '='.repeat(padding);
-  let binary: string;
-  try {
-    binary = atob(padded);
-  } catch {
-    return null;
-  }
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function importHmacKey(bytes: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
-    'sign',
-    'verify',
-  ]);
-}
-
 /** This token's own key, derived from the secret (part 06 step 5, `./core/key-ring.ts`). */
 async function purposeKey(secret: string): Promise<CryptoKey> {
-  return importHmacKey(await derivePurposeKey(crypto.subtle, secret, 'invitation-identity'));
+  return importHmacKey(
+    crypto.subtle,
+    await derivePurposeKey(crypto.subtle, secret, 'invitation-identity'),
+  );
 }
 
-/** The purpose key, then the raw secret every token was signed with before step 5 (roll-over). */
-async function verifiesUnderAnyKey(
-  secret: string,
-  signature: Uint8Array<ArrayBuffer>,
-  signed: Uint8Array<ArrayBuffer>,
-): Promise<boolean> {
-  for (const key of verificationKeys(
-    () => purposeKey(secret),
-    () => importHmacKey(encoder.encode(secret)),
-  )) {
-    if (await crypto.subtle.verify('HMAC', await key(), signature, signed)) return true;
+/** The codec's refusal in this module's words: its own for the token's shape, the codec's for the rest. */
+function refusalFor(failure: SignedTokenFailure): { readonly ok: false; readonly reason: string } {
+  switch (failure.kind) {
+    case 'parts-count':
+      return { ok: false, reason: 'malformed invitation identity token' };
+    case 'version':
+      return { ok: false, reason: 'invitation identity token version is not accepted' };
+    default:
+      return { ok: false, reason: signedTokenRefusal(failure) };
   }
-  return false;
 }
 
 export async function mintInvitationIdentityToken(
@@ -101,14 +80,7 @@ export async function mintInvitationIdentityToken(
     iat,
     exp: iat + INVITATION_IDENTITY_TTL_SECONDS,
   };
-  const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
-  const signed = `${TOKEN_VERSION}.${payload}`;
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    await purposeKey(secret),
-    encoder.encode(signed),
-  );
-  return `${signed}.${base64UrlEncode(new Uint8Array(signature))}`;
+  return sealSignedToken(crypto.subtle, await purposeKey(secret), TOKEN_VERSION, claims);
 }
 
 /** Verify signature before parsing, then positively validate every claim and the bounded expiry. */
@@ -120,33 +92,14 @@ export async function verifyInvitationIdentityToken(
   if (typeof token !== 'string' || token.length === 0) {
     return { ok: false, reason: 'no invitation identity cookie on the request' };
   }
-  const parts = token.split('.');
-  if (parts.length !== 3) return { ok: false, reason: 'malformed invitation identity token' };
-  const [version, payloadPart, signaturePart] = parts;
-  if (version !== TOKEN_VERSION || payloadPart === undefined || signaturePart === undefined) {
-    return { ok: false, reason: 'invitation identity token version is not accepted' };
-  }
-  const signature = base64UrlDecode(signaturePart);
-  if (signature === null) return { ok: false, reason: 'signature segment is not base64url' };
-  const signatureValid = await verifiesUnderAnyKey(
-    secret,
-    signature,
-    encoder.encode(`${version}.${payloadPart}`),
+  const opened = await openSignedToken(
+    crypto.subtle,
+    await purposeKey(secret),
+    TOKEN_VERSION,
+    token,
   );
-  if (!signatureValid) return { ok: false, reason: 'signature does not verify' };
-
-  const payloadBytes = base64UrlDecode(payloadPart);
-  if (payloadBytes === null) return { ok: false, reason: 'payload segment is not base64url' };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder().decode(payloadBytes));
-  } catch {
-    return { ok: false, reason: 'payload is not JSON' };
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return { ok: false, reason: 'payload is not a JSON object' };
-  }
-  const claims = parsed as Record<string, unknown>;
+  if (!opened.ok) return refusalFor(opened.failure);
+  const claims = opened.payload;
   if (
     Object.keys(claims).length !== CLAIM_NAMES.length ||
     CLAIM_NAMES.some((name) => !Object.hasOwn(claims, name))

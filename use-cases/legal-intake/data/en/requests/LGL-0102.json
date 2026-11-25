@@ -1,0 +1,17 @@
+{
+  "form": "Legal request form",
+  "id": "LGL-0102",
+  "submitted_at": "2026-11-20T11:05:00+09:00",
+  "requester": {
+    "name": "Yu Hiruma",
+    "department": "Quality Assurance",
+    "email": "hiruma@yukimi-seiko.example"
+  },
+  "type": "Dispute or claim",
+  "title": "A lawyer for Amane Foods sent a letter claiming damages",
+  "counterparty": "Amane Foods",
+  "details": "The packing machine we delivered last year stopped last month, and a lawyer acting for Amane Foods sent a letter asking us to pay for the production they lost. The letter asks for an answer within two weeks of receipt. Quality Assurance is still looking into the cause of the breakdown.",
+  "urgent": true,
+  "urgent_reason": "The letter sets a deadline for our answer",
+  "attachments": ["Amane_Foods_letter.pdf"]
+}

@@ -24,15 +24,15 @@ import type { Logger } from '@agent-workspace/core/telemetry';
 
 import type { IdGenerator } from '../ids';
 import type { EvaluationRunStatus } from '@indx-workspace/contracts/evaluations';
-import type { MembershipRoleName } from '@indx-workspace/contracts/team';
 import type { ProjectPolicyLimits } from '@indx-workspace/contracts/policy-ceiling';
 import type { RunFeedbackRating, RunFeedbackRequest } from '@indx-workspace/contracts/feedback';
 import type { RunStartProblemCode } from '@indx-workspace/contracts/runs';
 import type { SurfaceLimitProblemCode } from '@indx-workspace/contracts/surfaces';
 import type { CeilingFor } from '../agents';
 import type { DailyCostCap } from '../usage/daily-cost';
+import type { DemoApprovedWrites } from './demo-approved-writes';
 import type { DemoRunGate } from './demo-run-gate';
-import type { PrincipalKind, TokenScope, Via } from '../identity';
+import type { Caller } from '../identity';
 import type { ResolvedAttachment } from './attachments';
 import type { SseEvent } from './sse';
 import type { RunRecord, RunStore } from './store';
@@ -59,42 +59,33 @@ export interface AgentFeedbackRow {
   readonly events: readonly SseEvent[];
 }
 
-/** Who is making the request, already resolved to one workspace (spec §25 multi-tenant isolation). */
-export interface RunPrincipal {
-  /** The principal that acted. */
-  readonly principalId: string;
-  /**
-   * The principal that owns what this caller writes and that own/other is decided against
-   * (`rbac/principal.ts`'s `ownerPrincipalId`). Equal to `principalId` except for a local
-   * runtime key, which writes for the member it acts for (issue #509, S1-24). Every composition
-   * root sets it, so it is required (`rbac/core/owner-principal.ts`).
-   */
-  readonly ownerPrincipalId: string;
-  readonly userId: string | null;
-  readonly workspaceId: string;
-  /** Present for cookie/API-key identities that need an owner/admin-only operation. */
-  readonly role?: MembershipRoleName;
-  /**
-   * The attenuation a browser-token credential carries (issue #236, SDK-04, S-1), or `null` for a
-   * session or an API-key principal. `requireRunPermission` and `decideRunListAccess` (`./api.ts`)
-   * pass this straight through to `decide()`, whose scope grammar denies before §21's own table is
-   * even consulted; a session scope's row identity (its run must belong to that session) is a
-   * separate check at the row read, because `decide()` sees only the path and cannot know it.
-   *
-   * **Required, not optional.** An optional field lets a composition root that forgets it compile
-   * anyway, and a principal whose scope silently reads `undefined` reaches every run route with
-   * its minter's full width — the defect this field was added to prevent. Spelling `null` is the
-   * positive assertion that this credential carries no attenuation.
-   */
-  readonly scope: TokenScope | null;
-  /**
-   * Which verifier produced the principal and what kind it is. Optional so a fixture that predates
-   * the identity assertion compiles; absent means no caller identity can be signed (fails closed,
-   * `./caller.ts`).
-   */
-  readonly via?: Via;
-  readonly kind?: PrincipalKind;
-}
+/**
+ * Who is making the request, already resolved to one workspace (spec §25 multi-tenant isolation):
+ * the fields of the one {@link Caller} type a run route reads (part 06 step 9).
+ *
+ * - `ownerPrincipalId` is the principal that owns what this caller writes and that own/other is
+ *   decided against. Equal to `principalId` except for a local runtime key, which writes for the
+ *   member it acts for (issue #509, S1-24). Every composition root sets it, so it is required
+ *   (`rbac/core/owner-principal.ts`).
+ * - `scope` is the attenuation a browser-token credential carries (issue #236, SDK-04, S-1), or
+ *   `null` for a session or an API-key principal. `requireRunPermission` and `decideRunListAccess`
+ *   (`./api.ts`) pass it straight through to `decide()`, whose scope grammar denies before §21's
+ *   own table is even consulted; a session scope's row identity (its run must belong to that
+ *   session) is a separate check at the row read, because `decide()` sees only the path.
+ *   **Required, not optional.** An optional field lets a composition root that forgets it compile
+ *   anyway, and a principal whose scope silently reads `undefined` reaches every run route with
+ *   its minter's full width — the defect this field was added to prevent. Spelling `null` is the
+ *   positive assertion that this credential carries no attenuation.
+ * - `role` is present for cookie/API-key identities that need an owner/admin-only operation.
+ * - `via` and `kind` say which verifier produced the principal and what kind it is. Optional so a
+ *   fixture that predates the identity assertion compiles; absent means no caller identity can be
+ *   signed (fails closed, `./caller.ts`).
+ */
+export type RunPrincipal = Pick<
+  Caller,
+  'principalId' | 'ownerPrincipalId' | 'userId' | 'workspaceId' | 'scope'
+> &
+  Partial<Pick<Caller, 'role' | 'via' | 'kind'>>;
 
 /** The part of an agent a run route needs. The rest of §17's agent belongs to W1-CP-05. */
 export interface AgentRef {
@@ -418,6 +409,12 @@ export interface RunStartEnvironment {
    * `demo_expires_at` per start and no start is ever gated. Absent only where a test leaves it out.
    */
   readonly demoRunGate?: DemoRunGate;
+  /**
+   * The Agent Store demo's records stand-ins (ADR-0169): keep the calls an approval admitted, for a
+   * continuation, before it launches. The composition root always wires it; absent only where a
+   * test leaves it out.
+   */
+  readonly demoApprovedWrites?: DemoApprovedWrites;
   /** What a new run of the agent would use, for the composer (issue #393); `null` if unknown. */
   readonly describeRunTarget?: (
     workspaceId: string,

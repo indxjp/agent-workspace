@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * The dependency-cruiser half of `pnpm architecture:check`: ONE run of the real config over `apps`
- * and `packages`, with the violations listed in `.dependency-cruiser-known-violations.json`
+ * The dependency-cruiser half of `pnpm architecture:check`: ONE run of the real config over `apps`,
+ * `packages` and `use-cases`, with the violations listed in `.dependency-cruiser-known-violations.json`
  * ignored, that fails on
  *
  * - a violation the baseline does not list — exactly what `depcruise --ignore-known` fails on,
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 export const KNOWN_VIOLATIONS = '.dependency-cruiser-known-violations.json';
 
 export const REGENERATE_BASELINE =
-  'pnpm exec depcruise --config dependency-cruiser.config.mjs --output-type baseline apps packages > .dependency-cruiser-known-violations.json';
+  'pnpm exec depcruise --config dependency-cruiser.config.mjs --output-type baseline apps packages use-cases > .dependency-cruiser-known-violations.json';
 
 /**
  * @typedef {{ rule: { name: string; severity: string }; from: string; to: string }} Violation
@@ -81,6 +81,7 @@ async function main() {
       'json',
       'apps',
       'packages',
+      'use-cases',
     ],
     { cwd: repoRoot, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 },
   );

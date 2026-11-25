@@ -240,6 +240,8 @@ function splitRef(ref) {
 export function readXlsx(buffer) {
   const zip = readZip(buffer);
   const part = (name) => zip.get(name)?.toString('utf8') ?? '';
+  const dateStyles = dateStylesOf(part('xl/styles.xml'));
+  const date1904 = /<workbookPr\b[^>]*\sdate1904="(?:1|true)"/u.test(part('xl/workbook.xml'));
   const shared = [...part('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/gu)].map((match) =>
     textOf(match[1]),
   );
@@ -253,6 +255,8 @@ export function readXlsx(buffer) {
     const target = targets.get(attribute(match[0], 'r:id')) ?? '';
     const xml = part(target.startsWith('/') ? target.slice(1) : `xl/${target}`);
     const cells = {};
+    const dates = [];
+    const errors = [];
     let width = 0;
     let height = 0;
     for (const cell of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gu)) {
@@ -266,9 +270,17 @@ export function readXlsx(buffer) {
       else if (type === 'inlineStr') value = textOf(inner);
       else if (type === 'str') value = raw === undefined ? null : decode(raw);
       else if (type === 'b') value = raw === '1';
+      else if (type === 'e') value = raw === undefined ? null : decode(raw);
+      else if (type === 'd') value = raw === undefined ? null : decode(raw);
       else if (raw !== undefined) value = Number(raw);
       if (value === null || value === '') continue;
       cells[ref] = value;
+      if (type === 'e') errors.push(ref);
+      else if (
+        type === 'd' ||
+        (typeof value === 'number' && dateStyles[Number(attribute(` ${cell[1]}`, 's') ?? 0)])
+      )
+        dates.push(ref);
       const { column, row } = splitRef(ref);
       width = Math.max(width, column + 1);
       height = Math.max(height, row + 1);
@@ -289,9 +301,35 @@ export function readXlsx(buffer) {
           rows[row][column] = value;
       }
     }
-    return { name: attribute(match[0], 'name'), rows, merges, cells };
+    return { name: attribute(match[0], 'name'), rows, merges, cells, dates, errors };
   });
-  return { sheets };
+  return { sheets, date1904 };
+}
+
+/** Excel's built-in number formats that show a date or a time (CJK locales included). */
+const DATE_FORMAT_IDS = new Set([
+  14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51,
+  52, 53, 54, 55, 56, 57, 58,
+]);
+
+/**
+ * Whether each cell style (`<cellXfs>` index, a cell's `s`) shows its number as a date or time: a
+ * built-in date format, or a custom format code with a date or time token outside quoted text,
+ * escapes and `[...]` sections.
+ */
+function dateStylesOf(styles) {
+  const custom = new Map(
+    [...styles.matchAll(/<numFmt\b[^>]*>/gu)].map((match) => [
+      Number(attribute(match[0], 'numFmtId')),
+      attribute(match[0], 'formatCode') ?? '',
+    ]),
+  );
+  const xfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/u.exec(styles)?.[1] ?? '';
+  return [...xfs.matchAll(/<xf\b[^>]*>/gu)].map((match) => {
+    const id = Number(attribute(match[0], 'numFmtId') ?? 0);
+    const code = (custom.get(id) ?? '').replace(/"[^"]*"|\\.|\[[^\]]*\]/gu, '');
+    return DATE_FORMAT_IDS.has(id) || /[ymdhs]/iu.test(code);
+  });
 }
 
 /**

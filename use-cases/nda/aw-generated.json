@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "95756d38866c379b00673486660126ef69b4c34a4c89fd8ba381135ac6595382",
+        "agents/nda.md": "3448107691bdcfadf566f9242681854f4fc19eb1d66419c49f325edcd1374a3d",
+        "agents/nda.ts": "9d8ab33e2176f4c41f01e685e7d0577fa63138b8e45f9486f05797ab1b30cfbb",
+        "evals/nda.yaml": "ee1450c73c77e13c06d6281d013710c9725e9e20c1c24edc8652977baaecfe55",
+        "skills/nda/SKILL.md": "1e7d9d3487832ce1dca7565a46505e33fddeca29fede89f9edef43e7d2129e04",
+        "surfaces/main.ts": "07063e59f4f03a9a5f8576c7197c36960fc3ab31084d4d9afab730a7fe4ca1b8"
+      },
+      "edits": []
+    }
+  }
+}

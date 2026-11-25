@@ -1,5 +1,6 @@
 import { describe, it } from 'vitest';
 import { registerConcurrentRevisionsTests } from './service-storage-concurrent-revisions.test-support';
+import { registerDeleteRowsTests } from './service-storage-delete-rows.test-support';
 import {
   createRowsWorld,
   memoryFixture,
@@ -8,8 +9,6 @@ import {
   type Fixture,
 } from './service-storage-fixture.test-support';
 import { registerImportsTests } from './service-storage-imports.test-support';
-import { registerLegacyMovesTests } from './service-storage-legacy-moves.test-support';
-import { registerLegacyReadsTests } from './service-storage-legacy-reads.test-support';
 import { registerPublishingTests } from './service-storage-publishing.test-support';
 import { registerStorageReadsTests } from './service-storage-reads.test-support';
 import { registerRevisionRowsTests } from './service-storage-revisions.test-support';
@@ -32,9 +31,8 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
     registerStorageReadsTests(rowsWorld);
     registerStorageWritesTests(rowsWorld);
     registerRevisionRowsTests(rowsWorld);
-    registerLegacyMovesTests(rowsWorld);
     registerConcurrentRevisionsTests(rowsWorld);
-    registerLegacyReadsTests(rowsWorld);
+    registerDeleteRowsTests(rowsWorld);
   });
 }
 defineSuite('in-memory catalog', memoryFixture, true);

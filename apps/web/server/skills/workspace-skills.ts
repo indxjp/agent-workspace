@@ -1,6 +1,6 @@
 /**
  * The skills of a workspace, as another context may handle them: list them, read one's files, make
- * one from files, install the built-ins, delete one. It is the skills routes' own sequence
+ * one from files, publish new files for one, install the built-ins, delete one. It is the skills routes' own sequence
  * (`service.ts`, `handlers.ts`, `builtin.ts`, `delete.ts`), called with a workspace id the caller
  * already decided on instead of one read from a request, so the catalog row, the reservation, the
  * rows and the platform record are written exactly as `POST /api/skills` writes them.
@@ -12,13 +12,14 @@
  */
 import { isBuiltinSkillName } from '@indx-workspace/contracts/skills';
 
+import type { Caller } from '../identity';
 import type { SkillObjects, StorageService } from '../storage-and-sharing';
 import { ensureBuiltinSkills } from './builtin';
 import { deleteSkill } from './delete';
 import { exportSkill, type SkillExportFile } from './handlers';
 import { withSkillMetaColumn } from './meta-column';
 import type { SkillCatalog } from './ports';
-import { importSkillWithId, problemCode } from './service';
+import { importSkillWithId, problemCode, publishSkillRevisionWithId } from './service';
 
 /** One file of a skill, at its path inside the skill's folder (`SKILL.md`, `scripts/run.mjs`). */
 export interface WorkspaceSkillFile {
@@ -27,10 +28,7 @@ export interface WorkspaceSkillFile {
 }
 
 /** Who a skill made in a workspace belongs to: a membership principal there. */
-export interface WorkspaceSkillOwner {
-  readonly principalId: string;
-  readonly userId: string | null;
-}
+export type WorkspaceSkillOwner = Pick<Caller, 'principalId' | 'userId'>;
 
 /** What making a skill came to: its catalog id, or the problem code the import answered. */
 export type WorkspaceSkillCreated =
@@ -38,6 +36,10 @@ export type WorkspaceSkillCreated =
   /** The workspace already has a skill with the name; its id. Its files are left as they are. */
   | { readonly kind: 'exists'; readonly id: string }
   | { readonly kind: 'refused'; readonly code: string };
+
+/** What publishing new files for a skill came to. */
+export type WorkspaceSkillPublished =
+  { readonly kind: 'published' } | { readonly kind: 'refused'; readonly code: string };
 
 /** What deleting a skill came to. */
 export type WorkspaceSkillRemoved =
@@ -57,6 +59,16 @@ export interface WorkspaceSkills {
     owner: WorkspaceSkillOwner,
     skill: { readonly name: string; readonly files: readonly WorkspaceSkillFile[] },
   ): Promise<WorkspaceSkillCreated>;
+  /**
+   * Make `files` the whole current content of the existing skill `name` and freeze them as its next
+   * revision, as `POST /api/skills/:name/revisions` does. The skill keeps its id, so an agent it is
+   * assigned to follows the new files.
+   */
+  publish(
+    workspaceId: string,
+    owner: WorkspaceSkillOwner,
+    skill: { readonly name: string; readonly files: readonly WorkspaceSkillFile[] },
+  ): Promise<WorkspaceSkillPublished>;
   /** Install the platform's built-in skills among `names` (`BUILTIN_SKILL_NAMES`); others are ignored. */
   installBuiltins(
     workspaceId: string,
@@ -66,6 +78,12 @@ export interface WorkspaceSkills {
   /** Delete the skill `name`: its files, its record and its row. Refused while an agent has it. */
   remove(workspaceId: string, name: string): Promise<WorkspaceSkillRemoved>;
 }
+
+/** A file as the skills routes take it: its bytes as base64. */
+const encodeFile = (file: WorkspaceSkillFile) => ({
+  path: file.path,
+  contentBase64: Buffer.from(file.bytes).toString('base64'),
+});
 
 export interface WorkspaceSkillsDependencies {
   /** The workspace's skill objects (the files of a skill stored before the catalog held rows). */
@@ -116,13 +134,7 @@ export function createWorkspaceSkills(deps: WorkspaceSkillsDependencies): Worksp
         deps.objects(workspaceId),
         await deps.catalog(workspaceId),
         principalOf(workspaceId, owner),
-        {
-          name: skill.name,
-          files: skill.files.map((file) => ({
-            path: file.path,
-            contentBase64: Buffer.from(file.bytes).toString('base64'),
-          })),
-        },
+        { name: skill.name, files: skill.files.map(encodeFile) },
         rowsOf(workspaceId),
       );
       if (imported.status === 201) {
@@ -134,6 +146,19 @@ export function createWorkspaceSkills(deps: WorkspaceSkillsDependencies): Worksp
         if (id !== null) return { kind: 'exists', id };
       }
       return { kind: 'refused', code };
+    },
+
+    async publish(workspaceId, owner, skill) {
+      const published = await publishSkillRevisionWithId(
+        deps.objects(workspaceId),
+        await deps.catalog(workspaceId),
+        principalOf(workspaceId, owner),
+        skill.name,
+        { files: skill.files.map(encodeFile) },
+        rowsOf(workspaceId),
+      );
+      if (published.status === 201) return { kind: 'published' };
+      return { kind: 'refused', code: problemCode(published) ?? String(published.status) };
     },
 
     async installBuiltins(workspaceId, owner, names) {

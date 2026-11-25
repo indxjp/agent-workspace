@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "f5c88b6b96bd1dcf1f13956bcd451362ed3297e48eb6515faafc045f144362a4",
+        "agents/refund.md": "4bd317b7c3a03a28893a886e54ce8e55b2fe4097bef1e19edddf36b0d67349c1",
+        "agents/refund.ts": "ce0f6f48769a97953010144734522503e15d290abaf3745c23d722cf9363451e",
+        "evals/refund.yaml": "f2365f9b195e70d4b2aa7b07df7db27bed416a5764a08688ca87e0729a84a0c8",
+        "skills/refund/SKILL.md": "5415cf2c595dfde90b69958a92de18d7bff19b94ff606f05828b36b23cf575d5",
+        "surfaces/main.ts": "b0dd97acd78d2b873372b07678b5e01fd81afdbdf8c19aaea55d62b980324e5f"
+      },
+      "edits": []
+    }
+  }
+}

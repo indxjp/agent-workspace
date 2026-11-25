@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "8da2bb4200c5344f3edf7f1787607f3e808d0b7c1273f0226347f768fbf3a4e4",
+        "agents/reg-watch.md": "f84af76c71260fcfcf343393cd47c39e0096b8ae02e634e0af7078d8f50e3418",
+        "agents/reg-watch.ts": "df6a83e3cc70561d6623c8c2280d7c6f23e521a8d9df72c958d677639a0663d4",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/reg-watch.yaml": "a71c3fec30f4b09239c033c6175937f1351f0a5ee251af13b8f29f6e760f8ea1",
+        "skills/reg-watch/SKILL.md": "5fea1b78bb4ecfc8961defd18bdbb0548eafedd139ec61d2cb0f733cf1e362ee",
+        "surfaces/main.ts": "383b691a7e50ce2a5859bfd178b9d29606a6e2f8e52862b8dc89e6048e12c8b3",
+        "triggers/reg-watch.json": "a66606c98643e11a99cdacf4142514f9e77eef9ec8905d36761a034486b13371"
+      },
+      "edits": []
+    }
+  }
+}

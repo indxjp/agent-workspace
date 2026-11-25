@@ -111,6 +111,23 @@ describe('scanSource on a bare top-level name', () => {
       'manuals true',
     ]);
   });
+
+  it("does not count the SDK definition helpers' arguments, which are names and never paths", () => {
+    const references = scanSource(
+      '/repo/use-cases/a/agents/a.ts',
+      [
+        "import { files, skill } from '@indx-workspace/sdk/define';",
+        "files('scripts', 'read');",
+        "skill('manuals');",
+      ].join('\n'),
+      TOP_LEVEL,
+    );
+    const reads = references.filter(({ kind }) => kind === 'read');
+    expect(reads.map(({ path: target, bare }) => `${target} ${String(bare)}`)).toEqual([
+      'scripts true',
+      'manuals true',
+    ]);
+  });
 });
 
 describe('globsCover', () => {

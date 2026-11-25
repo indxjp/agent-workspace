@@ -1,0 +1,30 @@
+{
+  "kind": "webhook",
+  "name": "task-extract",
+  "prompt": "メールかチャットのメッセージが届きました。頼まれごとを拾って、タスクに登録してください。 / An email or chat message arrived; pick out its requests and file them as a task.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["messageId", "requests", "owner", "title", "due", "reason"],
+    "properties": {
+      "messageId": { "type": "string" },
+      "requests": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["person", "request", "deadline"],
+          "properties": {
+            "person": { "type": "string" },
+            "request": { "type": "string" },
+            "deadline": { "type": "string" }
+          }
+        }
+      },
+      "owner": { "type": "string" },
+      "title": { "type": "string" },
+      "due": { "type": "string" },
+      "reason": { "type": "string" }
+    }
+  }
+}

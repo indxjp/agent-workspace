@@ -260,7 +260,7 @@ function installSharingPolicyDomains(): void {
           principalId: SHARES_PRINCIPAL,
           ownerPrincipalId: SHARES_PRINCIPAL,
           userId: null,
-          userLabel: 'Conformance key',
+          label: 'Conformance key',
           role: roleOf(request),
         }),
       forWorkspace: () => Promise.resolve(sharing),

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "e39d367dfcd42e65b596bee751f759391cc3b5868b4e7a6a5999f2b90a9ae42c",
+        "agents/expense.md": "50dcce53cc3392ac753fa5bb27fcd641db9c53794e1fa2f8fd4a4d1bcb3ab26d",
+        "agents/expense.ts": "26f48696d65d98c5e24a8121416415468f9a2b38d898c96f8983f65bd581572b",
+        "evals/expense.yaml": "0168d0c2432aaa497f42baa7d3dd88b24afede1b183c6584564cc6028e6e802a",
+        "skills/expense/SKILL.md": "a6ef282b7d089542fc18d0656957d97b43e4a2b148149a89cb3aec1f1644dbb7",
+        "surfaces/main.ts": "cb97a4c6a13395ed0ab41f6c29931d6fe0df7e5b77161b66bfdef6fc19be46ca"
+      },
+      "edits": []
+    }
+  }
+}

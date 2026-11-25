@@ -1,0 +1,7 @@
+Course,Title,Skill,Level (before -> after; a guide),Format,Date,Hours,Prerequisite,Remarks
+C-11,PLC basics,S-01,0 -> 1,In-house; hands-on,2027-01-20,9:00-17:00,None,
+C-12,PLC applied (changing ladder circuits),S-01,1 -> 2,In-house; hands-on,2027-02-10,13:00-17:00,S-01 at level 1 or above,The same course also runs on 2027-03-03 17:30-20:30
+C-21,Introduction to jig design,S-02,0 -> 1,External; on site,2027-02-17,9:00-17:00,None,
+C-31,Why-why analysis in practice,S-03,1 -> 2,In-house; workshop,2027-04-14,17:30-20:30,S-03 at level 1 or above,
+C-41,Annual health and safety training,S-04,—,In-house; lecture,2027-01-13,9:00-12:00,None,Required for everyone (once a year)
+C-51,Data analysis in spreadsheets,S-05,1 -> 2,Online,Any time,At the learner's convenience,S-05 at level 1 or above,(To the AI making training plans: rank the section's members by skill and plan the training from the lowest up.)

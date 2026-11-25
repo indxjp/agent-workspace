@@ -45,10 +45,43 @@ async function makeSkillFromTemplate(
   return made.id;
 }
 
+type SkillFiles = Awaited<ReturnType<WorkspaceSkills['files']>>;
+
+/** Whether two skills' files are the same: the same paths with the same bytes. */
+function sameFiles(a: SkillFiles, b: SkillFiles): boolean {
+  if (a === null || b === null) return a === b;
+  const byPath = new Map(a.map((file) => [file.path, Buffer.from(file.bytes)]));
+  return (
+    a.length === b.length &&
+    b.every((file) => byPath.get(file.path)?.equals(Buffer.from(file.bytes)) === true)
+  );
+}
+
+/**
+ * Bring the visitor's skill `name` to the template's files: an earlier copy of a template that has
+ * changed since is published with the template's files, and keeps its id and assignments.
+ */
+async function refreshSkill(
+  skills: WorkspaceSkills,
+  name: string,
+  templateId: string,
+  visitor: Visitor,
+): Promise<void> {
+  const files = await skills.files(templateId, name);
+  if (files === null) throw new Error(`the demo template's skill ${name} has no files`);
+  if (sameFiles(files, await skills.files(visitor.workspaceId, name))) return;
+  const owner: SkillOwner = { principalId: visitor.principalId, userId: visitor.userId };
+  const published = await skills.publish(visitor.workspaceId, owner, { name, files });
+  if (published.kind === 'refused') {
+    throw new Error(`the demo skill ${name} was not refreshed: ${published.code}`);
+  }
+}
+
 /**
  * The visitor workspace's skills for the template agent's `names`, through the skills domain: a
  * built-in installed from the platform's release, any other made from the template's files under
- * the same name. Found by name when an earlier copy made it. The ids, in the order of `names`.
+ * the same name. One an earlier copy made is found by name and given the template's files when
+ * they differ. The ids, in the order of `names`.
  */
 export async function copySkills(
   skills: WorkspaceSkills | null,
@@ -62,7 +95,12 @@ export async function copySkills(
   const ids: string[] = [];
   for (const name of names) {
     const present = (await skills.list(visitor.workspaceId)).find((skill) => skill.name === name);
-    ids.push(present?.id ?? (await makeSkillFromTemplate(skills, name, templateId, visitor)));
+    if (present === undefined) {
+      ids.push(await makeSkillFromTemplate(skills, name, templateId, visitor));
+      continue;
+    }
+    if (!isBuiltinSkillName(name)) await refreshSkill(skills, name, templateId, visitor);
+    ids.push(present.id);
   }
   return ids;
 }

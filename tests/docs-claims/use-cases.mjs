@@ -9,7 +9,7 @@
  * caller assertions (added in the console as the Owner, as the project file says, since `aw dev`
  * holds an Admin key; with the value its servers verify with), the
  * folders its agents are granted (`aw files mkdir`, then `aw files upload` of `data/<folder>/`),
- * `aw push --yes`, a restart of each server that verifies the caller assertion with the connector
+ * the skill revisions its agents pin (`aw skills publish`), `aw push --yes`, a restart of each server that verifies the caller assertion with the connector
  * id and workspace id `aw connectors list` now names (the project file's `<tool-id>` and
  * `<workspace-id>`), `aw check`, one
  * `aw chat -p` turn with the first prompt of its eval file, `aw eval --json`, and Ctrl+C. A shared
@@ -44,15 +44,21 @@ export {
   MAX_TRACED_RUNS,
   STAND_IN,
   chatFailedRunId,
+  chatPausedRunId,
   devEnvironment,
   failedRuns,
   firstPrompt,
   identityEnvironment,
   identityTargets,
+  printedRun,
   serverCommands,
   workspaceSecrets,
 } from './use-cases-parse.mjs';
-export { fileSetupCommands, pointApisAtLoopback } from './use-cases-server.mjs';
+export {
+  fileSetupCommands,
+  pointApisAtLoopback,
+  skillPublishCommands,
+} from './use-cases-server.mjs';
 export { consoleSignIn, signInFormFields } from './use-cases-console.mjs';
 
 /** @typedef {import('./run.mjs').Row} Row */

@@ -3,10 +3,10 @@
 Translators from a `PortableProject` (`@indx-workspace/contracts/portable-agent`) to the files an
 external agent host takes, and back where the host allows it. The design is
 ADR-0133
-D6-D8. The package is published in lock-step with `@indx-workspace/contracts`; six targets ship: `claude-managed-agents`,
-`copilot-studio`, `m365-declarative-agent`, `microsoft-foundry`, `gemini-enterprise` (compile only)
-and `aws-agentcore`, each at
-`@indx-workspace/platforms/<target>`.
+D6-D8. The package is published in lock-step with `@indx-workspace/contracts`; nine targets ship: `claude-managed-agents`,
+`copilot-studio`, `m365-declarative-agent`, `microsoft-foundry`, `gemini-enterprise` (compile only),
+`aws-agentcore`, and the eject targets `eject-claude-agent-sdk`, `eject-mastra` and
+`eject-openai-agents`, each at `@indx-workspace/platforms/<target>`.
 
 - `PlatformTarget` is the port: an id, a capability matrix, an options schema, a pure `compile`
   and an optional `import`.

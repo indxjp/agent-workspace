@@ -209,6 +209,7 @@ describe('compileMastraRun', () => {
       skillsDirectory: '.mastra/skills',
       skills: [{ name: 'writer', scripts: ['a.mjs'] }],
       writable: ['outputs'],
+      writableDirectories: ['outputs'],
     });
     expect(out.agent.tools.some((tool) => tool.includes('command'))).toBe(false);
     expect(compiled().skillScript).toBeNull();

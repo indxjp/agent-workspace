@@ -3,7 +3,8 @@
 // carries its own copy between markers:
 //   <!-- chrome:head -->…<!-- /chrome:head -->   (and chrome:header, chrome:footer)
 // --write rewrites those blocks from the partials; --check (the default) fails on any drift.
-// The header link to the page itself is marked aria-current="page".
+// The header link to the page itself is marked aria-current="page", and `{{page}}` in a partial is
+// the page's own file name (the language switch links to the same page in the other language).
 // Usage: node scripts/sites/chrome.mjs [--write|--check]
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -21,10 +22,11 @@ const PARTS = ['head', 'header', 'footer'];
  * @returns {string} The block as it belongs in that page.
  */
 export function renderBlock(page, part, body) {
-  const marked =
+  const marked = (
     part === 'header'
       ? body.replaceAll(`href="${page}">`, `href="${page}" aria-current="page">`)
-      : body;
+      : body
+  ).replaceAll('{{page}}', page);
   return `<!-- chrome:${part} -->\n${marked.trimEnd()}\n<!-- /chrome:${part} -->`;
 }
 

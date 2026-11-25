@@ -1,23 +1,11 @@
 /** Skill reads, imports, revisions and file exports over the storage ports. */
 
-import {
-  isValidSkillName,
-  SKILL_META_PREFIX,
-  skillFilesPrefix,
-  skillNameFromMetaKey,
-  skillRowFolder,
-} from './keys';
+import { isValidSkillName, SKILL_META_PREFIX, skillNameFromMetaKey, skillRowFolder } from './keys';
 import { listAll } from '../storage/objects';
 import type { SkillObjects } from '../storage-and-sharing';
 import type { ApiResult } from '../http/result';
 import { json, problem } from './result';
-import {
-  ensureSkillRows,
-  skillFiles,
-  skillWriter,
-  type SkillRows,
-  type SkillRowsWriter,
-} from './tree';
+import { skillFiles, skillWriter, type SkillRows, type SkillRowsWriter } from './tree';
 import { decodeSkillFiles, encodeBase64, type ReplacedFile } from './skill-content';
 import {
   describeSkill,
@@ -60,7 +48,7 @@ export async function listSkills(store: SkillObjects, rows?: SkillRows): Promise
   for (const name of names) {
     const meta = await readSkillMeta(store, name);
     if (meta === null) continue; // an entry this module cannot make sense of is skipped, not fatal
-    const detail = await describeSkill(store, meta, rows);
+    const detail = await describeSkill(meta, rows);
     // K-4: one such row hides the whole list rather than being omitted from it or listed with no
     // id — see {@link unreadableSkillMdProblem} for why, and for the repair path.
     if (detail.source === null) return unreadableSkillMdProblem(name);
@@ -86,7 +74,7 @@ export async function importSkill(
   const decoded = decodeSkillFiles(files);
   if (!decoded.ok) return decoded.result;
 
-  const writer = skillWriter(store, rows, name);
+  const writer = skillWriter(rows, name);
   try {
     for (const file of decoded.files) await writer.put(file.path, file.bytes);
   } catch (error) {
@@ -119,7 +107,7 @@ export async function recordImportedSkill(
   const now = clock.now().toISOString();
   const meta: SkillMetaRecord = { name, enabled: true, createdAt: now, updatedAt: now };
   await writeSkillMeta(store, meta);
-  return json(201, { skill: await describeSkill(store, meta, rows) });
+  return json(201, { skill: await describeSkill(meta, rows) });
 }
 
 /**
@@ -153,10 +141,9 @@ export async function replaceSkillFiles(
   if (!decoded.ok) return decoded;
   const { files } = decoded;
 
-  const writer = skillWriter(store, rows, name);
+  const writer = skillWriter(rows, name);
   const kept = new Set(files.map((file) => file.path.toLowerCase()));
   try {
-    await ensureSkillRows(store, rows, name);
     const existing = await writer.files();
     for (const file of files) await writer.put(file.path, file.bytes);
     for (const old of existing) {
@@ -168,7 +155,7 @@ export async function replaceSkillFiles(
 
   const updated: SkillMetaRecord = { ...meta, updatedAt: clock.now().toISOString() };
   await writeSkillMeta(store, updated);
-  return { ok: true, files, skill: await describeSkill(store, updated, rows) };
+  return { ok: true, files, skill: await describeSkill(updated, rows) };
 }
 
 // ── GET /api/skills/:name ──────────────────────────────────────────────────────────────────────
@@ -182,7 +169,7 @@ export async function getSkill(
   if (meta === null) {
     return problem(404, 'skill_not_found', `No skill named ${JSON.stringify(name)}.`);
   }
-  return json(200, { skill: await describeSkill(store, meta, rows) });
+  return json(200, { skill: await describeSkill(meta, rows) });
 }
 
 // ── GET /api/skills/:name/export ──────────────────────────────────────────────────────────────
@@ -202,7 +189,7 @@ export async function exportSkill(
   if (meta === null) {
     return problem(404, 'skill_not_found', `No skill named ${JSON.stringify(name)}.`);
   }
-  const listed = await skillFiles(store, rows, skillRowFolder(name), skillFilesPrefix(name));
+  const listed = await skillFiles(rows, skillRowFolder(name));
   const files: SkillExportFile[] = [];
   for (const file of listed) {
     const body = await file.read();

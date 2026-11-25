@@ -1,7 +1,8 @@
 /**
- * What the deploy's seeding step sends the platform for each live catalog entry
- * (`PUT /api/demo/templates/{entry}`, `DemoTemplateSeed`): built offline from the entry's own source
- * project, with no network and no credential.
+ * What the deploy's seeding step sends the platform for each catalog entry it seeds
+ * (`PUT /api/demo/templates/{entry}`, `DemoTemplateSeed`; {@link seededEntries}: in staging every
+ * entry with a source, live or coming soon, in production the live ones): built offline from the
+ * entry's own source project, with no network and no credential.
  *
  * - The agent is the entry's demo agent rendered to the portable K-1 definition by the SDK's own
  *   `toAgentVersionBody`, which is what `aw push` stores and `aw agents export` reads back, then made
@@ -16,8 +17,8 @@
  *   that would send or write outside, so a visitor's copy can answer a read from the entry's records
  *   and a write with the demo-only reply. An app entry's tools are its app kit's, derived from the
  *   app's resources; an `openapiTool`'s are the operations its `allow` rules admit in its own
- *   document; `CONNECTOR_TOOLS` is the explicit table of the gallery's `mcp()` connectors, whose
- *   tools live in their servers' code. A connector found in none of these declares no tool, and a
+ *   document; `CONNECTOR_TOOLS` is the explicit table of the `mcp()` connectors whose tools live
+ *   in a server's code, with the writes a records stand-in keeps (`recorded`). A connector found in none of these declares no tool, and a
  *   copy offers it one send tool, so `tests/store/demo-copy-tools.test.ts` checks that every tool a
  *   live entry's moment needs is offered.
  * - An `openapiTool`'s writes wait for a person's approval on the platform because its connector
@@ -34,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DemoTemplateSeedSchema,
+  type DemoRecordedWrite,
   type DemoSampleRecords,
   type DemoSeedConnector,
   type DemoSeedFile,
@@ -42,6 +44,7 @@ import {
 } from '@indx-workspace/contracts/demo-operator';
 import { isBuiltinSkillName } from '@indx-workspace/contracts/skills';
 import {
+  AW_DEV_TOOLS_CONNECTOR,
   selectAllowedOperations,
   toolApprovalRules,
   TOOL_OPERATION_METHODS,
@@ -49,15 +52,39 @@ import {
 } from '@indx-workspace/contracts/tool-connectors';
 import {
   isOpenApiTool,
+  publicSourceRecords,
   toAgentVersionBody,
+  type CodeTool,
   type DefinedAgent,
   type OpenApiTool,
+  type PublicSourceConfig,
 } from '@indx-workspace/sdk/define';
 
-import type { LiveEntry } from '../../../examples/store/catalog/define.ts';
+import {
+  hasSource,
+  type CatalogEntry,
+  type LiveEntry,
+  type SourcedEntry,
+} from '../../../examples/store/catalog/define.ts';
 import { CATALOG } from '../../../examples/store/catalog/index.ts';
+import competitorReleases, {
+  releases as competitorSource,
+} from '../../../use-cases/competitor/tools/releases.ts';
+import digestSources, { sources as digestSource } from '../../../use-cases/digest/tools/sources.ts';
+import marketStats, { stats as marketSource } from '../../../use-cases/market/tools/stats.ts';
+import patentSearchTool, {
+  patents as patentSearchSource,
+} from '../../../use-cases/patent-search/tools/patents.ts';
+import regWatchNotices, {
+  notices as regWatchSource,
+} from '../../../use-cases/reg-watch/tools/notices.ts';
+import screeningLists, {
+  lists as screeningSource,
+} from '../../../use-cases/screening/tools/lists.ts';
+import trendNews, { news as trendSource } from '../../../use-cases/trend/tools/news.ts';
 import { parseAuthorityMatrix } from '../../gallery/ringi-review/mcp/authority.mjs';
 import { demoAgentDefinition } from '../demo-agents.test-support.ts';
+import { stagedView } from '../live-verify/source-hash.ts';
 
 const REPOSITORY_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -70,16 +97,188 @@ const LANGS = ['ja', 'en'] as const;
 interface ToolLists {
   readonly reads: readonly string[];
   readonly writes: readonly string[];
+  /**
+   * The writes a copy's records stand-in keeps once a person approved them, each with the kind of
+   * record it is and the read that answers with it (G3, ADR-0169).
+   */
+  readonly recorded?: readonly DemoRecordedWrite[];
 }
 
 /**
- * The tools of the gallery's `mcp()` connectors that a seed carries records for (`FIXTURE_RECORDS`),
- * as their servers (`<source>/mcp/*.mjs`) name them. Keyed by entry slug, then connector name.
+ * The tools of the `mcp()` connectors whose tools live in a server's code rather than in the
+ * source project, as the servers name them: the gallery's (`<source>/mcp/*.mjs`, which a seed
+ * carries records for, `FIXTURE_RECORDS`) and a use case's stand-in connector. Keyed by entry slug,
+ * then connector name. An entry with no source is never seeded, so its row waits harmlessly.
  */
-const CONNECTOR_TOOLS: Readonly<Record<string, Readonly<Record<string, ToolLists>>>> = {
+export const CONNECTOR_TOOLS: Readonly<Record<string, Readonly<Record<string, ToolLists>>>> = {
   'ringi-review': { authority: { reads: ['check_authority'], writes: [] } },
   'meeting-minutes': { 'task-tracker': { reads: ['list_members'], writes: [] } },
+  // The incident router (use-cases/incident): it reads the tracker's open tasks and routes an alert
+  // by creating one, which waits for approval and is then kept as a task the read answers with.
+  incident: {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The escalation desk (use-cases/escalation, TR like incident): it hands a ticket to engineering
+  // or a manager by creating one task, which waits for approval and is then kept.
+  escalation: {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The legal intake desk (use-cases/legal-intake, TR like incident): it hands a request to a lawyer
+  // by creating one task, which waits for approval and is then kept.
+  'legal-intake': {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The customer enquiry desk's rebuild (use-cases/customer-inquiry, `next`; TR like incident): it
+  // hands an enquiry and its reply draft to one owner by creating one task, which waits for
+  // approval and is then kept. The gallery source declares no tracker, so this is the rebuild's.
+  'customer-inquiry': {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The quotation agent's rebuild (use-cases/quotation, `next`; DR): it registers the quote it
+  // drafted in the ERP with one `create_quote`, which waits for approval. No record kind holds a
+  // quote (ADR-0169 D1), so the stand-in answers the approved call and keeps nothing; the gallery
+  // source's ERP is an `openapiTool`, so this row is the rebuild's.
+  quotation: { 'quotation-erp': { reads: [], writes: ['create_quote'] } },
+  // The multilingual desk (use-cases/multilingual, TR like incident): it hands an enquiry and its
+  // reply draft to the owner by creating one task, which waits for approval and is then kept.
+  multilingual: {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The security alert desk (use-cases/sec-alert, TR like incident): it hands an alert to the
+  // on-call analyst by creating one task, which waits for approval and is then kept.
+  'sec-alert': {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The task extractor (use-cases/task-extract, TR like incident): it files a message's requests by
+  // creating one task, which waits for approval and is then kept.
+  'task-extract': {
+    tracker: {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The onboarding flow (use-cases/onboarding): it creates one onboarding task per approved call
+  // and reads them back; its connector is named after the entry, so no other demo shares it.
+  onboarding: {
+    'onboarding-tasks': {
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    },
+  },
+  // The account requests desk (use-cases/account-requests): it records one access change per
+  // approved call and reads them back; its connector is named after the entry, so no other demo
+  // shares it.
+  'account-requests': {
+    'account-requests-grants': {
+      reads: ['list_grants'],
+      writes: ['change_access'],
+      recorded: [{ write: 'change_access', kind: 'access', read: 'list_grants' }],
+    },
+  },
+  // The wave-3 action entries (use-cases/facility, offboarding, scheduling): each records one
+  // booking, access removal or calendar event per approved call and reads them back; each connector
+  // is named after its entry, so no other demo shares it.
+  facility: {
+    'facility-bookings': {
+      reads: ['list_bookings'],
+      writes: ['book_resource'],
+      recorded: [{ write: 'book_resource', kind: 'booking', read: 'list_bookings' }],
+    },
+  },
+  offboarding: {
+    'offboarding-access': {
+      reads: ['list_grants'],
+      writes: ['change_access'],
+      recorded: [{ write: 'change_access', kind: 'access', read: 'list_grants' }],
+    },
+  },
+  scheduling: {
+    'scheduling-calendar': {
+      reads: ['list_events'],
+      writes: ['create_event'],
+      recorded: [{ write: 'create_event', kind: 'calendar', read: 'list_events' }],
+    },
+  },
+  // The use cases that read a public source (ADR-0170): the code tool is a read of the shared
+  // code-tool connector, answered from the snapshot in `PUBLIC_SOURCES` below.
+  competitor: { [AW_DEV_TOOLS_CONNECTOR]: { reads: [competitorReleases.name], writes: [] } },
+  digest: { [AW_DEV_TOOLS_CONNECTOR]: { reads: [digestSources.name], writes: [] } },
+  market: { [AW_DEV_TOOLS_CONNECTOR]: { reads: [marketStats.name], writes: [] } },
+  'patent-search': { [AW_DEV_TOOLS_CONNECTOR]: { reads: [patentSearchTool.name], writes: [] } },
+  'reg-watch': { [AW_DEV_TOOLS_CONNECTOR]: { reads: [regWatchNotices.name], writes: [] } },
+  screening: { [AW_DEV_TOOLS_CONNECTOR]: { reads: [screeningLists.name], writes: [] } },
+  trend: { [AW_DEV_TOOLS_CONNECTOR]: { reads: [trendNews.name], writes: [] } },
 };
+
+/**
+ * The public-source tools of the use cases that read one (ADR-0170 D4), keyed by entry slug: the code
+ * tool the project declares and the configuration it ships. A copy's records stand-in answers the
+ * tool's read from that configuration's own snapshot, in both languages, as the tool's snapshot
+ * mode does, so the demo and the project cannot drift.
+ */
+export const PUBLIC_SOURCES: Readonly<
+  Record<string, { readonly tool: CodeTool; readonly source: PublicSourceConfig }>
+> = {
+  competitor: { tool: competitorReleases, source: competitorSource },
+  digest: { tool: digestSources, source: digestSource },
+  market: { tool: marketStats, source: marketSource },
+  'patent-search': { tool: patentSearchTool, source: patentSearchSource },
+  'reg-watch': { tool: regWatchNotices, source: regWatchSource },
+  screening: { tool: screeningLists, source: screeningSource },
+  trend: { tool: trendNews, source: trendSource },
+};
+
+/** The record sets of the entry's public-source tool, one per language; none without one. */
+export function publicSourceSets(slug: string): readonly DemoSampleRecords[] {
+  const publicSource = PUBLIC_SOURCES[slug];
+  if (publicSource === undefined) return [];
+  const { snapshot } = publicSource.source;
+  if (snapshot === undefined) throw new Error(`${slug}: its public source ships no snapshot`);
+  return LANGS.map((lang) =>
+    publicSourceRecords({
+      connector: AW_DEV_TOOLS_CONNECTOR,
+      tool: publicSource.tool.name,
+      lang,
+      snapshot,
+    }),
+  );
+}
+
+/** The connector `name` as a seed declares it; `recorded` only when it keeps a write. */
+export function declaredConnector(name: string, tools: ToolLists): DemoSeedConnector {
+  return {
+    name,
+    reads: tools.reads,
+    writes: tools.writes,
+    ...(tools.recorded === undefined ? {} : { recorded: tools.recorded }),
+  };
+}
 
 /** Which read tools answer with the records of a gallery entry's resource (a records file name). */
 const RECORD_TOOLS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
@@ -156,7 +355,7 @@ const isOperationMethod = (method: string): method is ToolOperationMethod =>
  * project-relative JSON file), by operation id, which is the tool name the platform registers.
  */
 function operationsOf(
-  entry: LiveEntry,
+  entry: SourcedEntry,
   tool: OpenApiTool,
 ): readonly { readonly name: string; readonly method: ToolOperationMethod }[] {
   const document = readJson(path.join(sourceOf(entry), tool.spec)) as {
@@ -179,13 +378,13 @@ function operationsOf(
 }
 
 /** The `openapiTool`s the entry's agent holds. */
-function openApiToolsOf(entry: LiveEntry): readonly OpenApiTool[] {
+function openApiToolsOf(entry: SourcedEntry): readonly OpenApiTool[] {
   const agent = demoAgentDefinition(entry) as DefinedAgent;
   return (agent.tools ?? []).filter(isOpenApiTool);
 }
 
 /** Its reads and writes, as a seed declares a connector's tools. */
-function openApiToolLists(entry: LiveEntry, tool: OpenApiTool): ToolLists {
+function openApiToolLists(entry: SourcedEntry, tool: OpenApiTool): ToolLists {
   const operations = operationsOf(entry, tool);
   const gated = new Set(toolApprovalRules(tool.name, operations));
   const isWrite = (name: string): boolean => gated.has(`mcp__${tool.name}__${name}`);
@@ -240,10 +439,10 @@ function appToolsOf(source: string): {
   };
 }
 
-const sourceOf = (entry: LiveEntry): string => path.join(REPOSITORY_ROOT, entry.source);
+const sourceOf = (entry: SourcedEntry): string => path.join(REPOSITORY_ROOT, entry.source);
 
 /** The text of the agent's instructions when it keeps them in a file beside its definition. */
-function instructionsOf(entry: LiveEntry, agent: DefinedAgent): string | undefined {
+function instructionsOf(entry: SourcedEntry, agent: DefinedAgent): string | undefined {
   const { instructions } = agent;
   if (typeof instructions === 'string') return undefined;
   const folder = path.join(sourceOf(entry), 'agents');
@@ -251,7 +450,7 @@ function instructionsOf(entry: LiveEntry, agent: DefinedAgent): string | undefin
 }
 
 /** The agent as the portable definition a demo template is made from. */
-function definitionOf(entry: LiveEntry): DemoTemplateSeed['definition'] {
+function definitionOf(entry: SourcedEntry): DemoTemplateSeed['definition'] {
   const agent = demoAgentDefinition(entry) as DefinedAgent;
   const instructions = instructionsOf(entry, agent);
   const { definition } = toAgentVersionBody(
@@ -306,7 +505,7 @@ function filesUnder(folder: string): readonly string[] {
 }
 
 /** The skills the definition names that are not built-ins, each with its files from `skills/<name>/`. */
-function skillsOf(entry: LiveEntry, names: readonly string[]): readonly DemoSeedSkill[] {
+function skillsOf(entry: SourcedEntry, names: readonly string[]): readonly DemoSeedSkill[] {
   return names
     .filter((name) => !isBuiltinSkillName(name))
     .map((name) => {
@@ -322,7 +521,7 @@ function skillsOf(entry: LiveEntry, names: readonly string[]): readonly DemoSeed
 }
 
 /** The entry's `demo.seed` folders as sample files, at `<collection>/<path under the folder>`. */
-function filesOf(entry: LiveEntry): readonly DemoSeedFile[] {
+function filesOf(entry: SourcedEntry): readonly DemoSeedFile[] {
   return entry.demo.seed.flatMap((seed) => {
     const from = path.join(sourceOf(entry), seed.from);
     return filesUnder(from).map((relative) => ({
@@ -334,7 +533,7 @@ function filesOf(entry: LiveEntry): readonly DemoSeedFile[] {
 
 /** The tools of each connector the definition names, for the entry. */
 function connectorsOf(
-  entry: LiveEntry,
+  entry: SourcedEntry,
   names: readonly string[],
   app: ReturnType<typeof appToolsOf> | null,
 ): readonly DemoSeedConnector[] {
@@ -347,23 +546,27 @@ function connectorsOf(
         : tool !== undefined
           ? openApiToolLists(entry, tool)
           : (CONNECTOR_TOOLS[entry.slug]?.[name] ?? { reads: [], writes: [] });
-    return { name, reads: tools.reads, writes: tools.writes };
+    return declaredConnector(name, tools);
   });
 }
 
 /** The entry's sample records, one set per resource and language, for the connector that serves them. */
 function recordsOf(
-  entry: LiveEntry,
+  entry: SourcedEntry,
   connectors: readonly DemoSeedConnector[],
   app: ReturnType<typeof appToolsOf> | null,
 ): readonly DemoSampleRecords[] {
-  const fixtures = (FIXTURE_RECORDS[entry.slug] ?? []).map((fixture): DemoSampleRecords => ({
-    connector: fixture.connector,
-    resource: fixture.resource,
-    lang: 'ja',
-    tools: fixture.tools,
-    data: fixture.data(sourceOf(entry)),
-  }));
+  // The gallery fixtures read a gallery source; a rebuild under use-cases/ (`next`) brings its own.
+  const gallery = entry.source.startsWith('tests/gallery/');
+  const fixtures = (gallery ? (FIXTURE_RECORDS[entry.slug] ?? []) : []).map(
+    (fixture): DemoSampleRecords => ({
+      connector: fixture.connector,
+      resource: fixture.resource,
+      lang: 'ja',
+      tools: fixture.tools,
+      data: fixture.data(sourceOf(entry)),
+    }),
+  );
   const folder = entry.demo.records;
   if (folder === undefined) return fixtures;
   if (fixtures.length > 0) throw new Error(`${entry.slug}: records come from one place only`);
@@ -396,8 +599,8 @@ function recordsOf(
   return sets;
 }
 
-/** The seed of one live entry. */
-export function buildSeed(entry: LiveEntry): DemoTemplateSeed {
+/** The seed of one entry with a source, live or coming soon. */
+export function buildSeed(entry: SourcedEntry): DemoTemplateSeed {
   const definition = definitionOf(entry);
   const app = entry.kind === 'app' ? appToolsOf(sourceOf(entry)) : null;
   const connectors = connectorsOf(entry, definition.resources.connectors, app);
@@ -406,11 +609,29 @@ export function buildSeed(entry: LiveEntry): DemoTemplateSeed {
     connectors,
     skills: skillsOf(entry, definition.resources.skills),
     files: filesOf(entry),
-    records: recordsOf(entry, connectors, app),
+    records: [...recordsOf(entry, connectors, app), ...publicSourceSets(entry.slug)],
   });
 }
 
-/** The live entries of the catalog: the ones with a demo to seed. */
+/** The live entries of the catalog: the ones a visitor can try. */
 export function liveEntries(): readonly LiveEntry[] {
   return CATALOG.filter((entry): entry is LiveEntry => entry.status === 'live');
+}
+
+/** Where the deploy seeds: the staging project (every push to main) or production (a tag). */
+export type SeedEnvironment = 'staging' | 'production';
+
+/**
+ * The entries the deploy seeds a template for. Staging: every entry with a source, live or coming
+ * soon, so an entry's code merged as `soon` is seeded and R1 can verify it before the flip (the Agent
+ * Store 100-use-case plan, section 7), each as {@link stagedView} has it. Production: the live
+ * entries only, as they are, the ones a visitor can try and the nightly sample check expects.
+ */
+export function seededEntries(
+  environment: SeedEnvironment,
+  entries: readonly CatalogEntry[] = CATALOG,
+): readonly SourcedEntry[] {
+  return environment === 'staging'
+    ? entries.filter(hasSource).map((entry) => stagedView(entry))
+    : entries.filter((entry): entry is LiveEntry => entry.status === 'live');
 }

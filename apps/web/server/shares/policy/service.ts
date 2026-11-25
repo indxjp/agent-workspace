@@ -1,4 +1,4 @@
-import type { Role } from '../../identity';
+import type { Caller, Role } from '../../identity';
 import type { WorkspaceSharing } from '../wiring';
 import { DomainError } from '../../errors';
 
@@ -9,7 +9,7 @@ export async function setPublicSharingPolicy(
   enabled: boolean,
   role: Role,
   sharing: WorkspaceSharing,
-  actor: { principalId: string; userId: string | null; userLabel: string },
+  actor: Pick<Caller, 'principalId' | 'userId' | 'label'>,
 ): Promise<void> {
   if (role !== 'owner') {
     throw new DomainError({
@@ -22,7 +22,7 @@ export async function setPublicSharingPolicy(
   await sharing.audit.write({
     actorPrincipalId: actor.principalId,
     actorUserId: actor.userId,
-    actorLabel: actor.userLabel,
+    actorLabel: actor.label,
     action: 'public-sharing-policy-changed',
     subjectId: null,
     subjectLabel: `Public sharing: ${enabled ? 'on' : 'off'}`,

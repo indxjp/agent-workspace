@@ -1,18 +1,13 @@
-/** The background jobs the storage composition starts: the cleanup pass and the skills adopt pass. */
+/** The background job the storage composition starts: the cleanup pass. */
 import { log } from '../telemetry/logger';
 import { cronSecretFrom } from '../http/cron';
 import type { ObjectStore } from '@agent-workspace/core/storage';
 import { startStorageCleanup } from '../storage/cleanup-cron';
 import type { CleanupMode } from '../storage/cleanup-cron';
 import type { CleanupDependencies } from '../storage/cleanup';
-import type { SessionStateBlobCatalog, StorageService } from '../storage/service';
-import type {
-  createResourceCatalogStoreProvider,
-  WorkspaceSkillsStoreProvider,
-} from '../storage/store';
-import { configuredPath } from './config';
-import { safeProviderErrorName } from './storage-open';
-import type { SkillsAdoptWiring, StorageCleanupWiring } from './storage';
+import type { SessionStateBlobCatalog } from '../storage/service';
+import type { createResourceCatalogStoreProvider } from '../storage/store';
+import type { StorageCleanupWiring } from './storage';
 
 /** The session-state blob rows of a workspace: the service reads them, the cleanup checks them. */
 export type SessionStateOf = (
@@ -53,45 +48,4 @@ export async function startCleanupJob(
       ? `[compose] storage cleanup runs from GET /api/cron/storage-cleanup in ${cleanup.mode} mode (the storage design, §04).`
       : `[compose] storage cleanup scheduled hourly in ${cleanup.mode} mode (the storage design, §04).`,
   );
-}
-
-const STORAGE_MIGRATE_ENV = 'AW_STORAGE_MIGRATE';
-
-/**
- * The skills adopt pass (the storage design, §06), in the background and under its own database
- * lock. Off with `AW_STORAGE_MIGRATE=off`; this release has no other stage, so any other value runs
- * it, unless the latest recorded pass already proved no old skill form is left. Never rejects; a
- * failure is logged by name.
- */
-// storage-bridge(#1699): old skill forms
-export async function startSkillsAdopt(
-  store: WorkspaceSkillsStoreProvider,
-  catalog: ReturnType<typeof createResourceCatalogStoreProvider>,
-  storage: StorageService,
-  adopt: SkillsAdoptWiring,
-): Promise<void> {
-  if (configuredPath(STORAGE_MIGRATE_ENV) === 'off') return;
-  try {
-    const { runSkillsAdoptStage, skillsAdoptProven } = await import('../storage/migrate-skills');
-    const ran = await adopt.lock('storage-migrate-skills', async () => {
-      // Read under the lock, so a pass another server just finished counts.
-      if (skillsAdoptProven(await adopt.migrationRuns.latest('skills'))) return 'proven';
-      await runSkillsAdoptStage({
-        workspaceIds: adopt.workspaceIds,
-        objects: (workspaceId) => store.forWorkspace(workspaceId),
-        catalog: (workspaceId) => Promise.resolve(catalog.forWorkspace(workspaceId)),
-        ownerPrincipalId: (workspaceId) => adopt.owners.ownerPrincipalId(workspaceId),
-        storage,
-        runs: adopt.migrationRuns,
-        log,
-      });
-      return 'ran';
-    });
-    if (!ran.acquired) log.info('skills adopt skipped: another server is running it');
-    else if (ran.value === 'proven') {
-      log.info('skills adopt skipped: the latest pass left no old skill forms');
-    }
-  } catch (error) {
-    log.error(`[compose] skills adopt stopped (name=${safeProviderErrorName(error)}).`);
-  }
 }

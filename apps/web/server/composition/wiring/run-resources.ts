@@ -209,7 +209,7 @@ export function wireRunResources({
       principalId: identity.principalId,
       ownerPrincipalId: identity.ownerPrincipalId,
       userId: identity.userId,
-      userLabel: identity.label,
+      label: identity.label,
       role: identity.role,
       scope: identity.scope,
     };

@@ -1,6 +1,7 @@
-import { decide, type Ownership, type Role } from '../../../identity';
+import { decide, type Caller, type Ownership } from '../../../identity';
 
-type Caller = { readonly role: Role; readonly ownerPrincipalId: string };
+/** The fields of the one {@link Caller} type these checks read (part 06 step 9). */
+type CheckingCaller = Pick<Caller, 'role' | 'ownerPrincipalId'>;
 type Target = { readonly id: string; readonly ownerPrincipalId: string };
 
 /**
@@ -9,25 +10,25 @@ type Target = { readonly id: string; readonly ownerPrincipalId: string };
  * /api/agents/:id/pointers`, owned as the console route resolves it. The save moves the `local` pointer,
  * so a role that may only add versions never gets that far.
  */
-export function mayCheck(caller: Caller, agent: Target | undefined): boolean {
+export function mayCheck(caller: CheckingCaller, agent: Target | undefined): boolean {
   return (
     may('POST', caller, agent) && (agent === undefined || may('PUT', caller, agent, 'pointers'))
   );
 }
 
 /** Whether `role` may make the console call that reads the agent's versions: `GET /api/agents/:id/versions`. */
-export function mayRead(caller: Caller, agent: Target): boolean {
+export function mayRead(caller: CheckingCaller, agent: Target): boolean {
   return may('GET', caller, agent);
 }
 
 /** Whether `role` may make the console call that evaluates a version: `POST /api/agents/:id/evaluations`. */
-export function mayEvaluate(caller: Caller, agent: Target): boolean {
+export function mayEvaluate(caller: CheckingCaller, agent: Target): boolean {
   return may('POST', caller, agent, 'evaluations');
 }
 
 /** Whether `role` may make the console call that starts a run: `POST /api/agents/:id/runs`, owned as `ownershipOf` resolves it. */
 export function mayRun(
-  caller: { readonly role: Role },
+  caller: Pick<Caller, 'role'>,
   agent: { readonly id: string },
   ownership: Ownership,
 ): boolean {
@@ -39,7 +40,7 @@ export function mayRun(
 
 function may(
   method: 'GET' | 'POST' | 'PUT',
-  caller: Caller,
+  caller: CheckingCaller,
   agent: Target | undefined,
   sub: 'versions' | 'evaluations' | 'pointers' = 'versions',
 ): boolean {

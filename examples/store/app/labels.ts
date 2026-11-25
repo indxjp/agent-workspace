@@ -33,9 +33,12 @@ export function safetyTags(entry: CatalogEntry, lang: Lang): string[] {
   );
 }
 
-/** Every feature `entry` uses, for the Under the hood tab. */
-export function featuresUsed(entry: LiveEntry, lang: Lang): string[] {
-  return entry.safety.map((property) => pick(FEATURES[property], lang));
+/** The name of each feature in `properties`: the ones an entry or one step of its flow uses. */
+export function featureNames(
+  properties: readonly LiveEntry['safety'][number][],
+  lang: Lang,
+): string[] {
+  return properties.map((property) => pick(FEATURES[property], lang));
 }
 
 export function areaName(entry: CatalogEntry, lang: Lang): string {

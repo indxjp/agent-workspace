@@ -1,0 +1,9 @@
+task_id,workstream,title,owner,status,due_date
+PT-101,Data migration,Extract customer data from the old system,Mio Takano,Done,2026-11-20
+PT-102,Data migration,Write the product master conversion rules,Mio Takano,In Progress,2026-12-04
+PT-103,Data migration,Performance test of the migration tool,Mio Takano,In Progress,2026-12-02
+PT-201,Screens,Order entry screen,Ritsu Kusumi,Done,2026-11-20
+PT-202,Screens,Shipping instruction screen,Ritsu Kusumi,In Progress,2026-11-25
+PT-203,Screens,Printed forms,Ritsu Kusumi,To Do,2026-12-02
+PT-301,Training,Write the training material,Shiori Arisawa,In Progress,2026-12-04
+PT-302,Training,Book the training room,Shiori Arisawa,Done,2026-11-18

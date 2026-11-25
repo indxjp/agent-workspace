@@ -1,0 +1,3 @@
+address,owner,purpose,valid_until
+198.51.100.23,IT,Quarterly vulnerability scan (including the VPN and email sign-in pages),2026-11-30
+192.0.2.41,IT,Head office's internet exit,2027-03-31

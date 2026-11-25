@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "b8e02c3bcc44306da1961fd50a2d426c59bc650d031ec2cecf267d534794add1",
+        "agents/work-instruction.md": "390319987d05711b00846628a954ac7a80ce89bf61296e10e57d4a4a52f966d6",
+        "agents/work-instruction.ts": "6cd7007b69f9e10331d036bb8652d4cf85df2a47444b4c67cf085b2e7fbd7c3d",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/work-instruction.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/work-instruction/SKILL.md": "93c5a10e1fd1c23426c572ebb8b13424dad9f92299cdbada7b87e128c7efba29",
+        "surfaces/main.ts": "6e89cfddcf5afb3a3ac7f9ff9b79901273ad325b729d314c081e481fd9534cc5"
+      },
+      "edits": []
+    }
+  }
+}

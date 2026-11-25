@@ -1,0 +1,68 @@
+{
+  "machineId": "IM-04",
+  "name": "Injection moulding machine No. 4",
+  "model": "JS-350",
+  "line": "Moulding line",
+  "records": [
+    {
+      "id": "T-0021",
+      "citation": "[Trouble record T-0021]",
+      "date": "2023-07-07",
+      "symptom": "Short shot; resin does not fill to the end of the part",
+      "cause": "Broken nozzle heater",
+      "action": "Replaced the heater and checked the temperature rise",
+      "durationMin": 70,
+      "technician": "Daisuke Karibe"
+    },
+    {
+      "id": "T-0022",
+      "citation": "[Trouble record T-0022]",
+      "date": "2023-12-12",
+      "symptom": "Clamping pressure will not build",
+      "cause": "Internal leak from worn clamping cylinder packing",
+      "action": "Replaced the clamping cylinder packing",
+      "durationMin": 240,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0023",
+      "citation": "[Trouble record T-0023]",
+      "date": "2024-05-09",
+      "symptom": "Flash on the parts",
+      "cause": "Poor clamping from debris on the mould parting face",
+      "action": "Cleaned the parting face and reset the clamping force",
+      "durationMin": 45,
+      "technician": "Daisuke Karibe"
+    },
+    {
+      "id": "T-0024",
+      "citation": "[Trouble record T-0024]",
+      "date": "2024-10-28",
+      "symptom": "Oil temperature rise alarm",
+      "cause": "Scale on the water side of the oil cooler",
+      "action": "Acid-cleaned the oil cooler",
+      "durationMin": 120,
+      "technician": "Ken Shiomi"
+    },
+    {
+      "id": "T-0025",
+      "citation": "[Trouble record T-0025]",
+      "date": "2025-03-17",
+      "symptom": "Metering time is unstable",
+      "cause": "Material bridging under the hopper",
+      "action": "Cleaned the hopper and dryer and checked the drying conditions",
+      "durationMin": 35,
+      "technician": "Daisuke Karibe"
+    },
+    {
+      "id": "T-0026",
+      "citation": "[Trouble record T-0026]",
+      "date": "2025-09-04",
+      "symptom": "Injection pressure will not build",
+      "cause": "Worn check ring on the screw head",
+      "action": "Replaced the check ring and seat",
+      "durationMin": 300,
+      "technician": "Koji Mikoshiba"
+    }
+  ]
+}

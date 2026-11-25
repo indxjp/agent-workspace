@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "475e30d21418acee0c0b4f28337a8a573302ffecde10f19e4c28f854e15b196e",
+        "agents/interview.md": "4a2344c5d5950f6a2cae4ce4bc88ba7ed8fc26c4904b6d1e8263fa88d5733675",
+        "agents/interview.ts": "92c821dfb2162c0fbaa88a746c2ed5563c64ceaa01c9da6059db23a58038749a",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/interview.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/interview/SKILL.md": "c59ab6526339266b3b76a2a285b0ac0c3614d6016a277a33f427149155e6d1e8",
+        "surfaces/main.ts": "d2956cc832c7b740fa684a22fcc3474ff12bc87b029b59119310138b069ae66e"
+      },
+      "edits": []
+    }
+  }
+}

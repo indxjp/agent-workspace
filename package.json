@@ -20,13 +20,16 @@
     "metrics:baseline": "node scripts/metrics/baseline.mjs",
     "workflows:check": "node scripts/check-workflows.mjs",
     "test-inputs:check": "node scripts/policy-check-test-inputs.mjs",
-    "format": "prettier --write \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
-    "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \"use-cases/**/*.{ts,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \"use-cases/**/*.{ts,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
     "test": "node scripts/test-with-services.mjs",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",
     "test:coverage:apps": "vitest run --config vitest.apps.coverage.config.ts --coverage",
     "test:coverage:ui-cli": "vitest run --config vitest.ui-cli.coverage.config.ts --coverage",
+    "test:coverage:use-cases": "vitest run --config vitest.use-cases.coverage.config.ts --coverage",
+    "test:coverage:gallery": "vitest run --config vitest.gallery.coverage.config.ts --coverage",
+    "use-cases:new": "node use-cases/kit/new.ts",
     "test:browser": "playwright test",
     "build": "nx run-many -t build",
     "db:generate": "pnpm --filter @agent-workspace/core run db:generate",
@@ -62,7 +65,7 @@
     "formal:check": "node scripts/formal/check.mjs",
     "check:fast": "pnpm adr:check && pnpm workflows:check && pnpm test-inputs:check && pnpm policy:check && pnpm changes:check && pnpm format:check && pnpm migrations:check && pnpm migrations:lint && pnpm typecheck && pnpm lint && pnpm complexity:check && pnpm clock:check && pnpm durations:check && pnpm architecture:check && pnpm deadcode:check && pnpm duplication:check && pnpm docs:check && pnpm stories:check",
     "check": "pnpm check:fast && pnpm test && pnpm build",
-    "check:ci": "pnpm check:fast && pnpm test && pnpm test:coverage && pnpm test:coverage:apps && pnpm test:coverage:ui-cli && pnpm build",
+    "check:ci": "pnpm check:fast && pnpm test && pnpm test:coverage && pnpm test:coverage:apps && pnpm test:coverage:ui-cli && pnpm test:coverage:use-cases && pnpm test:coverage:gallery && pnpm build",
     "sites:build": "node scripts/sites/build.mjs",
     "sites:deploy": "node scripts/sites/build.mjs && npx --yes wrangler@4.147.0 deploy -c infra/cloudflare/lp.wrangler.jsonc && npx --yes wrangler@4.147.0 deploy -c infra/cloudflare/docs.wrangler.jsonc"
   },
@@ -137,7 +140,7 @@
         ],
         "executor": "nx:run-commands",
         "options": {
-          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs playwright.app-kit.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts tests scripts examples/store/catalog sites/lp/assets/*.js --max-warnings 0"
+          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs playwright.app-kit.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts vitest.use-cases.coverage.config.ts vitest.gallery.coverage.config.ts tests scripts examples/store/catalog sites/lp/assets/*.js --max-warnings 0"
         }
       }
     }

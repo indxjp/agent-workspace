@@ -46,4 +46,30 @@ export default defineEntry({
     check: { tools: ['search_files', 'run_skill_script'], approval: 'Write' },
   },
   safety: ['person', 'files', 'structured'],
+  next: {
+    source: 'use-cases/excel-consolidation',
+    demo: {
+      agent: 'excel-consolidation',
+      prompts: [
+        {
+          ja: '今月（2025年5月）の拠点別売上を集計して、前月からの増減を説明して',
+          en: "Consolidate this month's (May 2025) sales by branch and explain the change from last month.",
+        },
+        {
+          ja: '2025年5月と4月の拠点別売上を集計する計画を出して',
+          en: 'Show me the plan for consolidating May and April 2025 sales by branch.',
+        },
+      ],
+      moment: {
+        ja: '形式のバラバラな5拠点のExcelが、承認した計画どおりに1つの表とExcelファイルになり、差の大きい拠点に説明が付く。',
+        en: 'Spreadsheets of five different shapes, one per branch, become one table and one workbook on the plan a person approved, with notes on the biggest gaps.',
+      },
+      data: {
+        ja: '架空の5拠点の月次売上報告Excel 10ファイルと、テンプレート・経費精算・メモ',
+        en: '10 fictional monthly sales workbooks from 5 branches, plus a template, an expense report and a note',
+      },
+      seed: [{ collection: 'excel-consolidation', from: 'data' }],
+      check: { tools: ['search_files'], approval: 'run_skill_script' },
+    },
+  },
 });

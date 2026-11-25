@@ -566,7 +566,9 @@ A request is checked in three places, and each does one job:
 
 The web app's signing keys are derived from `SESSION_SECRET` with HKDF and a purpose label
 (`apps/web/server/auth/core/key-ring.ts`), so a token signed for one purpose is refused for every
-other. The run token is signed with the gateway's own `GATEWAY_TOKEN_SECRET`. Bearer secrets are
+other. The session, workspace-selection and invitation-identity cookies share one signed-token
+codec (`apps/web/server/auth/core/signed-token.ts`), which verifies the signature with Web Crypto
+before it parses the payload. The run token is signed with the gateway's own `GATEWAY_TOKEN_SECRET`. Bearer secrets are
 stored only as a SHA-256 hash and looked up by that hash.
 
 | Credential                                                        | Lifetime                                        | Stored as                                  | Can be revoked                             | Adapter                                                                    |

@@ -1,6 +1,6 @@
 'use client';
 /**
- * The Try tab once the visitor is signed in: a real chat with the entry's demo agent in the
+ * The Try it section once the visitor is signed in: a real chat with the entry's demo agent in the
  * visitor's own demo workspace. Tool calls, approval waits and answers appear as the run's events
  * arrive, drawn with the SDK chat's own parts (`ToolTrace`, `ApprovalPrompt`, `AssistantProse`).
  * The runs left come from the platform; a cap turns the chat into the recording fallback.
@@ -14,7 +14,7 @@ import {
   type DemoFallbackReason,
 } from '@indx-workspace/contracts/demo';
 import type { RunApprovalDecision } from '@indx-workspace/contracts/runs';
-import { ApprovalPrompt, AssistantProse, ToolTrace } from '@indx-workspace/react';
+import { ApprovalPrompt, AssistantProse, ResultChart, ToolTrace } from '@indx-workspace/react';
 import { ApiProblemError, runFailure, type AgentWorkspaceClient } from '@indx-workspace/sdk';
 
 import type { LiveEntry } from '../../../../catalog/define';
@@ -22,6 +22,7 @@ import { recordingFor } from '../../../../catalog/recording';
 import { RECORDINGS } from '../../../../catalog/recordings.generated';
 import { pick, type Lang } from '../../../lang';
 import { callPlatform } from '../../../platform-api';
+import { chartsFor } from './charts';
 import { Fallback } from './fallback';
 import { allowanceText, chatFallback, fallbackReasonOf } from './messages';
 import { applyFrame, beginTurn, continueTurn, type Turn } from './transcript';
@@ -95,6 +96,7 @@ export function DemoChat({
         ...turn,
         status: run.status,
         pendingApproval: run.pendingApproval,
+        structured: run.output?.structured ?? null,
       }));
     } catch {
       setProblem('stream');
@@ -107,7 +109,13 @@ export function DemoChat({
     setProblem(null);
     setRunStop(null);
     try {
-      const started = await client.runs.start(agentId, { prompt, sessionId: sessionId.current });
+      // The entry's schema, when it declares one, so the answer comes back typed and is charted.
+      const { outputSchema } = entry.demo;
+      const started = await client.runs.start(agentId, {
+        prompt,
+        sessionId: sessionId.current,
+        ...(outputSchema === undefined ? {} : { outputSchema }),
+      });
       setTurns((all) => [
         ...all,
         { ...beginTurn(started.run.id, prompt), status: started.run.status },
@@ -192,6 +200,9 @@ export function DemoChat({
           <ToolTrace mode="full" steps={turn.tools} strings={WORDS.toolStrings(lang)} />
           {turn.answers.map((answer) => (
             <AssistantProse key={answer.id} text={answer.text} />
+          ))}
+          {chartsFor(entry.slug, turn.structured).map((chart, at) => (
+            <ResultChart key={at} chart={chart} structured={turn.structured} locale={lang} />
           ))}
           {turn.pendingApproval === null ? null : (
             <ApprovalPrompt

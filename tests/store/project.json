@@ -45,9 +45,11 @@
         "{workspaceRoot}/scripts/release/package-smoke.mjs",
         "{workspaceRoot}/scripts/release/package-tar.mjs",
         "{workspaceRoot}/tests/apps/benchmark.ts",
+        "{workspaceRoot}/tests/apps/handwritten.ts",
         "{workspaceRoot}/tests/apps/lane.mjs",
         "{workspaceRoot}/tests/apps/registry.ts",
-        "{workspaceRoot}/tests/gallery/**/*"
+        "{workspaceRoot}/tests/gallery/**/*",
+        "{workspaceRoot}/use-cases/**/*"
       ]
     }
   }

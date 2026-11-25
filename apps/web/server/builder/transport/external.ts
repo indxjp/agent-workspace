@@ -20,7 +20,7 @@ import { admitToolEndpointCall, endpointCredentialKey } from '../../integrations
 import { randomIds, type IdGenerator } from '../../ids';
 import { featureRefusalResponse } from '../../features/guard';
 import { BUILDER_RESOURCE_PATH, bearerChallenge, resourceUrl } from '../../oauth/resource';
-import type { Principal } from '../../identity';
+import type { Caller } from '../../identity';
 import { apiError } from '../../execution';
 import { answerLocally, readCall, toolCallName } from '../../tool-endpoint/handler';
 import type { CallContext } from '../ports';
@@ -30,7 +30,7 @@ import { TOOL_LIST, refusal, toolAnswer } from './mcp';
 
 /** The parts of a verified principal this door reads; the workspace and caller come from nothing else. */
 export type ExternalPrincipal = Pick<
-  Principal,
+  Caller,
   | 'via'
   | 'oauth'
   | 'scope'

@@ -179,8 +179,10 @@ affinity). The server refuses a `networkPolicy` a driver cannot enforce as
   **Today:** `docker` and `kubernetes` enforce `restricted` and `open` through a per-session egress
   proxy. The isolation suite has checks that an allowed host is reachable, any other host and
   the metadata address are refused, and a sandbox cannot bypass the proxy, but they have not yet run
-  green on both lanes, so today this is covered by unit tests only. `cloud-run-service` and
-  `aca-sessions` refuse `restricted` and are not exercised by the live driver suite. E2B (`external`)
+  green on both lanes, so today this is covered by unit tests only. `cloud-run-service` has a
+  live isolation proof under `none`, and takes `restricted` and `open` through a shared egress proxy
+  when the project file sets `gcp.sandboxInternet: true`; `aca-sessions` refuses `restricted` and is
+  not exercised by the live driver suite. E2B (`external`)
   and `vercel-sandbox` have passed the providers-live lane; `cloudflare-sandbox` is implemented but
   refuses every run by name (ADR-0131), and the remaining managed-cloud ids have no implementation at all — see
   [The data plane](/concepts/data-plane#the-contract) for the standing of each cloud's sandbox.
@@ -191,7 +193,7 @@ affinity). The server refuses a `networkPolicy` a driver cannot enforce as
 <AccordionGroup>
   <Accordion title="Every driver id, and isolation at a glance">
 
-`RUNTIME_DRIVERS` (`packages/contracts/src/runtimes.ts`) names thirteen ids — the six above, plus
+`RUNTIME_DRIVERS` (`packages/contracts/src/runtimes.ts`) names thirteen ids — the five above, plus
 `sandbox-runtime` (a host-backed OS sandbox, no Docker required), `gke-agent-sandbox`,
 `aws-agentcore`, `aws-ecs`, `cloud-run-sandbox`, `external`, `vercel-sandbox` and `cloudflare-sandbox`. In
 `packages/runtime/src/` only `local.ts`, `docker.ts`, `kubernetes.ts`, `aca-sessions.ts`,

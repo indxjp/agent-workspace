@@ -203,6 +203,63 @@ prompt, so a case that reaches a gated call ends at D1's pause. Without a rule, 
 Rejected: approving in evals automatically (it writes to real systems), and a scripted approver per
 case (it needs a second turn, while a case is one prompt).
 
+## Amendment (issue #2439) — A gate is stored by connector id and followed to the run's key
+
+D3 lets a gate name a connector tool as `mcp__<server>__<tool>`, and Claude Code matches it against
+the run's tool names, which carry the run's server keys. As first shipped, a save stored the gate as
+written, by the connector's name, while the tool rules beside it were stored by connector id
+([ADR-0113](0113-tools-defined-in-code-are-catalog-connectors-that-run-in-the-gateway.md) SD13,
+#1109). A connector's key is its name or `connector-<id>` (when a same-named tool connector takes
+the name), and a rename changes it. In either case the gate matched no tool, and the write it
+guarded ran without a person's approval and without an error. Gates now follow the connector:
+
+- **Stored by id.** Every policy save (the version pipeline) stores a gate whose server is the name
+  of an MCP connector of the workspace as `mcp__connector-<id>__<tool>`, exactly as SD13 stores
+  `tools.base`, `tools.autoApprove` and `tools.deny`. A gate on any other server (a tool connector's
+  key, a name no MCP connector has yet) is stored as written and binds by name. A demo template's
+  seed (`apps/web/server/demo/provision/policy-remap.ts`, `withConnectorIdsByName`) stores its gates
+  by the template connector's id the same way, so a template connector renamed after seeding keeps
+  its gate, and a copy points the gate at its stand-in by id
+  ([ADR-0171](0171-a-demo-copy-converges-on-its-template-and-each-entrys-stand-ins-are-its-own.md) D3).
+- **A rule splits at its first `__`.** `mcp__<server>__<tool>` is read with the server ending at the
+  first `__`, at save and at compose alike. A connector whose name contains `_` is not a usable slug,
+  so its run key is always `connector-<id>` (SD13 rule 1) and a gate on it must be written in that
+  form; a gate that spells such a name (`mcp__my__crm__send`) is read as the server `my`, binds to
+  nothing, and guards nothing. Only slug names (no `_`) can be written by name.
+- **Followed to the run's key at compose.** A gate stored by id is given the connector's key in the
+  run. A gate a version saved before this amendment stored by name is given the key of the run's
+  connector of that name, and is also kept as written, so a tool connector now keyed by that name is
+  gated too. Versions are immutable, so old gates are resolved when they are read, not rewritten.
+- **Refused, never dropped.** When a gate's connector is served by the run (by id or by name) and no
+  rule the gate became names one of the run's servers, compose refuses the run with
+  `approval_gate_unresolved` (ADR-0065 D3: refuse, never drop). Resolution makes this unreachable
+  today; it is the backstop against a key map that drifts from the servers a run serves.
+- **A gate for a connector the run does not serve is kept.** A connector that is not assigned, is
+  disabled, or is left out by the policy ceiling offers the run no tool, so its gate guards nothing
+  there. Refusing it would stop every run of an agent whose gated connector is switched off, for no
+  protection.
+
+After mapping, a gate and an `autoApprove` on the same connector name the same server, so the Claude
+adapter's `splitApprovals` moves the auto-approval out of `allowedTools` and `canUseTool` asks.
+
+What it does not cover: a gate a version saved before this amendment wrote by a connector's name,
+whose connector has since been renamed, names a server no connector of the run has, and nothing
+stored links it to the renamed connector; it guards nothing until the agent is saved again with the
+gate on the new name. A save from this amendment on stores the id, so a later rename is followed.
+
+The same reading covers the other lists a version saved before #1109 holds by name (#2446). A
+name-form `deny` is given the key of the run's MCP connector of that name as well, and kept as
+written: a deny on one more key only narrows. A name-form `autoApprove` or `tools.base` entry is
+never moved to another key, since that would grant a tool the owner never named; it is dropped
+when the run's MCP connector of that name has another key (the #1109 fallback, where the name is
+now a tool connector's key), and otherwise kept as written. A name-form rule whose connector has
+since been renamed resolves to nothing, as a gate does, until the agent is saved again.
+
+Rejected: rewriting stored versions to ids (a version is immutable, and a name renamed before the
+rewrite could not be resolved by it either), and refusing every gate that names no server of the run
+(it would refuse an agent whose gated connector is merely disabled, and a tool connector's gate when
+that connector is not assigned).
+
 ## Related decisions
 
 - [ADR-0065](0065-an-agents-engine-is-an-extension-point-behind-one-port.md) — D3 (refuse, never

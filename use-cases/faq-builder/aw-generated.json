@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "f7113da940e8c0dd18c28d6a0b16670f86b3009606d1a7eb7df7190cdb15f2bc",
+        "agents/faq-builder.md": "57d5e62016888cb81e2ae679678ffe6b9d871a3450973e856f475d25c2729cd2",
+        "agents/faq-builder.ts": "c01722b743d81471324085d05995e3f7e01c332349c4015030e59f54f82a5023",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/faq-builder.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/faq-builder/SKILL.md": "6902973f7c7715e69155144ea82f9f5daf60fc82da59609b9502f0639dd9d138",
+        "surfaces/main.ts": "f4153ef4a6f5355f21192cf46eee9cb9a721d7db603e405ff8370cb25d40483b"
+      },
+      "edits": []
+    }
+  }
+}

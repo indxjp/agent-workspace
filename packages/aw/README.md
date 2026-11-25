@@ -7,14 +7,17 @@ resources that the server serves today ([the CLI overview](https://docs.agentwor
 nothing else — a row that waits for a server change has no command rather than a stub, so
 `aw --help` is an honest inventory of what the control plane can do today.
 
-Besides that tree there are two local commands that need no control plane: `aw init` writes a new
-project and `aw dev` runs it on this machine and pushes its definition files on every save (see
-[Local development](#local-development-aw-init-and-aw-dev)). `aw check` and `aw push` read the
-project's definition files and save them as agent versions (see
-[Agents as code](#agents-as-code-aw-check-and-aw-push)).
+Besides that tree there are project commands that work on the files in your repository:
+`aw init` writes a new project and `aw dev` runs it on this machine and pushes its definition files
+on every save (see [Local development](#local-development-aw-init-and-aw-dev)); `aw check` and
+`aw push` save the definition files as agent versions (see
+[Agents as code](#agents-as-code-aw-check-and-aw-push)); `aw chat` talks to an agent;
+`aw eval`, `aw promote`, `aw rollback` and `aw versions` score and move versions; `aw generate`
+adds an agent, a page, a resource or an app; `aw deploy` ships the project; and `aw platforms`
+exports an agent to another agent platform.
 
-This is the operator's CLI. `packages/cli` (`agent-workspace`) is the deployment generator; the
-two share nothing but the repository.
+This is the developer's and operator's CLI. `@indx-workspace/cli` (`agent-workspace`) is the
+deployment generator; `aw deploy` runs it, so a project lists it as a dev dependency.
 
 ## Five-minute quickstart
 
@@ -24,7 +27,7 @@ two share nothing but the repository.
 npm install --global @indx-workspace/aw   # or run it once: npx @indx-workspace/aw --version
 ```
 
-`aw` is released in lock-step with `@indx-workspace/sdk` and `@indx-workspace/contracts`, at the
+`aw` is released in lock-step with the other published `@indx-workspace` packages, at the
 contracts version it speaks. Inside this repository, `pnpm --filter @indx-workspace/aw... build`
 and `node packages/aw/dist/index.js` run it from the workspace instead.
 
@@ -192,8 +195,9 @@ surfaces in sync with it.
   (`BOOTSTRAP_ADMIN` when set). An address holding a terminal control character is refused. The URL is `http://127.0.0.1:<port>`, the same one
   the project step of the configuration precedence gives, so `aw me` and the other commands reach
   the local runtime from the project directory.
-- It stores the short-lived token in `~/.config/agent-workspace/credentials.json` (mode `0600`)
-  and never prints it.
+- It stores the workspace API key the local runtime issued in
+  `~/.config/agent-workspace/local-credentials.json` (mode `0600`), one per local URL, and never
+  prints it. `credentials.json` beside it holds only `aw login`'s tokens.
 - It applies the project file's `models` and `connectors` from its own environment, before the
   first sync (C10, C11). Each is created, or its settings and credential brought in step; a
   provider or transport that differs from the server's is printed as
@@ -427,25 +431,20 @@ server's minor that fixes it (`@indx-workspace/aw`).
 
 ## Command tree
 
-`aw --help` prints it; `aw <family> --help` prints one family. Families: `workspaces`
-(`sharing-policy`), `team` (`members`, `users`, `api-keys`), `models` (`connections`,
-`discover`), `runtimes` (`profiles`, `connections`), `secrets`, `files`, `skills`, `connectors`,
-`agents` (`assignments`, `versions`, `pointers`), `projects`, `sessions`, `runs`, `shares`, `metrics`, `audit`. The
-local commands `init` and `dev`, and the project commands `check` and `push`, stand beside the
-families.
+`aw --help` prints it; `aw <family> --help` prints one family. Families: `workspaces`, `team`
+(`members`, `users`, `api-keys`, `invitations`), `models` (`connections`, `discover`), `runtimes`
+(`profiles`, `connections`), `engines`, `secrets`, `files`, `storage`, `skills`, `connectors`,
+`endpoint-clients`, `agents` (`assignments`, `versions`, `pointers`, `policy`, `export`, `import`,
+`new`), `agent-teams`, `projects`, `sessions`, `runs`, `shares`, `tokens`, `triggers`, `webhooks`,
+`metrics`, `audit`, `platforms` and `blueprint`. `login`, `logout`, `whoami` and `me` say who `aw`
+is; the project commands above stand beside the families.
 
-Deliberately absent until their server change lands (spec §7.2, §8): `me` (S-8),
-`runtimes detect|test` (S-9, S-4), `secrets remove` (S-10), `skills remove` (S-12),
-`connectors update` (S-20), `agents policy|export|import` (S-13), `agents archive` (RF-201),
-`shares publish` (RF-103).
+Deliberately absent until their server change lands (spec §7.2, §8): `runtimes detect|test`
+(S-9, S-4), `agents archive` (RF-201) and `shares publish` (RF-103).
 
-Absent because the only credential `aw` can hold is refused: `workspaces list|get|create|update`
-and `team invitations list|create|resend|revoke`. Every `/api/workspaces` and `/api/invitations`
-route answers an API-key principal with `403 api_key_not_permitted` (ADR W9-WS-119: a key acts
-for one workspace with a fixed role and has no human membership to administer against), so a
-command for them would exit 1 on every invocation. The SDK methods exist for a session-cookie
-caller; a session mode for the CLI would need a way for a person to sign this binary in
-(S-22). `team invitations accept` is browser-only besides.
+`aw login` signs a person in through the browser, so the commands that act on workspaces and
+invitations, which an API key may not call (`403 api_key_not_permitted`, ADR W9-WS-119), work
+under a signed-in person. `team invitations accept` is browser-only.
 
 ## Layout
 
@@ -465,5 +464,7 @@ caller; a session mode for the CLI would need a way for a person to sign this bi
 | `src/commands/project.ts`                     | `aw check` and `aw push`, thin over `src/project/`.                                                       |
 | `src/project/`                                | The definition-file loader (a forked child, ADR-0111), problem lines, the diff, check and push.           |
 
-The package depends on `@indx-workspace/sdk`, `@indx-workspace/contracts`, `zod` and Node's
-built-ins, and on nothing else; `dependency-cruiser` enforces it.
+The package depends on `@indx-workspace/sdk`, `@indx-workspace/contracts`,
+`@indx-workspace/platforms`, `@modelcontextprotocol/sdk`, `esbuild`, `zod` and Node's built-ins,
+with `@indx-workspace/cli` as an optional peer for `aw deploy`; `dependency-cruiser` enforces the
+boundary.

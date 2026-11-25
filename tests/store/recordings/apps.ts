@@ -256,7 +256,7 @@ async function recordApp(recording: AppRecording) {
       {},
       { requireApproval: gatedCalls(agent) },
     );
-    return await playTurn(workspace, ask.prompt);
+    return await playTurn(workspace, ask);
   } finally {
     resetAppRuntimeForTests();
   }
@@ -458,24 +458,23 @@ export const APPS: Readonly<Record<string, Recorder>> = {
             : itemsOf(await context.tool('service-desk', 'kb_article_list', {})).filter((item) =>
                 `${text(item, 'title')} ${text(item, 'body')}`.includes(about),
               );
-        // The visitor takes the ticket: priority and owner are what the prompt asks for.
+        // Priority and status are what the prompt asks for (people are ids, so it names no owner).
         await context.tool('service-desk', 'ticket_update', {
           id: text(found, 'id'),
           status: 'in_progress',
           priority: 'p2',
-          assignee: PERSON,
         });
         const title = text(article, 'title');
         return title === ''
           ? say(
               ask.lang,
-              '優先度をp2、担当をあなたにして対応中にしました。該当するナレッジ記事は見つかりませんでした。',
-              'Set priority p2, assigned it to you and started work. No knowledge article matched.',
+              '優先度をp2にして対応中にしました。該当するナレッジ記事は見つかりませんでした。',
+              'Set priority p2 and marked it in progress. No knowledge article matched.',
             )
           : say(
               ask.lang,
-              `優先度をp2、担当をあなたにして対応中にしました。ナレッジ記事「${title}」を添えます。`,
-              `Set priority p2, assigned it to you and started work. Attach the article "${title}".`,
+              `優先度をp2にして対応中にしました。ナレッジ記事「${title}」を添えます。`,
+              `Set priority p2 and marked it in progress. Attach the article "${title}".`,
             );
       },
     }),

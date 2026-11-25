@@ -1,0 +1,55 @@
+{
+  "kind": "schedule",
+  "name": "meeting-prep",
+  "prompt": "今日の商談ごとに準備ブリーフを作成して、meeting-prep-reports フォルダに保存してください。 / Prepare today's meeting briefs and save them to the meeting-prep-reports folder.",
+  "cron": "0 9 * * 1-5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "briefs", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "briefs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "meeting",
+            "account",
+            "attendees",
+            "accountNotes",
+            "openDeals",
+            "recentEmails",
+            "talkingPoints",
+            "sources"
+          ],
+          "properties": {
+            "meeting": { "type": "string" },
+            "account": { "type": "string" },
+            "attendees": { "type": "array", "items": { "type": "string" } },
+            "accountNotes": { "type": "array", "items": { "type": "string" } },
+            "openDeals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "stage", "nextStep"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "stage": { "type": "string" },
+                  "nextStep": { "type": "string" }
+                }
+              }
+            },
+            "recentEmails": { "type": "array", "items": { "type": "string" } },
+            "talkingPoints": { "type": "array", "items": { "type": "string" } },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

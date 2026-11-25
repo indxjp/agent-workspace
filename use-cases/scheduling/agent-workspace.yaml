@@ -1,0 +1,27 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: scheduling
+engine: claude-agent-sdk
+# Action (AC). A request arrives in chat; the agent reads its reference folder, proposes the change
+# and makes it in a system through the `scheduling-calendar` connector. Every write waits for a person's
+# approval, and one approval covers exactly one call (ADR-0145 D2.1): a change of several records is
+# several calls, each approved on its own. Upload the reference folder once:
+#   for f in data/*/*; do aw files upload "scheduling/${f#data/}" "$f"; done
+policy:
+  permissions:
+    # search_files and the file tools read the granted reference folder only.
+    readFiles: true
+    writeFiles: false
+    runCommands: false
+    unrestrictedNetwork: false
+  # The only connector any agent in this project may use.
+  tools: [scheduling-calendar]
+  limits:
+    maxBudgetUsd: 0.5
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

@@ -96,7 +96,8 @@ function initDrawer() {
   };
   var setDrawer = function (open) {
     toggle.setAttribute("aria-expanded", bool(open));
-    toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    var ja = document.documentElement.lang === "ja";
+    toggle.setAttribute("aria-label", open ? (ja ? "メニューを閉じる" : "Close menu") : ja ? "メニューを開く" : "Open menu");
     drawer.classList.toggle("open", open);
   };
   toggle.addEventListener("click", function () {

@@ -159,12 +159,6 @@ export async function wireSubsystems({
   const skills = await installSkillsApi(
     { resolveWorkspace, scopes, catalog: resourceCatalog },
     files.kind === 'serving' ? files.runtime.storage : undefined,
-    {
-      lock: (name, work) => root.withNamedLock(name, work),
-      workspaceIds: () => root.listWorkspaceIds(),
-      migrationRuns: root.storageMigrationRuns,
-      owners: root.workspaces,
-    },
   );
   const sessions = await installSessionTranscripts(
     identifyAuditActor,

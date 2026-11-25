@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "65c0b66c73d16d25f068a0deaff1411542afa53d60af1dfaabdb81b48a18c972",
+        "agents/ringi-review.md": "3e1d61316088293c051b2bfd114fe155f27d59bbc76fd1dd50880689056dae36",
+        "agents/ringi-review.ts": "b79436c53377fd37732d1b2163b7448ffa4eaa8adeb0b613db9bd59ca14a6b73",
+        "evals/ringi-review.yaml": "f1e1c802ef3964f593d1c60916da9ec13d2d6e1fb300d1a43d6e010fc31b6b37",
+        "skills/ringi-review/SKILL.md": "618cf88eafbdda43fdc478a337c2911af470c435316df8e216e8296bb0318959",
+        "surfaces/main.ts": "a222f9cc75cc181b7b7ac56b53d80279a06d125f46c48f32d6a4f3a0c7aa0103"
+      },
+      "edits": []
+    }
+  }
+}

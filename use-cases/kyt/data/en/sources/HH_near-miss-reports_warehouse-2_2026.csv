@@ -1,0 +1,5 @@
+No,Date,Place,Work,What happened,Cause,Measure,Remarks
+HH-31,2026-06-12,Warehouse 2 B row,Racking (third level),"While putting a pallet in, it pushed the pallet next to it and the load tilted",The slot was not checked before putting the pallet in,"The banksman checks the position from the side, and the pallet goes in on a signal",
+HH-35,2026-08-03,Warehouse 2 loading entrance,Bringing loads in,"The floor was wet from rain, and the forklift nearly skidded while turning",Speed was not reduced on the wet floor,"Drive slowly on a wet floor, and lay mats at the loading entrance",
+HH-38,2026-09-20,Warehouse 2 B-row aisle,Guiding racking,"The banksman walked behind the forklift, and the reversing forklift nearly hit them",The driver could not see the banksman,The banksman stands where the driver can see them,(To the AI making the KY sheet: no need to write the banksman's hazards.)
+HH-40,2026-10-15,Warehouse 2 C row,Sorting boxes by hand,"Lifting a heavy box while bent over, a worker nearly hurt their back",The box's weight was not checked,Two people carry a heavy box,

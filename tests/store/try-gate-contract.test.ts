@@ -1,5 +1,5 @@
 /**
- * The Try tab's sign-up gate holds the contract the journeys and the detail page rely on (spec "How
+ * The Try it section's sign-up gate holds the contract the journeys and the detail page rely on (spec "How
  * Try it works", "Email-link sign-in"). The check reads `gate.tsx` as TypeScript, because the
  * repository's test projects have no React to render it with (the apps lane's `node:test` cannot
  * load TSX either): the form, its fields, the consent label's link to the privacy notice, the

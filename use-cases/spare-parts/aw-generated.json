@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:an": {
+      "files": {
+        "agent-workspace.yaml": "9c291ea74572d5c576c3cdb25802eb065d0fbb118295106ee44dacb1fbe65f70",
+        "agents/spare-parts.md": "cbd8c798b209cff6ec60d2b4dd13e1e0e694c17d2237fd836f6bf6963a0526fc",
+        "agents/spare-parts.ts": "fe8d0b2d65b5cbb7dfc0ce696b425ea3eefd3e047d3623e14cbda6ffe2f93eba",
+        "data/en/records.csv": "49f11cfe079c9f95d082fd8666b46ff935987716c0345313ffe300cb079bb52c",
+        "data/ja/records.csv": "8b73a591f399f59cb675be4d44da2bb0a5848ace5ae61bb11e0a478858e64622",
+        "evals/spare-parts.yaml": "3be1f082a6d23b5386b187415294e5673dc4caa6b19462f8e34e85ec8bc109c3",
+        "skills/spare-parts/SKILL.md": "18f87af2d307b7c01ea4332d4b6897e611f75b55f651692db45769de3e6e4c92",
+        "surfaces/main.ts": "6b2b37cbc6e39b5a90f57bf07c43f569119c0d63ec7d950b5bb7924f9f0f4a9f"
+      },
+      "edits": []
+    }
+  }
+}

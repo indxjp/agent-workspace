@@ -138,11 +138,10 @@ tradeoffs. They do not narrate syntax.
 
   | Bridge                                                                                                                                                                    | Removed by |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-  | old skill forms (bare-prefix skills, skill marker objects, the skills adopt stage) and the old per-area layout helpers in `@indx-workspace/contracts`                     | #1699      |
   | JSON+base64 skill import                                                                                                                                                  | #1700      |
   | optional `status`, `objectId`, `targetPath`, `uploadMode`, `reservationToken` and `updatedAt` on file-catalog rows until the hand-written file-catalog fakes are replaced | #1634      |
   | a folder move that refuses while an upload under it is pending                                                                                                            | #1657      |
-  | the deprecated 0.6.10 storage-settings exports                                                                                                                            | #1944      |
+  | the deprecated 0.6.10 storage-settings exports and the deprecated old per-area naming exports (`legacyAreaPrefixes`)                                                      | #1944      |
 
 - Exported reusable APIs get TSDoc when purpose, failure modes, units, or invariants are not clear
   from their signature. Do not repeat the parameter name in prose.
@@ -217,6 +216,15 @@ then lower the ceiling in the same change. Never raise a gate to accommodate new
 floors ratchet the other way: `scripts/check-coverage-ratchet.mjs` (run in the CI coverage jobs)
 fails a pull request that lowers a floor in a `vitest*.coverage.config.ts`, and warns when one trails the measured value by more than 5
 points, so a floor is raised with the code and never lowered.
+
+Narrow exception, shrink-only: the Agent Store's promotion check (`tests/store/catalog.test.ts`)
+requires every `live` catalog entry to have a passing real-model (R1) record for the current hash of
+its source. The 14 wave-1 entries went live before that record existed; they were listed in
+`tests/store/awaiting-r1.json`, whose length must equal `AWAITING_R1_CEILING` in that test. Their
+records have since been committed (the last, service-desk, in flip wave 2e), so the list is empty
+and the ceiling is 0. The test fails when a listed entry has its record or is no longer live, when
+the length and the ceiling differ, or when the list holds an entry the base branch's list does not:
+an entry that goes live from now on needs its record.
 
 ## Sources
 

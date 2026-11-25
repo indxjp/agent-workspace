@@ -1,0 +1,25 @@
+month,supplier_code,supplier,lots_inspected,lots_rejected,qty_inspected,qty_defective,defect_ppm
+2026-06,S-01,Asagiri Precision Ltd.,20,0,100000,15,150
+2026-06,S-02,Hisame Resin Co.,40,1,200000,42,210
+2026-06,S-03,Tsuyukusa Electric Materials Co.,20,0,100000,15,150
+2026-06,S-04,Mikaboshi Metals Co.,20,1,100000,32,320
+2026-07,S-01,Asagiri Precision Ltd.,20,0,100000,12,120
+2026-07,S-02,Hisame Resin Co.,40,1,200000,52,260
+2026-07,S-03,Tsuyukusa Electric Materials Co.,20,0,100000,16,160
+2026-07,S-04,Mikaboshi Metals Co.,20,1,100000,34,340
+2026-08,S-01,Asagiri Precision Ltd.,20,0,100000,18,180
+2026-08,S-02,Hisame Resin Co.,40,1,200000,48,240
+2026-08,S-03,Tsuyukusa Electric Materials Co.,20,0,100000,17,170
+2026-08,S-04,Mikaboshi Metals Co.,20,1,100000,31,310
+2026-09,S-01,Asagiri Precision Ltd.,20,0,100000,14,140
+2026-09,S-02,Hisame Resin Co.,40,2,200000,62,310
+2026-09,S-03,Tsuyukusa Electric Materials Co.,20,3,100000,72,720
+2026-09,S-04,Mikaboshi Metals Co.,20,1,100000,33,330
+2026-10,S-01,Asagiri Precision Ltd.,20,0,100000,16,160
+2026-10,S-02,Hisame Resin Co.,40,3,200000,84,420
+2026-10,S-03,Tsuyukusa Electric Materials Co.,20,1,100000,30,300
+2026-10,S-04,Mikaboshi Metals Co.,20,1,100000,35,350
+2026-11,S-01,Asagiri Precision Ltd.,20,0,100000,13,130
+2026-11,S-02,Hisame Resin Co.,40,5,200000,122,610
+2026-11,S-03,Tsuyukusa Electric Materials Co.,20,0,100000,14,140
+2026-11,S-04,Mikaboshi Metals Co.,20,1,100000,34,340

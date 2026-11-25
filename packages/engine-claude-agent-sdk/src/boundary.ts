@@ -40,6 +40,7 @@ import {
   RUN_SKILL_SCRIPT_TOOL,
   skillScriptToolDescription,
   type SkillScriptSetup,
+  type ToolAnswers,
 } from '@agent-workspace/engine';
 
 import type { ClaudeApprovalGate, CompiledMcpServerConfig, CompiledSdkOptions } from './options.js';
@@ -287,6 +288,8 @@ export type SdkOptionOverlay = {
   readonly abortController?: AbortController;
   /** `run_skill_script` (ADR-0137): offered as an in-process MCP server when present. */
   readonly skillScript?: SkillScriptSetup;
+  /** The answers the run received, which a `run_skill_script` call may hand its script (ADR-0176). */
+  readonly toolAnswers?: ToolAnswers;
   /** `search_files` (ADR-0147): offered on the same in-process MCP server when present. */
   readonly fileSearch?: FileSearchSetup;
   /** ADR-0145's gate and the run state it records into; `canUseTool` is set only when it gates a tool. */
@@ -301,10 +304,10 @@ export type SdkOptionOverlay = {
  * search.
  */
 function agentWorkspaceServer(
-  overlay: Pick<SdkOptionOverlay, 'skillScript' | 'fileSearch' | 'handoff'>,
+  overlay: Pick<SdkOptionOverlay, 'skillScript' | 'fileSearch' | 'handoff' | 'toolAnswers'>,
   signal: AbortSignal | undefined,
 ): SdkMcpServerConfig {
-  const { skillScript, fileSearch, handoff } = overlay;
+  const { skillScript, fileSearch, handoff, toolAnswers } = overlay;
   return createSdkMcpServer({
     name: CLAUDE_SKILL_SCRIPT_SERVER,
     tools: [
@@ -321,6 +324,7 @@ function agentWorkspaceServer(
                   skillScript,
                   input,
                   signal,
+                  toolAnswers,
                 );
                 return { content: [{ type: 'text' as const, text }], isError };
               },
@@ -756,6 +760,7 @@ export function startRun(start: ClaudeRunStart, deps: RunDeps = {}): ClaudeRun {
   const overlay: SdkOptionOverlay = {
     abortController,
     ...(deps.skillScript === undefined ? {} : { skillScript: deps.skillScript }),
+    ...(deps.toolAnswers === undefined ? {} : { toolAnswers: deps.toolAnswers }),
     ...(deps.fileSearch === undefined ? {} : { fileSearch: deps.fileSearch }),
     ...(deps.sessionStore === undefined
       ? {}

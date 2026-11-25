@@ -5,9 +5,6 @@
  * `rbac/authorisation-matrix.test.ts`'s, derived from the route declaration.
  */
 import { log as webLogger } from '../telemetry/logger';
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,11 +29,13 @@ import { createInMemoryConnectorsStoreProvider } from '../connectors/memory-stor
 import type { EndpointClientsRuntime } from '../endpoint-clients/wiring';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { skillFileKey } from '../skills/keys';
-import type { WorkspaceSkillsStoreProvider } from '../storage/store';
+import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
+import { skillRowFolder } from '../skills/keys';
+import { createStorageService, type StorageService } from '../storage/service';
 import {
-  createLocalFilesystemObjectStoreProvider,
-  type ObjectStream,
+  bytesToStream,
+  createInMemoryObjectStore,
+  createInMemoryObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';
@@ -57,7 +56,9 @@ const ACTORS = {
 type Actor = keyof typeof ACTORS;
 
 let agentOfBuilderA: string;
-let skillsRoot: string;
+let storage: StorageService;
+const objects = createInMemoryObjectStoreProvider();
+const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
 
 function isActor(value: string): value is Actor {
   return Object.hasOwn(ACTORS, value);
@@ -100,31 +101,45 @@ function resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
   );
 }
 
-/** The skills store under `skillsRoot`, with every `read` answered by `read` instead. */
-function skillStoreWithRead(
-  read: (
-    key: string,
-    inner: (key: string) => Promise<ObjectStream | null>,
-  ) => Promise<ObjectStream | null>,
-): WorkspaceSkillsStoreProvider {
-  const provider = createLocalFilesystemObjectStoreProvider(skillsRoot);
-  return {
-    forWorkspace: (workspaceId) => {
-      const inner = provider.forWorkspace(workspaceId);
-      return {
-        delete: (key) => inner.delete(key),
-        copy: (source, destination) => inner.copy(source, destination),
-        head: (key) => inner.head(key),
-        read: (key, options) => read(key, (k) => inner.read(k, options)),
-        write: (key, body, options) => inner.write(key, body, options),
-        listPage: (prefix, options) => inner.listPage(prefix, options),
-      };
+/** Save one of the fixture skill's files as its `skills` row. */
+async function saveSkillFile(relativePath: string, bytes: Uint8Array): Promise<void> {
+  const saved = await storage.save(
+    { workspaceId: WORKSPACE, principalId: ACTORS.builderA.principalId, userId: null },
+    {
+      area: 'skills',
+      path: `${skillRowFolder('triage-guide')}/${relativePath}`,
+      body: bytesToStream(bytes),
+      maxBytes: PLATFORM_EXPORT_MAX_BYTES + 1,
+      replace: true,
     },
-  };
+  );
+  if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
+}
+
+/** Install the files runtime over `service`, which holds the skill rows the export reads. */
+function installFiles(service: StorageService): void {
+  installTestDomains({
+    files: { kind: 'serving', runtime: { resolveWorkspace, store: objects, storage: service } },
+  });
+}
+
+/** {@link storage} with every `open` answered by `open` instead. */
+function storageWithOpen(
+  open: (
+    path: string | undefined,
+    inner: () => ReturnType<StorageService['open']>,
+  ) => ReturnType<StorageService['open']>,
+): StorageService {
+  return { ...storage, open: (ctx, row) => open(row.path, () => storage.open(ctx, row)) };
 }
 
 beforeEach(async () => {
-  skillsRoot = await mkdtemp(path.join(os.tmpdir(), 'platform-exports-'));
+  const catalogs = createInMemoryCatalogStore();
+  storage = createStorageService({
+    catalog: (workspaceId) => catalogs.forWorkspace(workspaceId),
+    objects: createInMemoryObjectStore(),
+    log: noLog,
+  });
   const agents = createInMemoryAgentStoreProvider();
   const created = await agents.forWorkspace(WORKSPACE).create(
     {
@@ -139,12 +154,8 @@ beforeEach(async () => {
   if (created.kind !== 'created') throw new Error('the memory store creates the fixture agent');
   agentOfBuilderA = created.agent.id;
 
-  const skillStore = createLocalFilesystemObjectStoreProvider(skillsRoot);
-  const files = skillStore.forWorkspace(WORKSPACE);
-  await files.write(skillFileKey('triage-guide', 'SKILL.md'), new TextEncoder().encode(SKILL_MD), {
-    contentType: null,
-  });
-  await files.write(skillFileKey('triage-guide', 'assets/blob.bin'), BINARY, { contentType: null });
+  await saveSkillFile('SKILL.md', new TextEncoder().encode(SKILL_MD));
+  await saveSkillFile('assets/blob.bin', BINARY);
 
   installTestDomains({ agents: { agents, resolveWorkspace } });
   installTestDomains({
@@ -171,11 +182,9 @@ beforeEach(async () => {
     } as Partial<EndpointClientsRuntime> as EndpointClientsRuntime,
   });
   installTestDomains({
-    skills: { kind: 'serving', runtime: { resolveWorkspace, store: skillStore } },
+    skills: { kind: 'serving', runtime: { resolveWorkspace, store: objects } },
   });
-  installTestDomains({
-    files: { kind: 'serving', runtime: { resolveWorkspace, store: skillStore } },
-  });
+  installFiles(storage);
   installTestDomains({
     rbac: {
       directory: createMemoryDirectory({ users: [] }),
@@ -223,9 +232,8 @@ beforeEach(async () => {
   expect(saved.status).toBe(201);
 });
 
-afterEach(async () => {
+afterEach(() => {
   clearApplicationContext();
-  await rm(skillsRoot, { recursive: true, force: true });
 });
 
 describe('POST /api/agents/:id/platform-exports', () => {
@@ -312,19 +320,14 @@ describe('POST /api/agents/:id/platform-exports', () => {
   });
 
   it('refuses an over-size skill tree with 422 from its listed sizes, before reading its bytes', async () => {
-    await createLocalFilesystemObjectStoreProvider(skillsRoot)
-      .forWorkspace(WORKSPACE)
-      .write(
-        skillFileKey('triage-guide', 'assets/huge.bin'),
-        new Uint8Array(PLATFORM_EXPORT_MAX_BYTES),
-        { contentType: null },
-      );
-    const reads: string[] = [];
-    const store = skillStoreWithRead((key, read) => {
-      reads.push(key);
-      return read(key);
-    });
-    installTestDomains({ skills: { kind: 'serving', runtime: { resolveWorkspace, store } } });
+    await saveSkillFile('assets/huge.bin', new Uint8Array(PLATFORM_EXPORT_MAX_BYTES));
+    const reads: (string | undefined)[] = [];
+    installFiles(
+      storageWithOpen((path, open) => {
+        reads.push(path);
+        return open();
+      }),
+    );
 
     const response = await post(exportsRoute, { actor: 'builderA' });
 
@@ -334,11 +337,8 @@ describe('POST /api/agents/:id/platform-exports', () => {
   });
 
   it('fails with 500 rather than exporting a partial skill when a listed file is gone', async () => {
-    const blobKey = skillFileKey('triage-guide', 'assets/blob.bin');
-    const store = skillStoreWithRead((key, read) =>
-      key === blobKey ? Promise.resolve(null) : read(key),
-    );
-    installTestDomains({ skills: { kind: 'serving', runtime: { resolveWorkspace, store } } });
+    const blob = `${skillRowFolder('triage-guide')}/assets/blob.bin`;
+    installFiles(storageWithOpen((path, open) => (path === blob ? Promise.resolve(null) : open())));
 
     const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
 

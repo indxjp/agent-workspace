@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:an": {
+      "files": {
+        "agent-workspace.yaml": "007c8e864a8e759f7290a7f0adef67863465342f80abccc0c96934b1c8d56ec8",
+        "agents/dash-narrator.md": "412c82921835a5bd7f06a7f2a159090b4b4602f02135469a5d53882601b8eeca",
+        "agents/dash-narrator.ts": "dfb217080debd71dd9d2d04020c8b2f0b05385e806bb7e610929282773f78fa8",
+        "data/en/records.csv": "49f11cfe079c9f95d082fd8666b46ff935987716c0345313ffe300cb079bb52c",
+        "data/ja/records.csv": "8b73a591f399f59cb675be4d44da2bb0a5848ace5ae61bb11e0a478858e64622",
+        "evals/dash-narrator.yaml": "ac13cd3891afbafa431c08193040be6d93929658bb0f4400d9a8f88a603e67fe",
+        "skills/dash-narrator/SKILL.md": "00271f4e7b0e1f41d63334a9fb6b2258c7cc26fc1d1f9c688cf6f934acacd274",
+        "surfaces/main.ts": "c8ea3bd5f84076e78468fdc814926914c8dcda1038748349888215e8e077a374"
+      },
+      "edits": []
+    }
+  }
+}

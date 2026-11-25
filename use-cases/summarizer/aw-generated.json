@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "30f44081d5a40f9bde90705a6d37448e8dec1dfae6dbfebcfad9f0139c840a49",
+        "agents/summarizer.md": "db1529b3f6de57baeccc81eca278ccdbb6b533acf913ed76cfd3d772e11b8485",
+        "agents/summarizer.ts": "d50c01e0cc83d50c6c1bae1ec3b0d0d8445b635ac8209f64514520afc30a8c1c",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/summarizer.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/summarizer/SKILL.md": "c109cb4f5753417b651b86db83385b79265be548593da9abb4a9c72e6e5f761a",
+        "surfaces/main.ts": "3d8985dfaf7968d3ed6005c7e421e0155fae42ef7feeb0f1ecb1e9dc83e106dc"
+      },
+      "edits": []
+    }
+  }
+}

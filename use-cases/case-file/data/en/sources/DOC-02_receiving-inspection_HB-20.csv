@@ -1,0 +1,3 @@
+Lot,Order,Part,Received,Quantity,Inspected,Result,Defects,Defect,Recorded by
+L1,PO-7741,HB-20,2026-09-17,1500,2026-09-25,Passed,0,,Receiving inspection
+L2,PO-7741,HB-20,2026-09-24,1500,2026-10-08,Partly failed,210,Dimensional (hole position),Receiving inspection

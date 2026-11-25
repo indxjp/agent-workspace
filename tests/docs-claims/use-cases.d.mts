@@ -35,7 +35,10 @@ export function failedRuns(
   evalStdout: string,
 ): { name: string; runId: string; failures: string[] }[];
 export function chatFailedRunId(chatOutput: string): string | undefined;
+export function chatPausedRunId(chatOutput: string): string | undefined;
+export function printedRun(stdout: string): { id: string; status: string; text: string };
 export function fileSetupCommands(dir: string): string[];
+export function skillPublishCommands(dir: string): string[];
 export function pointApisAtLoopback(dir: string, port: number): void;
 export function parseArguments(argv: readonly string[]): { version: string; registry: string };
 export function installSteps(

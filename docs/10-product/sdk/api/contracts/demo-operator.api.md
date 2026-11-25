@@ -19,6 +19,118 @@ export const DEMO_OPERATOR_TOKEN_SETTING = "AW_DEMO_OPERATOR_TOKEN";
 export const DEMO_READINESS_PATH = "/api/demo/readiness";
 
 // @public
+export const DEMO_RECORD_ISSUES_MAX = 20;
+
+// @public
+export const DEMO_RECORD_KINDS: readonly ["calendar", "task", "access", "booking"];
+
+// @public
+export const DEMO_RECORD_SAMPLES: {
+    readonly calendar: {
+        readonly ja: {
+            readonly title: "新任者オリエンテーション";
+            readonly start: "2026-12-01T10:00:00+09:00";
+            readonly end: "2026-12-01T11:00:00+09:00";
+            readonly attendees: readonly ["佐藤 美咲", "田中 健一"];
+            readonly location: "本社 3階 会議室A";
+        };
+        readonly en: {
+            readonly title: "New starter orientation";
+            readonly start: "2026-12-01T10:00:00+09:00";
+            readonly end: "2026-12-01T11:00:00+09:00";
+            readonly attendees: readonly ["Misaki Sato", "Kenichi Tanaka"];
+            readonly location: "Head office, 3F meeting room A";
+        };
+    };
+    readonly task: {
+        readonly ja: {
+            readonly title: "ノートPCを準備する";
+            readonly assignee: "情報システム部 山田";
+            readonly due: "2026-11-28";
+        };
+        readonly en: {
+            readonly title: "Prepare a laptop";
+            readonly assignee: "IT, Yamada";
+            readonly due: "2026-11-28";
+        };
+    };
+    readonly access: {
+        readonly ja: {
+            readonly person: "佐藤 美咲";
+            readonly system: "経費精算システム";
+            readonly level: "read";
+            readonly change: "grant";
+        };
+        readonly en: {
+            readonly person: "Misaki Sato";
+            readonly system: "Expense system";
+            readonly level: "read";
+            readonly change: "grant";
+        };
+    };
+    readonly booking: {
+        readonly ja: {
+            readonly resource: "本社 3階 会議室A";
+            readonly start: "2026-12-02T14:00:00+09:00";
+            readonly end: "2026-12-02T15:00:00+09:00";
+            readonly bookedFor: "田中 健一";
+            readonly purpose: "取引先との打ち合わせ";
+        };
+        readonly en: {
+            readonly resource: "Head office, 3F meeting room A";
+            readonly start: "2026-12-02T14:00:00+09:00";
+            readonly end: "2026-12-02T15:00:00+09:00";
+            readonly bookedFor: "Kenichi Tanaka";
+            readonly purpose: "Meeting with a client";
+        };
+    };
+};
+
+// @public
+export const DEMO_RECORD_SCHEMAS: {
+    readonly calendar: z.ZodReadonly<z.ZodObject<{
+        title: z.ZodString;
+        start: z.ZodISODateTime;
+        end: z.ZodISODateTime;
+        attendees: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+        location: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>;
+    readonly task: z.ZodReadonly<z.ZodObject<{
+        title: z.ZodString;
+        assignee: z.ZodString;
+        due: z.ZodOptional<z.ZodISODate>;
+        notes: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>;
+    readonly access: z.ZodReadonly<z.ZodObject<{
+        person: z.ZodString;
+        system: z.ZodString;
+        level: z.ZodEnum<{
+            read: "read";
+            write: "write";
+            admin: "admin";
+        }>;
+        change: z.ZodEnum<{
+            grant: "grant";
+            revoke: "revoke";
+        }>;
+        until: z.ZodOptional<z.ZodISODate>;
+    }, z.core.$strict>>;
+    readonly booking: z.ZodReadonly<z.ZodObject<{
+        resource: z.ZodString;
+        start: z.ZodISODateTime;
+        end: z.ZodISODateTime;
+        bookedFor: z.ZodString;
+        purpose: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>;
+};
+
+// @public
+export const DEMO_RECORD_WRITE_PROBLEM_CODES: readonly ["demo_record_invalid", "demo_write_not_recorded"];
+
+// @public
+export const DEMO_RECORD_WRITES_MAX = 50;
+
+// @public
 export const DEMO_SEED_CONNECTORS_MAX = 16;
 
 // @public
@@ -47,6 +159,40 @@ export const DEMO_TEMPLATES_PATH = "/api/demo/templates";
 
 // @public
 export const DEMO_VERIFICATION_PATH = "/api/demo/verification";
+
+// @public
+export const DemoAccessChangeSchema: z.ZodReadonly<z.ZodObject<{
+    person: z.ZodString;
+    system: z.ZodString;
+    level: z.ZodEnum<{
+        read: "read";
+        write: "write";
+        admin: "admin";
+    }>;
+    change: z.ZodEnum<{
+        grant: "grant";
+        revoke: "revoke";
+    }>;
+    until: z.ZodOptional<z.ZodISODate>;
+}, z.core.$strict>>;
+
+// @public
+export const DemoBookingSchema: z.ZodReadonly<z.ZodObject<{
+    resource: z.ZodString;
+    start: z.ZodISODateTime;
+    end: z.ZodISODateTime;
+    bookedFor: z.ZodString;
+    purpose: z.ZodOptional<z.ZodString>;
+}, z.core.$strict>>;
+
+// @public
+export const DemoCalendarEventSchema: z.ZodReadonly<z.ZodObject<{
+    title: z.ZodString;
+    start: z.ZodISODateTime;
+    end: z.ZodISODateTime;
+    attendees: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+    location: z.ZodOptional<z.ZodString>;
+}, z.core.$strict>>;
 
 // @public (undocumented)
 export type DemoEntryState = z.infer<typeof DemoEntryStateSchema>;
@@ -79,6 +225,67 @@ export const DemoReadinessSchema: z.ZodReadonly<z.ZodObject<{
 }, z.core.$strict>>;
 
 // @public (undocumented)
+export type DemoRecordedWrite = z.infer<typeof DemoRecordedWriteSchema>;
+
+// @public
+export const DemoRecordedWriteSchema: z.ZodReadonly<z.ZodObject<{
+    write: z.ZodString;
+    kind: z.ZodEnum<{
+        task: "task";
+        access: "access";
+        calendar: "calendar";
+        booking: "booking";
+    }>;
+    read: z.ZodString;
+}, z.core.$strict>>;
+
+// @public (undocumented)
+export type DemoRecordIssue = z.infer<typeof DemoRecordIssueSchema>;
+
+// @public
+export const DemoRecordIssueSchema: z.ZodReadonly<z.ZodObject<{
+    path: z.ZodString;
+    message: z.ZodString;
+}, z.core.$strict>>;
+
+// @public (undocumented)
+export type DemoRecordKind = z.infer<typeof DemoRecordKindSchema>;
+
+// @public (undocumented)
+export const DemoRecordKindSchema: z.ZodEnum<{
+    task: "task";
+    access: "access";
+    calendar: "calendar";
+    booking: "booking";
+}>;
+
+// @public (undocumented)
+export type DemoRecordWriteAnswer = z.infer<typeof DemoRecordWriteAnswerSchema>;
+
+// @public
+export const DemoRecordWriteAnswerSchema: z.ZodDiscriminatedUnion<[z.ZodReadonly<z.ZodObject<{
+    demoOnly: z.ZodLiteral<true>;
+    recorded: z.ZodLiteral<true>;
+    tool: z.ZodString;
+    record: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
+    demoOnly: z.ZodLiteral<true>;
+    recorded: z.ZodLiteral<false>;
+    tool: z.ZodString;
+    code: z.ZodEnum<{
+        demo_record_invalid: "demo_record_invalid";
+        demo_write_not_recorded: "demo_write_not_recorded";
+    }>;
+    issues: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+        path: z.ZodString;
+        message: z.ZodString;
+    }, z.core.$strict>>>>>;
+}, z.core.$strict>>], "recorded">;
+
+// @public (undocumented)
+export type DemoRecordWriteProblemCode = (typeof DEMO_RECORD_WRITE_PROBLEM_CODES)[number];
+
+// @public (undocumented)
 export type DemoSampleRecords = z.infer<typeof DemoSampleRecordsSchema>;
 
 // @public
@@ -101,6 +308,16 @@ export const DemoSeedConnectorSchema: z.ZodReadonly<z.ZodObject<{
     name: z.ZodString;
     reads: z.ZodReadonly<z.ZodArray<z.ZodString>>;
     writes: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+    recorded: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+        write: z.ZodString;
+        kind: z.ZodEnum<{
+            task: "task";
+            access: "access";
+            calendar: "calendar";
+            booking: "booking";
+        }>;
+        read: z.ZodString;
+    }, z.core.$strict>>>>>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -122,6 +339,14 @@ export const DemoSeedSkillSchema: z.ZodReadonly<z.ZodObject<{
         path: z.ZodString;
         base64: z.ZodBase64;
     }, z.core.$strict>>>>;
+}, z.core.$strict>>;
+
+// @public
+export const DemoTaskSchema: z.ZodReadonly<z.ZodObject<{
+    title: z.ZodString;
+    assignee: z.ZodString;
+    due: z.ZodOptional<z.ZodISODate>;
+    notes: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -291,6 +516,16 @@ export const DemoTemplateSeedSchema: z.ZodReadonly<z.ZodObject<{
         name: z.ZodString;
         reads: z.ZodReadonly<z.ZodArray<z.ZodString>>;
         writes: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+        recorded: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            write: z.ZodString;
+            kind: z.ZodEnum<{
+                task: "task";
+                access: "access";
+                calendar: "calendar";
+                booking: "booking";
+            }>;
+            read: z.ZodString;
+        }, z.core.$strict>>>>>;
     }, z.core.$strict>>>>;
     skills: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
         name: z.ZodString;

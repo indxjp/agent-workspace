@@ -7,16 +7,10 @@
  * catalog type it stands for, both ways, so the two cannot drift through a structural match.
  */
 import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
-import { parsePendingSkillDelete as parseCatalogPendingSkillDelete } from '@agent-workspace/core/db-model';
 
-import type { PendingSkillDelete, SkillCatalog } from './ports';
+import type { SkillCatalog } from './ports';
 
 /** A workspace's resource catalog as the skills port: PostgreSQL and the in-memory catalog alike. */
 export function skillCatalogOf(catalog: ResourceCatalogRepository): SkillCatalog {
   return catalog;
-}
-
-/** Read a persisted pending-delete record; anything unreadable still marks the delete as pending. */
-export function parsePendingSkillDelete(value: unknown): PendingSkillDelete {
-  return parseCatalogPendingSkillDelete(value);
 }

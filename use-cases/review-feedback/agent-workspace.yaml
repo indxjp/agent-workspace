@@ -1,0 +1,22 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: review-feedback
+engine: claude-agent-sdk
+# Drafting (archetype DR): notes and sources in `review-feedback/<ja|en>/`, a document out. The agent
+# writes a document model and the built-in `office-writer` renders it to `outputs/`, which the run
+# returns; that render is the one call a person approves (ADR-0145, ADR-0167). Upload the data with
+#   for f in $(cd data && find . -type f); do aw files upload "review-feedback/${f#./}" "data/${f#./}"; done
+policy:
+  permissions:
+    writeFiles: true
+    runCommands: true
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 0.5
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

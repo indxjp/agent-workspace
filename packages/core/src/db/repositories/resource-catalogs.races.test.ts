@@ -270,7 +270,9 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 rounds of 20 concurrent reserves of one path: exactly one wins per round', async () => {
     await expectOneWinnerPerReserveRound(h);
-  });
+    // About 500 PostgreSQL transactions (20 rounds of 20 reserves, each round confirmed, removed
+    // and forgotten): half a second idle, but CI runners share one host and its PostgreSQL.
+  }, 60_000);
 
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 mixed file and folder renames never deadlock', async () => {

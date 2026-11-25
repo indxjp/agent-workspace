@@ -1,3 +1,526 @@
 {
-  "runs": []
+  "runs": [
+    {
+      "entry": "crm-sales",
+      "runId": "33cbfb73-731b-4752-a684-4d507779ce79",
+      "date": "2026-11-21T07:13:34.059Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e0c0f2f78a919b337aaaaa4fbb5254ed559b4476b5f752819abd933ed85410dc"
+    },
+    {
+      "entry": "quotation",
+      "runId": "0bac9e16-4a59-4791-a730-268c8b0e7c74",
+      "date": "2026-11-21T07:14:15.757Z",
+      "result": "fail",
+      "reason": "createQuote did not wait for approval",
+      "environment": "staging",
+      "sourceHash": "a0f9ca8bc5233200d50156f35c69807a58df321268e014ba26c3afed62a33b40"
+    },
+    {
+      "entry": "customer-inquiry",
+      "runId": "1201be3d-56cf-47ef-8f10-9aff6e170625",
+      "date": "2026-11-21T07:14:45.509Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "c90fba5890c2ff2ac64c9a9f37a0f216e0e962fe8a7c16807f9ac5aec3232728"
+    },
+    {
+      "entry": "service-desk",
+      "runId": "80dae2b6-1d43-4f48-91ab-1cc52527b385",
+      "date": "2026-11-21T07:15:05.375Z",
+      "result": "fail",
+      "reason": "ticket_update was not called and answered",
+      "environment": "staging",
+      "sourceHash": "0a2e0d7bdd88d47c3d7c02a09eed459f3995bd4df6dadddc2ca789c22cdc6c00"
+    },
+    {
+      "entry": "manual-search",
+      "runId": "9bc50723-2b10-4367-8745-ebffeb141d92",
+      "date": "2026-11-21T07:15:22.928Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "9c70f77d08879ecced0a4aec475b2bcad94f964d6551d744b2884850e0d141ba"
+    },
+    {
+      "entry": "wiki",
+      "runId": "047b40f5-5dcf-424e-a9d2-9695a62b1e7d",
+      "date": "2026-11-21T07:15:46.641Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "eafcce5085611ed2fc82198e8c0d2428bcb90d700ee24e429a9529a6e1737db8"
+    },
+    {
+      "entry": "cad-drafting",
+      "runId": "53ae4c4b-0b75-4cc9-8f95-a327effa5fc0",
+      "date": "2026-11-21T07:16:07.216Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "9692381cedc4937ce46887fe1742dc88dbe235310861151a015907a52bba0174"
+    },
+    {
+      "entry": "quality-defect",
+      "runId": "1e9e8f23-f5d9-4d0f-b22d-9574a94fc3e5",
+      "date": "2026-11-21T07:16:44.856Z",
+      "result": "fail",
+      "reason": "searchDefects was not called and answered",
+      "environment": "staging",
+      "sourceHash": "d71a63a22679da3f9fa68f6f374a08b944941980814dfec3cd30c7080d37f285"
+    },
+    {
+      "entry": "maintenance",
+      "runId": "b22ccd76-0983-46d7-9593-6b0848da3b66",
+      "date": "2026-11-21T07:17:01.297Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "8b649afb9835e6f1c3d03aec430dcd59377b3863e13d32c214d3b7644e7359fb"
+    },
+    {
+      "entry": "contract-review",
+      "runId": "cdda89a6-9efc-4dee-b053-c1cf91805bc6",
+      "date": "2026-11-21T07:17:25.158Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "177a499e3ecf73be6539f5e15ee3497a4c615187434fa0f7a19ce5bd05012db1"
+    },
+    {
+      "entry": "ringi-review",
+      "runId": "b05a3b1b-146f-4079-a030-06a10efd6ca4",
+      "date": "2026-11-21T07:18:22.551Z",
+      "result": "fail",
+      "reason": "check_authority was not called and answered",
+      "environment": "staging",
+      "sourceHash": "e73cf7daf0afea6144ff5710109a282b6f8ce6f8efbddefde757c76a1c32c87e"
+    },
+    {
+      "entry": "excel-consolidation",
+      "runId": "fab10a12-5dd1-4af4-b1d1-24f8737daff6",
+      "date": "2026-11-21T07:18:49.870Z",
+      "result": "fail",
+      "reason": "search_files was not called and answered",
+      "environment": "staging",
+      "sourceHash": "1f704c1b3246a7618528667d0737463f298613a529b5618f2d25d92a0a7b7897"
+    },
+    {
+      "entry": "team-chat",
+      "runId": "65cca81f-6480-42f3-96d9-3d2890c862c2",
+      "date": "2026-11-21T07:20:09.934Z",
+      "result": "fail",
+      "reason": "message_list was not called and answered",
+      "environment": "staging",
+      "sourceHash": "e19f33e5885a0404da899de9cb10a82fa916aca6a3883681d90545081218edc3"
+    },
+    {
+      "entry": "meeting-minutes",
+      "runId": "7f9313e6-a51d-4060-abc0-b72bdf95009e",
+      "date": "2026-11-21T07:20:19.430Z",
+      "result": "fail",
+      "reason": "list_members was not called and answered",
+      "environment": "staging",
+      "sourceHash": "6fa7053da23595ef694a24634f6d77da3f57ff125627a60b86e738ce23c88de5"
+    },
+    {
+      "entry": "quotation",
+      "runId": "416790e6-83ad-4963-9509-2155c46f9937",
+      "date": "2026-11-21T09:56:41.748Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "a0f9ca8bc5233200d50156f35c69807a58df321268e014ba26c3afed62a33b40"
+    },
+    {
+      "entry": "customer-inquiry",
+      "runId": "67031ccf-ad8c-4690-99c9-0d1a7b54afd7",
+      "date": "2026-11-21T10:00:05.872Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "c90fba5890c2ff2ac64c9a9f37a0f216e0e962fe8a7c16807f9ac5aec3232728"
+    },
+    {
+      "entry": "service-desk",
+      "runId": "f2979895-f5c7-4c26-afa8-645a8b974e1b",
+      "date": "2026-11-21T10:00:27.570Z",
+      "result": "fail",
+      "reason": "ticket_update was not called and answered",
+      "environment": "staging",
+      "sourceHash": "0a2e0d7bdd88d47c3d7c02a09eed459f3995bd4df6dadddc2ca789c22cdc6c00"
+    },
+    {
+      "entry": "manual-search",
+      "runId": "e64f4d50-f051-46cd-9e9d-bf8a8d80a93d",
+      "date": "2026-11-21T10:01:24.330Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9c70f77d08879ecced0a4aec475b2bcad94f964d6551d744b2884850e0d141ba"
+    },
+    {
+      "entry": "cad-drafting",
+      "runId": "eaf596f3-527c-4ede-bd80-04ed012fcf1f",
+      "date": "2026-11-21T10:02:03.340Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9692381cedc4937ce46887fe1742dc88dbe235310861151a015907a52bba0174"
+    },
+    {
+      "entry": "quality-defect",
+      "runId": "538351f7-747f-4e16-bd31-bf0d0b6041de",
+      "date": "2026-11-21T10:02:38.660Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "d71a63a22679da3f9fa68f6f374a08b944941980814dfec3cd30c7080d37f285"
+    },
+    {
+      "entry": "maintenance",
+      "runId": "83c5ef34-775a-4bd7-8f5c-b3f27aaafd9f",
+      "date": "2026-11-21T10:03:07.812Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "8b649afb9835e6f1c3d03aec430dcd59377b3863e13d32c214d3b7644e7359fb"
+    },
+    {
+      "entry": "ringi-review",
+      "runId": "4965c854-b385-4c39-b554-5bd585d713dd",
+      "date": "2026-11-21T10:04:22.279Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e73cf7daf0afea6144ff5710109a282b6f8ce6f8efbddefde757c76a1c32c87e"
+    },
+    {
+      "entry": "excel-consolidation",
+      "runId": "ebb427cc-c9fc-4144-89ef-5fd6a0691a74",
+      "date": "2026-11-21T10:05:02.126Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "1f704c1b3246a7618528667d0737463f298613a529b5618f2d25d92a0a7b7897"
+    },
+    {
+      "entry": "team-chat",
+      "runId": "043ce2d1-195c-4823-ade3-2dd2be9497ce",
+      "date": "2026-11-21T10:07:36.033Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e19f33e5885a0404da899de9cb10a82fa916aca6a3883681d90545081218edc3"
+    },
+    {
+      "entry": "meeting-minutes",
+      "runId": "0bfde521-b818-4f70-9eae-da2d384e7911",
+      "date": "2026-11-21T10:07:55.036Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "6fa7053da23595ef694a24634f6d77da3f57ff125627a60b86e738ce23c88de5"
+    },
+    {
+      "entry": "policy-qa",
+      "runId": "d582239a-801c-49c7-8a94-d6277b0d42f9",
+      "date": "2026-11-21T10:01:44.906Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "dc50f68f802632947fd7dae9dc21c1bca1467bdaeec0b9b910f4a9f46ad6239f"
+    },
+    {
+      "entry": "nda",
+      "runId": "c1303d0f-1721-466a-9668-edb93b482748",
+      "date": "2026-11-21T10:03:35.086Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "0c1b9bc37439578f2ddefaf361e9af225e51c6be63c5c7d2f4fc44de40ec31ca"
+    },
+    {
+      "entry": "service-desk",
+      "runId": "e7499832-4036-4ed9-b6a5-6557a84e9ef9",
+      "date": "2026-11-22T04:35:41.284Z",
+      "result": "fail",
+      "reason": "ticket_update was not called and answered (called: ticket_search, kb_article_search; stop: end_turn)",
+      "environment": "staging",
+      "sourceHash": "0a2e0d7bdd88d47c3d7c02a09eed459f3995bd4df6dadddc2ca789c22cdc6c00"
+    },
+    {
+      "entry": "meeting-prep",
+      "runId": "dfaaf095-a330-4e31-891a-89a06c555e76",
+      "date": "2026-11-22T04:34:07.793Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "89ee907a27f6248ac9efb23fa113f0e39b69235de36c616bb715493fb746ec61"
+    },
+    {
+      "entry": "deal-risk",
+      "runId": "a24bf1e2-8e2f-45d5-b76f-cf84c53fea19",
+      "date": "2026-11-22T04:34:58.774Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "4ac67c97554e3720ad49fc019deb858dccad85e0e20319bf4e3166a73a1af038"
+    },
+    {
+      "entry": "sla-watch",
+      "runId": "72e90d0f-6b76-4895-866e-5f687fc803b7",
+      "date": "2026-11-22T04:36:45.758Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "076f0a5384b3045dd78f6920ab079ac1b40d446484d560f3d19daa044ad7471d"
+    },
+    {
+      "entry": "attendance",
+      "runId": "702973f6-c9f3-4f73-9fee-e04f34790db2",
+      "date": "2026-11-22T04:46:47.033Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "b645171ab0c40154374f3609059c490bddcf325ef3b30f27e1bbddbde1e9193f"
+    },
+    {
+      "entry": "standup",
+      "runId": "5a92988d-774a-4b1f-9e4e-284b56ce80b7",
+      "date": "2026-11-22T04:49:30.180Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9285492de2e26b04e9d17dc779d511086b8210fbe94f008ed0e346ab672baf51"
+    },
+    {
+      "entry": "project-status",
+      "runId": "84357648-d66a-49f6-9e83-a16c3f9f4712",
+      "date": "2026-11-22T04:50:08.916Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "910aeda67210e49ae2fa6f64322af2e142aacd14e496bb892144a6e98fb7cc9a"
+    },
+    {
+      "entry": "budget",
+      "runId": "ffe3bd21-505c-4453-8238-2c77c4a0b8e8",
+      "date": "2026-11-22T04:44:18.840Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "c9abb7d6e7d3ae81fb7e4211c91f9433fd5931df37137d9933710199175b2d76"
+    },
+    {
+      "entry": "onboarding",
+      "runId": "d9bbd14d-c9fb-4e33-a1bc-dc9830a8a5c1",
+      "date": "2026-11-22T04:46:07.934Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "5cb66d163564a65db49afea07c3e202e095298d6f4a72195052759e6b8e785af"
+    },
+    {
+      "entry": "incident",
+      "runId": "4198e538-43aa-48ef-a725-974ae90aea2d",
+      "date": "2026-11-22T04:47:22.387Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "ad8671245524cb31ba8984bc38331422207ccf4fc9ec16d5a69e685153852d79"
+    },
+    {
+      "entry": "account-requests",
+      "runId": "897572e5-5939-464e-8883-67f265105693",
+      "date": "2026-11-22T04:49:07.067Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9f6d222596ba3d0b3cc2a84172ca25f9aae39aeed278e6dd476a677b6340e27a"
+    },
+    {
+      "entry": "faq-bot",
+      "runId": "0e69e6f7-0148-433c-9335-ba1cae33d54a",
+      "date": "2026-11-22T04:35:57.604Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "0987b18372f9c316204d1b75f98d16ee914e40b64e54b1dc8849a09a671d8838"
+    },
+    {
+      "entry": "inspection",
+      "runId": "1646dd7f-2128-424a-8712-52266bd0cc31",
+      "date": "2026-11-22T04:39:47.966Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "eedbf5d1d0a3c0d29e495b57d79bfe873e39faf354b74bcc634244ffd4ea94cf"
+    },
+    {
+      "entry": "ad-compliance",
+      "runId": "37380bf3-1172-46fb-b98f-4f27abf5d97b",
+      "date": "2026-11-22T04:40:25.315Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "f3f639d2d1909412a36489ff35c71631a4330ebd46b65f181b8449ad95647f5c"
+    },
+    {
+      "entry": "screening",
+      "runId": "454b444f-2a7a-41d0-8d31-6f8f53ff479b",
+      "date": "2026-11-22T04:42:08.727Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "ae94c9569afbb459b85acbe49d8268e14b10241bd4661e2f07ba3fc9e8da89a0"
+    },
+    {
+      "entry": "expense",
+      "runId": "15032ff9-3dfa-46e0-bad3-43824b6a15a2",
+      "date": "2026-11-22T04:42:55.800Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "21e8413af950dc9572da3768c6478ba0bba0a95c67166bc95f91a38fba4dd4fc"
+    },
+    {
+      "entry": "invoice",
+      "runId": "42c597b6-5f55-422f-a397-50e069c375e7",
+      "date": "2026-11-22T04:43:34.649Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "257f207fe48c45c19d5593c7f4ad257b85f149bffe02da4a32c7825e5178634c"
+    },
+    {
+      "entry": "screening-hr",
+      "runId": "b4ad9f6b-103c-4e44-bb5b-db9611165496",
+      "date": "2026-11-22T04:44:43.512Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "9c7a7bb6d2f34a59be0cf8766c45bf995e2153b0e27b9362f76c912da85b88da"
+    },
+    {
+      "entry": "code-review",
+      "runId": "9e2f62a5-0018-4113-bfc0-c4d5e0689399",
+      "date": "2026-11-22T04:47:52.082Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "b2ab9b295decf03706902425eee5a9fe8e64430655840a999f0df7cf7d86d6f1"
+    },
+    {
+      "entry": "market",
+      "runId": "508e1cd2-2e80-4b77-8091-f3566f1a2239",
+      "date": "2026-11-22T04:51:41.659Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "f378ffa15fd3ca0679123c5ce223d5d4d7b24056b086cb0e8de47c1a41ea3551"
+    },
+    {
+      "entry": "proposal",
+      "runId": "b93c2b15-0356-4391-937d-9044379ead4f",
+      "date": "2026-11-22T09:39:49.074Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "28024ab45c23089fdae19a39be4e8a8b983782ba1f2dd204de735084ac9aef32"
+    },
+    {
+      "entry": "service-desk",
+      "runId": "c866e679-43c5-4854-8d6c-e4433fb60fcb",
+      "date": "2026-11-22T09:41:49.358Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "71acc6be78ddd405c683ef30696793520b34d8bc470f7894de7d81e64da843c1"
+    },
+    {
+      "entry": "returns",
+      "runId": "84c9177f-8df4-4f58-be05-e4e23294afca",
+      "date": "2026-11-22T09:42:11.892Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "78147011a3238d1f1c9d761505442a143c838525d2bebd9902375eb54331f371"
+    },
+    {
+      "entry": "newcomer",
+      "runId": "fe01a4e6-fb8d-4940-b869-a1dad1f07090",
+      "date": "2026-11-22T09:42:51.608Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "77f7b553f202409610f532cd23fe1045de507bc73b413953dcdf1cc7d8da91e8"
+    },
+    {
+      "entry": "translator",
+      "runId": "4bae4408-883f-4ace-b0fb-0158103c0504",
+      "date": "2026-11-22T09:43:46.492Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "e9b77dcc496493aee981ffc97a24c38a7448a84f3da5fe953baadfef9b4ab0f6"
+    },
+    {
+      "entry": "glossary",
+      "runId": "3abe5696-064b-46d3-9062-181a4e696ac3",
+      "date": "2026-11-22T09:44:22.131Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "85835b41ff2b741c45c4b5fcd4727e192954dc141ac87b85988f9950a49350b0"
+    },
+    {
+      "entry": "work-instruction",
+      "runId": "51106f2f-dec4-4088-b4a9-cb7f216518ff",
+      "date": "2026-11-22T09:45:03.540Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "cc21434209fa5af482b45eda4d8175d4b21b52b8a2bd1a3d61a2d7d09d1cb65d"
+    },
+    {
+      "entry": "interview",
+      "runId": "b88dcc15-98fc-4725-a3d9-e1bd3f234d3d",
+      "date": "2026-11-22T09:46:58.801Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "1a03ea1474faec40d91805e13ab65b4e31393a3684fc58e4271eba5f36e3bd1b"
+    },
+    {
+      "entry": "release-notes",
+      "runId": "b7fe1cc5-18f0-4c4a-ac46-2a2c44e8e7e7",
+      "date": "2026-11-22T09:47:44.330Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "c673e1ed1aa2b78ac8d44e5c198a9143e10077a6b2a8c96d2027e2b248641fce"
+    },
+    {
+      "entry": "announce",
+      "runId": "569c185f-6a37-4ad7-b753-b211f360f11b",
+      "date": "2026-11-22T09:48:20.105Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "b89c03b3b013c0e1a701645b7151471d89fe61e38951129ba69f5519d1b533cf"
+    },
+    {
+      "entry": "privacy",
+      "runId": "da2ec1e3-ff89-430f-8c36-2a3758779eea",
+      "date": "2026-11-22T11:07:16.219Z",
+      "result": "pass",
+      "reason": "the moment happened",
+      "environment": "staging",
+      "sourceHash": "fe8a750fce040e9d28e723d294d68728b0d64ea9114166860af214b0f692e456"
+    }
+  ]
 }

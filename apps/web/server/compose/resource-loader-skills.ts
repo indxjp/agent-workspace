@@ -1,5 +1,5 @@
 import type { RunSkillReference } from '@agent-workspace/run-protocol';
-import { skillRevisionPrefix, skillRevisionRowFolder, skillRowFolder } from '../skills/keys';
+import { skillRevisionRowFolder, skillRowFolder } from '../skills/keys';
 import { skillFiles } from '../skills/tree';
 import {
   type RunFileSource,
@@ -23,15 +23,13 @@ async function loadSkills(context: {
   const { workspaceId, skillIds, skillRevisions, dependencies, sources } = context;
 
   if (skillIds.length === 0) return [];
-  if (dependencies.skills === undefined) {
+  if (dependencies.skills === undefined || dependencies.storage === undefined) {
     throw new Error('this agent has assigned skills, but skill storage is not configured');
   }
 
   const catalog = await dependencies.catalog.forWorkspace(workspaceId);
   const byId = new Map((await catalog.listSkills()).map((skill) => [skill.id, skill]));
-  const store = dependencies.skills.forWorkspace(workspaceId);
-  const rows =
-    dependencies.storage === undefined ? undefined : { storage: dependencies.storage, workspaceId };
+  const rows = { storage: dependencies.storage, workspaceId };
   const out: RunSkillReference[] = [];
   for (const skillId of skillIds) {
     const skill = byId.get(skillId);
@@ -42,15 +40,12 @@ async function loadSkills(context: {
     // A pinned skill is the frozen revision (SDK-19, N-1); an unpinned one follows its current content.
     const pinned = skillRevisions[skillId];
     // @story US-STO-08
-    const listed =
+    const listed = await skillFiles(
+      rows,
       pinned === undefined
-        ? await skillFiles(store, rows, skillRowFolder(skill.name), `skills/${skill.name}`)
-        : await skillFiles(
-            store,
-            rows,
-            skillRevisionRowFolder(skill.name, pinned),
-            skillRevisionPrefix(skill.name, pinned),
-          );
+        ? skillRowFolder(skill.name)
+        : skillRevisionRowFolder(skill.name, pinned),
+    );
     if (!listed.some((entry) => entry.relativePath === 'SKILL.md')) {
       throw new Error(`assigned skill ${JSON.stringify(skill.name)} has no SKILL.md`);
     }

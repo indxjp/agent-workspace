@@ -1,4 +1,12 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,11 +19,14 @@ import {
   STAND_IN,
   devEnvironment,
   chatFailedRunId,
+  chatPausedRunId,
   failedRuns,
   fileSetupCommands,
+  skillPublishCommands,
   firstPrompt,
   identityEnvironment,
   identityTargets,
+  printedRun,
   installSteps,
   parseArguments,
   pointApisAtLoopback,
@@ -173,6 +184,22 @@ describe('what a project needs before aw check', () => {
     expect(playbook[1]).toBe(
       "aw files upload 'playbook/PB-01-liability-cap.md' 'data/playbook/PB-01-liability-cap.md'",
     );
+  });
+
+  it('publishes revision 1 of a pinned skill before aw push, as the tutorial does', () => {
+    expect(skillPublishCommands(dir('contract-review'))).toEqual([
+      "aw skills publish 'contract-playbook' './skills/contract-playbook'",
+    ]);
+    expect(skillPublishCommands(dir('manual-search'))).toEqual([]);
+    const work = mkdtempSync(path.join(tmpdir(), 'pin-'));
+    try {
+      cpSync(dir('contract-review'), work, { recursive: true });
+      const agent = path.join(work, 'agents', 'contract-review.ts');
+      writeFileSync(agent, readFileSync(agent, 'utf8').replace('revision: 1', 'revision: 2'));
+      expect(() => skillPublishCommands(work)).toThrow('pinned to revision 2, not 1');
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   });
 
   it('uploads the three Word drafts into contracts/<deal-team>/ and a .gitkeep into each drafts/<deal-team>/', () => {
@@ -399,6 +426,47 @@ describe('the first prompt of an eval file', () => {
       ),
     ).toBe('line one\n\nline two');
     expect(firstPrompt('cases: []\n')).toBeUndefined();
+  });
+});
+
+describe('a chat that pauses for approval', () => {
+  const RUN = '0b6f3a1e-5d7c-4a52-9d0e-6a3f1c2b4d5e';
+  const NEXT = '7d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+
+  it('names the paused run only for run_awaiting_approval', () => {
+    expect(
+      chatPausedRunId(
+        `error: run_awaiting_approval: run ${RUN} failed: the run ended awaiting_approval\n`,
+      ),
+    ).toBe(RUN);
+    expect(chatPausedRunId(`error: run_failed: run ${RUN} failed: no model\n`)).toBeUndefined();
+    expect(
+      chatPausedRunId('error: run_awaiting_approval: run 1;rm failed: awaiting_approval'),
+    ).toBeUndefined();
+  });
+
+  it('reads the continuation from aw runs approve, and the settled run from aw runs wait', () => {
+    expect(
+      printedRun(
+        JSON.stringify({ run: { id: NEXT, status: 'queued', output: null }, events: '/e' }),
+      ),
+    ).toEqual({
+      id: NEXT,
+      status: 'queued',
+      text: '',
+    });
+    expect(
+      printedRun(
+        JSON.stringify({ id: NEXT, status: 'completed', output: { text: '図面を作成しました' } }),
+      ),
+    ).toEqual({ id: NEXT, status: 'completed', text: '図面を作成しました' });
+  });
+
+  it('refuses output that is not a run, or a run id that is not a UUID', () => {
+    expect(() => printedRun('not json')).toThrow('not a run');
+    expect(() => printedRun(JSON.stringify({ id: '1;rm', status: 'completed' }))).toThrow(
+      'not a run',
+    );
   });
 });
 

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "2d6f3c4c853d717d2b2cc15791373937391cce8b40bdc382a0df98082ed0be68",
+        "agents/quotation.md": "1aa60e9c1c62c00f8fb1994e54009cd4f88ab737613248abf5f833918d1d7e5f",
+        "agents/quotation.ts": "6294db856e6f65ba893c79927bfa0e45cf1ade1f851336ef3a74ae8a8851e655",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/quotation.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/quotation/SKILL.md": "fe8af25ac7b68308a891caa1b71e635bc0c495dfaae4b80faab0068e09cccb7a",
+        "surfaces/main.ts": "76cdf5dea7db307c68f656298fb7db925caf435d7c6e8c738c1ba5191d48716f"
+      },
+      "edits": []
+    }
+  }
+}

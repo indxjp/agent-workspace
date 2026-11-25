@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "2fb8402160fb1f6397a7d9b2b7349464d809c7244f7f1dc144e787f61e1322a5",
+        "agents/price-guard.md": "2527e5649b80f354631794fb272bb357cb7462f9841f18cfa1374698ab5b0ade",
+        "agents/price-guard.ts": "0e98d6f0c5bd31c97cbfee1e465b72b3bb3fabf089c594ee02669c41149bdef3",
+        "evals/price-guard.yaml": "1ff489313178a99ae3e40304805e9b2972f427cf3b6c803f8536f18bc3134a70",
+        "skills/price-guard/SKILL.md": "509167918ecfab0e65465534c55f7ae90df2ebc2238060f5d5ac9eee4af1cb64",
+        "surfaces/main.ts": "d1a6ff832320b00059d03d36968c583efb92bc1726dac81819bbafa5ffb8c5fb"
+      },
+      "edits": []
+    }
+  }
+}

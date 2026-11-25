@@ -1,6 +1,6 @@
 'use client';
 /**
- * The Try tab's sign-up gate (spec "Email-link sign-in"): an email address, the consent tick that
+ * The Try it section's sign-up gate (spec "Email-link sign-in"): an email address, the consent tick that
  * links the privacy notice, the challenge slot and a button. The platform emails a sign-in link;
  * the request is refused on the server without the tick too, so this form's own check is only for
  * the visitor's convenience.

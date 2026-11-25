@@ -1,0 +1,13 @@
+{
+  "id": "INQ-4002",
+  "received_at": "2026-11-19T15:40:00+09:00",
+  "channel": "form",
+  "from": {
+    "name": "Sosuke Makino",
+    "email": "sosuke.makino@mail.example"
+  },
+  "subject": "The coffee grinder I received does not work",
+  "text": "The electric coffee grinder (order MS-30352) delivered on 12 November does not start when I switch it on. Can you exchange it?",
+  "order_id": "MS-30352",
+  "to": "support@midori-kurashikan.example"
+}

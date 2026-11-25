@@ -6,7 +6,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { systemClock, type Clock } from '../clock';
-import { ownerPrincipalIdOf, type Role } from '../identity';
+import { ownerPrincipalIdOf, type Caller } from '../identity';
 import type { CreateShareInput, ShareRecord } from './store';
 import { isPublicSharingEnabled } from './policy/service';
 import type { WorkspaceSharing } from './wiring';
@@ -20,23 +20,17 @@ import { hashPassphrase, PassphraseAttemptLimiter, verifyPassphrase } from './pa
 export type { Expiry } from './core/rules';
 export type { PublishShareInput } from './core/input';
 
-/** Who publishes a share. */
-interface PublishActor {
-  principalId: string;
-  ownerPrincipalId: string;
-  userId: string | null;
-  userLabel: string;
-  role: Role;
-}
+/** Who publishes a share: the fields of the one {@link Caller} type it reads (part 06 step 9). */
+type PublishActor = Pick<Caller, 'principalId' | 'ownerPrincipalId' | 'userId' | 'label' | 'role'>;
 
 /** Who revokes a share. */
-type RevokeActor = Pick<PublishActor, 'principalId' | 'userId' | 'userLabel'>;
+type RevokeActor = Pick<Caller, 'principalId' | 'userId' | 'label'>;
 
 /** The audit actor fields every share event carries. */
 const auditActor = (actor: RevokeActor) => ({
   actorPrincipalId: actor.principalId,
   actorUserId: actor.userId,
-  actorLabel: actor.userLabel,
+  actorLabel: actor.label,
 });
 
 /** The link token a share is published under; shown once, only its hash is stored. */

@@ -1,0 +1,117 @@
+{
+  "asOf": "2026-11-16",
+  "items": [
+    {
+      "id": "FEU-0412",
+      "source": "Fictional End-User List",
+      "url": "https://lists.example/end-user-list",
+      "title": "Kestrel Orbital Components Ltd.",
+      "summary": "Entity listed for procurement of controlled components for unmanned aerial systems.",
+      "publishedAt": "2025-03-14",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "entity",
+        "country": "Republic of Veloria",
+        "aliases": "Kestrel Orbital; ケストレル・オービタル・コンポーネンツ; KOC Ltd.",
+        "address": "14 Harbour Ring Road, Port Selen, Veloria",
+        "listedOn": "2025-03-14"
+      }
+    },
+    {
+      "id": "FEU-0413",
+      "source": "Fictional End-User List",
+      "url": "https://lists.example/end-user-list",
+      "title": "Duvan Applied Dynamics",
+      "summary": "Entity listed for diversion of machine tools to a weapons programme.",
+      "publishedAt": "2025-03-14",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "entity",
+        "country": "Duvan Federation",
+        "aliases": "DAD; ドゥヴァン・アプライド・ダイナミクス; Duvan Applied Dynamics JSC",
+        "address": "7 Foundry Lane, Kalvor, Duvan Federation",
+        "listedOn": "2025-03-14"
+      }
+    },
+    {
+      "id": "FEU-0458",
+      "source": "Fictional End-User List",
+      "url": "https://lists.example/end-user-list",
+      "title": "Marisca Precision Trading FZE",
+      "summary": "Entity listed as a transshipment intermediary for dual-use goods.",
+      "publishedAt": "2026-06-02",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "entity",
+        "country": "Marisca",
+        "aliases": "MPT FZE; マリスカ・プレシジョン・トレーディング",
+        "address": "Free Zone Block C-19, Marisca",
+        "listedOn": "2026-06-02"
+      }
+    },
+    {
+      "id": "FSL-2207",
+      "source": "Fictional Sanctions List",
+      "url": "https://lists.example/sanctions-list",
+      "title": "VASHKIN, Teodor",
+      "summary": "Individual designated as a director of entities supplying a sanctioned programme.",
+      "publishedAt": "2024-11-08",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "individual",
+        "country": "Republic of Veloria",
+        "aliases": "Teodor Vashkin; Fyodor Vashkin; テオドール・ワシキン",
+        "dateOfBirth": "1968-04-22",
+        "listedOn": "2024-11-08"
+      }
+    },
+    {
+      "id": "FSL-2231",
+      "source": "Fictional Sanctions List",
+      "url": "https://lists.example/sanctions-list",
+      "title": "ORLANDE, Mirela",
+      "summary": "Individual designated for arranging payments for a listed entity.",
+      "publishedAt": "2025-09-30",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "individual",
+        "country": "Marisca",
+        "aliases": "Mirela Orlande; ミレラ・オルランデ",
+        "dateOfBirth": "1979-12-03",
+        "listedOn": "2025-09-30"
+      }
+    },
+    {
+      "id": "FSL-2240",
+      "source": "Fictional Sanctions List",
+      "url": "https://lists.example/sanctions-list",
+      "title": "Selen Maritime Holdings",
+      "summary": "Entity designated for operating vessels that carried sanctioned cargo.",
+      "publishedAt": "2025-09-30",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "entity",
+        "country": "Republic of Veloria",
+        "aliases": "Selen Maritime; セレン・マリタイム・ホールディングス",
+        "address": "2 Quay Street, Port Selen, Veloria",
+        "listedOn": "2025-09-30"
+      }
+    },
+    {
+      "id": "FSL-2302",
+      "source": "Fictional Sanctions List",
+      "url": "https://lists.example/sanctions-list",
+      "title": "BREKHOV, Anton",
+      "summary": "Individual designated as the beneficial owner of a listed shipping entity.",
+      "publishedAt": "2026-08-19",
+      "retrievedAt": "2026-11-16",
+      "fields": {
+        "type": "individual",
+        "country": "Republic of Veloria",
+        "aliases": "Anton Brekhov; アントン・ブレホフ",
+        "dateOfBirth": "1972-07-15",
+        "listedOn": "2026-08-19"
+      }
+    }
+  ]
+}

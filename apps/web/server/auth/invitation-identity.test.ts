@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { derivePurposeKey } from './core/key-ring.ts';
 import {
   INVITATION_IDENTITY_COOKIE_BASE_NAME,
   INVITATION_IDENTITY_TTL_SECONDS,
@@ -27,9 +28,10 @@ async function signedToken(version: string, payload: Record<string, unknown>): P
   const encoder = new TextEncoder();
   const body = base64Url(encoder.encode(JSON.stringify(payload)));
   const signed = `${version}.${body}`;
+  // The invitation cookie's purpose key (part 06 steps 5–6): the raw secret no longer verifies.
   const key = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(SECRET),
+    await derivePurposeKey(crypto.subtle, SECRET, 'invitation-identity'),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],

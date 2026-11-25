@@ -1,0 +1,17 @@
+{
+  "form": "法務相談フォーム",
+  "id": "LGL-0103",
+  "submitted_at": "2026-11-20T16:40:00+09:00",
+  "requester": {
+    "name": "仙波 ひより",
+    "department": "広報部",
+    "email": "semba@yukimi-seiko.example"
+  },
+  "type": "法令・規程の確認",
+  "title": "展示会の来場者アンケートの抽選キャンペーンの確認",
+  "counterparty": "",
+  "details": "来年二月の展示会で、アンケートに答えた来場者の中から抽選で旅行券を贈るキャンペーンを考えています。景品の決まりに反しないか確認してほしいです。キャンペーンの案を添付します。",
+  "urgent": false,
+  "urgent_reason": "",
+  "attachments": ["展示会キャンペーン案.pptx"]
+}

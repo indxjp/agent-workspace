@@ -49,6 +49,11 @@ export const recordedTurnSchema = z.strictObject({
   steps: z.array(recordedStepSchema).readonly(),
   /** The engine's stop reason of the last run, such as `end_turn` or `max_turns`. */
   stopReason: z.string().nullable(),
+  /**
+   * The last run's typed answer (`run.output.structured`, ADR-0143), present only when the run was
+   * asked for the entry's `demo.outputSchema` and answered it; the replay charts it.
+   */
+  structured: z.record(z.string(), z.json()).readonly().optional(),
 });
 export type RecordedTurn = z.infer<typeof recordedTurnSchema>;
 
@@ -95,7 +100,18 @@ export function judgeMoment(turn: RecordedTurn, check: MomentCheck): MomentVerdi
   const at = turn.steps.findIndex(
     (step) => step.kind === 'approval' && isTool(step.toolName, approval),
   );
-  if (at === -1) return { pass: false, reason: `${approval} did not wait for approval` };
+  if (at === -1) {
+    // A write that ran unasked and answered (a gate that did not hold), one that was called but
+    // refused or failed, and one never reached (an agent that stopped early) are told apart.
+    const calls = tools.filter((step) => isTool(step.name, approval));
+    const ran = calls.some((step) => step.output !== null && !step.isError);
+    const how = ran
+      ? 'it ran without one'
+      : calls.length > 0
+        ? 'it was called but refused or failed'
+        : 'it was never called';
+    return { pass: false, reason: `${approval} did not wait for approval: ${how}` };
+  }
   const waited = turn.steps[at];
   if (waited?.kind !== 'approval' || waited.decision !== 'approved') {
     return { pass: false, reason: `${approval} was not approved` };

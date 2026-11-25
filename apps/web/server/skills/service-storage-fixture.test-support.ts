@@ -19,7 +19,6 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   readBytes,
-  streamToBytes,
   type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { afterAll, beforeAll } from 'vitest';
@@ -83,11 +82,6 @@ function serverRows(
     principalId: principal.ownerPrincipalId,
     userId: principal.userId,
   }).rows;
-}
-
-export async function textAt(store: ObjectStore, key: string): Promise<string | null> {
-  const object = await store.read(key);
-  return object === null ? null : new TextDecoder().decode(await streamToBytes(object.body));
 }
 
 export function memoryFixture(): Promise<Fixture> {

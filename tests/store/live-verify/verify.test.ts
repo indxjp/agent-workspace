@@ -18,24 +18,34 @@ import { realModelEvidenceSchema } from '../../../examples/store/catalog/verific
 import { scriptedWorkspace, type Script } from '../../gallery/harness/scripted-workspace.ts';
 import {
   productionEvidenceSchema,
+  readEvidence,
   writeEvidence,
   writeProductionEvidence,
 } from './evidence-file.ts';
 import {
+  deployedCommitOf,
+  entriesToVerify,
+  errorCodeOf,
   LiveVerifyRefusal,
   MAX_APPROVALS,
   REASON_MAX,
   SPEND_APPROVED,
   readSettings,
   redact,
+  refuseStaleCopies,
+  refuseUndeployed,
   secretsOf,
+  sourceHashesOf,
+  trailOf,
   verifyLive,
+  withSourceHashes,
   type LiveClient,
 } from './verify.ts';
 
 /** A value that looks like a credential, planted everywhere a secret could leak. */
 const CANARY = 'ak_live_CANARYCANARYCANARYCA_CANARYCANARYCANARYCANARYCANARYCANARYCAN';
 const AGENT_NAME = 'Support';
+const HASH = 'a'.repeat(64);
 const NOW = new Date('2026-12-01T09:30:00.000Z');
 
 const base = CATALOG.find((entry) => entry.status === 'live');
@@ -77,6 +87,30 @@ function clientOver(script: Script): LiveClient {
     runs: workspace.aw.runs,
   };
 }
+
+describe('the run it starts', () => {
+  it("asks for the entry's output schema, as the Try it section does", async () => {
+    const workspace = scriptedWorkspace(async (context) => {
+      await context.tool('shop', 'lookup', {});
+      return { text: 'Looked it up.', structured: { found: 1 } };
+    }, connectors);
+    const outputSchema = { type: 'object', properties: { found: { type: 'number' } } };
+    const typed: LiveEntry = {
+      ...entry,
+      demo: { ...entry.demo, outputSchema, check: { tools: ['lookup'], approval: null } },
+    };
+    const agents = [fixtures.agent({ id: workspace.agentId, name: AGENT_NAME })];
+    const outcome = await verifyLive({
+      client: { agents: { list: () => Promise.resolve(agents) }, runs: workspace.aw.runs },
+      secrets: [CANARY],
+      entries: [typed],
+      now: () => NOW,
+      environment: 'staging',
+    });
+    expect(outcome.records.map((record) => record.result)).toEqual(['pass']);
+    expect(workspace.runs.map((started) => started.outputSchema)).toEqual([outputSchema]);
+  });
+});
 
 const run = (client: LiveClient) =>
   verifyLive({
@@ -176,14 +210,31 @@ describe('a run against the scripted model', () => {
     expect(outcome.records).toHaveLength(1);
     expect(outcome.records[0]).toMatchObject({
       result: 'fail',
-      reason: 'update did not wait for approval',
+      reason:
+        'update did not wait for approval: it was never called (called: lookup; stop: end_turn; ended on a statement)',
     });
   });
 
-  it('records a run id the platform gave, and the evidence parses with the schema', async () => {
+  it('never carries the closing answer, or a secret it quotes, into the fail record', async () => {
+    const leaks: Script = async (context) => {
+      await context.tool('shop', 'lookup', {});
+      return `The key is ${CANARY}. Shall I save it?`;
+    };
+    const outcome = await run(clientOver(leaks));
+    expect(outcome.records[0]?.result).toBe('fail');
+    expect(outcome.records[0]?.reason).not.toContain(CANARY);
+    expect(outcome.records[0]?.reason).not.toContain('The key is');
+    expect(outcome.records[0]?.reason).toContain('ended on a question');
+  });
+
+  it('records a run id the platform gave, and the evidence parses once the hash is added', async () => {
     const outcome = await run(clientOver(asksThenWrites));
-    const parsed = realModelEvidenceSchema.parse({ runs: outcome.records });
+    expect(realModelEvidenceSchema.safeParse({ runs: outcome.records }).success).toBe(false);
+    const parsed = realModelEvidenceSchema.parse({
+      runs: withSourceHashes(outcome.records, new Map([[entry.slug, HASH]])),
+    });
     expect(parsed.runs[0]?.runId.length).toBeGreaterThan(0);
+    expect(parsed.runs[0]?.sourceHash).toBe(HASH);
   });
 
   it('does not run an entry whose agent the deployment lacks: no record, never a fail', async () => {
@@ -244,7 +295,8 @@ describe('a production run', () => {
     expect(passed.records[0]).toMatchObject({ result: 'pass', environment: 'production' });
     expect(failed.records[0]).toMatchObject({
       result: 'fail',
-      reason: 'update did not wait for approval',
+      reason:
+        'update did not wait for approval: it was never called (called: lookup; stop: end_turn; ended on a statement)',
       environment: 'production',
     });
   });
@@ -356,6 +408,7 @@ describe('the limits', () => {
         result: 'fail',
         reason,
         environment: 'staging',
+        sourceHash: HASH,
       },
     ],
   });
@@ -410,14 +463,283 @@ describe('the evidence file', () => {
       result: 'pass',
       reason: 'the moment happened',
       environment: 'staging',
+      sourceHash: HASH,
     };
     writeFileSync(file, `${JSON.stringify({ runs: [earlier] }, null, 2)}\n`);
     const outcome = await run(clientOver(onlyLooksUp));
-    const written = writeEvidence(file, outcome.records);
+    const written = writeEvidence(
+      file,
+      withSourceHashes(outcome.records, new Map([[entry.slug, HASH]])),
+    );
+    expect(readEvidence(file)).toEqual(written);
     const onDisk = realModelEvidenceSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
     expect(onDisk).toEqual(written);
     expect(onDisk.runs).toHaveLength(2);
     expect(onDisk.runs[0]).toEqual(earlier);
     expect(onDisk.runs[1]?.result).toBe('fail');
+  });
+});
+
+describe('which entries a staging run verifies', () => {
+  const live = CATALOG.filter((candidate): candidate is LiveEntry => candidate.status === 'live');
+  const [first, second] = live;
+  if (first === undefined || second === undefined) throw new Error('need two live entries');
+  const none = () => false;
+
+  it('verifies only the named entries, so a batch verifies its own', () => {
+    const named = entriesToVerify(live, ` ${second.slug},${first.slug} ,,${first.slug}`, none);
+    expect(named.map(({ slug }) => slug).sort()).toEqual([first.slug, second.slug].sort());
+  });
+
+  it('by default verifies every live entry with no passing record for its current source', () => {
+    const passed = (candidate: { readonly slug: string }) => candidate.slug === first.slug;
+    for (const named of [undefined, '', ' , ']) {
+      const chosen = entriesToVerify(live, named, passed).map(({ slug }) => slug);
+      expect(chosen).toEqual(live.map(({ slug }) => slug).filter((slug) => slug !== first.slug));
+    }
+  });
+
+  it('refuses a name that is not an entry with a source before anything is spent, echoing only slugs', () => {
+    expect(() => entriesToVerify(live, `${first.slug},no-such-entry`, none)).toThrow(
+      /not an entry with a source: no-such-entry$/u,
+    );
+    expect(() => entriesToVerify(live, `$(echo ${CANARY})`, none)).toThrow(
+      new LiveVerifyRefusal(
+        'refused: STORE_LIVE_VERIFY_ENTRIES names what is not an entry with a source: (not a slug)',
+      ),
+    );
+  });
+
+  it('takes every hash before the run, and refuses an entry with no source to hash', () => {
+    expect(sourceHashesOf([first], () => HASH)).toEqual(new Map([[first.slug, HASH]]));
+    expect(() => sourceHashesOf([first], () => null)).toThrow(LiveVerifyRefusal);
+  });
+
+  it('refuses to keep a record whose entry had no hash taken', () => {
+    const record = {
+      entry: first.slug,
+      runId: 'run-1',
+      date: NOW.toISOString(),
+      result: 'pass',
+      reason: 'the moment happened',
+      environment: 'staging',
+    } as const;
+    expect(() => withSourceHashes([record], new Map())).toThrow(LiveVerifyRefusal);
+  });
+
+  it('needs the commit staging was deployed from, as a full sha', () => {
+    const commit = 'a1'.repeat(20);
+    expect(deployedCommitOf({ STORE_LIVE_VERIFY_DEPLOYED_COMMIT: ` ${commit} ` })).toBe(commit);
+    for (const value of [undefined, '', 'main', 'a1b2c3', `${commit}0`]) {
+      expect(() => deployedCommitOf({ STORE_LIVE_VERIFY_DEPLOYED_COMMIT: value })).toThrow(
+        LiveVerifyRefusal,
+      );
+    }
+  });
+
+  it('refuses before spending when staging does not run the code checked out', () => {
+    expect(() => {
+      refuseUndeployed([first, second], () => null);
+    }).not.toThrow();
+    expect(() => {
+      refuseUndeployed([first, second], (candidate) =>
+        candidate.slug === second.slug ? 'its source differs' : null,
+      );
+    }).toThrow(
+      new LiveVerifyRefusal(
+        `refused: staging does not run the code checked out; deploy it first (${second.slug}: its source differs)`,
+      ),
+    );
+  });
+});
+
+describe('the copy the verification workspace holds', () => {
+  // A workspace not refilled since a template change holds the old copy (a refill converges it,
+  // ADR-0171); R1 must not verify it as the new code.
+  const workspace = scriptedWorkspace(
+    asksThenWrites,
+    connectors,
+    {},
+    { requireApproval: ['mcp__shop__update'] },
+  );
+  const holding = (instructions: string): LiveClient => ({
+    agents: {
+      list: () =>
+        Promise.resolve([
+          fixtures.agent({ id: workspace.agentId, name: AGENT_NAME, instructions }),
+        ]),
+    },
+    runs: workspace.aw.runs,
+  });
+  const verify = (client: LiveClient) =>
+    verifyLive({
+      client,
+      secrets: [CANARY],
+      entries: [entry],
+      now: () => NOW,
+      environment: 'staging',
+      expectedInstructions: () => 'the deployed instructions',
+    });
+
+  it('runs an entry whose copy has the instructions its deployed template gives', async () => {
+    const outcome = await verify(holding('the deployed instructions'));
+    expect(outcome.records.map((record) => record.result)).toEqual(['pass']);
+  });
+
+  it('refuses, before anything is spent, a copy older than the deployed template', async () => {
+    const client = holding('an older version');
+    const start = client.runs.start;
+    let spent = false;
+    const watched: LiveClient = {
+      ...client,
+      runs: {
+        ...client.runs,
+        start: (...args: Parameters<typeof start>) => {
+          spent = true;
+          return start(...args);
+        },
+      },
+    };
+    await expect(verify(watched)).rejects.toThrow(
+      new LiveVerifyRefusal(
+        `refused: the verification workspace holds an older copy of ${entry.slug}; refill it from the deployed templates first (PUT /api/demo/verification, or re-run the deploy)`,
+      ),
+    );
+    expect(spent).toBe(false);
+  });
+
+  it('leaves an entry with no copy to the run, which reports it as not run', () => {
+    expect(() => refuseStaleCopies([entry], [], () => 'x')).not.toThrow();
+  });
+});
+
+describe('a long failed turn', () => {
+  it('keeps its reason, trail included, within the evidence limit', async () => {
+    const wandersOff: Script = async (context) => {
+      for (let at = 0; at < 120; at += 1) {
+        await context.tool('shop', at % 2 === 0 ? 'lookup' : 'browse_every_catalog_page', {});
+      }
+      return 'Still looking.';
+    };
+    const outcome = await run(clientOver(wandersOff));
+    const reason = outcome.records[0]?.reason ?? '';
+    expect(outcome.records[0]?.result).toBe('fail');
+    expect(reason).toMatch(
+      /^update did not wait for approval: it was never called \(called: lookup, /u,
+    );
+    expect(reason.length).toBeLessThanOrEqual(REASON_MAX);
+    const evidence = { runs: withSourceHashes(outcome.records, new Map([[entry.slug, HASH]])) };
+    expect(realModelEvidenceSchema.safeParse(evidence).success).toBe(true);
+  });
+});
+
+describe('trailOf', () => {
+  it('names what a failed turn did: tools in order, repeats counted, errors and waits marked, the stop', () => {
+    expect(
+      trailOf({
+        prompt: 'q',
+        steps: [
+          {
+            kind: 'tool',
+            name: 'mcp__agent-workspace__search_files',
+            input: {},
+            output: 'a',
+            isError: false,
+          },
+          {
+            kind: 'tool',
+            name: 'mcp__agent-workspace__search_files',
+            input: {},
+            output: 'b',
+            isError: false,
+          },
+          { kind: 'answer', text: 'thinking aloud' },
+          {
+            kind: 'tool',
+            name: 'mcp__tracker-incident__create_task',
+            input: {},
+            output: 'no',
+            isError: true,
+          },
+          { kind: 'approval', toolName: 'mcp__tracker__create_task', decision: null },
+          { kind: 'tool', name: 'Read', input: {}, output: null, isError: false },
+        ],
+        stopReason: 'max_turns',
+      }),
+    ).toBe('called: search_filesx2, create_task!, wait:create_task, Read; stop: max_turns');
+    expect(trailOf({ prompt: 'q', steps: [], stopReason: null })).toBe(
+      'called: nothing; stop: none',
+    );
+  });
+
+  it('ends by saying whether the closing answer asked a question, never quoting it', () => {
+    const read = { kind: 'tool', name: 'Read', input: {}, output: 'a', isError: false } as const;
+    const ending = (text: string) =>
+      trailOf({ prompt: 'q', steps: [read, { kind: 'answer', text }], stopReason: 'end_turn' });
+    expect(ending('Here is the table.\n\nShall I save it?\n')).toBe(
+      'called: Read; stop: end_turn; ended on a question',
+    );
+    expect(ending('保存してよろしいですか？')).toBe(
+      'called: Read; stop: end_turn; ended on a question',
+    );
+    expect(ending('Here is the table.')).toBe('called: Read; stop: end_turn; ended on a statement');
+    const question = 'called: Read; stop: end_turn; ended on a question';
+    expect(
+      ending('Shall I save it?\n\nA person decides whether to accept the return and refund.'),
+    ).toBe(question);
+    expect(ending('保存しますか。担当者が判断してください。')).toBe(question);
+    expect(ending('保存してよいでしょうか\nどう直すかは担当者が判断してください。')).toBe(question);
+    expect(ending('See `search?q=1` and 〔RET-03〕. The writer decides what to change.')).toBe(
+      'called: Read; stop: end_turn; ended on a statement',
+    );
+  });
+
+  it('names the code a failed call answered with, so a refused render tells its reason (R1 run 44985488322)', () => {
+    const failed = (output: string | null) =>
+      ({
+        kind: 'tool',
+        name: 'mcp__agent-workspace__run_skill_script',
+        input: {},
+        output,
+        isError: true,
+      }) as const;
+    expect(
+      trailOf({
+        prompt: 'q',
+        steps: [
+          failed('approval_required: mcp__agent-workspace__run_skill_script needs approval.'),
+          {
+            kind: 'approval',
+            toolName: 'mcp__agent-workspace__run_skill_script',
+            decision: 'approved',
+          },
+          failed(
+            'exit code 1\n\nstderr:\n{"error":"output_not_writable","message":"outputs/秘密.docx could not be written"}',
+          ),
+          failed('refused (timeout): the script ran longer than 120 seconds and was stopped.'),
+          failed('the guide for 柚木原さつき: see drafts/a.json'),
+          failed(null),
+        ],
+        stopReason: 'end_turn',
+      }),
+    ).toBe(
+      'called: run_skill_script!(approval_required), wait:run_skill_script, run_skill_script!(output_not_writable), run_skill_script!(timeout), run_skill_script!x2; stop: end_turn',
+    );
+  });
+});
+
+describe('errorCodeOf', () => {
+  it('takes only a lower-case code, never the text around it', () => {
+    expect(errorCodeOf('{"error": "invalid_model", "issues": [{"path": "$.blocks[0]"}]}')).toBe(
+      '(invalid_model)',
+    );
+    expect(errorCodeOf('Error: file not found: drafts/x.json')).toBe('');
+    expect(errorCodeOf('{"error":"Bad thing"}')).toBe('');
+    expect(
+      errorCodeOf('exit code 1\n\nstdout:\nthe memo says {"error":"leaked_word"} in its text'),
+    ).toBe('');
+    expect(errorCodeOf('stdout:\nsee refused (word) above')).toBe('');
+    expect(errorCodeOf(`{"error":"${'a'.repeat(60)}"}`)).toBe('');
+    expect(errorCodeOf(null)).toBe('');
   });
 });

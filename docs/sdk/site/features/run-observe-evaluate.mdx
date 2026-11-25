@@ -123,8 +123,8 @@ cases:
 | ------------- | ------------------------------------------------------------ |
 | `contains`    | The final answer contains every listed text (case-sensitive) |
 | `notContains` | The final answer contains none of the listed texts           |
-| `tool`        | The run called the tool with exactly this name               |
-| `judge`       | A model grades the answer as meeting this rubric             |
+| `tool`        | The run called this tool, with or without `mcp__<server>__`  |
+| `judge`       | A model grades the answer and its tool calls by this rubric  |
 
 A case needs at least one check. All four are available today.
 
@@ -279,9 +279,10 @@ pushing (see [Your stack](/features/your-stack#ship-it-to-your-infrastructure)).
 | ------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `single-vm`                           | Docker Compose on one Linux VM, behind your TLS proxy (for example Caddy)                       | Available through `aw deploy`                                                                                                                      |
 | `gcp-cloudrun`                        | Terraform on Google Cloud Run; the CLI ships the module and copies the images by digest         | Available through `aw deploy`; `--infra <dir>` is optional (use your own module)                                                                   |
-| Kubernetes (EKS, GKE, AKS, OpenShift) | The Helm chart `infra/helm/agent-workspace`                                                     | Not an `aw deploy` target; chart and guide ship with your delivery. The per-session sandbox Pod is live-verified on a kind cluster, with no managed-cluster proof yet |
+| `kubernetes` (EKS, GKE, AKS, OpenShift) | The Helm chart `infra/helm/agent-workspace`, installed by `aw deploy`                       | Available through `aw deploy`. The per-session sandbox Pod is live-verified on a kind cluster, with no managed-cluster proof yet |
+| `vercel`                              | The control plane on Vercel, with agent sessions on E2B                                         | Available through `aw deploy`; see [Deploy to Vercel](/guides/deploy-vercel)                                                                       |
 
-Both `aw deploy` targets need Node 24 or later and `@indx-workspace/cli`. Projects created with
+Every `aw deploy` target needs Node 24 or later and `@indx-workspace/cli`. Projects created with
 `npm create` already include it, pinned in `devDependencies`; for a project created before this
 release, run `npm install --save-dev @indx-workspace/cli@<aw's version>`. For `single-vm`, run `aw deploy` on the VM itself. `aw deploy` never prints a password or key, and it
 refuses a missing prerequisite by name before it creates anything. The prerequisites per target,
@@ -452,8 +453,8 @@ flowchart TD
 - **An evaluation runs at most 200 cases,** one after another. More than 20 run as a run the CLI
   advances in steps; an interrupted run cannot be resumed, and there are no datasets or repeated
   runs.
-- **`environments.production` takes two fields,** `target` and `url`, and `aw deploy` accepts only
-  `production`. Kubernetes goes through the Helm chart, not `aw deploy`.
+- **`aw deploy` accepts only `production`.** `environments.production` takes `target` and `url`,
+  plus `apps` for a portal app's image and `gcp` for Cloud Run settings.
 - **Not yet a declared release.** Signed images and the published install path are
   [P-6](/concepts/roadmap#p-6-a-published-release-with-signed-images-and-the-installer).
 

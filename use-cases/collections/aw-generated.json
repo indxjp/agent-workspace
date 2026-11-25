@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "955c3360bbdbd7a535e9ef6aadcb2afd443883e586523bbba9e214a7a033d1ab",
+        "agents/collections.md": "22e5d0cb3b36ee13343d06ec3d27610e4f77284995d356822bb20b2366a328e2",
+        "agents/collections.ts": "48e9ebcda00d8ea334929f7ecdc16bfcbc2803274b1de8fb36bc64ced00dd040",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/collections.yaml": "19e4b627e6fbabdf42ed0cd1a422478acc041ca4fb4316fdc0c2ce27101927d6",
+        "skills/collections/SKILL.md": "89be97bfd31072810c468b4fae443deda56b3af057105b8aeca027e63ba3039e",
+        "surfaces/main.ts": "61689afe24d9cd99371e638d0a199f69ce6a056f446bfcb1102e4463e8acdf4c",
+        "triggers/collections.json": "8bbb84d04b24ac372736bebd6c8a74d8686d01946989609f5f486f7466abc717"
+      },
+      "edits": []
+    }
+  }
+}

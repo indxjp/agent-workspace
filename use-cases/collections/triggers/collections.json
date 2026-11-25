@@ -1,0 +1,46 @@
+{
+  "kind": "schedule",
+  "name": "collections",
+  "prompt": "今日時点の督促リストを作成して、collections-reports フォルダに保存してください。 / Write today's collections list and save it to the collections-reports folder.",
+  "cron": "0 9 * * 1-5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "invoices", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "invoices": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "invoice",
+            "customer",
+            "dueDate",
+            "balance",
+            "daysOverdue",
+            "stage",
+            "draft",
+            "sources"
+          ],
+          "properties": {
+            "invoice": { "type": "string" },
+            "customer": { "type": "string" },
+            "dueDate": { "type": "string" },
+            "balance": { "type": "integer" },
+            "daysOverdue": { "type": "integer" },
+            "stage": {
+              "type": "string",
+              "enum": ["first-reminder", "second-reminder", "escalate"]
+            },
+            "draft": { "type": "string" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

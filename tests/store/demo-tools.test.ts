@@ -2,14 +2,20 @@
  * Which tools of the live demo agents could send or write outside, and what the visitor's copy
  * does with each (the provisioner: `apps/web/server/demo/provision/outside-tools.ts`). A tool that
  * only reads is left out of the copy; a tool that could send or write is replaced by a stand-in
- * that answers `DEMO_SEND_RESULT` and does nothing. The table below is the reviewed inventory of
- * the 14 live entries: a new tool in any source fails this test until someone has decided which
+ * that answers `DEMO_SEND_RESULT` and does nothing. A code tool runs on the platform's own
+ * `aw-dev-tools` connector, which the seed declares with its reads (`CONNECTOR_TOOLS` in
+ * `./seed/build.ts`), so the copy gets that connector as a stand-in that answers a public-source
+ * read from the entry's snapshot records (ADR-0170 D4). The table below is the reviewed inventory of
+ * the live entries: a new tool in any source fails this test until someone has decided which
  * of the two it is.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+
+import { AW_DEV_TOOLS_CONNECTOR } from '@indx-workspace/contracts/tool-connectors';
+import { isCodeTool } from '@indx-workspace/sdk/define';
 
 import { CATALOG } from '../../examples/store/catalog/index.ts';
 import { REPOSITORY_ROOT } from '../apps/registry.ts';
@@ -40,6 +46,37 @@ const EXPECTED: Readonly<Record<string, Inventory>> = {
   'team-chat': { standIn: ['team-chat'], omitted: [] },
   wiki: { standIn: ['wiki'], omitted: [] },
   'service-desk': { standIn: ['service-desk'], omitted: [] },
+  'policy-qa': NONE,
+  nda: NONE,
+  'meeting-prep': NONE,
+  'deal-risk': NONE,
+  'sla-watch': NONE,
+  attendance: NONE,
+  standup: NONE,
+  'project-status': NONE,
+  budget: NONE,
+  incident: { standIn: ['tracker'], omitted: [] },
+  onboarding: { standIn: ['onboarding-tasks'], omitted: [] },
+  'account-requests': { standIn: ['account-requests-grants'], omitted: [] },
+  'faq-bot': NONE,
+  market: { standIn: [AW_DEV_TOOLS_CONNECTOR], omitted: [] },
+  inspection: NONE,
+  'ad-compliance': NONE,
+  expense: NONE,
+  invoice: NONE,
+  screening: { standIn: [AW_DEV_TOOLS_CONNECTOR], omitted: [] },
+  'screening-hr': NONE,
+  'code-review': NONE,
+  proposal: NONE,
+  returns: NONE,
+  newcomer: NONE,
+  translator: NONE,
+  glossary: NONE,
+  'work-instruction': NONE,
+  interview: NONE,
+  'release-notes': NONE,
+  announce: NONE,
+  privacy: NONE,
 };
 
 interface DefinedTools {
@@ -92,7 +129,10 @@ describe('the tools of the live demo agents', () => {
       const standIn: string[] = [];
       const omitted: string[] = [];
       for (const tool of defined.tools ?? []) {
-        if ('connector' in tool) {
+        if (isCodeTool(tool)) {
+          // A code tool's calls go to `aw-dev-tools`, whose seeded reads a stand-in answers.
+          if (!standIn.includes(AW_DEV_TOOLS_CONNECTOR)) standIn.push(AW_DEV_TOOLS_CONNECTOR);
+        } else if ('connector' in tool) {
           // A connector's tools are not known from outside: a stand-in.
           standIn.push(tool.connector);
         } else if (onlyReads(tool.allow, path.join(source, tool.spec))) {

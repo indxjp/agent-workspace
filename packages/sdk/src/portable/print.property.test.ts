@@ -88,5 +88,6 @@ describe('printAgentProject properties [US-BLD-06][unit][sdk]', () => {
       }),
       { seed: SEED, numRuns: RUNS },
     );
-  });
+    // RUNS prettier formats of generated TypeScript: CPU-bound, and slow on a loaded CI machine.
+  }, 30_000);
 });

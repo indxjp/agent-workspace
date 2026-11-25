@@ -12,7 +12,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearClientIdentity, installClientIdentity } from '../../client-identity';
 import type { DemoSettings } from '../../settings';
 import { createInMemoryObjectStoreProvider } from '../../storage/testing';
-import { wireDemoSweep, wireRunDemoCaps } from './run-api-demo-caps';
+import { createInMemoryConnectorsStoreProvider } from '../../connectors/memory-store';
+import { wireDemoSweep, wireRunDemoApprovedWrites, wireRunDemoCaps } from './run-api-demo-caps';
 
 const WORKSPACE = '00000000-0000-4000-8000-000000000002';
 const USER = '00000000-0000-4000-8000-000000000003';
@@ -33,6 +34,8 @@ function gateOver(repository: Partial<DemoCapsRepository>, demo: DemoSettings = 
     admit: () => Promise.resolve('admitted' as const),
     countAdmissionsSince: () => Promise.resolve(0),
     spentOn: () => Promise.resolve({ costUsd: '0', unpricedUsage: false }),
+    keepsDemoWrites: () => Promise.resolve(true),
+    markVerificationWorkspace: () => Promise.resolve(),
     ...repository,
   } satisfies DemoCapsRepository;
   return wireRunDemoCaps({ root: { demoCaps: caps }, demo } as never).demoRunGate;
@@ -144,6 +147,40 @@ function sweepWiredOver(options: { storage?: boolean; events: string[]; demo?: D
           },
   } as unknown as Parameters<typeof wireDemoSweep>[0];
 }
+
+describe('wireRunDemoApprovedWrites (ADR-0169)', () => {
+  const CALL = { toolName: 'mcp__tasks__task_create', canonicalCall: '{"input":{},"name":"x"}' };
+
+  /** The keeper over memory connectors, where the repository says whether `WORKSPACE` keeps writes. */
+  function keeperWith(keeps: boolean) {
+    const connectors = createInMemoryConnectorsStoreProvider();
+    const forWorkspace = vi.spyOn(connectors, 'forWorkspace');
+    const keepsDemoWrites = vi.fn(() => Promise.resolve(keeps));
+    const wired = wireRunDemoApprovedWrites({
+      root: { demoCaps: { keepsDemoWrites } },
+      connectors: { kind: 'serving', runtime: { connectors } },
+    } as never);
+    return { keeper: wired.demoApprovedWrites, forWorkspace, keepsDemoWrites };
+  }
+
+  it('reads the connectors of a workspace that keeps demo writes (a demo or the verification workspace), and of no other', async () => {
+    const kept = keeperWith(true);
+    await kept.keeper?.keep({ workspaceId: WORKSPACE, calls: [CALL] });
+    expect(kept.keepsDemoWrites).toHaveBeenCalledWith(WORKSPACE);
+    expect(kept.forWorkspace).toHaveBeenCalledWith(WORKSPACE);
+
+    const ordinary = keeperWith(false);
+    await ordinary.keeper?.keep({ workspaceId: WORKSPACE, calls: [CALL] });
+    expect(ordinary.keepsDemoWrites).toHaveBeenCalledWith(WORKSPACE);
+    expect(ordinary.forWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('wires no keeper where the deployment serves no connectors', () => {
+    expect(
+      wireRunDemoApprovedWrites({ root: {}, connectors: { kind: 'unavailable' } } as never),
+    ).toEqual({});
+  });
+});
 
 describe('wireDemoSweep: what the catalog does not list', () => {
   it('leaves no object behind for an expired workspace with a session-state blob and a pending upload', async () => {

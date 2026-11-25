@@ -11,9 +11,11 @@
  * sends; that is a different credential.)
  *
  * Every cryptographic operation here is a call into Web Crypto — `crypto.subtle.sign`,
- * `crypto.subtle.verify`, `crypto.getRandomValues`. Nothing in this file implements a primitive,
- * and nothing compares two secrets with `===`: `subtle.verify` is the constant-time comparison,
- * which is why the signature check is written as a verify rather than as a sign-then-compare.
+ * `crypto.subtle.verify`, `crypto.getRandomValues` — made here or, for the token's format, by the
+ * one signed-token codec in `./core/signed-token.ts` (part 06 step 6), which this module hands
+ * `crypto.subtle` and the session key. Nothing implements a primitive, and nothing compares two
+ * secrets with `===`: `subtle.verify` is the constant-time comparison, which is why the signature
+ * check is written as a verify rather than as a sign-then-compare.
  * Spec §40 makes a mature library mandatory for cryptography; Web Crypto is the platform's, is
  * present in both runtimes Next.js middleware can run in, and needs no dependency —
  * see docs/adr/W1-CP-06-web-crypto-instead-of-a-jwt-library.md for why a dependency was not the
@@ -22,7 +24,7 @@
  * ## Reading order matters
  *
  * `verifySignInSessionToken` rejects in a fixed order and names what it rejected at every step. The
- * order is not cosmetic: the signature is checked **before** the payload is parsed, so no
+ * order is not cosmetic: the codec checks the signature **before** the payload is parsed, so no
  * attacker-controlled JSON is ever handed to `JSON.parse` on the strength of a bad MAC, and
  * `exp` is parsed and type-checked **before** it is compared, so a missing or non-numeric expiry
  * cannot produce a `NaN < now` that is false and therefore reads as "not expired" (ADR-0015 —
@@ -41,7 +43,14 @@ import {
   type SignInSessionCookie,
   type SignInSessionVia,
 } from './core/session-rules.ts';
-import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
+import { derivePurposeKey } from './core/key-ring.ts';
+import {
+  importHmacKey,
+  openSignedToken,
+  sealSignedToken,
+  signedTokenRefusal,
+  type SignedTokenFailure,
+} from './core/signed-token.ts';
 
 // The pure rules live in `./core/` (ADR W1-CP-06, amended); this module signs and verifies.
 export {
@@ -268,19 +277,12 @@ export function readSessionSecret(env: Readonly<Record<string, string | undefine
 
 /**
  * Deriving and importing a key is asynchronous and happens on every request through the gate, so
- * the imported keys are memoised by secret. The map holds two entries, the session key and the old
- * key, for each distinct secret a process has seen, which in practice is one.
+ * the imported key is memoised by secret. The map holds one entry for each distinct secret a
+ * process has seen, which in practice is one.
  */
-type HmacKey = Awaited<ReturnType<typeof crypto.subtle.importKey>>;
+type HmacKey = Awaited<ReturnType<typeof importHmacKey>>;
 
 const keyCache = new Map<string, Promise<HmacKey>>();
-
-function importHmacKey(bytes: Uint8Array<ArrayBuffer>): Promise<HmacKey> {
-  return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
-    'sign',
-    'verify',
-  ]);
-}
 
 function memoised(cacheKey: string, create: () => Promise<HmacKey>): Promise<HmacKey> {
   const cached = keyCache.get(cacheKey);
@@ -293,60 +295,8 @@ function memoised(cacheKey: string, create: () => Promise<HmacKey>): Promise<Hma
 /** The session's own key, derived from the secret (part 06 step 5, `./core/key-ring.ts`). */
 function sessionKey(secret: string): Promise<HmacKey> {
   return memoised(`session\0${secret}`, async () =>
-    importHmacKey(await derivePurposeKey(crypto.subtle, secret, 'session')),
+    importHmacKey(crypto.subtle, await derivePurposeKey(crypto.subtle, secret, 'session')),
   );
-}
-
-/** The raw secret as the key: what every session was signed with before step 5. Verify only. */
-function legacyKey(secret: string): Promise<HmacKey> {
-  return memoised(`legacy\0${secret}`, () => importHmacKey(encoder.encode(secret)));
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
-}
-
-/**
- * The `Uint8Array<ArrayBuffer>` in the return type is not decoration: Web Crypto's `BufferSource`
- * excludes views backed by a `SharedArrayBuffer`, so a plain `Uint8Array` — whose buffer is
- * `ArrayBufferLike` — is not assignable to it. Allocating the buffer explicitly says which kind
- * it is.
- */
-function base64UrlDecode(text: string): Uint8Array<ArrayBuffer> | null {
-  if (!/^[A-Za-z0-9_-]+$/u.test(text)) return null;
-  const padding = (4 - (text.length % 4)) % 4;
-  const padded = text.replace(/-/gu, '+').replace(/_/gu, '/') + '='.repeat(padding);
-  let binary: string;
-  try {
-    binary = atob(padded);
-  } catch {
-    return null;
-  }
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
-/**
- * The session key, then the old one during the roll-over (`verificationKeys`). Each comparison is
- * constant-time; how many keys were tried shows only which key signed the token, not the MAC.
- */
-async function verifiesUnderAnyKey(
-  secret: string,
-  signature: Uint8Array<ArrayBuffer>,
-  signed: Uint8Array<ArrayBuffer>,
-): Promise<boolean> {
-  for (const key of verificationKeys(
-    () => sessionKey(secret),
-    () => legacyKey(secret),
-  )) {
-    if (await crypto.subtle.verify('HMAC', await key(), signature, signed)) return true;
-  }
-  return false;
 }
 
 /** Mint a token for `claims`. The caller has already decided the claims are true. */
@@ -354,14 +304,7 @@ export async function mintSignInSessionToken(
   claims: SignInSessionClaims,
   secret: string,
 ): Promise<string> {
-  const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
-  const signed = `${TOKEN_VERSION}.${payload}`;
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    await sessionKey(secret),
-    encoder.encode(signed),
-  );
-  return `${signed}.${base64UrlEncode(new Uint8Array(signature))}`;
+  return sealSignedToken(crypto.subtle, await sessionKey(secret), TOKEN_VERSION, claims);
 }
 
 /** Build the claims for a new session. Separated from minting so the clock is one argument. */
@@ -392,6 +335,17 @@ function reject(code: VerifyFailure, reason: string): VerifyResult {
 }
 
 /**
+ * The codec's refusal in this module's words: its default words, and a bad MAC named as such.
+ * The reasons are pinned by `session-golden.test.ts`.
+ */
+function refusalFor(failure: SignedTokenFailure): VerifyResult {
+  if (failure.kind === 'signature') {
+    return reject('invalid_signature', 'signature does not verify under this deployment secret');
+  }
+  return reject('malformed_session', signedTokenRefusal(failure));
+}
+
+/**
  * Verify a token. Rejects in a fixed order, naming what it rejected; there is no path through
  * this function that returns `ok` without a valid MAC, a well-formed payload and an expiry that
  * parsed as a finite number and is in the future.
@@ -405,41 +359,14 @@ export async function verifySignInSessionToken(
     return reject('no_session_cookie', 'no session cookie on the request');
   }
 
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    return reject('malformed_session', `token has ${String(parts.length)} parts, expected 3`);
-  }
-  const [version, payloadPart, signaturePart] = parts;
-  if (version !== TOKEN_VERSION || payloadPart === undefined || signaturePart === undefined) {
-    return reject('malformed_session', 'token version tag is not the one this build issues');
-  }
-
-  const signature = base64UrlDecode(signaturePart);
-  if (signature === null) {
-    return reject('malformed_session', 'signature segment is not base64url');
-  }
-
-  // Constant-time, and before anything attacker-controlled is parsed.
-  const signatureValid = await verifiesUnderAnyKey(
-    secret,
-    signature,
-    encoder.encode(`${version}.${payloadPart}`),
+  const opened = await openSignedToken(
+    crypto.subtle,
+    await sessionKey(secret),
+    TOKEN_VERSION,
+    token,
   );
-  if (!signatureValid) {
-    return reject('invalid_signature', 'signature does not verify under this deployment secret');
-  }
-
-  const payloadBytes = base64UrlDecode(payloadPart);
-  if (payloadBytes === null) {
-    return reject('malformed_session', 'payload segment is not base64url');
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder().decode(payloadBytes));
-  } catch {
-    return reject('malformed_session', 'payload is not JSON');
-  }
-  const claims = parseSignInSessionClaims(parsed);
+  if (!opened.ok) return refusalFor(opened.failure);
+  const claims = parseSignInSessionClaims(opened.payload);
   if (!claims.ok) return reject(claims.code, claims.reason);
   const refused = signInSessionTimeRefusal(claims.claims, nowMs);
   if (refused !== null) return reject(refused.code, refused.reason);

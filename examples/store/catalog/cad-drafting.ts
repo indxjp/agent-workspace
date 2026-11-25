@@ -39,4 +39,30 @@ export default defineEntry({
     check: { tools: ['search_files', 'run_skill_script'], approval: 'Write' },
   },
   safety: ['person', 'approval', 'files'],
+  next: {
+    source: 'use-cases/cad-drafting',
+    demo: {
+      agent: 'cad-drafting',
+      prompts: [
+        {
+          ja: 'ブラケット 140×90、SUS304 t2.0、φ9 の取付穴4か所（左下から 15,15 / 125,15 / 15,75 / 125,75）、新図番 BRK-1101。似た過去図面を探して作図して。',
+          en: 'Bracket 140×90, SUS304 t2.0, four φ9 mounting holes (from the lower left: 15,15 / 125,15 / 15,75 / 125,75), new drawing number BRK-1101. Find the closest past drawing and draft it.',
+        },
+        {
+          ja: 'ブラケットを新しく作図して。材質は SS400。',
+          en: 'Draw a new bracket. The material is SS400.',
+        },
+      ],
+      moment: {
+        ja: '仕様を伝えると、似た過去図面から図面の下書き（DXF）と部品表ができ、書き出しは設計者の承認を待つ。',
+        en: "Give a spec; a drawing draft (DXF) and a parts list are made from the closest past drawing, and writing it waits for a designer's approval.",
+      },
+      data: {
+        ja: '架空の過去図面6枚（DXF）と作図メモ',
+        en: '6 fictional past drawings (DXF) and drafting notes',
+      },
+      seed: [{ collection: 'cad-drafting', from: 'data' }],
+      check: { tools: ['search_files'], approval: 'run_skill_script' },
+    },
+  },
 });

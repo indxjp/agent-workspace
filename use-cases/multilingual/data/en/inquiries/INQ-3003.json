@@ -1,0 +1,10 @@
+{
+  "id": "INQ-3003",
+  "received_at": "2026-11-21T10:45:00+09:00",
+  "from": { "name": "Yeon Haneul", "email": "yeon.haneul@mail.example" },
+  "to": "support@komorebi-goods.example",
+  "subject": "도착한 접시가 깨져 있습니다 (주문 KM-25036)",
+  "text": "안녕하세요.\n\n어제 주문 KM-25036 의 도자기 접시 MP-07 을 받았는데, 상자를 열어 보니 한 장에 금이 가 있었습니다. 사진을 첨부합니다. 새 제품으로 교환해 주실 수 있나요?\n\n연하늘 드림",
+  "order_id": "KM-25036",
+  "attachments": ["MP-07_crack.jpg"]
+}

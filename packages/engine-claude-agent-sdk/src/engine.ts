@@ -25,6 +25,7 @@
  * the runner asks.
  */
 import {
+  classifySdkEvent,
   toAgentFrames,
   type ClassifiedSdkEvent,
   type RunRequest,
@@ -45,6 +46,7 @@ import {
   type EngineCompileResult,
   type EngineRunRequest,
   type EngineSessionStore,
+  type ToolAnswers,
 } from '@agent-workspace/engine';
 
 import { startRun, structuredOutputFailure, type TranscriptMirror } from './boundary.js';
@@ -271,6 +273,44 @@ async function rejectionFailure(
  * because the SDK's optional methods are not on the port's interface and must be absent rather
  * than `undefined`.
  */
+/**
+ * A continuation of an approval (ADR-0145 D2) runs the approved call in a new run of the same
+ * session, so the answer a gated `run_skill_script` call names was received by the run that paused.
+ * The SDK loads the session's transcript from the mirror before it resumes; this records the
+ * answers in that main transcript (never a subagent's, never another session's), through the same
+ * frame mapping as a live answer, so the approved call reads the answer the person saw (ADR-0176).
+ */
+function recordResumedAnswers(mirror: TranscriptMirror, answers: ToolAnswers): TranscriptMirror {
+  return {
+    ...mirror,
+    load: async (key) => {
+      const loaded = await mirror.load(key);
+      if (loaded !== null && key.subpath === undefined) {
+        for (const entry of loaded) {
+          const event = classifySdkEvent(entry);
+          if (!isOwnAnswer(event)) continue;
+          for (const frame of toAgentFrames(event, CLAUDE_AGENT_SDK_ENGINE_ID)) {
+            answers.observe(frame);
+          }
+        }
+      }
+      return loaded;
+    },
+  };
+}
+
+/**
+ * Whether an SDK message is the main agent's own. A subagent's messages carry the id of the `Task`
+ * call that started it (`parent_tool_use_id`); their tool answers reached the subagent's model,
+ * never the run's, so a script may not be handed one (ADR-0176).
+ */
+function isOwnAnswer(event: ClassifiedSdkEvent): boolean {
+  const { event: message } = event;
+  if (typeof message !== 'object' || message === null) return true;
+  const parent: unknown = Reflect.get(message, 'parent_tool_use_id');
+  return typeof parent !== 'string' || parent === '';
+}
+
 function toTranscriptMirror(store: EngineSessionStore): TranscriptMirror {
   const listSessions = store.listSessions?.bind(store);
   const listSessionSummaries = store.listSessionSummaries?.bind(store);
@@ -416,11 +456,13 @@ export function createClaudeAgentSdkEngine(
 
     compile: compileClaude,
 
-    plan: (compiled, request, { sessionStore, abortController, fileSearch: link }) => {
+    plan: (compiled, request, { sessionStore, abortController, fileSearch: link, toolAnswers }) => {
       // The kit calls `plan` only after `compile` answered `ok`, with that result for this request.
       // `ClaudeRun.abort` is `abortController.abort`, so the kit's controller is the run's.
       const skillScript = skillScriptSetup(request, CLAUDE_PROTECTED_CONFIG_DIRECTORY);
       const fileSearch = fileSearchSetup(request, link);
+      const mirror = sessionStore === undefined ? undefined : toTranscriptMirror(sessionStore);
+      const continuesApproval = (compiled.approval?.approvedToolCalls.length ?? 0) > 0;
       const run = runStarter(
         {
           runId: request.runId,
@@ -432,9 +474,16 @@ export function createClaudeAgentSdkEngine(
         },
         {
           abortController,
-          ...(skillScript === null ? {} : { skillScript }),
+          ...(skillScript === null ? {} : { skillScript, toolAnswers }),
           ...(fileSearch === null ? {} : { fileSearch }),
-          ...(sessionStore === undefined ? {} : { sessionStore: toTranscriptMirror(sessionStore) }),
+          ...(mirror === undefined
+            ? {}
+            : {
+                sessionStore:
+                  continuesApproval && skillScript !== null
+                    ? recordResumedAnswers(mirror, toolAnswers)
+                    : mirror,
+              }),
         },
       );
 
@@ -498,6 +547,7 @@ export function createClaudeAgentSdkEngine(
             },
           ];
         },
+        isOwnAnswer,
         // Claude's verdict reads the run's own state, not a terminal event.
         isTerminal: () => false,
         // The SDK watches the abort signal itself.

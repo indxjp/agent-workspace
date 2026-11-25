@@ -1,0 +1,9 @@
+{
+  "source": "chat",
+  "id": "MSG-0601",
+  "channel": "#sales-planning",
+  "ts": "2026-11-24T10:12:00+09:00",
+  "user": { "name": "Ryo Miyamori", "handle": "@miyamori-ryo" },
+  "text": "@washio-taku Taku, could you make the revised quote for Hinode Books by Friday 27 November and send it to me? It's the version with the quantity changed from 300 to 500 copies. Thanks.",
+  "mentions": ["@washio-taku"]
+}

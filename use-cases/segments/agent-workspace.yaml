@@ -1,0 +1,24 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: segments
+engine: claude-agent-sdk
+# Analysis (archetype AN): a spreadsheet export (CSV) in the `segments` folder, a deterministic
+# skill script that computes (the entry writes `skills/segments/scripts/analyse.mjs` and a flow
+# that covers it), and a typed answer whose numbers all come from that script. It is
+# read-only: no file grant is read-write and `writeFiles` is off, so a skill script can write
+# nowhere but its temporary directory and runs without a person's approval (ADR-0167 D5).
+#   for f in data/ja/*; do aw files upload "segments/$(basename "$f")" "$f"; done
+policy:
+  permissions:
+    writeFiles: false
+    runCommands: true
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 0.5
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

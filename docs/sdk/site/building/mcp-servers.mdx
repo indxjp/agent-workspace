@@ -157,12 +157,14 @@ The model sees each tool as `mcp__<key>__<tool>`. The key is the connector's nam
 a lowercase slug (letters, digits and hyphens, at most 46 characters, not starting with `connector-`,
 not `agent-workspace`, and not already used by another server in the run), so `internal-search`
 appears as `mcp__internal-search__search`. Any other name falls back to `connector-<id>`, e.g.
-`mcp__connector-3f2a…__search`. You may write an allow or deny rule in the slug form,
-`mcp__internal-search__search`, but it is stored by connector id: saving the policy rewrites it to
-`mcp__connector-<id>__search`, and each run rewrites that to the connector's key for the run. A rule
+`mcp__connector-3f2a…__search`. You may write an allow, deny or approval (`requireApproval`) rule
+in the slug form, `mcp__internal-search__search`, but it is stored by connector id: saving the
+policy rewrites it to `mcp__connector-<id>__search`, and each run rewrites that to the connector's
+key for the run. A rule
 therefore keeps applying to the same connector after a rename, and never passes to another connector
 that later takes the name. A slug-form rule that names no MCP connector of the workspace when it is
-saved is stored as written.
+saved is stored as written. A run whose approval rule on one of its connectors would match none of
+its tools is refused with `approval_gate_unresolved` rather than started without the approval.
 
 Who may assign, read, edit or test whose connector follows the catalog → assignment → grant
 vocabulary on [Ownership and sharing](/concepts/ownership-and-sharing).

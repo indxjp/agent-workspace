@@ -146,7 +146,10 @@ export type ResolvedStorageSettings =
       warnings: readonly string[];
     };
 
-// storage-bridge(#1699): legacy per-area layout (incl. sessions/) until the naming migration
+/**
+ * The directory of each area under a `file://` root. The files and skills area stores open there
+ * (tool bundles live in the skills one); `sessions` is named only by the deprecated helpers below.
+ */
 const FILE_AREA_DIRECTORY: Readonly<Record<StorageArea, string>> = {
   files: 'files',
   skills: 'skills',
@@ -171,9 +174,12 @@ export function storageAreaPlace(settings: StorageSettings, area: StorageArea): 
   return { kind: 'at', location: areaLocation(settings.location, area) };
 }
 
+// storage-bridge(#1944): the old per-area naming exports, removed in the next major release
 /**
- * Where one area's objects sit in the old per-area naming: list `prefix` (no trailing slash) in
+ * Where one area's objects sat in the old per-area naming: list `prefix` (no trailing slash) in
  * the store `location` opens as a root. Each key beneath it is `workspaces/<id>/<storage key>`.
+ * @deprecated Nothing reads the old per-area naming since 0.6.12 moved every object off it;
+ * removed in the next major release (#1944).
  */
 export type LegacyAreaPrefix = {
   readonly area: StorageArea;
@@ -182,11 +188,12 @@ export type LegacyAreaPrefix = {
 };
 
 /**
- * The old object layouts a deployment may still hold (the storage design, §06 "Moving existing
- * files safely"): one entry per area. A bucket or a `file://` root keeps each area under its own
- * directory. Pure, so the server's adopt stage and `agent-workspace doctor` read one list.
+ * The old object layouts a deployment may have held (the storage design, §06 "Moving existing
+ * files safely"): one entry per area. A bucket or a `file://` root kept each area under its own
+ * directory.
+ * @deprecated Nothing reads the old per-area naming since 0.6.12 moved every object off it;
+ * removed in the next major release (#1944).
  */
-// storage-bridge(#1699): old object naming
 export function legacyAreaPrefixes(settings: StorageSettings): readonly LegacyAreaPrefix[] {
   if (settings.kind === 'none' || settings.kind === 'refused' || settings.kind === 'legacy') {
     return [];

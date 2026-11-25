@@ -1,0 +1,14 @@
+{
+  "ticket": {
+    "id": "TCK-2102",
+    "created_at": "2026-11-20T11:20:00+09:00",
+    "channel": "web",
+    "subject": "利用者を追加する方法",
+    "description": "来月から新しいスタッフが入るので、ログインできる利用者を一人増やしたいです。どの画面から追加できますか。",
+    "priority": "normal",
+    "status": "new",
+    "tags": ["account", "how-to"],
+    "requester": { "name": "楢橋 芽依", "email": "narahashi@kotonoha.example" },
+    "organization": { "name": "ことのは書房" }
+  }
+}

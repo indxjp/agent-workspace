@@ -1,0 +1,10 @@
+row_id,competitor_id,competitor,item,value,source,as_of
+C-01,UKG,Ukigumo Systems,Monthly price per user (excl. tax),"JPY 1,200",UKG-001,2026-06-02
+C-02,UKG,Ukigumo Systems,Offline mode,yes,UKG-001,2026-06-02
+C-03,UKG,Ukigumo Systems,Single sign-on,yes,UKG-002,2026-09-15
+C-04,TSU,Tsuyukusa Labs,Monthly price per user (excl. tax),JPY 980,TSU-001,2026-05-20
+C-05,TSU,Tsuyukusa Labs,Offline mode,no,TSU-001,2026-05-20
+C-06,TSU,Tsuyukusa Labs,Single sign-on,no,TSU-001,2026-05-20
+C-07,NNK,Nanakamado Soft,Monthly price per user (excl. tax),"JPY 1,100",NNK-001,2026-04-10
+C-08,NNK,Nanakamado Soft,Offline mode,yes,NNK-001,2026-04-10
+C-09,NNK,Nanakamado Soft,Single sign-on,yes,NNK-001,2026-04-10

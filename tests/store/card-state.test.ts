@@ -16,6 +16,7 @@ import {
 } from '../../examples/store/app/verification.ts';
 import { RECORDINGS } from '../../examples/store/catalog/recordings.generated.ts';
 import { CATALOG } from '../../examples/store/catalog/index.ts';
+import { SOURCE_HASHES } from '../../examples/store/catalog/source-hashes.generated.ts';
 import {
   REAL_MODEL_EVIDENCE,
   cardState,
@@ -29,14 +30,22 @@ const [FIRST, SECOND] = LIVE;
 if (FIRST === undefined || SECOND === undefined)
   throw new Error('the catalog needs two live entries');
 
-const record = (entry: string, date: string, result: 'pass' | 'fail'): RealModelRun => ({
+/** A record of `entry`'s current source (its hash in `source-hashes.generated.ts`) unless `hash`. */
+const record = (
+  entry: string,
+  date: string,
+  result: 'pass' | 'fail',
+  hash: string = SOURCE_HASHES[entry] ?? 'a'.repeat(64),
+): RealModelRun => ({
   entry,
   runId: `run-${date}`,
   date,
   result,
   reason: result === 'pass' ? 'the moment happened' : 'a tool did not run',
   environment: 'staging',
+  sourceHash: hash,
 });
+const OTHER_HASH = 'f'.repeat(64);
 
 const kinds = (runs: readonly RealModelRun[]) =>
   Object.fromEntries(LIVE.map((slug) => [slug, cardVerification(slug, runs).kind]));
@@ -56,15 +65,24 @@ describe('the committed evidence', () => {
     for (const run of parsed.runs) expect(LIVE).toContain(run.entry);
   });
 
-  it('starts empty: the real run waits for a person to approve the spend', () => {
-    expect(REAL_MODEL_EVIDENCE.runs).toEqual([]);
+  it('flips exactly the entries whose latest committed record for their current source passed', () => {
+    const latest = new Map<string, RealModelRun>();
+    for (const run of REAL_MODEL_EVIDENCE.runs) {
+      if (run.sourceHash !== SOURCE_HASHES[run.entry]) continue;
+      const seen = latest.get(run.entry);
+      if (seen === undefined || seen.date < run.date) latest.set(run.entry, run);
+    }
+    const passed = LIVE.filter((slug) => latest.get(slug)?.result === 'pass');
+    const states = kinds(REAL_MODEL_EVIDENCE.runs);
+    expect(LIVE.filter((slug) => states[slug] === 'real-model')).toEqual(passed);
   });
 });
 
 describe('a live card', () => {
   it('is verified with the scripted model, and its label never says real Claude, until a record passed', () => {
     expect(new Set(Object.values(kinds([])))).toEqual(new Set(['scripted-model']));
-    for (const slug of LIVE) {
+    const committed = kinds(REAL_MODEL_EVIDENCE.runs);
+    for (const slug of LIVE.filter((other) => committed[other] === 'scripted-model')) {
       expect(verificationLabel(slug, 'en')).toBe('Verified with the scripted model');
       expect(verificationLabel(slug, 'ja')).not.toContain('Claude');
     }
@@ -106,6 +124,37 @@ describe('a live card', () => {
   });
 });
 
+describe('a card and records for another source (ADR-0174)', () => {
+  it('is not changed by a record for another source hash, passed or failed', () => {
+    const current = record(FIRST, '2026-12-01T00:00:00.000Z', 'pass');
+    // A rebuild staged as `next` gets its R1 records in the same file, under its own hash.
+    const rebuildPassed = record(FIRST, '2026-12-08T00:00:00.000Z', 'pass', OTHER_HASH);
+    const rebuildFailed = record(FIRST, '2026-12-09T00:00:00.000Z', 'fail', OTHER_HASH);
+    expect(cardVerification(FIRST, [rebuildPassed]).kind).toBe('scripted-model');
+    expect(cardVerification(FIRST, [current, rebuildFailed])).toEqual(
+      cardVerification(FIRST, [current]),
+    );
+    expect(cardVerification(FIRST, [current, rebuildPassed])).toEqual({
+      kind: 'real-model',
+      runId: 'run-2026-12-01T00:00:00.000Z',
+      date: '2026-12-01T00:00:00.000Z',
+    });
+  });
+
+  it('counts the records of the hash it is given, so a repoint to the rebuild carries its record', () => {
+    const rebuildPassed = record(FIRST, '2026-12-08T00:00:00.000Z', 'pass', OTHER_HASH);
+    expect(cardVerification(FIRST, [rebuildPassed], { [FIRST]: OTHER_HASH }).kind).toBe(
+      'real-model',
+    );
+    // An entry with no current hash (not live) is never verified by a record.
+    expect(cardVerification(FIRST, [rebuildPassed], {}).kind).toBe('scripted-model');
+  });
+
+  it('knows a current hash for every live entry', () => {
+    expect(Object.keys(SOURCE_HASHES).sort()).toEqual([...LIVE].sort());
+  });
+});
+
 describe('a card under maintenance', () => {
   const passed = record(FIRST, '2026-12-01T00:00:00.000Z', 'pass');
 
@@ -119,7 +168,8 @@ describe('a card under maintenance', () => {
   it('touches only the entries listed, and an empty list changes nothing', () => {
     expect(cardState(SECOND, [FIRST], [passed]).kind).toBe('scripted-model');
     expect(cardState(FIRST, [], [passed])).toEqual(cardVerification(FIRST, [passed]));
-    expect(verificationLabel(SECOND, 'en', [FIRST])).toBe('Verified with the scripted model');
+    expect(verificationLabel(SECOND, 'en', [FIRST])).toBe(verificationLabel(SECOND, 'en'));
+    expect(verificationLabel(SECOND, 'en', [FIRST])).not.toBe('Under maintenance');
   });
 });
 
@@ -175,7 +225,7 @@ describe('the maintenance list the store reads', () => {
   });
 });
 
-describe('the Try tab for an entry under maintenance', () => {
+describe('the Try it section for an entry under maintenance', () => {
   it('shows the unavailable fallback with the entry’s recording, and the live demo otherwise', () => {
     const recorded = RECORDINGS.find((recording) => recording.lang === 'en');
     expect(recorded).toBeDefined();

@@ -280,7 +280,7 @@ function installSessionMoveDomains(repositories: ReturnType<typeof sessionMoveRe
           principalId: SESSIONS_PRINCIPAL,
           ownerPrincipalId: SESSIONS_PRINCIPAL,
           userId: null,
-          userLabel: 'Builder key',
+          label: 'Builder key',
         }),
       forWorkspace: () => Promise.resolve(repositories),
     },

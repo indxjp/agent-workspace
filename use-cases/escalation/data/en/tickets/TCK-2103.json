@@ -1,0 +1,14 @@
+{
+  "ticket": {
+    "id": "TCK-2103",
+    "created_at": "2026-11-21T08:40:00+09:00",
+    "channel": "phone",
+    "subject": "Nobody can sign in since this morning",
+    "description": "Since the start of work this morning, every one of our users sees \"Cannot reach the authentication server\" on the sign-in screen and cannot use the service. Stock allocation has stopped and all work at the distribution centre has stopped. If this is not fixed today, we will review whether to continue the contract.",
+    "priority": "urgent",
+    "status": "new",
+    "tags": ["login", "outage"],
+    "requester": { "name": "Riku Suzakuin", "email": "suzakuin@soyokaze-logi.example" },
+    "organization": { "name": "Soyokaze Logistics" }
+  }
+}

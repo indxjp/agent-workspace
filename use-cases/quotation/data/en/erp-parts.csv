@@ -1,0 +1,6 @@
+part no,part name,kind,material,length (mm),width (mm),thickness (mm),holes,bends,customer,order nos
+P-10231,Motor-mount L bracket,Bracket,SS400,200,100,3.2,4,2,Sample Seiki Co.,SO-2024-0412 SO-2025-0108
+P-10388,Sensor-mount bracket,Bracket,SS400,180,90,3.2,4,2,Sample Chuo Industries Co.,SO-2025-0377
+P-10502,Frame base plate,Plate,SS400,400,300,9,8,0,Sample Seiki Co.,SO-2025-0219
+P-20114,Control panel inspection cover,Cover,SUS304,300,150,2,6,4,Sample Hokuriku Food Systems Co.,SO-2025-0533
+P-30071,Heat-sink block base,Block,A5052,60,60,20,2,0,Sample Chuo Industries Co.,SO-2024-0920

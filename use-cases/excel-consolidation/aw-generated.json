@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:an": {
+      "files": {
+        "agent-workspace.yaml": "bb30296337a5b47b04ec76338722390e4dad2672626e52d2b447e888cd516047",
+        "agents/excel-consolidation.md": "53ea09b5c39f6bfd4d5d25c9d50c1c4a474b463f6bc59dfd4bd5c15731951a5a",
+        "agents/excel-consolidation.ts": "0171d7de48b4197d7b9053df0f9f5c38cda3c683216b837dc80ca14ba93913ff",
+        "data/en/records.csv": "49f11cfe079c9f95d082fd8666b46ff935987716c0345313ffe300cb079bb52c",
+        "data/ja/records.csv": "8b73a591f399f59cb675be4d44da2bb0a5848ace5ae61bb11e0a478858e64622",
+        "evals/excel-consolidation.yaml": "fcba5413e0156971fe8d5053671cccc85c2403bdb8b59637c45aec954f932507",
+        "skills/excel-consolidation/SKILL.md": "a5f9d194704daf0959d297a57f134b4a5a262b203d5efe724c8ff4143b939e16",
+        "surfaces/main.ts": "be7b1223024521a62605937929a589325196b30d8c5bb5a46768d5123e5b0595"
+      },
+      "edits": []
+    }
+  }
+}

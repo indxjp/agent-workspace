@@ -1,0 +1,29 @@
+{
+  "kind": "schedule",
+  "name": "__slug__",
+  "prompt": "今日の分のレポートを作成して、保存してください。 / Write today's report and save it.",
+  "cron": "0 9 * * 1-5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["title", "items", "savedTo"],
+    "properties": {
+      "title": { "type": "string" },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["heading", "body", "sources"],
+          "properties": {
+            "heading": { "type": "string" },
+            "body": { "type": "string" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

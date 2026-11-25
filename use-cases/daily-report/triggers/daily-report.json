@@ -1,0 +1,45 @@
+{
+  "kind": "schedule",
+  "name": "daily-report",
+  "prompt": "今日の生産日報まとめを作成して、daily-report-reports フォルダに保存してください。 / Write today's production daily and save it to the daily-report-reports folder.",
+  "cron": "0 9 * * 1-5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "lines", "issues", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "lines": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["line", "utilizationPct", "outputQty", "defectQty", "stopMin", "source"],
+          "properties": {
+            "line": { "type": "string" },
+            "utilizationPct": { "type": "number" },
+            "outputQty": { "type": "integer" },
+            "defectQty": { "type": "integer" },
+            "stopMin": { "type": "integer" },
+            "source": { "type": "string" }
+          }
+        }
+      },
+      "issues": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["line", "issue", "source"],
+          "properties": {
+            "line": { "type": "string" },
+            "issue": { "type": "string" },
+            "source": { "type": "string" }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

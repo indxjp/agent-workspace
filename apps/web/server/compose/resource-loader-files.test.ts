@@ -1,5 +1,6 @@
 import { seedCatalogFile } from '@agent-workspace/core/db';
 import {
+  bytesToStream,
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   newObjectId,
@@ -26,19 +27,22 @@ describe('agent run resource loader', () => {
   it('loads only assigned files and enabled skills, and refuses an assigned disabled connector', async () => {
     const assignedConnectorIds = ['connector-enabled'];
     const skillObjects = createInMemoryObjectStoreProvider();
-    await skillObjects
-      .forWorkspace(WORKSPACE)
-      .write('skills/enabled/SKILL.md', Buffer.from('# enabled'), {});
-    await skillObjects
-      .forWorkspace(WORKSPACE)
-      .write('skills/disabled/SKILL.md', Buffer.from('# disabled'), {});
-    await skillObjects
-      .forWorkspace(WORKSPACE)
-      .write('skills/unassigned/SKILL.md', Buffer.from('# unassigned'), {});
-
     const catalogs = createInMemoryCatalogStore();
     const catalog = catalogs.forWorkspaceSync(WORKSPACE);
     const storage = storageOver(catalogs);
+    for (const name of ['enabled', 'disabled', 'unassigned']) {
+      const saved = await storage.save(
+        { workspaceId: WORKSPACE, principalId: OWNER_PRINCIPAL, userId: null },
+        {
+          area: 'skills',
+          path: `.skills/${name}/SKILL.md`,
+          body: bytesToStream(Buffer.from(`# ${name}`)),
+          maxBytes: 1024,
+          replace: true,
+        },
+      );
+      if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
+    }
     const fileIds = await seedFiles(storage, ['assigned.txt', 'unassigned.txt'], {
       'assigned.txt': 'assigned',
       'unassigned.txt': 'unassigned',

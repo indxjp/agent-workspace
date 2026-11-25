@@ -1,21 +1,17 @@
 import type { ShareRecord, WorkspaceSharing } from './store';
-import type { Ownership, Role } from '../identity';
+import type { Caller, Ownership } from '../identity';
 import type { SharedRun } from './session-snapshot/snapshot';
 
+/**
+ * Who calls a share route: the fields of the one {@link Caller} type the routes read (part 06 step
+ * 9), or why there is none. `ownerPrincipalId` is the owner of what this caller writes (issue
+ * #509); it is required, as on Caller (`rbac/core/owner-principal.ts`).
+ */
 export type ShareActor =
-  | {
-      readonly kind: 'workspace';
-      readonly workspaceId: string;
-      readonly principalId: string;
-      /**
-       * The owner of what this actor writes (`Principal.ownerPrincipalId`, issue #509). Every
-       * composition root sets it, so it is required (`rbac/core/owner-principal.ts`).
-       */
-      readonly ownerPrincipalId: string;
-      readonly userId: string | null;
-      readonly userLabel: string;
-      readonly role: Role;
-    }
+  | ({ readonly kind: 'workspace' } & Pick<
+      Caller,
+      'workspaceId' | 'principalId' | 'ownerPrincipalId' | 'userId' | 'label' | 'role'
+    >)
   | { readonly kind: 'unauthenticated'; readonly reason: string }
   | { readonly kind: 'forbidden'; readonly reason: string };
 export type { WorkspaceSharing };

@@ -117,6 +117,7 @@ describe('toSdkOptions run_skill_script', () => {
     skillsDirectory: '.claude/skills',
     skills: [{ name: 'review', scripts: ['check.mjs'] }],
     writable: [],
+    writableDirectories: [],
   };
 
   it('adds the in-process server that carries the tool, beside the connectors', () => {

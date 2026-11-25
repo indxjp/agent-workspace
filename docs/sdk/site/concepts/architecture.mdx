@@ -126,8 +126,8 @@ architecture keeps: one dependency direction, strict contracts, subpath entry po
 application as a consumer. What differs from the target is around them, not inside them:
 
 <Note>
-  **Today:** the packages are published on npm; a browser authenticates with a scoped browser token,
-  including from another origin; a person signs the CLI in with `aw login`; the control plane's own
+  **Today:** the packages are published on npm; a browser authenticates with a scoped browser token
+  (cross-origin only through a public surface, since the API sends no CORS headers); a person signs the CLI in with `aw login`; the control plane's own
   screens still mostly bypass the SDK; and a handful of lifecycles (agent policy, export, archive,
   deletion of skills and secrets) are not on the wire. **Target:** the layered layout, the
   credential per consumer type, the fully addressable API and the dogfooding rule described on

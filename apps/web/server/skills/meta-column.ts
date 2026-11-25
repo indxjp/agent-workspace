@@ -8,14 +8,11 @@
  * passes every other key through, so the handlers stay as they are and nothing is written under
  * the prefix.
  *
- * - Reads and lists use the column. A row whose column is empty falls back to the record an earlier
- *   release wrote as an object, and the column is filled from it.
- * - Writes go to the column only.
- * - Deleting the record clears the column and removes the legacy object too: the skill is gone, and
- *   a leftover object would bring it back. Removing the legacy objects of skills that are not
- *   being deleted is the finalize step's job (#1676).
+ * - Reads and lists use the column only.
+ * - Writes go to the column only; a skill with no catalog row has nowhere to hold its record.
+ * - Deleting the record clears the column.
  */
-import { bytesToStream, listAll, listPageFrom, readWhole, streamToBytes } from '../storage/objects';
+import { bytesToStream, listPageFrom, streamToBytes } from '../storage/objects';
 import type { SkillObjectEntry, SkillObjects } from '../storage-and-sharing';
 import { systemClock, type Clock } from '../clock';
 
@@ -25,7 +22,7 @@ import { skillMetaKey, skillNameFromMetaKey, SKILL_META_PREFIX } from './keys';
 interface MetaCatalog {
   listSkills(): Promise<readonly { readonly name: string; readonly meta: unknown }[]>;
   getSkill(name: string): Promise<{ readonly meta: unknown } | null>;
-  setSkillMeta(name: string, meta: unknown, onlyIfEmpty?: boolean): Promise<boolean>;
+  setSkillMeta(name: string, meta: unknown): Promise<boolean>;
 }
 
 const views = new WeakSet<SkillObjects>();
@@ -61,14 +58,12 @@ export function withSkillMetaColumn(
   // The listing of each walk still in progress, keyed by the cursor its next page passes back. A
   // view lives for one request, so an abandoned walk is dropped with it.
   const walks = new Map<string, readonly SkillObjectEntry[]>();
-  // The records held only in a column are paged with the legacy objects as one listing.
-  const mergedListing = async (prefix: string): Promise<readonly SkillObjectEntry[]> => {
-    const listed = await listAll(store, prefix);
-    const seen = new Set(listed.map((entry) => entry.key));
+  // Every record held in a column, as one listing of the prefix.
+  const recordListing = async (): Promise<readonly SkillObjectEntry[]> => {
     const fromRows: SkillObjectEntry[] = [];
     for (const row of await catalog.listSkills()) {
       const key = skillMetaKey(row.name);
-      if (row.meta === null || seen.has(key)) continue;
+      if (row.meta === null) continue;
       fromRows.push({
         kind: 'file',
         key,
@@ -77,7 +72,7 @@ export function withSkillMetaColumn(
         lastModified: clock.now(),
       });
     }
-    return [...listed, ...fromRows];
+    return fromRows;
   };
   const view: SkillObjects = {
     ...store,
@@ -86,16 +81,9 @@ export function withSkillMetaColumn(
       if (name === null) return store.read(key, options);
       // One by-name read, so a list that reads every record stays linear in the skills.
       const row = await catalog.getSkill(name);
-      if (row?.meta !== null && row?.meta !== undefined) {
-        const body = new TextEncoder().encode(JSON.stringify(row.meta));
-        return recordStream(body, JSON_TYPE, clock.now());
-      }
-      // storage-bridge(#1699): read skill marker objects written before the columns existed
-      const legacy = await readWhole(store, key);
-      if (legacy === null) return null;
-      const record = parseRecord(legacy.body);
-      if (row !== null && record !== null) await catalog.setSkillMeta(name, record, true);
-      return recordStream(legacy.body, legacy.contentType, legacy.lastModified);
+      if (row?.meta === null || row?.meta === undefined) return null;
+      const body = new TextEncoder().encode(JSON.stringify(row.meta));
+      return recordStream(body, JSON_TYPE, clock.now());
     },
     async write(key, body, options) {
       const name = skillNameFromMetaKey(key);
@@ -106,25 +94,22 @@ export function withSkillMetaColumn(
       if (await catalog.setSkillMeta(name, record)) {
         return recordStream(bytes, options.contentType ?? null, clock.now()).meta;
       }
-      // storage-bridge(#1699): a skill that only has its legacy record and no row yet keeps being
-      // rewritten there until the next list or read gives it a row
-      if ((await store.head(key)) !== null) return store.write(key, bytes, options);
       throw new Error(`skill ${name} has no catalog row to hold its record`);
     },
     async delete(key) {
       const name = skillNameFromMetaKey(key);
-      if (name !== null) await catalog.setSkillMeta(name, null);
-      await store.delete(key);
+      if (name === null) return store.delete(key);
+      await catalog.setSkillMeta(name, null);
     },
     async listPage(prefix, options) {
       if (prefix !== SKILL_META_PREFIX || options?.recursive === true) {
         return store.listPage(prefix, options);
       }
       // A walk builds its listing on its first page and pages the rest from it, so a walk reads the
-      // catalog and the legacy objects once rather than once per page.
+      // catalog once rather than once per page.
       const resumed = options?.cursor === undefined ? undefined : walks.get(options.cursor);
       if (options?.cursor !== undefined) walks.delete(options.cursor);
-      const entries = resumed ?? (await mergedListing(prefix));
+      const entries = resumed ?? (await recordListing());
       const merged = (): Promise<readonly SkillObjectEntry[]> => Promise.resolve(entries);
       const page = await listPageFrom({ level: merged, tree: merged }, prefix, options);
       if (page.cursor !== null) walks.set(page.cursor, entries);

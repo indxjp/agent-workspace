@@ -15,7 +15,11 @@ the release gate, which `publish-packages.yml` and `images.yml` call with
 `full: true` before they publish; a push to `main` only builds and writes the cache. A failed nightly
 opens or updates an issue (`nightly-alarm.yml`). The label `ci:full` on a pull request runs the heavy
 tier early, from the next push after it is added. A body edit re-runs the fast checks only, even on a
-`ci:full` pull request.
+`ci:full` pull request. One coverage suite runs below the heavy tier: the use cases'
+(`pnpm test:coverage:use-cases`, 100% per file) runs on the pull request and in the queue whenever
+the diff reaches the use cases' tests, with the check that `use-cases/SCOREBOARD.md` claims no
+coverage its summary does not show; the `plan` job decides it (`scripts/ci/ci-plan.mjs`,
+`COVERAGE_SUITES`), and `CI success` requires the `coverage` job wherever the plan names it.
 
 The workflows beside `ci.yml` start only where their work is (ADR-0053, Amendment 2026-11-19e).
 `quality.yml` (the Helm render) runs when `infra/helm/**` changes, `internal-checks.yml` when the
@@ -93,7 +97,15 @@ route and screen inventories, the RF-001 register, the catalog fakes and the dup
 with the tracked tree, and `pnpm test-inputs:check` proves that every `tests/` Nx project's `test`
 inputs cover what its tests read (ADR-0053, Amendment 2026-11-19f). The jobs that build Docker images free
 room first (`.github/actions/free-disk`): about 30 GB of unused SDKs are deleted in the background
-while the job installs. The jobs that need embedded run after `build` only, beside `build-embedded`, and
+while the job installs. Docker Hub limits anonymous pulls per address and CI's runners share
+addresses, so every job that pulls a Docker Hub image or resolves its digest runs
+`.github/actions/docker-hub-mirror` right after checkout: the CLI looks Docker Hub digests up at
+Google's public mirror `mirror.gcr.io` (`AW_DOCKER_HUB_MIRROR`, still pinning the docker.io
+repository; a pull from Docker Hub verifies the digest), and a GitHub-hosted runner's Docker daemon
+pulls through it, so there CI trusts `mirror.gcr.io` for Docker Hub content. A self-hosted daemon is
+shared, so the action leaves it alone; its mirror is configured on the host. Service containers start
+before any step, so their images name `mirror.gcr.io` directly (`pnpm workflows:check` enforces both).
+The jobs that need embedded run after `build` only, beside `build-embedded`, and
 `.github/actions/workspace-build` waits for its artifact; `generated-project-e2e` and
 `tool-sandbox-e2e` (which needs no build job at all) build their Docker images before that wait.
 `journey-e2e` runs the journey and the first-hour stopwatch as two matrix legs, and `docs-claims`

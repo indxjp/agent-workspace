@@ -161,3 +161,31 @@ it('runner manager cloud-run-service network > calls an agent sandbox only at an
     }),
   ).toThrow(/request\.host/u);
 });
+
+it('runner manager cloud-run-service network > control-plane link (RUNTIME_SESSION_MIRROR_URL) > accepts the gateway load balancer address, bypassed when there is a proxy', () => {
+  expect(
+    managerDriverOptions({ ...cloudRun, RUNTIME_SESSION_MIRROR_URL: 'http://10.10.0.50' }).driver,
+  ).toBeDefined();
+  expect(
+    managerDriverOptions({
+      ...cloudRun,
+      ...proxy,
+      RUNTIME_PROXY_BYPASS: '10.10.0.50',
+      RUNTIME_SESSION_MIRROR_URL: 'http://10.10.0.50',
+    }).driver,
+  ).toBeDefined();
+});
+
+it('runner manager cloud-run-service network > control-plane link (RUNTIME_SESSION_MIRROR_URL) > refuses a malformed URL and a host the proxy would carry', () => {
+  expect(() =>
+    managerDriverOptions({ ...cloudRun, RUNTIME_SESSION_MIRROR_URL: 'not a url' }),
+  ).toThrow(/sessionMirrorUrl/u);
+  expect(() =>
+    managerDriverOptions({
+      ...cloudRun,
+      ...proxy,
+      RUNTIME_PROXY_BYPASS: '10.10.0.10',
+      RUNTIME_SESSION_MIRROR_URL: 'http://10.10.0.50',
+    }),
+  ).toThrow(/bypass list/u);
+});

@@ -10,7 +10,7 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -24,14 +24,20 @@ import {
   countHandwritten,
   generatedFileStates,
   importOffenders,
+  isBinary,
+  isExcludedFromAppCount,
   isExcludedFromCount,
   renderScoreboard,
+  STORE_APP_ID,
   scoreApp,
   scoreOf,
+  storeEntryFileProblem,
+  storeEntrySlugs,
   type AppBenchmark,
   type AppScore,
   type HandwrittenCount,
 } from './benchmark.ts';
+import { CATALOG } from '../../examples/store/catalog/index.ts';
 import {
   atScopeVersion,
   differingFiles,
@@ -192,6 +198,43 @@ describe('the offline cells, on fixtures', () => {
     expect(overBudget(count, 0)).toContain('  app/extra.ts: 1');
   });
 
+  it('a binary file is not counted; SVG, XML, text and TypeScript are', async () => {
+    const copy = await minimalCopy();
+    await mkdir(path.join(copy, 'public'), { recursive: true });
+    // A WebP's RIFF header: its little-endian size holds NUL bytes, as every image and font does.
+    const webp = Buffer.concat([
+      Buffer.from('RIFF\x24\x00\x00\x00WEBPVP8 \x18\x00\x00\x00', 'latin1'),
+      Buffer.from('\n\n\nnot a line of code\n', 'latin1'),
+    ]);
+    await writeFile(path.join(copy, 'public/shot.webp'), webp);
+    await writeFile(
+      path.join(copy, 'public/icon.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg">\n</svg>\n',
+    );
+    await writeFile(path.join(copy, 'public/sitemap.xml'), '<urlset>\n</urlset>\n');
+    await writeFile(path.join(copy, 'public/robots.txt'), 'User-agent: *\nAllow: /\n');
+    await writeFile(path.join(copy, 'app/extra.ts'), "export const extra = 'mine';\n");
+
+    const count = await countHandwritten(copy, await manifestOf(copy));
+
+    expect(isBinary(webp)).toBe(true);
+    expect(count.files).toStrictEqual([
+      { file: 'app/extra.ts', lines: 1 },
+      { file: 'public/icon.svg', lines: 2 },
+      { file: 'public/robots.txt', lines: 2 },
+      { file: 'public/sitemap.xml', lines: 2 },
+    ]);
+  });
+
+  it('a NUL byte in a source file fails the count instead of hiding the file', async () => {
+    const copy = await minimalCopy();
+    await writeFile(path.join(copy, 'app/hidden.ts'), "export const hidden = 'x';\u0000\n");
+
+    await expect(countHandwritten(copy, await manifestOf(copy))).rejects.toThrow(
+      'app/hidden.ts holds a NUL byte; a source file is text',
+    );
+  });
+
   it('an @agent-workspace/core import fails No fork', async () => {
     const copy = await minimalCopy();
     await writeFile(
@@ -323,7 +366,210 @@ describe('the offline cells, on fixtures', () => {
     expect(isExcludedFromCount('catalog/generated.ts')).toBe(false);
     expect(isExcludedFromCount('catalog/generated-notes.ts')).toBe(false);
   });
+
+  it("leaves the store's landing copy out of the store's count only, an Owner-approved exception", async () => {
+    // Owner decision 2026-11-21 (SSOT §4: Markdown is knowledge, reviewed as prose).
+    expect(isExcludedFromAppCount(STORE_APP_ID, 'catalog/landing/nda.md')).toBe(true);
+    expect(isExcludedFromAppCount(STORE_APP_ID, 'catalog/landing/crm-sales.md')).toBe(true);
+    for (const file of [
+      'catalog/landing/nda.ts',
+      'catalog/landing/notes/nda.md',
+      'catalog/landing/NDA.md',
+      'catalog/nda.md',
+      'catalog/nda.ts',
+      'landing/nda.md',
+    ]) {
+      expect(isExcludedFromAppCount(STORE_APP_ID, file), file).toBe(false);
+    }
+    expect(isExcludedFromAppCount('wiki', 'catalog/landing/nda.md')).toBe(false);
+
+    const parent = await mkdtemp(path.join(os.tmpdir(), 'apps-benchmark-store-'));
+    temporary.push(parent);
+    for (const id of [STORE_APP_ID, 'wiki']) {
+      const dir = path.join(parent, id);
+      await mkdir(path.join(dir, 'catalog', 'landing'), { recursive: true });
+      await writeFile(path.join(dir, 'catalog', 'landing', 'nda.md'), '# NDA\n\nprose\n');
+      await writeFile(path.join(dir, 'catalog', 'notes.md'), '# notes\n');
+      await writeFile(path.join(dir, 'catalog', 'nda.ts'), 'export const x = 1;\n');
+    }
+    const empty = parseGeneratedManifest('{"version":1,"entries":{}}');
+    const counted = async (id: string): Promise<string[]> =>
+      (await countHandwritten(path.join(parent, id), empty)).files.map(({ file }) => file);
+    expect(await counted(STORE_APP_ID)).toStrictEqual(['catalog/nda.ts', 'catalog/notes.md']);
+    expect(await counted('wiki')).toStrictEqual([
+      'catalog/landing/nda.md',
+      'catalog/nda.ts',
+      'catalog/notes.md',
+    ]);
+  });
+
+  it("leaves the store's per-entry catalog files out of the store's count only, an Owner-approved exception", async () => {
+    // Owner decision 2026-11-21 (SSOT §4 and §11): catalog/<slug>.ts of an actual catalog entry is
+    // pure defineEntry data, like the landing copy.
+    const slugs = new Set(['nda', 'crm-sales']);
+    expect(isExcludedFromAppCount(STORE_APP_ID, 'catalog/nda.ts', slugs)).toBe(true);
+    expect(isExcludedFromAppCount(STORE_APP_ID, 'catalog/crm-sales.ts', slugs)).toBe(true);
+    for (const file of [
+      'catalog/define.ts',
+      'catalog/index.ts',
+      'catalog/recording.ts',
+      'catalog/verification.ts',
+      'catalog/helper.ts',
+      'catalog/nda.tsx',
+      'catalog/sub/nda.ts',
+      'nda.ts',
+      'app/nda.ts',
+    ]) {
+      expect(isExcludedFromAppCount(STORE_APP_ID, file, slugs), file).toBe(false);
+    }
+    expect(isExcludedFromAppCount(STORE_APP_ID, 'catalog/nda.ts')).toBe(false);
+    expect(isExcludedFromAppCount('wiki', 'catalog/nda.ts', slugs)).toBe(false);
+
+    // The real catalog's index names exactly its entries, and none of its own modules.
+    const index = await readFile(
+      path.join(REPOSITORY_ROOT, 'examples', 'store', 'catalog', 'index.ts'),
+      'utf8',
+    );
+    const real = storeEntrySlugs(index);
+    expect([...real].sort()).toStrictEqual(CATALOG.map((entry) => entry.slug).sort());
+    for (const own of ['define', 'index', 'recording', 'verification', 'landing.generated']) {
+      expect(real.has(own), own).toBe(false);
+    }
+
+    const parent = await mkdtemp(path.join(os.tmpdir(), 'apps-benchmark-store-entries-'));
+    temporary.push(parent);
+    for (const id of [STORE_APP_ID, 'wiki']) {
+      const catalog = path.join(parent, id, 'catalog');
+      await mkdir(catalog, { recursive: true });
+      await writeFile(
+        path.join(catalog, 'index.ts'),
+        "import nda from './nda.ts';\nimport { defineEntry } from './define.ts';\nexport const CATALOG = [nda];\n",
+      );
+      await writeFile(path.join(catalog, 'nda.ts'), PURE_ENTRY);
+      for (const file of ['define.ts', 'recording.ts', 'helper.ts']) {
+        await writeFile(path.join(catalog, file), 'export default {};\n');
+      }
+    }
+    const empty = parseGeneratedManifest('{"version":1,"entries":{}}');
+    const counted = async (id: string): Promise<string[]> =>
+      (await countHandwritten(path.join(parent, id), empty)).files.map(({ file }) => file);
+    expect(await counted(STORE_APP_ID)).toStrictEqual([
+      'catalog/define.ts',
+      'catalog/helper.ts',
+      'catalog/index.ts',
+      'catalog/recording.ts',
+    ]);
+    expect(await counted('wiki')).toStrictEqual([
+      'catalog/define.ts',
+      'catalog/helper.ts',
+      'catalog/index.ts',
+      'catalog/nda.ts',
+      'catalog/recording.ts',
+    ]);
+
+    // An entry file that holds code fails the store's count instead of leaving it.
+    await writeFile(
+      path.join(parent, STORE_APP_ID, 'catalog', 'nda.ts'),
+      `${PURE_ENTRY}export const helper = () => 1;\n`,
+    );
+    await expect(counted(STORE_APP_ID)).rejects.toThrow(
+      'catalog/nda.ts is not pure defineEntry data: it has statements beyond the import and the default export',
+    );
+  });
+
+  it('takes as an entry file only pure defineEntry data, as every catalog entry file is', async () => {
+    expect(storeEntryFileProblem(PURE_ENTRY)).toBeNull();
+    const catalog = path.join(REPOSITORY_ROOT, 'examples', 'store', 'catalog');
+    const slugs = storeEntrySlugs(await readFile(path.join(catalog, 'index.ts'), 'utf8'));
+    const problems: string[] = [];
+    for (const slug of slugs) {
+      const problem = storeEntryFileProblem(
+        await readFile(path.join(catalog, `${slug}.ts`), 'utf8'),
+      );
+      if (problem !== null) problems.push(`${slug}: ${problem}`);
+    }
+    expect(problems).toStrictEqual([]);
+
+    const IMPORT = "import { defineEntry } from './define.ts';\n";
+    const entry = (body: string): string => `${IMPORT}\nexport default defineEntry({ ${body} });\n`;
+    for (const [label, text, problem] of [
+      [
+        'a planted helper export',
+        `${PURE_ENTRY}export const helper = 1;\n`,
+        'it has statements beyond the import and the default export',
+      ],
+      [
+        'a computed value',
+        entry("slug: 'a', wave: 1 + 1"),
+        'BinaryExpression where only data may be',
+      ],
+      ['an identifier', entry('slug: name'), 'Identifier where only data may be'],
+      ['a call', entry("slug: String('a')"), 'CallExpression where only data may be'],
+      ['an arrow', entry('pick: () => 1'), 'ArrowFunction where only data may be'],
+      [
+        'a template with a substitution',
+        entry('slug: `a${1}`'),
+        'TemplateExpression where only data may be',
+      ],
+      ['a spread', entry('...base'), 'SpreadAssignment where only a literal key and value may be'],
+      [
+        'a computed key',
+        entry("['slug']: 'a'"),
+        'PropertyAssignment where only a literal key and value may be',
+      ],
+      [
+        'a method',
+        entry('pick() { return 1; }'),
+        'MethodDeclaration where only a literal key and value may be',
+      ],
+      [
+        'a shorthand',
+        entry('slug'),
+        'ShorthandPropertyAssignment where only a literal key and value may be',
+      ],
+      ['a nested call', entry('demo: { prompts: [f()] }'), 'CallExpression where only data may be'],
+      [
+        'another import',
+        `import { defineEntry, AREAS } from './define.ts';\nexport default defineEntry({});\n`,
+        "the first statement is not import { defineEntry } from './define.ts'",
+      ],
+      [
+        'an import from elsewhere',
+        `import { defineEntry } from './helper.ts';\nexport default defineEntry({});\n`,
+        "the first statement is not import { defineEntry } from './define.ts'",
+      ],
+      [
+        'no defineEntry call',
+        `${IMPORT}export default { slug: 'a' };\n`,
+        'the second statement is not export default defineEntry({...})',
+      ],
+      [
+        'a variable in between',
+        `${IMPORT}const base = {};\nexport default defineEntry(base);\n`,
+        'the second statement is not export default defineEntry({...})',
+      ],
+    ] as const) {
+      expect(storeEntryFileProblem(text), label).toBe(problem);
+    }
+    // Every kind of literal is data.
+    expect(
+      storeEntryFileProblem(
+        entry("a: 'x', b: `y`, c: 1, d: true, e: false, f: null, g: [1, { h: 'i' }], 'j-k': {}"),
+      ),
+    ).toBeNull();
+  });
 });
+
+const PURE_ENTRY = `import { defineEntry } from './define.ts';
+
+export default defineEntry({
+  slug: 'nda',
+  area: 'legal',
+  status: 'soon',
+  wave: 2,
+  name: { ja: 'NDAチェック', en: 'NDA checker' },
+});
+`;
 
 describe('the evidence check', () => {
   const spec = "test('J3: a member opens a note and edits it', async () => {});\n";

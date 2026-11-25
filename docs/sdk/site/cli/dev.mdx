@@ -14,30 +14,30 @@ description: "Everything aw dev prints and accepts: the ready screen line by lin
 `npm run dev` in a new project runs `aw dev`. It starts the published local runtime
 (`@indx-workspace/embedded`) from the project's own dependencies: one Node process with an embedded
 PostgreSQL. It signs `aw` in, creates the `default` model connection from your key, pushes the
-project's agents, surfaces and skills, and then syncs again on every save. In 0.6.9,
-`npx aw dev --help` lists `aw dev [--quiet] [--verbose] [--open | --no-open] [--sandbox <local|docker>]`.
-The next release adds `--port <n>`, and the subcommands `aw dev status` and `aw dev stop`
-([below](#start-it-in-the-background)).
+project's agents, surfaces and skills, and then syncs again on every save.
+`npx aw dev --help` lists
+`aw dev [--quiet] [--verbose] [--open | --no-open] [--sandbox <local|docker>] [--port <n>]`, and the
+subcommands `aw dev status` and `aw dev stop` ([below](#start-it-in-the-background)).
 
 ## The ready screen, line by line
 
 `aw dev` reads `ANTHROPIC_API_KEY` (and `ANTHROPIC_BASE_URL`, if set) from its environment. Set it
 in the shell, never in a file; no key is written to the project. The runtime's own output (initdb,
 PostgreSQL, Next) goes to `.aw/logs/runtime.log`, which the generated `.gitignore` lists. It prints
-one screen when everything is up. This is the real output of 0.6.9 on a first start, with the
-password masked:
+one screen when everything is up. This is the output on a first start:
 
 ```text title="Output"
 > dev
 > aw dev
 
-Sign in at http://127.0.0.1:3000 as admin@localhost.test with password … (shown once; it is kept in /home/node/my-agent/.agent-workspace/local-secrets.json)
 model connection: default (anthropic)
 
   Agent Workspace · my-agent · local
 
   try       http://127.0.0.1:3000/p/s/main/try
-  console   http://127.0.0.1:3000  sign in as admin@localhost.test · password in .agent-workspace/local-secrets.json
+  console   http://127.0.0.1:3000
+            sign in as admin@localhost.test
+            password in .agent-workspace/secrets/local-secrets.json
   chat      npx aw chat
 
     runtime   ready in 3.6 s   logs: .aw/logs/runtime.log
@@ -56,11 +56,10 @@ synced: skill refund-policy (new, 1 file) · "assistant" created at version 1
 
 | Line | What it means |
 | --- | --- |
-| `Sign in at … with password …` | Printed by the runtime on the first start only, when it generates the console password. The password is kept in `.agent-workspace/local-secrets.json` (key `BOOTSTRAP_ADMIN_PASSWORD`). |
 | `model connection: default (anthropic)` | The model connection `aw dev` created from your key. |
 | `Agent Workspace · my-agent · local` | The project and the environment (`local`) it runs. |
 | `try` | The surface's chat page. Open it to talk to the agent. |
-| `console` | The web console: its URL, the owner email `admin@localhost.test`, and where the password is. See the [console tour](/getting-started/console-tour). |
+| `console` | The web console: its URL, the owner email `admin@localhost.test`, and the file that holds the password (`.agent-workspace/secrets/local-secrets.json`, key `BOOTSTRAP_ADMIN_PASSWORD`). The password itself is never printed. See the [console tour](/getting-started/console-tour). |
 | `chat` | The terminal chat: [aw chat](/cli/chat). |
 | `runtime` | How long the start took, and the runtime log. |
 | `model` | The connection, and `key checked` once the provider accepted the key (`stored key checked` when it runs on a key you pasted earlier). |
@@ -78,9 +77,8 @@ the screen has the same content without colour or ticks. When the runtime stops 
 
 <Note>
 
-In the next release the password is never printed: the `console` row splits into three lines
-(the URL, `sign in as …`, `password in …`), and the file moves to
-`.agent-workspace/secrets/local-secrets.json`; an existing project's file is moved there for you.
+A project made before the password moved kept it in `.agent-workspace/local-secrets.json`;
+`aw dev` moves that file to `.agent-workspace/secrets/local-secrets.json` for you.
 
 </Note>
 
@@ -102,7 +100,7 @@ line names the agent, also when you changed its surface.
 | `--open` / `--no-open` | Open the chat page without asking, or never ask. |
 | `--sandbox local` | Run agents on the in-process `local` driver (the default profile). |
 | `--sandbox docker` | Run every agent in a Docker container; see [the Docker sandbox](/getting-started/troubleshooting#the-docker-sandbox-refuses-to-start-or-the-run-fails). |
-| `--port <n>` | Next release: the web port. In 0.6.9, set `environments.local.port` instead. |
+| `--port <n>` | The web port. Without it, `PORT`, else `environments.local.port`. |
 
 ## Ports
 
@@ -113,7 +111,7 @@ starts.
 
 | Role                | Default | Setting that moves it                                                 |
 | ------------------- | ------- | --------------------------------------------------------------------- |
-| web                 | 3000    | `environments.local.port` (next release also `aw dev --port` and `PORT`) |
+| web                 | 3000    | `aw dev --port`, `PORT`, or `environments.local.port`                  |
 | gateway             | 4000    | the web port, or `GATEWAY_PORT` in the project's `.env`               |
 | runner              | 8080    | the web port, or `RUNNER_PORT` in the project's `.env`                |
 | embedded PostgreSQL | 25432   | the web port, `AW_DATABASE_PORT` in `.env`, or `DATABASE_URL` instead |
@@ -239,8 +237,8 @@ answers without asking, and without a terminal `--yes` is required. It writes th
 `AGENTS.md`), refuses to overwrite any file that exists and never edits `package.json`. It also
 makes sure `.gitignore` lists `node_modules/`, `.agent-workspace/`, `.aw/` and `.env`: it creates
 the file, or appends only the missing lines to yours. It then prints what to run next: `npm init -y`
-when the directory has no `package.json`, the `npm install -D` line for the three packages at
-`aw`'s version, the variables `aw dev` reads, and `next: npx aw dev`.
+when the directory has no `package.json`, the `npm install -D` line for `@indx-workspace/aw`, `embedded`, `sdk` and the
+engine's packages at `aw`'s version, the variables `aw dev` reads, and `next: npx aw dev`.
 
 `aw init` takes the same setup flags as `npm create` (`--theme`, `--provider`, `--agent`, and the
 rest; `npx @indx-workspace/aw init --help` lists them with their defaults), and a flag answers its
@@ -248,7 +246,7 @@ question so it is not asked.
 
 ## With an app
 
-In the next release, a project with a portal app (`aw generate app <name>`, which records
+A project with a portal app (`aw generate app <name>`, which records
 `app:<name>` in `aw-generated.json`) runs the app too. After the runtime is ready, and before the
 first sync, `aw dev`:
 
@@ -284,7 +282,7 @@ connector that asks for an identity refuses it; start the run from the console, 
 
 ## aw deploy with an app
 
-In the next release, an app made with `aw generate app <name>` (or `--template portal`) is one
+An app made with `aw generate app <name>` (or `--template portal`) is one
 more image in the deployment. `aw deploy` does not build it: you build it, push it, and name its
 digest in the project file.
 
@@ -333,8 +331,7 @@ So an app whose connector is not registered yet is still healthy, while its API 
 ## Stop it
 
 Press Ctrl+C in the terminal that runs it. The runtime and its database can take a few seconds to
-stop; without a terminal, 0.6.9 prints `interrupted`. The next release says
-`stopping the local runtime…` at once. `npm run dev` starts it again with everything you made: the
+stop; `aw dev` says `stopping the local runtime…` at once. `npm run dev` starts it again with everything you made: the
 data stays under `.agent-workspace/`, which `.gitignore` lists.
 
 ## Upgrade the local database
@@ -376,21 +373,13 @@ Restart `aw dev` afterwards. Use the database port the ready screen names if it 
 the ready screen. The generated `AGENTS.md` gives the command for each shell:
 
 ```sh title="From the generated AGENTS.md, bash and zsh (illustrative)" claim="illustrative"
-mkdir -p .aw && nohup npm run dev > .aw/dev.out 2>&1 &
+mkdir -p .aw && nohup npm run dev >> .aw/dev.out 2>&1 < /dev/null &
 ```
 
-Then wait for the `try` row in `.aw/dev.out`, and check with `npx aw chat -p "hi"`.
-
-<Warning>
-
-`npx aw dev status` and `npx aw dev stop` arrive in the next release. In 0.6.9 there is no such
-subcommand: `npx aw dev status` starts a second runtime, which fails on the first one's database
-([details](/getting-started/troubleshooting#aw-dev-status-starts-a-second-runtime)). From the next
-release, `npx aw dev status` exits 0 and prints the URL once the runtime is ready (`--json` prints
-`{"running":true,"url":…,"port":…,"pid":…}`), and fails while it is still starting or stopped;
-`npx aw dev stop` stops it, its runtime and its database.
-
-</Warning>
+Then wait until `npx aw dev status` exits 0: it prints the URL once the runtime is ready
+(`--json` prints `{"running":true,"url":…,"port":…,"pid":…}`), and fails while it is still
+starting or stopped. Check it with `npx aw chat -p "hi"`. `npx aw dev stop` stops it, its runtime
+and its database; stop it that way, never by killing `npm`.
 
 <Card title="Next: Troubleshooting" icon="arrow-right" href="/getting-started/troubleshooting">
   A missing key, a busy port, Windows and WSL, the Docker sandbox and the widget, each with its fix.

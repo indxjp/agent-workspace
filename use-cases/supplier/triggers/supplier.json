@@ -1,0 +1,42 @@
+{
+  "kind": "schedule",
+  "name": "supplier",
+  "prompt": "先月の受入検査とクレームから、仕入先品質の月次レポートを日本語で作成して、supplier-reports フォルダに保存してください。",
+  "cron": "0 9 1 * *",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["month", "suppliers", "trend", "savedTo"],
+    "properties": {
+      "month": { "type": "string" },
+      "suppliers": {
+        "type": "array",
+        "maxItems": 60,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supplier", "defectPpm", "status", "reasons", "sources"],
+          "properties": {
+            "supplier": { "type": "string" },
+            "defectPpm": { "type": "integer" },
+            "status": { "type": "string", "enum": ["watch", "ok"] },
+            "reasons": { "type": "array", "items": { "type": "string" } },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "trend": {
+        "type": "array",
+        "maxItems": 60,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["month", "defectPpm"],
+          "properties": { "month": { "type": "string" }, "defectPpm": { "type": "integer" } }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

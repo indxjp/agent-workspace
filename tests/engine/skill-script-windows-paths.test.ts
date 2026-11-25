@@ -17,6 +17,7 @@ const SETUP: SkillScriptSetup = {
   skillsDirectory: '.engine-config/skills',
   skills: [{ name: 'review', scripts: ['check.mjs'] }],
   writable: ['drafts'],
+  writableDirectories: ['drafts'],
 };
 const SCRIPTS = 'C:\\work\\.engine-config\\skills\\review\\scripts';
 const CALL = { skill: 'review', script: 'check.mjs', args: [] };
@@ -43,6 +44,8 @@ function windows(
       return Promise.resolve({ stdout: 'ok', stderr: '' });
     },
     makeScratchDirectory: () => Promise.resolve('C:\\scratch\\call-1'),
+    writeFile: () => Promise.resolve(),
+    makeDirectory: () => Promise.resolve(),
     removeDirectory: () => Promise.resolve(),
   };
   return { host, commands };

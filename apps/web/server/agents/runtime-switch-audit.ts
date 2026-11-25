@@ -1,13 +1,9 @@
 import type { RuntimeProfileStoreProvider } from '../execution';
+import type { Caller } from '../identity';
 import type { AgentsRuntime } from './wiring';
 
-export interface RuntimeSwitchActor {
-  readonly principalId: string;
-  /** Compatibility attribution for membership principals; null for API keys. */
-  readonly userId: string | null;
-  readonly userLabel: string;
-  readonly workspaceId: string;
-}
+/** Who switched the runtime: the fields of the one {@link Caller} type this writer reads (part 06 step 9). */
+type RuntimeSwitchCaller = Pick<Caller, 'principalId' | 'userId' | 'label' | 'workspaceId'>;
 
 export interface RuntimeSwitchAuditEvent {
   readonly workspaceId: string;
@@ -23,7 +19,7 @@ export interface RuntimeSwitchAuditEvent {
 export function createRuntimeSwitchAudit(
   dependencies: Readonly<{
     profiles: RuntimeProfileStoreProvider;
-    identifyActor(request: Request): Promise<RuntimeSwitchActor | null>;
+    identifyActor(request: Request): Promise<RuntimeSwitchCaller | null>;
     recordAuditEvent(event: RuntimeSwitchAuditEvent): Promise<void>;
   }>,
 ): NonNullable<AgentsRuntime['runtimeSwitchAudit']> {
@@ -56,7 +52,7 @@ export function createRuntimeSwitchAudit(
         workspaceId: actor.workspaceId,
         actorPrincipalId: actor.principalId,
         actorUserId: actor.userId,
-        actorLabel: actor.userLabel,
+        actorLabel: actor.label,
         action: 'agent-changed',
         subjectId: change.agentId,
         subjectLabel: `${change.agentName}: runtime ${fromDriver} -> ${toDriver}`,

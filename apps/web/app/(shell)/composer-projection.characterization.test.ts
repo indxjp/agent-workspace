@@ -218,7 +218,7 @@ describe('composer projection characterization', () => {
                 workspaceId: WORKSPACE,
                 principalId: CREATOR,
                 userId: CREATOR,
-                userLabel: 'creator@example.test',
+                label: 'creator@example.test',
                 role: 'owner',
                 scope: null,
               }),

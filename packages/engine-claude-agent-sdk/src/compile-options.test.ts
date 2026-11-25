@@ -257,6 +257,38 @@ describe('Write files writes inside the workspace without asking', () => {
   });
 });
 
+describe('an agent that grants office-writer writes outputs/ only through its approved script', () => {
+  const OUTPUTS_DENY = 'Edit(//run/claude/outputs/**)';
+  const SKILL_FILE = { path: 'SKILL.md', size: 1, sha256: 'a'.repeat(64) };
+  const runs = (skills: Record<string, unknown>, assigned: readonly string[] = []) =>
+    compileCanonical({
+      portable: { ...canonicalAgent, skills },
+      resources: { files: [], skills: assigned.map((name) => ({ name, files: [SKILL_FILE] })) },
+      policy: { tools: null },
+    });
+
+  it('denies Write and Edit under outputs/ and still allows the model draft', () => {
+    const compiled = runs({ mode: 'allowlist', names: ['office-writer'] });
+    expect(compiled.disallowedTools).toContain(OUTPUTS_DENY);
+    expect(compiled.allowedTools).toContain('Edit(//run/claude/**)');
+    expect(claudeOptionsAllowWrite(compiled, 'outputs/x.md')).toBe(false);
+    expect(claudeOptionsAllowWrite(compiled, 'outputs')).toBe(false);
+    expect(claudeOptionsAllowWrite(compiled, 'drafts/proposal.json')).toBe(true);
+  });
+
+  it('denies it too when every assigned skill is allowed and office-writer is one', () => {
+    expect(runs({ mode: 'all' }, ['office-writer']).disallowedTools).toContain(OUTPUTS_DENY);
+    expect(runs({ mode: 'all' }, ['office-reader']).disallowedTools).not.toContain(OUTPUTS_DENY);
+    expect(runs({ mode: 'all' }).disallowedTools).not.toContain(OUTPUTS_DENY);
+  });
+
+  it('changes nothing for an agent without office-writer', () => {
+    const compiled = runs({ mode: 'allowlist', names: ['office-reader'] });
+    expect(compiled.disallowedTools).not.toContain(OUTPUTS_DENY);
+    expect(claudeOptionsAllowWrite(compiled, 'outputs/a.md')).toBe(true);
+  });
+});
+
 describe('the memory folder line (ADR-0163)', () => {
   const withPermissions = (permissions: Record<string, unknown>, instructions?: string) =>
     RunRequest.parse({

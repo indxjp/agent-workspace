@@ -1,0 +1,6 @@
+host,type,department,criticality,note
+FIN-LT-014,ノートPC,経理部,high,支払いの承認に使う端末
+VPN-GW-01,VPN装置,情報システム部,high,社外からの接続の入口
+IDP-CLOUD,認証基盤,情報システム部,high,全社のシングルサインオン
+MAIL,メール,情報システム部,medium,全社のメール
+GA-LT-031,ノートPC,総務部,medium,総務部の共用端末

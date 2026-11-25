@@ -21,7 +21,7 @@ export function parseLinkFragment(hash: string): EmailLinkVerifyRequest | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** Where a verified visitor goes: the entry's Try tab, or the shelves when the link named none. */
+/** Where a verified visitor goes: the entry's Try it section, or the shelves when the link named none. */
 export function afterSignInPath(entry: string | undefined): string {
   return entry === undefined ? '/' : `/agents/${entry}#try`;
 }

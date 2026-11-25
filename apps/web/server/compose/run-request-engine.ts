@@ -8,6 +8,8 @@ import { DomainError } from '../errors';
 import { registeredEngine, resolveWireProtocol } from '../execution';
 import type { AgentRecord } from '../agents/contract';
 import type { AgentRunResourceSelection } from './resource-loader';
+import { approvalGatesForRun } from './run-request-approval-gates';
+import { withLegacyNameRules } from './run-request-legacy-name-rules';
 import type { GrantedFiles } from './run-request-resources';
 import {
   withMemberApprovalRules,
@@ -86,7 +88,10 @@ export function wireProtocolFor(engineId: string, provider: ModelProvider | unde
 export function enginePolicyArmFor(
   agent: AgentRecord,
   cwd: string,
-  resources: Pick<AgentRunResourceSelection, 'connectorKeys' | 'toolConnectors'> & {
+  resources: Pick<
+    AgentRunResourceSelection,
+    'mcpServers' | 'connectorNames' | 'connectorKeys' | 'toolConnectors'
+  > & {
     readonly files: GrantedFiles;
   },
   approvedToolCalls: readonly { readonly canonicalCall: string }[],
@@ -99,11 +104,17 @@ export function enginePolicyArmFor(
   // Every write operation of an openapi tool is implicitly `requireApproval` (ADR-0113 SD4); the
   // rules carry the run's own server keys, so they are added here rather than stored on the policy.
   // A rule written against a member tool's neutral name, `agent__<member>`, is given the engine's
-  // spelling, `mcp__agent__<member>` (ADR-0104 acceptance decision 3).
+  // spelling, `mcp__agent__<member>` (ADR-0104 acceptance decision 3). A gate on an MCP connector
+  // is given the connector's key in this run, whether it is stored by id or by name, or the run is
+  // refused: left on a key the run does not use it would match no tool, and the write would run
+  // without approval (#2439).
   const requireApproval = [
     ...new Set([
       ...withMemberApprovalRules(
-        policy !== null && 'tools' in policy ? (policy.requireApproval ?? []) : [],
+        approvalGatesForRun(
+          policy !== null && 'tools' in policy ? (policy.requireApproval ?? []) : [],
+          resources,
+        ),
       ),
       ...(resources.toolConnectors ?? []).flatMap((connector) => connector.approvalRules ?? []),
     ]),
@@ -111,7 +122,14 @@ export function enginePolicyArmFor(
   return {
     tools:
       policy !== null && 'tools' in policy
-        ? withMemberToolRules(withRunConnectorKeys(policy.tools, resources.connectorKeys ?? {}))
+        ? withMemberToolRules(
+            withRunConnectorKeys(
+              // A rule an older version stored by connector name is read first (#2446): a deny
+              // gains the connector's run key, and a grant is never moved to another key.
+              withLegacyNameRules(policy.tools, resources),
+              resources.connectorKeys ?? {},
+            ),
+          )
         : null,
     fileGrantDeny: applyFileGrantPolicy(cwd, resources.files),
     // Left out when empty, so a run without a gate sends the arm an older runner image accepts.

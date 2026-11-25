@@ -79,7 +79,7 @@ import offboarding from './offboarding.ts';
 import incident from './incident.ts';
 import codeReview from './code-review.ts';
 import releaseNotes from './release-notes.ts';
-import access from './access.ts';
+import accountRequests from './account-requests.ts';
 import assets from './assets.ts';
 import logs from './logs.ts';
 import secAlert from './sec-alert.ts';
@@ -182,7 +182,7 @@ const ENTRIES: readonly CatalogEntry[] = [
   incident,
   codeReview,
   releaseNotes,
-  access,
+  accountRequests,
   assets,
   logs,
   secAlert,

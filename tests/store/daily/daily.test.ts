@@ -117,7 +117,8 @@ describe('the daily production test', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.body).toEqual({
       state: 'maintenance',
-      reason: 'update did not wait for approval',
+      reason:
+        'update did not wait for approval: it was never called (called: lookup; stop: end_turn; ended on a statement)',
     });
     expect(exitCodeOf(outcome)).toBe(1);
   });

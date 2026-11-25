@@ -4,6 +4,13 @@ Start here to find the document for a task. Read the rows for what you are doing
 Before any change, read [AGENTS.md](../AGENTS.md), [ENGINEERING_GUIDELINES.md](../ENGINEERING_GUIDELINES.md)
 and [architecture.md](architecture.md). [llms.txt](../llms.txt) lists the same documents in reading order.
 
+Using Agent Workspace rather than changing it? The [developer docs site](sdk/site/index.mdx)
+(published at <https://docs.agentworkspace.indx.jp>) follows one path in seven chapters, read in
+order: [1 run your first agent](sdk/site/path/first-agent.mdx), [2 build](sdk/site/path/build.mdx),
+[3 test](sdk/site/path/test.mdx), [4 embed](sdk/site/path/embed.mdx),
+[5 ship](sdk/site/path/ship.mdx), [6 operate](sdk/site/path/operate.mdx) and, optionally,
+[7 other platforms](sdk/site/path/platforms.mdx).
+
 ## Doing X → read Y
 
 | Doing                                          | Read                                                                                                                                                                                                                                                                                                                                      |
@@ -25,6 +32,7 @@ and [architecture.md](architecture.md). [llms.txt](../llms.txt) lists the same d
 | Releasing                                      | [release/README.md](release/README.md); notes per version in [release/notes/](release/notes/)                                                                                                                                                                                                                                             |
 | Editing the developer docs site                | [sdk/site/README.md](sdk/site/README.md)                                                                                                                                                                                                                                                                                                  |
 | Working on the use-case gallery                | [10-product/sdk/gallery/README.md](10-product/sdk/gallery/README.md)                                                                                                                                                                                                                                                                      |
+| Working on the Agent Store or a store entry    | [use-cases/README.md](../use-cases/README.md) (the entries), [examples/README.md](../examples/README.md) (the store app), [store guide](sdk/site/features/agent-store.mdx)                                                                                                                                                                |
 | Running the user walkthrough                   | [walkthrough/README.md](walkthrough/README.md)                                                                                                                                                                                                                                                                                            |
 
 ## What to skip

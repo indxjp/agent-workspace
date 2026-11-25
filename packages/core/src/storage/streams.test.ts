@@ -294,7 +294,8 @@ describe('a paged walk resumes at its cursor instead of walking from the start',
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+    // Writes, lists and removes 3,000 real files: half a second idle, many on a loaded CI disk.
+  }, 30_000);
 });
 
 describe('servedRange', () => {

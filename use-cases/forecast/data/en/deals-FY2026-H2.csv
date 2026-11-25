@@ -1,0 +1,22 @@
+deal_id,customer,stage,amount,probability,close_month,note
+D-1001,Sumikawa Seiki,won,4800000,100,2026-07,Purchase order received
+D-1002,Ashihara Logistics,won,3200000,100,2026-07,Purchase order received
+D-1003,Narumi Foods,lost,2500000,0,2026-08,Lost on price
+D-1004,Kozuru Densou,won,6100000,100,2026-08,Purchase order received
+D-1005,Yunoki Kasei,won,2750000,100,2026-09,Purchase order received
+D-1006,Shiomi Kensetsu,lost,5400000,0,2026-09,Comparing with a competitor
+D-1007,Shiiba Textile,won,1980000,100,2026-09,Purchase order received
+D-1008,Narasaki Kogyo,won,7200000,100,2026-10,Purchase order received
+D-1009,Asagiri Hotels,won,3450000,100,2026-10,Purchase order received
+D-1010,Ukai Seisakusho,lost,2900000,0,2026-10,Lost on price
+D-1011,Momiyama Shoji,open,5600000,80,2026-11,Quote sent
+D-1012,Makanae Medical,open,8400000,50,2026-11,In trial
+D-1013,Sumikawa Seiki,open,3300000,70,2026-11,Quote sent
+D-1014,Narumi Foods,open,2150000,30,2026-11,Waiting for the customer budget
+D-1015,Ashihara Logistics,open,4750000,60,2026-12,Quote sent
+D-1016,Kozuru Densou,open,9800000,20,2026-12,Comparing with a competitor
+D-1017,Shiomi Kensetsu,open,1275000,40,2026-12,Waiting for the customer budget
+D-1018,Yunoki Kasei,won,2600000,100,2026-11,Purchase order received
+D-1019,Shiiba Textile,open,2345000,35,2026-12,In trial
+D-1020,Ukai Seisakusho,open,6000000,10,2026-12,
+D-1021,Asagiri Hotels,lost,1800000,0,2026-11,Comparing with a competitor

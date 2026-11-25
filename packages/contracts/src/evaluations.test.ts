@@ -53,6 +53,14 @@ describe('EvalCaseFileSchema (issue #618)', () => {
     expect(issues({ cases: [one({ tool: 't', regex: 'x' })] })[0]).toMatch(/^cases\.0\.expect: /);
   });
 
+  it('refuses a blank tool, so it can never name the empty bare name of `mcp__x__`', () => {
+    for (const tool of ['', '  ']) {
+      expect(issues({ cases: [one({ tool })] })).toEqual([
+        expect.stringContaining('cases.0.expect.tool'),
+      ]);
+    }
+  });
+
   it('refuses an empty expect, a blank input and an empty contains list', () => {
     expect(issues({ cases: [one({})] })).toEqual([
       expect.stringContaining('cases.0.expect: expect must name at least one'),

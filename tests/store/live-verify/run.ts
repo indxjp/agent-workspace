@@ -3,28 +3,45 @@
  *
  *   STORE_LIVE_VERIFY=spend-approved STORE_LIVE_VERIFY_ENVIRONMENT=staging \
  *   STORE_LIVE_VERIFY_URL=<staging origin> STORE_LIVE_VERIFY_API_KEY=<key> \
- *   node tests/store/live-verify/run.ts [evidence-file]
+ *   [STORE_LIVE_VERIFY_ENTRIES=<slug>,<slug>] node tests/store/live-verify/run.ts [evidence-file]
  *
  * It does nothing and exits non-zero without the opt-in, and prints only entry slugs, results and
  * reasons, never a credential or the deployment's address. In staging the evidence file defaults to
  * the committed `examples/store/catalog/real-model-runs.json`; a person commits what it appends.
+ * A staging run verifies the entries with a source (live, or coming soon with its code merged, which
+ * the staging deploy seeds; a live entry's staged rebuild, `next`, in its place) that
+ * `STORE_LIVE_VERIFY_ENTRIES` names, or by default every one with no
+ * passing record for its current source hash, and each record carries that hash
+ * (`source-hash.ts`), taken from the checkout before anything is spent. It refuses, before spending,
+ * any entry whose source or catalog file is not the same at `STORE_LIVE_VERIFY_DEPLOYED_COMMIT` (the
+ * commit staging was deployed and seeded from) as in the checkout, and any entry whose copy in the
+ * verification workspace has other instructions than the seed built from the checkout (a workspace
+ * not refilled since the deploy), so the record verifies the code the run exercised.
  * With `STORE_LIVE_VERIFY_ENVIRONMENT=production` (the daily production test, `../daily/`) the
  * evidence file must be named, and it is written whole as production evidence, never appended to the
  * committed file.
  */
 import { fileURLToPath } from 'node:url';
 
+import type { LiveEntry } from '../../../examples/store/catalog/define.ts';
 import { CATALOG } from '../../../examples/store/catalog/index.ts';
-import { writeEvidence, writeProductionEvidence } from './evidence-file.ts';
+import { buildSeed, seededEntries } from '../seed/build.ts';
+import { readEvidence, writeEvidence, writeProductionEvidence } from './evidence-file.ts';
+import { deployedSourceDiffers, entrySourceHash, passedForSource } from './source-hash.ts';
 import {
   clientFor,
+  deployedCommitOf,
+  entriesToVerify,
   LiveVerifyRefusal,
   type LiveEnvironment,
   type VerifyOutcome,
   readSettings,
   redact,
+  refuseUndeployed,
   secretsOf,
+  sourceHashesOf,
   verifyLive,
+  withSourceHashes,
 } from './verify.ts';
 
 const DEFAULT_EVIDENCE = fileURLToPath(
@@ -37,20 +54,37 @@ async function main(): Promise<number> {
   const secrets = secretsOf(env);
   try {
     const settings = readSettings(env);
-    const entries = CATALOG.filter((entry) => entry.status === 'live');
-    const input = { client: clientFor(settings), secrets, entries, now: () => new Date() };
+    const live = CATALOG.filter((entry): entry is LiveEntry => entry.status === 'live');
+    const input = { client: clientFor(settings), secrets, now: () => new Date() };
     let outcome: VerifyOutcome<LiveEnvironment>;
     if (settings.environment === 'production') {
       const file = process.argv[2];
       if (file === undefined) {
         throw new LiveVerifyRefusal('refused: a production run needs an evidence file to write');
       }
-      const production = await verifyLive({ ...input, environment: 'production' });
+      const production = await verifyLive({ ...input, entries: live, environment: 'production' });
       writeProductionEvidence(file, production.records);
       outcome = production;
     } else {
-      const staging = await verifyLive({ ...input, environment: 'staging' });
-      writeEvidence(process.argv[2] ?? DEFAULT_EVIDENCE, staging.records);
+      const file = process.argv[2] ?? DEFAULT_EVIDENCE;
+      const { runs } = readEvidence(file);
+      // R1 verifies what staging seeded: a coming-soon entry once its code is merged (R1 comes before
+      // the flip), and a live entry's staged rebuild (`next`) before the repoint.
+      const sourced = seededEntries('staging');
+      const hashes = sourceHashesOf(sourced, (entry) => entrySourceHash(entry));
+      const entries = entriesToVerify(sourced, env['STORE_LIVE_VERIFY_ENTRIES'], (entry) =>
+        passedForSource(entry.slug, hashes.get(entry.slug) ?? null, runs),
+      );
+      const deployed = deployedCommitOf(env);
+      refuseUndeployed(entries, (entry) => deployedSourceDiffers(entry, deployed));
+      // A workspace not refilled since the deploy holds an older copy, which is refused, unspent.
+      const staging = await verifyLive({
+        ...input,
+        entries,
+        environment: 'staging',
+        expectedInstructions: (entry) => buildSeed(entry).definition.agent.instructions,
+      });
+      writeEvidence(file, withSourceHashes(staging.records, hashes));
       outcome = staging;
     }
     for (const record of outcome.records) {

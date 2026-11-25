@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "330ea911b2aef54e836e8b1215714b06401bda6e34eb6fdf874d43e69dec947f",
+        "agents/meeting-minutes.md": "62d8a912651467ff2729008f27cc35380340ae02d12e9b3f8c5ee1040cb8788b",
+        "agents/meeting-minutes.ts": "902fd08c319df4f1a6e0827731bcaecc4a2a7d0e012599019ff67ed5297d4a0f",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/meeting-minutes.yaml": "1c067c7a9432f84a31005cd148d6e9ced04b14b41178355957d448cdc6a338e3",
+        "skills/meeting-minutes/SKILL.md": "462159d8d7f5caf480b2716b8abaf4f1a983ba126ca584c7ca9eb4c622bfe4e9",
+        "surfaces/main.ts": "e70a90721977330a49c4f6dac92f75efe97cf90b5144f73000e56d6cb590e785",
+        "triggers/meeting-minutes.json": "dffd96269e90331e2ac0b295f15eb9ef1355fe7ed0414bd6c49fba145006e248"
+      },
+      "edits": []
+    }
+  }
+}

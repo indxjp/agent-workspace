@@ -4,7 +4,7 @@
  * installed every session route refuses with a 503 — never a stub, and never an in-memory store
  * (`docs/adr/W1-CP-04-run-api-is-installed-not-imported.md` for why it is installed, not imported).
  */
-import type { MembershipRoleName } from '@indx-workspace/contracts/team';
+import type { Caller } from '../identity';
 import type { SessionStateStore } from './state';
 import type { TranscriptStore } from './transcript';
 import type { SessionsStoreProvider } from './store';
@@ -18,21 +18,18 @@ import type { RetentionDriver } from './retention-cron';
  * a mirror and the key this API stores under are the same string by construction. The API checks
  * that they agree rather than assuming it — see `api.ts`.
  */
+/**
+ * The `user` arm is the fields of the one {@link Caller} type the session routes read (part 06 step
+ * 9). Its `ownerPrincipalId` is the principal that owns what this caller writes and that own/other
+ * is decided against: equal to `principalId` except for a local runtime key, which writes for the
+ * member it acts for (issue #509, S1-24). Every composition root sets it, so it is required
+ * (`rbac/core/owner-principal.ts`). The `runner` arm is a run's own token, with no caller behind it.
+ */
 export type SessionApiPrincipal =
-  | {
-      readonly kind: 'user';
-      readonly principalId: string;
-      /**
-       * The principal that owns what this caller writes and that own/other is decided against
-       * (`rbac/principal.ts`'s `ownerPrincipalId`). Equal to `principalId` except for a local
-       * runtime key, which writes for the member it acts for (issue #509, S1-24). Every
-       * composition root sets it, so it is required (`rbac/core/owner-principal.ts`).
-       */
-      readonly ownerPrincipalId: string;
-      readonly userId: string | null;
-      readonly workspaceId: string;
-      readonly role: MembershipRoleName;
-    }
+  | ({ readonly kind: 'user' } & Pick<
+      Caller,
+      'principalId' | 'ownerPrincipalId' | 'userId' | 'workspaceId' | 'role'
+    >)
   | {
       readonly kind: 'runner';
       readonly workspaceId: string;

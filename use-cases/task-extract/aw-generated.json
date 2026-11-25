@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:tr": {
+      "files": {
+        "agent-workspace.yaml": "520722e9b06387212e514176dee6849560956c84fb6c2f7bffafba28187650af",
+        "agents/task-extract.md": "99742657638955493d57478da6aa55e5f59438106f2de88a7e97e77099902062",
+        "agents/task-extract.ts": "52fba0083ff22bea222105e52a96a1be571eb68c621745e97bb7eb0ecb03404f",
+        "data/en/event.json": "248885839cc8daad2e06cb2bfba4cc468aada1c72a8af40a6180eeaf0d7b325a",
+        "data/ja/event.json": "9559947d26c25853d0fa05c41fb7693e479263ebde2b66da65c057682c6d6d13",
+        "evals/task-extract.yaml": "1841eedbeb247162c9f70721d5af50b26952115cb6d70af75053e99c1c8ff98a",
+        "skills/task-extract/SKILL.md": "5199d2fb7fd4200b023a22b96f0b8e3bf46cc8ba3837856cc13a258d557aac54",
+        "surfaces/main.ts": "d71887e9ed67eade4532fb1b57957d01d4354167a8ebd5bcf2228e196c00f86e",
+        "triggers/task-extract.json": "0588fe1060a76889cc9fdeacde6c74016f1ee65dbed2e648be72ea8f427d6a9f"
+      },
+      "edits": []
+    }
+  }
+}

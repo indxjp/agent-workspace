@@ -1,0 +1,9 @@
+{
+  "id": "INQ-3001",
+  "received_at": "2026-11-20T09:30:00+09:00",
+  "from": { "name": "Shirin Valecourt", "email": "shirin.valecourt@mail.example" },
+  "to": "support@komorebi-goods.example",
+  "subject": "Order KM-24811 has not moved for a week",
+  "text": "Hello,\n\nI ordered two cast-iron trivets (order KM-24811) on 10 November for delivery to Singapore. The tracking page has shown \"In transit\" for a week without any change. They are a gift for a dinner on 3 December. If they arrive after that, can I still return them?\n\nThank you,\nShirin Valecourt",
+  "order_id": "KM-24811"
+}

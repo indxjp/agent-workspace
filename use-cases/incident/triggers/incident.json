@@ -1,0 +1,23 @@
+{
+  "kind": "webhook",
+  "name": "incident",
+  "prompt": "監視システムからアラートが届きました。一次対応してください。 / An alert arrived from monitoring; triage it.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["alertId", "category", "severity", "impact", "owner", "reason", "steps", "draft"],
+    "properties": {
+      "alertId": { "type": "string" },
+      "category": {
+        "type": "string",
+        "enum": ["outage", "degradation", "job", "capacity", "security", "other"]
+      },
+      "severity": { "type": "string", "enum": ["SEV1", "SEV2", "SEV3", "SEV4"] },
+      "impact": { "type": "string" },
+      "owner": { "type": "string" },
+      "reason": { "type": "string" },
+      "steps": { "type": "array", "items": { "type": "string" } },
+      "draft": { "type": "string" }
+    }
+  }
+}

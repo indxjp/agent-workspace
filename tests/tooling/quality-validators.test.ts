@@ -191,5 +191,6 @@ describe('formal citation check', () => {
     ) as { entries: Parameters<typeof citationFailures>[0] };
 
     expect(citationFailures(catalogue.entries)).toEqual([]);
-  });
+    // Reads and parses every file the whole committed catalogue cites, which grows with it.
+  }, 30_000);
 });

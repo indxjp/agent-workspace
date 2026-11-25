@@ -1,6 +1,12 @@
 # Example apps
 
-Each directory here is an app a customer could have written: a project made with
+Each directory here is an app a customer could have written, and the Agent Store
+([`store/`](store/)) is one of them: a storefront of ready-made business agents, built on the same
+published packages. Its catalog is [`store/catalog/`](store/catalog/); each entry's source is a
+project in [`use-cases/`](../use-cases/README.md), [`tests/gallery/`](../tests/gallery/README.md) or
+one of the apps here.
+
+Each app is a project made with
 `npm create @indx-workspace`, grown with `aw generate` and a small amount of code of its own. They
 import only the published `@indx-workspace/*` packages, exactly as an app outside this repository
 does, so they show what the published packages can build without a fork.
@@ -67,7 +73,7 @@ generated file is a Generated gap.
 | [Wiki](./wiki/) | yes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 59 / 100 |
 | [CRM](./crm/) | yes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 141 / 200 |
 | [Service desk](./service-desk/) | yes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 246 / 250 |
-| [Agent Store](./store/) | no | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | 5200 / 5200 |
+| [Agent Store](./store/) | no | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | 4412 / 5310 |
 
 Declared gaps:
 
@@ -75,7 +81,8 @@ Declared gaps:
 
 <!-- apps-benchmark:end -->
 
-The same flag also writes `examples/store/catalog/line-counts.generated.ts`, the handwritten counts the Agent Store shows.
+`APPS_WRITE=1 pnpm vitest run --project tests tests/apps` rewrites the table above, and also writes
+`examples/store/catalog/line-counts.generated.ts`, the handwritten counts the Agent Store shows.
 
 ## An app's files
 

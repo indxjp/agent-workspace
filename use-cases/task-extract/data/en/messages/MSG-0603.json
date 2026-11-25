@@ -1,0 +1,9 @@
+{
+  "source": "chat",
+  "id": "MSG-0603",
+  "channel": "#sales-planning",
+  "ts": "2026-11-25T09:05:00+09:00",
+  "user": { "name": "Hinata Chihaya", "handle": "@chihaya-hinata" },
+  "text": "FYI: next Monday the whole company does a stocktake, so the storeroom is closed in the morning.",
+  "mentions": []
+}

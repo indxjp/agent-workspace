@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:ac": {
+      "files": {
+        "agent-workspace.yaml": "a194cecc2eb0b1a870e15de15fd6e116aa36d9c4996a689c5c91bd076d65e2f0",
+        "agents/offboarding.md": "5a1c69e9c94e5870f8a3e220b1b9c289768533478773ae055f9149ab69859c95",
+        "agents/offboarding.ts": "50043dfdef120f0bff7e75b1f7919e70105ca4588e06b70f3fda21cccd038d24",
+        "data/en/example.md": "177e3fc7867932733305e67d2c5905a37e31eb905d56f5311cdbcb3e97b3b19c",
+        "data/ja/example.md": "54b7540c9069770dd1dda1eae77916256695aa6371237decd04f557136dda70e",
+        "evals/offboarding.yaml": "5194859ef59ab6cd2dffd33e5fc5fc2ce8b26b0cf018aeea00b0044e33c13fe3",
+        "skills/offboarding/SKILL.md": "1188b21db9b8a5228aceea6096eb31ad8c349b9c921505ac399b8615fcbe8acd",
+        "surfaces/main.ts": "5d8bfe72078a0f3306baf96edead34b12617dafd15dceed125cfc783ee6efc3b"
+      },
+      "edits": []
+    }
+  }
+}

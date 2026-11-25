@@ -193,10 +193,26 @@ The script runs as `node --permission` with no shell, so a file grant that is re
 read-only: the script can read the run's working directory and can write only its scratch
 directory (`TMPDIR`) and, when the agent has `writeFiles: true`, the grants that are read-write.
 It cannot start another process, and it has no stdin, no network of its own and an environment
-that holds only `TMPDIR`. It stops after 120 seconds, and each of stdout and stderr is capped at
-1 MiB. A refusal comes back as `refused (<code>): <reason>`, and a non-zero exit comes back as the
-script's own output, so the model can read the error. Pass input as arguments or files, not a pipe:
-a script that needs a sibling skill's code imports it by relative path.
+that holds only `TMPDIR` (and `SKILL_SCRIPT_INPUT`, below). It stops after 120 seconds, and each of
+stdout and stderr is capped at 1 MiB. A refusal comes back as `refused (<code>): <reason>`, and a
+non-zero exit comes back as the script's own output, so the model can read the error. Pass input as
+arguments or files, not a pipe: a script that needs a sibling skill's code imports it by relative
+path.
+
+To compute over what an earlier tool call of the same run answered, the model passes that call's
+id instead of copying the answer into the arguments:
+
+```json title="run_skill_script input with a referenced answer (illustrative)" claim="illustrative"
+{ "skill": "peers", "script": "rank.mjs", "args": [], "input": { "fromToolUse": "toolu_01" } }
+```
+
+The engine writes that answer, exactly as the model received it, to a file the script can read and
+cannot change, and names the file in `SKILL_SCRIPT_INPUT`. An id with no answer in this run is
+refused as `unknown_tool_answer`, and the refusal lists the ids the run holds. An error answer, or
+one over 2 MiB, is refused as `unusable_tool_answer`. A script that reads a public source's answer
+imports the built-in reader
+`@indx-workspace/builtin-skills/office-reader/scripts/lib/public-source.mjs`. The design is in
+ADR-0176.
 
 On the Claude engine the tool is `mcp__agent-workspace__run_skill_script`, so an unattended run
 lists it in the agent's `engine.autoApprove`; `Bash` stays denied under a read-only grant. The

@@ -187,11 +187,75 @@ resource "google_compute_region_backend_service" "gateway" {
   }
 }
 
+# ── The control plane's run routes, on the same internal address (ADR-0172) ──────────────────────
+# A sandbox's runner mirrors the run's transcript to web and serves search_files from it
+# (AW_SESSION_MIRROR_URL, spec §14.9, ADR-0147). The sandbox firewall below allows one address, so
+# web's run routes are served there too: the URL map sends exactly these four path templates to web
+# and everything else to the gateway, so a sandbox reaches no other web route. A sandbox holds only
+# the run's signed token, bound to its workspace, run and session, so it reaches only its own
+# session (the state-* routes also accept a signed-in person's session, which a sandbox does not
+# have; file-search accepts the run token only). Web's ingress accepts the internal load balancer
+# (internal traffic), with or without a domain, and IAP (on the external load balancer only) is not
+# in this path.
+locals {
+  web_service_name = "${var.name}-web"
+  sandbox_web_route_templates = [
+    "/api/sessions/*/state-entries",
+    "/api/sessions/*/state-streams",
+    "/api/sessions/*/state-blobs",
+    "/api/sessions/*/file-search",
+  ]
+}
+
+resource "google_compute_region_network_endpoint_group" "web_internal" {
+  name                  = "${var.name}-web-internal-neg"
+  project               = var.project_id
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = local.web_service_name
+  }
+  depends_on = [google_project_service.required]
+}
+
+resource "google_compute_region_backend_service" "web_internal" {
+  name                  = "${var.name}-web-internal"
+  project               = var.project_id
+  region                = var.region
+  load_balancing_scheme = "INTERNAL_MANAGED"
+  protocol              = "HTTP"
+  backend {
+    group           = google_compute_region_network_endpoint_group.web_internal.id
+    balancing_mode  = "UTILIZATION"
+    capacity_scaler = 1.0
+  }
+}
+
 resource "google_compute_region_url_map" "gateway" {
   name            = "${var.name}-gateway"
   project         = var.project_id
   region          = var.region
   default_service = google_compute_region_backend_service.gateway.id
+
+  host_rule {
+    hosts        = ["*"]
+    path_matcher = "sandbox"
+  }
+
+  path_matcher {
+    name            = "sandbox"
+    default_service = google_compute_region_backend_service.gateway.id
+    route_rules {
+      priority = 1
+      service  = google_compute_region_backend_service.web_internal.id
+      dynamic "match_rules" {
+        for_each = local.sandbox_web_route_templates
+        content {
+          path_template_match = match_rules.value
+        }
+      }
+    }
+  }
 }
 
 resource "google_compute_region_target_http_proxy" "gateway" {
@@ -216,7 +280,8 @@ resource "google_compute_forwarding_rule" "gateway" {
 }
 
 # ── Sandbox egress (D-6) ──────────────────────────────────────────────────────────────────────────
-# A sandbox (tag aw-sandbox) may reach only the gateway's internal address, over tcp 80. Everything
+# A sandbox (tag aw-sandbox) may reach only the gateway's internal address, over tcp 80 (which also
+# serves web's four run routes, and nothing else of web: see the URL map above). Everything
 # else is denied, the Google VIPs included: the web, gateway and runner-manager services still reach
 # each other through the private run.app zone and 199.36.153.8/30, but a sandbox does not. Created for
 # an adopted network too: it may have NAT, and a `none` sandbox reaching a public host is the security

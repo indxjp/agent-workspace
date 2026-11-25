@@ -19,8 +19,8 @@ export default defineEntry({
     agent: 'triage',
     prompts: [
       {
-        ja: '新着チケット「会議室のプロジェクターにPCが映らない」の優先度と担当を決めて、役に立つナレッジ記事を教えて',
-        en: `For the new ticket "Laptop won't show on the meeting room projector", set the priority and owner and point me to a helpful knowledge article.`,
+        ja: '新着チケット「会議室のプロジェクターにPCが映らない」の優先度を決めて対応中にし、役に立つナレッジ記事を教えて',
+        en: `For the new ticket "Laptop won't show on the meeting room projector", set its priority, mark it in progress and point me to a helpful knowledge article.`,
       },
       {
         ja: '新着のチケットを優先度の高い順に並べて',
@@ -28,8 +28,8 @@ export default defineEntry({
       },
     ],
     moment: {
-      ja: 'チケットを起票すると、エージェントが優先度と担当を決め、役に立つナレッジ記事を答えで示す。',
-      en: 'File a ticket; the agent sets priority and owner and names the helpful knowledge article in its answer.',
+      ja: 'チケットを起票すると、エージェントが優先度を決めて対応中にし、役に立つナレッジ記事を答えで示す。',
+      en: 'File a ticket; the agent sets its priority, marks it in progress and names the helpful knowledge article in its answer.',
     },
     data: {
       ja: 'チケット12件・ナレッジ記事8本',

@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 
 import {
   createInMemoryCatalog,
+  parsePendingSkillDelete,
   type CatalogSkill,
   type CatalogSkillRevision,
   type DeleteCatalogSkillOutcome,
@@ -23,7 +24,7 @@ import type {
   SkillRow,
   SkillRowInput,
 } from './ports';
-import { parsePendingSkillDelete, skillCatalogOf } from './store';
+import { skillCatalogOf } from './store';
 import { describeSkillCatalogContract } from './store.contract';
 
 describeSkillCatalogContract('the in-memory catalog', () => {
@@ -51,6 +52,8 @@ it("the port's types are the catalog's, both ways", () => {
   expectTypeOf<MarkSkillDeletingOutcome>().toEqualTypeOf<CatalogMarkSkillDeletingOutcome>();
 });
 
+// The revision numbers are what let a resumed delete remove the revision rows, so a malformed list
+// reads as none, and an unreadable record still marks the delete as pending.
 it('reads a pending-delete record as the catalog does', () => {
   expect(parsePendingSkillDelete({ ownerPrincipalId: 'p', revisions: [1, 2] })).toEqual({
     ownerPrincipalId: 'p',
@@ -60,5 +63,11 @@ it('reads a pending-delete record as the catalog does', () => {
     ownerPrincipalId: null,
     revisions: [],
   });
+  for (const revisions of ['1', [-1], [1.5], ['1'], {}, null, undefined]) {
+    expect(parsePendingSkillDelete({ ownerPrincipalId: 'p', revisions })).toEqual({
+      ownerPrincipalId: 'p',
+      revisions: [],
+    });
+  }
   expect(parsePendingSkillDelete('garbage')).toEqual({ ownerPrincipalId: null, revisions: [] });
 });

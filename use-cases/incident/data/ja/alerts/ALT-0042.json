@@ -1,0 +1,27 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"HighErrorRate\"}",
+  "status": "firing",
+  "receiver": "agent-workspace-incident",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alert_id": "ALT-0042",
+        "alertname": "HighErrorRate",
+        "service": "order-api",
+        "env": "production",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "order-api の 5xx の割合が 10% を超えています",
+        "description": "直近 10 分間、注文の登録のおよそ 10 件に 1 件が 5xx エラーで失敗しています。残りの注文は通っています。"
+      },
+      "startsAt": "2026-11-21T09:12:00+09:00",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://monitoring.example.invalid/alerts/ALT-0042",
+      "fingerprint": "00000000005a17c0"
+    }
+  ],
+  "externalURL": "https://alertmanager.example.invalid"
+}

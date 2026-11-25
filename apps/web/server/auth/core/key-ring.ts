@@ -11,6 +11,13 @@
  * `crypto` global (`domain-core-is-pure` and the core globals ban). The signing modules pass
  * `crypto.subtle`; the two synchronous Node readers derive the same bytes with `node:crypto`'s
  * `hkdfSync` from {@link keyDerivation}, and a test holds the two paths equal.
+ *
+ * There is no roll-over. A token is signed and verified only with its purpose key. Step 5 (#2206,
+ * shipped in 0.6.13) also accepted the raw secret for one release, so a deploy signed nobody out.
+ * Step 6 removed that: a session lives at most twelve hours and the other signed tokens ten
+ * minutes. A token signed with the raw secret is refused, so a deployment that skips 0.6.13 signs
+ * its users out once. The visitor key is not a token and has no roll-over: its prefix moved to
+ * `v2_`, so a key derived the old way can never match a new one.
  */
 
 /** Every job the deployment secret keys. A new job adds a label here, never reuses one. */
@@ -69,22 +76,4 @@ export async function derivePurposeKey(
     derivation.lengthBytes * 8,
   );
   return new Uint8Array(bits);
-}
-
-/**
- * The roll-over. A token is signed only with its purpose key. A verifier also accepts the key
- * every token was signed with before this change (the raw secret), so a deploy signs nobody out
- * and breaks no sign-in, invitation or `aw login` in flight: a session lives at most twelve hours
- * and the other signed tokens ten minutes, so no token signed the old way is still valid twelve
- * hours after the deploy. Accepting the old key is no weaker than before this change. Removing it
- * is the next step's change (part 06 step 6, the single token codec), after one release.
- *
- * The visitor key is not a token and has no roll-over: its prefix moves to `v2_`, so a key derived
- * the old way can never match a new one (runnable public links are still off, release gate D-06).
- *
- * Callers pass each key as a thunk, so the old key is only made when the purpose key did not
- * verify, and a failure making it can never go unhandled.
- */
-export function verificationKeys<K>(purposeKey: K, legacyKey: K): readonly K[] {
-  return [purposeKey, legacyKey];
 }

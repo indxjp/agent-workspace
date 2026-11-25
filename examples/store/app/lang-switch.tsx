@@ -1,35 +1,25 @@
-'use client';
-import { useRouter } from 'next/navigation';
-
-import { LANG_COOKIE, LANGS, type Lang } from './lang';
-
-/** How long the language choice is remembered: one year. */
-const LANG_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
+import { LANGS, type Lang } from './lang';
 
 const NAMES: Record<Lang, string> = { ja: '日本語', en: 'English' };
 
-/** The switch at top right: sets the `store_lang` cookie and draws the page again in that language. */
+/**
+ * The switch at top right: a link to this page at `?lang=<it>`, which sets the language cookie
+ * (`proxy.ts`). Plain links, so it works without JavaScript and names the same URLs as `hreflang`.
+ */
 export function LangSwitch({ lang, label }: { readonly lang: Lang; readonly label: string }) {
-  const router = useRouter();
-  const choose = (next: Lang) => {
-    document.cookie = `${LANG_COOKIE}=${next}; path=/; max-age=${String(LANG_COOKIE_MAX_AGE_SECONDS)}; samesite=lax`;
-    router.refresh();
-  };
   return (
     <div role="group" aria-label={label} className="store-lang">
       {LANGS.map((each) => (
-        <button
+        <a
           key={each}
-          type="button"
+          href={`?lang=${each}`}
           lang={each}
-          aria-pressed={each === lang}
+          hrefLang={each}
+          aria-current={each === lang}
           className="aw-app-button"
-          onClick={() => {
-            choose(each);
-          }}
         >
           {NAMES[each]}
-        </button>
+        </a>
       ))}
     </div>
   );

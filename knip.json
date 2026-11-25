@@ -127,6 +127,15 @@
       "entry": ["src/{index,main}.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
+    "use-cases": {
+      "entry": [
+        "**/*.test.ts",
+        "kit/fixtures/coverage-rule/coverage-fixture.config.ts",
+        "templates/*/agents/*.ts",
+        "templates/*/surfaces/*.ts"
+      ],
+      "project": ["**/*.{ts,mjs}"]
+    },
     "packages/runtime": {
       "entry": [
         "src/{index,local,docker,kubernetes,cloud-run,vercel-sandbox,cloudflare-sandbox,aca-sessions,engine-images,transfer}.ts",

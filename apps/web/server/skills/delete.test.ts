@@ -28,7 +28,7 @@ import { Principal } from '../rbac/principal';
 import { parseRole, type Role } from '../rbac/core/roles';
 import { createStorageService, type StorageService } from '../storage/service';
 import { deleteSkill } from './delete';
-import { skillDeleteMarkerKey, skillMetaKey, skillRevisionRowFolder, skillRowFolder } from './keys';
+import { skillMetaKey, skillRevisionRowFolder, skillRowFolder } from './keys';
 import {
   createInMemoryObjectStore,
   createLocalFilesystemObjectStoreProvider,
@@ -395,9 +395,6 @@ describe('DELETE /api/skills/:name', () => {
       const retried = await remove('demo', builder);
       expect(retried.status).toBe(204);
       expect(await storedKeys(WORKSPACE_A)).toEqual([]);
-      expect(
-        await readWhole(skills.forWorkspace(WORKSPACE_A), skillDeleteMarkerKey('demo')),
-      ).toBeNull();
       expect(await catalogRows()).toEqual([]);
       expect((await remove('demo')).status).toBe(404);
     });

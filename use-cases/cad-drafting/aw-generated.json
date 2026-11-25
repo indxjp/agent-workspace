@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "7920bdbc2767d8130ad338250ac1768c6b6683f69bd7ca106220833331b81bbc",
+        "agents/cad-drafting.md": "833ab1c71caa550198a5a9136ff61b5b1560f950b77460ed322c31f356866a38",
+        "agents/cad-drafting.ts": "63dc804fbc09bf981e84fc816f6d489f32c7e08a9e9279961bbecead67f8686f",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/cad-drafting.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/cad-drafting/SKILL.md": "fff571363c21f9346ea644ec4fd37d04359702ae801a5c5c8d79d027cba48ccb",
+        "surfaces/main.ts": "ce1462d2efcbe37009da834149c4c8ddb11948b09a121c422fed9bb89640100f"
+      },
+      "edits": []
+    }
+  }
+}

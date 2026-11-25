@@ -1,0 +1,14 @@
+{
+  "ticket": {
+    "id": "TCK-2101",
+    "created_at": "2026-11-20T10:05:00+09:00",
+    "channel": "email",
+    "subject": "Every stock movement import fails",
+    "description": "Since yesterday evening, every file of stock movements we import from the handheld scanners fails with \"E-412 Import failed\". All of our staff tried and got the same. There are too many lines to type in by hand, so we cannot ship today.",
+    "priority": "high",
+    "status": "new",
+    "tags": ["import", "error"],
+    "requester": { "name": "Mizuho Sawatari", "email": "sawatari@mizunara.example" },
+    "organization": { "name": "Mizunara Workshop" }
+  }
+}

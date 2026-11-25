@@ -24,6 +24,7 @@ import type {
   SessionDurabilityVerdict,
 } from './port.js';
 import { skillsUnderConfigDirectory } from './skills.js';
+import { createToolAnswers, type ToolAnswers } from './tool-answers.js';
 
 /** Who knows the engine session id: the adapter, before the first event; or the stream, in its first `agent.session` frame. */
 export type EngineRunIdentity =
@@ -50,6 +51,13 @@ export type EngineRunPlan<TEvent> = {
   durability(completed: boolean): SessionDurabilityVerdict;
   /** The call the run stopped on for want of approval (ADR-0145 D5); omit on an engine that cannot. */
   approvalRequest?(): EngineApprovalRequest | null;
+  /**
+   * Whether the tool answers this event carries were received by the run's own agent, and may be
+   * recorded for `run_skill_script` (ADR-0176). `false` for a subagent's event, whose answers the
+   * run's model never received. Omitted: every event is the run's own (the engine's subagents do
+   * not surface their tool calls in the run's stream).
+   */
+  isOwnAnswer?(event: TEvent): boolean;
 };
 
 export type EngineAdapterSpec<TCompiled, TEvent> = {
@@ -69,6 +77,11 @@ export type EngineAdapterSpec<TCompiled, TEvent> = {
       readonly sessionStore: EngineSessionStore | undefined;
       readonly abortController: AbortController;
       readonly fileSearch: EngineFileSearchLink | undefined;
+      /**
+       * The answers this run received, recorded from its own frames (ADR-0176); what
+       * `run_skill_script` reads a referenced answer from.
+       */
+      readonly toolAnswers: ToolAnswers;
     },
   ): EngineRunPlan<TEvent>;
 };
@@ -107,10 +120,12 @@ export function createEngineAdapter<TCompiled, TEvent>(
         );
       }
       const abortController = context.abortController ?? new AbortController();
+      const toolAnswers = createToolAnswers();
       const plan = spec.plan(compiled.compiled, request, {
         sessionStore: context.sessionStore,
         abortController,
         fileSearch: context.fileSearch,
+        toolAnswers,
       });
       const { identity } = plan;
       let completed = false;
@@ -129,8 +144,13 @@ export function createEngineAdapter<TCompiled, TEvent>(
       void engineSessionId.catch(() => undefined);
       let awaitingId = identity.kind === 'reported';
 
-      function* observed(mapped: Iterable<EngineFrame>): Generator<EngineFrame, void, void> {
+      function* observed(
+        mapped: Iterable<EngineFrame>,
+        event: TEvent,
+      ): Generator<EngineFrame, void, void> {
+        const own = plan.isOwnAnswer?.(event) ?? true;
         for (const frame of mapped) {
+          if (own) toolAnswers.observe(frame);
           if (awaitingId && frame.frame === 'agent.session') {
             awaitingId = false;
             reportId(frame.engineSessionId);
@@ -153,10 +173,10 @@ export function createEngineAdapter<TCompiled, TEvent>(
           }
           if (plan.cancelled !== null && abortController.signal.aborted) {
             completed = true;
-            yield* observed(plan.map(plan.cancelled));
+            yield* observed(plan.map(plan.cancelled), plan.cancelled);
           } else {
             for await (const event of plan.events()) {
-              yield* observed(plan.map(event));
+              yield* observed(plan.map(event), event);
               if (plan.isTerminal(event)) completed = true;
             }
           }

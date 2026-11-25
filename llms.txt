@@ -63,7 +63,7 @@ then the guides, then the resource-by-resource detail.
 - [Quickstart](docs/sdk/site/getting-started/quickstart.mdx): Your first agent in about a minute: set the key, npm create, npm run dev, then chat with it in the browser and the terminal, change it and watch it update, and run its evaluations. One Node process, no Docker.
 - [Console tour](docs/sdk/site/getting-started/console-tour.mdx): Sign in to the web console of your local runtime and see each screen: the agent and its versions, runs, skills, files, connectors, models, runtimes and API keys, and which chapter uses each.
 - [aw chat](docs/sdk/site/cli/chat.mdx): Talk to an agent from the terminal: the interactive loop, one-shot mode, and the SDK calls behind both.
-- [Troubleshooting](docs/sdk/site/getting-started/troubleshooting.mdx): Fixes for the problems a first install can hit: a missing or rejected key, a busy port, an elevated Windows shell, Windows Node under WSL, the Docker sandbox, the widget on another origin, and the known issues of 0.6.9.
+- [Troubleshooting](docs/sdk/site/getting-started/troubleshooting.mdx): Fixes for the problems a first install can hit: a missing or rejected key, a busy port, an elevated Windows shell, Windows Node under WSL, the Docker sandbox, the widget on another origin, and the questions a first run raises.
 
 ## Docs site: 2 · Build your agent
 
@@ -192,6 +192,7 @@ then the guides, then the resource-by-resource detail.
 
 ## Docs site: Use cases
 
+- [Agent Store: ready-made business agents](docs/sdk/site/features/agent-store.mdx): A store of ready-made business agents you can browse, try on sample data, customize and install into your own cloud. Every entry is a complete Agent Workspace project in the repository, so what you try is what you install.
 - [Enterprise use-case gallery](docs/sdk/site/tutorials/index.mdx): Ten agents Japanese enterprises ask for, each built end to end with the Agent Workspace SDK and kept as a benchmark: what the SDK does today, what takes your own code, and what is missing, every verdict backed by a test.
 - [Build an agent on your own stack](docs/sdk/site/tutorials/your-stack.mdx): Pick the engine (Claude Agent SDK, Mastra, OpenAI Agents SDK or pi), the model, the skills, the tools, the frontend and the infrastructure, and turn the choice into one command, two committed files and a deployment you run yourself.
 - [Use cases](docs/sdk/site/concepts/use-cases.mdx): Six concrete shapes Agent Workspace takes — an in-product copilot, a team workspace with roles, backend automation, a locked-down review agent, a support agent employees can ask, and an agent that runs on the cloud you already approved — each mapped to the surfaces and pages that build it.

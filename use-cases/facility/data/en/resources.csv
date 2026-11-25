@@ -1,0 +1,6 @@
+Resource ID,Name,Type,Location,Capacity,Bookable hours,Notes
+RM-01,"Head office, 3F meeting room A",Meeting room,Head office 3F,6,09:00-18:00,
+RM-02,"Head office, 3F meeting room B",Meeting room,Head office 3F,10,09:00-18:00,Has a monitor
+RM-03,"Head office, 5F board room",Meeting room,Head office 5F,12,09:00-18:00,Needs the head of General Affairs' approval (FAC-04)
+CAR-01,Pool car 1 (5 seats),Pool car,Head office car park,5,08:00-20:00,
+CAR-02,Pool car 2 (2-seat van),Pool car,Head office car park,2,08:00-20:00,Suited to carrying goods

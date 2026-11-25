@@ -22,7 +22,11 @@ import {
 } from '@agent-workspace/engine/testing';
 import { describe, expect, it } from 'vitest';
 
-import { OPENAI_AGENTS_SDK_VERSION, type OpenAiAgentsRunStarter } from './boundary.js';
+import {
+  OPENAI_AGENTS_SDK_VERSION,
+  type OpenAiAgentsRunDeps,
+  type OpenAiAgentsRunStarter,
+} from './boundary.js';
 import type { OpenAiAgentsCompiled } from './compile.js';
 import {
   OPENAI_AGENTS_ADAPTER_VERSION,
@@ -304,6 +308,23 @@ describe('the OpenAI Agents adapter', () => {
     expect(connection.sessionDurability()).toEqual({
       durable: false,
       reason: 'the session store accepted no write for this run.',
+    });
+  });
+});
+
+describe('the answers a run_skill_script call may reference (ADR-0176)', () => {
+  it('hands the run starter the kit’s record, filled from the run’s own tool frames', async () => {
+    const handed: OpenAiAgentsRunDeps[] = [];
+    const starter = replayingStarter();
+    const connection = createOpenAiAgentsEngine((compiled, prompt, deps) => {
+      handed.push(deps);
+      return starter(compiled, prompt, deps);
+    }).start(REQUEST);
+    for await (const frame of connection.frames) expect(frame.engine).toBe('openai-agents');
+    expect(await handed[0]?.toolAnswers?.find('call_01')).toMatchObject({
+      toolCallId: 'call_01',
+      name: 'read_file',
+      isError: false,
     });
   });
 });

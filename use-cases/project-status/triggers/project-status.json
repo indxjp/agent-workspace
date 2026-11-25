@@ -1,0 +1,31 @@
+{
+  "kind": "schedule",
+  "name": "project-status",
+  "prompt": "今週のプロジェクト週報を作成して、project-status-reports フォルダに保存してください。 / Write this week's project status report and save it to the project-status-reports folder.",
+  "cron": "0 9 * * 5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "workstreams", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "workstreams": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "rag", "evidence", "openRisks", "sources"],
+          "properties": {
+            "name": { "type": "string" },
+            "rag": { "type": "string", "enum": ["red", "amber", "green"] },
+            "evidence": { "type": "array", "items": { "type": "string" } },
+            "openRisks": { "type": "array", "items": { "type": "string" } },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

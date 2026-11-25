@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "2b59434e706baff15d63da47bc6637af161cd0251c493cd1f2f93fa8fb03b3c6",
+        "agents/slides.md": "1281c9345474586f02b5bca16e42c740e6ecf443baf0d6bf3c219791c8989f3b",
+        "agents/slides.ts": "d86f608f2bbcaf0fd9280f13955c0f3575d59b35dcaf6902a3f7b5bbe72ded43",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/slides.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/slides/SKILL.md": "70ceb224652cad8ea58c6945058cd9f91ec53c7419de10f2fb23af922fa451d6",
+        "surfaces/main.ts": "d80511d2cb4d52252e694c26b13b5b5a25b465f00b5683694eba17de64d68122"
+      },
+      "edits": []
+    }
+  }
+}

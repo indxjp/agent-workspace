@@ -53,6 +53,7 @@ import {
   RUN_SKILL_SCRIPT_TOOL,
   skillScriptToolDescription,
   type SkillScriptSetup,
+  type ToolAnswers,
 } from '@agent-workspace/engine';
 
 import {
@@ -155,6 +156,8 @@ export type MastraRunDeps = {
   readonly signal: AbortSignal;
   /** The `fetch` the model providers use. The global one unless a test supplies its own. */
   readonly fetch?: typeof globalThis.fetch | undefined;
+  /** The answers the run received, which a `run_skill_script` call may hand its script (ADR-0176). */
+  readonly toolAnswers?: ToolAnswers | undefined;
 };
 
 /** How a run is started. A parameter of the engine so the conformance kit can replay events. */
@@ -466,7 +469,12 @@ async function connectorTools(
 }
 
 /** `run_skill_script` (ADR-0137), as a Mastra tool; the run's `signal` stops a running script. */
-function skillScriptTool(modules: MastraModules, setup: SkillScriptSetup, signal: AbortSignal) {
+function skillScriptTool(
+  modules: MastraModules,
+  setup: SkillScriptSetup,
+  signal: AbortSignal,
+  toolAnswers: ToolAnswers | undefined,
+) {
   return modules.tools.createTool({
     id: RUN_SKILL_SCRIPT_TOOL,
     description: skillScriptToolDescription(setup),
@@ -477,6 +485,7 @@ function skillScriptTool(modules: MastraModules, setup: SkillScriptSetup, signal
         setup,
         input,
         signal,
+        toolAnswers,
       );
       if (isError) throw new Error(text);
       return text;
@@ -607,6 +616,7 @@ function agentForRun({
   workspace,
   memory,
   signal,
+  toolAnswers,
 }: {
   readonly modules: MastraModules;
   readonly compiled: MastraCompiled;
@@ -616,6 +626,7 @@ function agentForRun({
   readonly workspace: MastraWorkspaceModule.Workspace;
   readonly memory: MastraMemoryModule.Memory;
   readonly signal: AbortSignal;
+  readonly toolAnswers: ToolAnswers | undefined;
 }): MastraAgentModule.Agent {
   const agents = Object.fromEntries(
     delegates.map((delegate, index) => [
@@ -628,7 +639,12 @@ function agentForRun({
       ? tools
       : {
           ...tools,
-          [RUN_SKILL_SCRIPT_TOOL]: skillScriptTool(modules, compiled.skillScript, signal),
+          [RUN_SKILL_SCRIPT_TOOL]: skillScriptTool(
+            modules,
+            compiled.skillScript,
+            signal,
+            toolAnswers,
+          ),
         };
   return new modules.agent.Agent({
     id: 'agent-workspace',
@@ -725,6 +741,7 @@ async function* runAgent(parts: RunParts): AsyncGenerator<MastraEvent, void, voi
     workspace,
     memory,
     signal: abort.signal,
+    toolAnswers: deps.toolAnswers,
   });
   const streamOptions = streamOptionsFor(compiled, abort.signal);
   // 'strict': a mismatch is an `error` chunk, not a silently dropped value. No `model`: the

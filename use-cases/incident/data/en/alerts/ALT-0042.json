@@ -1,0 +1,27 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"HighErrorRate\"}",
+  "status": "firing",
+  "receiver": "agent-workspace-incident",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alert_id": "ALT-0042",
+        "alertname": "HighErrorRate",
+        "service": "order-api",
+        "env": "production",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "order-api 5xx share is above 10%",
+        "description": "For the last 10 minutes, roughly one in ten orders has failed with a 5xx error; the rest go through."
+      },
+      "startsAt": "2026-11-21T09:12:00+09:00",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://monitoring.example.invalid/alerts/ALT-0042",
+      "fingerprint": "00000000005a17c0"
+    }
+  ],
+  "externalURL": "https://alertmanager.example.invalid"
+}

@@ -9,6 +9,13 @@ export interface XlsxSheet {
   readonly merges: readonly string[];
   /** Non-empty cells by reference as written, such as `B3`. */
   readonly cells: Readonly<Record<string, CellValue>>;
+  /**
+   * References of date cells: a number whose style shows a date or time (a serial day), or an
+   * ISO date cell (`t="d"`, whose value is its text).
+   */
+  readonly dates: readonly string[];
+  /** References of error cells (`#DIV/0!`, `#N/A`, …), whose value is the error's text. */
+  readonly errors: readonly string[];
 }
 
 export interface DocxParagraph {
@@ -33,7 +40,8 @@ export function writeZip(
 ): Buffer;
 export function columnIndex(letters: string): number;
 export function columnLetters(index: number): string;
-export function readXlsx(buffer: Buffer): { sheets: XlsxSheet[] };
+/** `date1904`: the workbook counts serial days from 1904-01-01 instead of 1900. */
+export function readXlsx(buffer: Buffer): { sheets: XlsxSheet[]; date1904: boolean };
 export function writeXlsx(workbook: {
   readonly sheets: readonly {
     readonly name: string;

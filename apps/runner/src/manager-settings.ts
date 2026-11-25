@@ -183,6 +183,11 @@ export const RUNNER_MANAGER_SETTINGS: readonly SettingDescription[] = [
     '`cloud-run-service`: the egress proxy sandboxes reach the internet through. Set with `RUNTIME_EGRESS_PROXY_KEY` or start-up stops.',
   ),
   row(
+    'RUNTIME_SESSION_MIRROR_URL',
+    'unset: sandbox runs are not mirrored and offer no file search',
+    '`cloud-run-service`: the control plane as a sandbox reaches it, given to each sandbox as `AW_SESSION_MIRROR_URL`. With an egress proxy its host must be in `RUNTIME_PROXY_BYPASS`, or start-up stops.',
+  ),
+  row(
     'RUNTIME_EGRESS_PROXY_KEY',
     'unset: no egress proxy',
     '`cloud-run-service`: the key that signs the credential a sandbox shows the egress proxy.',

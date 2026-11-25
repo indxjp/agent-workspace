@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:tr": {
+      "files": {
+        "agent-workspace.yaml": "09bb10bf81e8237ddb55da409594356054577404ce95f0c52654b797f3991681",
+        "agents/legal-intake.md": "a6be31add1a32b5fb2def9aa2e99d2e265fbca3eb4b64ec041874c8b82a7e21d",
+        "agents/legal-intake.ts": "ea972b4c80727f87b94d2e52c13203a66c2d20188ba64ca1852f86225b52a16e",
+        "data/en/event.json": "248885839cc8daad2e06cb2bfba4cc468aada1c72a8af40a6180eeaf0d7b325a",
+        "data/ja/event.json": "9559947d26c25853d0fa05c41fb7693e479263ebde2b66da65c057682c6d6d13",
+        "evals/legal-intake.yaml": "1841eedbeb247162c9f70721d5af50b26952115cb6d70af75053e99c1c8ff98a",
+        "skills/legal-intake/SKILL.md": "659860aa74354fcc1b043929536fa70949b5e109840e9459260cd8a5ddbbe10a",
+        "surfaces/main.ts": "3a42ae0a129ae607198a6fa505ffd0aecf605144ca15e3ba3820666ef19bdc53",
+        "triggers/legal-intake.json": "43eda2b5ed2a501c881e82c956916435c19862ddf659990f5e398a65742bc71c"
+      },
+      "edits": []
+    }
+  }
+}

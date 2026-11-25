@@ -177,8 +177,8 @@ does not know yet.
 neutrality](/concepts/runtime-neutrality), [Extend the platform](/building/extending-the-platform).
 
 <Note>
-  **Today:** the managed-cloud sandbox drivers are not verified and several named driver ids
-  have no implementation; `azure-openai` and `openai-compatible` connections run through the
+  **Today:** of the managed-cloud sandbox drivers only Cloud Run has a live isolation proof, and
+  several named driver ids have no implementation; `azure-openai` and `openai-compatible` connections run through the
   gateway's provider adapters, whose live-provider behaviour is fixture-verified rather than
   proven against the provider. **Target:** a published release with the driver matrix
   proven per driver, on the same native-per-cloud programme as the storage and secret backends.

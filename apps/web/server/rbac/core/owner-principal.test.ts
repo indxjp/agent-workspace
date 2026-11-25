@@ -33,7 +33,7 @@ describe('caller projections require ownerPrincipalId', () => {
       readonly ownerPrincipalId: string;
     }>();
     expectTypeOf<OwnerField<Parameters<ShareService['publish']>[1]>>().toEqualTypeOf<{
-      ownerPrincipalId: string;
+      readonly ownerPrincipalId: string;
     }>();
     expectTypeOf<OwnerField<RunOwnershipPrincipal>>().toEqualTypeOf<{
       readonly ownerPrincipalId: string;

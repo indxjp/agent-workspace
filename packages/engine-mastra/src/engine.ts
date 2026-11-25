@@ -63,7 +63,7 @@ export function createMastraEngine(
     // workspace is told to discover (ADR-0084).
     protectedConfigDirectory: MASTRA_PROTECTED_CONFIG_DIRECTORY,
     compile: compileMastraRun,
-    plan(configuration, request, { sessionStore, abortController }) {
+    plan(configuration, request, { sessionStore, abortController, toolAnswers }) {
       const { threadId, projectKey, resourceId, mode } = configuration.memory;
       const journal =
         sessionStore === undefined
@@ -78,7 +78,11 @@ export function createMastraEngine(
           raw: { type: 'mastra.thread', threadId, resourceId, mode },
         },
         events: () =>
-          runStarter(configuration, request.prompt, { journal, signal: abortController.signal }),
+          runStarter(configuration, request.prompt, {
+            journal,
+            signal: abortController.signal,
+            toolAnswers,
+          }),
         map: (event) => mapper.map(event),
         // An `error` chunk ends the stream without a `run_completed`, and still counts as completed.
         isTerminal: (event) =>

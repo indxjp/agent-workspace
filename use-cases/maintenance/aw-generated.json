@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "18346a55b33f4fbff9bc0eca631a8d76fbc974ec7c80c8e1cc863507b76bde5d",
+        "agents/maintenance.md": "3d1825b94a903a354e9001d0cc74d937bb331b09a3c933a5ce68404881440395",
+        "agents/maintenance.ts": "d13a5b8cf11e0b9293164cc8397766210d9ffc5f603c7dfeb63c3601e24c53be",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/maintenance.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/maintenance/SKILL.md": "f7113b3a844ec4cc722f0a4cee14b53bb668da9e2e38389f3a822211d3834bfa",
+        "surfaces/main.ts": "b40a92770e3eb67ceb9aa06c07ce26c9bb68e70798d7397bb723dde93b78042c"
+      },
+      "edits": []
+    }
+  }
+}

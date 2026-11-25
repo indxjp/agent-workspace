@@ -1,45 +1,13 @@
-import { spawn } from 'node:child_process';
-
 import { DEMO_SEND_RESULT } from '@indx-workspace/contracts/demo';
 import { describe, expect, it } from 'vitest';
 
 import { RECORDS_JSON_MAX_BYTES, RECORDS_PER_ANSWER } from './limits';
-import { RecordsTooLargeError, recordsServerCommand } from './records-server';
-
-type Command = ReturnType<typeof recordsServerCommand>;
-type Answer = Record<string, unknown>;
-
-/** Send `requests` to the stand-in `command`, one per line, and read one answer per request with an id. */
-async function converse(
-  command: Command,
-  requests: readonly unknown[],
-): Promise<readonly Answer[]> {
-  // Run with no secret and no proxy in its environment, as in a sandbox.
-  const child = spawn(process.execPath, [...command.args], {
-    stdio: 'pipe',
-    env: { NODE_ENV: 'test' },
-  });
-  const wanted = requests.filter(
-    (request) => (request as { id?: unknown }).id !== undefined,
-  ).length;
-  const lines: string[] = [];
-  let buffered = '';
-  const done = new Promise<void>((resolve, reject) => {
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      buffered += chunk;
-      const parts = buffered.split('\n');
-      buffered = parts.pop() ?? '';
-      lines.push(...parts.filter((part) => part !== ''));
-      if (lines.length >= wanted) resolve();
-    });
-    child.on('error', reject);
-  });
-  for (const request of requests) child.stdin.write(`${JSON.stringify(request)}\n`);
-  await done;
-  child.kill();
-  return lines.map((line) => JSON.parse(line) as Answer);
-}
+import {
+  readRecordsServerState,
+  RecordsTooLargeError,
+  recordsServerCommand,
+} from './records-server';
+import { converse, toolCall as call, type StandInAnswer as Answer } from './stand-in.test-support';
 
 const CONTACTS_EN = [
   { id: 'c1', name: 'Misaki Sato', email: 'sato@aoba.example', status: 'open' },
@@ -57,13 +25,6 @@ const COMMAND = recordsServerCommand({
     { lang: 'en', tools: ['contact_list', 'contact_get', 'contact_search'], data: CONTACTS_EN },
     { lang: 'ja', tools: ['contact_list', 'contact_get', 'contact_search'], data: CONTACTS_JA },
   ],
-});
-
-const call = (id: number, name: string, args?: unknown): unknown => ({
-  jsonrpc: '2.0',
-  id,
-  method: 'tools/call',
-  params: { name, ...(args === undefined ? {} : { arguments: args }) },
 });
 
 async function records(name: string, args?: unknown): Promise<readonly Record<string, unknown>[]> {
@@ -228,6 +189,26 @@ describe('the demo records stand-in', () => {
         sets: [{ lang: 'ja', tools: ['row_list'], data: [{ text: '日'.repeat(characters) }] }],
       }),
     ).toThrow(RecordsTooLargeError);
+  });
+
+  it('carries for a stand-in with no recorded write exactly what it carried before (ADR-0169)', () => {
+    const reads = {
+      contact_list: [{ id: 'c1', lang: 'en' }],
+    };
+    const command = recordsServerCommand({
+      reads: ['contact_list'],
+      writes: ['contact_update'],
+      sets: [{ lang: 'en', tools: ['contact_list'], data: [{ id: 'c1' }] }],
+    });
+    const carried = command.args.slice(2).join('');
+    expect(carried).toBe(JSON.stringify({ reads, writes: ['contact_update'] }));
+    expect(carried).not.toContain('schemas');
+    expect(readRecordsServerState(command)).toEqual({
+      reads,
+      writes: ['contact_update'],
+      recorded: [],
+      written: [],
+    });
   });
 
   it('has no code that could reach anything outside its own standard input and output', () => {

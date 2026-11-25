@@ -23,7 +23,11 @@ The deployment is private by default. Every deploy creates its own network (or u
   Load Balancer, a private address on your network (plain HTTP inside the network).
 - Each sandbox is an internal Cloud Run service on the sandbox subnet. Its firewall allows one
   destination, the gateway's internal load balancer; everything else is denied, Google's private
-  ranges (`199.36.153.8/30` and `199.36.153.4/30`) included. There is no NAT.
+  ranges (`199.36.153.8/30` and `199.36.153.4/30`) included. There is no NAT. The same load balancer
+  sends four of `web`'s routes to `web`, the ones a sandbox's runner uses to save the run's
+  transcript and search its files (`/api/sessions/<id>/state-entries`, `state-streams`,
+  `state-blobs` and `file-search`, each gated by the run's own token), and every other path to the
+  gateway ([ADR-0172](../../adr/0172-a-cloud-run-sandbox-reaches-the-control-plane-run-routes-at-the-gateway-address.md)).
 - `web`, the gateway and the runner manager reach the database and each other over the private
   network (Direct VPC egress for private ranges only; Private Google Access and a private `run.app`
   DNS zone).
@@ -444,7 +448,7 @@ the next `aw deploy production --yes` fails with `already exists`. Rename the pr
 
 ## Maintainers: `--infra`
 
-The steps below drive the Terraform module of a claude-agent-workspace checkout instead of the one
+The steps below drive the Terraform module of an agent-workspace checkout instead of the one
 shipped with the CLI, and are the procedure for a project that has no `gcp` block. The checkout's
 module is never written to.
 
@@ -466,8 +470,8 @@ environments:
 ```
 
 ```sh
-aw deploy production --infra ../claude-agent-workspace/infra --plan
-aw deploy production --infra ../claude-agent-workspace/infra --yes
+aw deploy production --infra ../agent-workspace/infra --plan
+aw deploy production --infra ../agent-workspace/infra --yes
 ```
 
 Without `--yes` it only plans: it exits 0 when the stack matches and 3 when changes are pending;
@@ -480,7 +484,7 @@ stays in the module's `terraform.tfvars`; a `gcp` block supplies `project_id` an
 | Prerequisite                                                             | Refused with                                                      |
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
 | Node.js 24 or later, and `@indx-workspace/cli` beside `aw`               | `Node.js 24 or later is required` / `install @indx-workspace/cli` |
-| `--infra`: the `infra/` directory of a claude-agent-workspace checkout   | `--infra <dir> is required` / `holds no Terraform module`         |
+| `--infra`: the `infra/` directory of an agent-workspace checkout   | `--infra <dir> is required` / `holds no Terraform module`         |
 | `project_id`: the `gcp` block, `terraform.tfvars` or `TF_VAR_project_id` | `The gcp-cloudrun module has no project_id`                       |
 | Terraform 1.8 or later                                                   | `Terraform is not installed`                                      |
 | The module initialised with a GCS backend                                | `The Terraform module gcp-cloudrun is not initialised`            |
@@ -491,7 +495,7 @@ stays in the module's `terraform.tfvars`; a `gcp` block supplies `project_id` an
 ### Prepare the module (once)
 
 ```sh
-cd claude-agent-workspace/infra/terraform/gcp-cloudrun
+cd agent-workspace/infra/terraform/gcp-cloudrun
 printf 'project_id = "acme-prod"\nregion     = "asia-northeast1"\n' > terraform.tfvars
 gcloud auth application-default login
 terraform init -backend-config="bucket=acme-prod-tfstate" -backend-config="prefix=agent-workspace"
@@ -524,14 +528,15 @@ inspect <reference>` prints each one's digest:
 ```sh
 gcloud auth configure-docker asia-northeast1-docker.pkg.dev
 AR=asia-northeast1-docker.pkg.dev/acme-prod/agent-workspace
+VERSION=0.6.13   # the release you deploy: `version` in packages/cli/src/release-images.json
 for name in web gateway runner runtime-claude-agent-sdk; do
-  digest=$(docker buildx imagetools inspect "ghcr.io/indxjp/agent-workspace/$name:0.2.1" \
+  digest=$(docker buildx imagetools inspect "ghcr.io/indxjp/agent-workspace/$name:$VERSION" \
     --format '{{json .Manifest}}' | jq -r .digest)
-  docker buildx imagetools create --tag "$AR/$name:0.2.1" \
+  docker buildx imagetools create --tag "$AR/$name:$VERSION" \
     "ghcr.io/indxjp/agent-workspace/$name@$digest"
 done
-export AW_WEB_IMAGE=$AR/web:0.2.1 AW_GATEWAY_IMAGE=$AR/gateway:0.2.1
-export AW_RUNNER_IMAGE=$AR/runner:0.2.1 AW_RUNTIME_IMAGE=$AR/runtime-claude-agent-sdk:0.2.1
+export AW_WEB_IMAGE=$AR/web:$VERSION AW_GATEWAY_IMAGE=$AR/gateway:$VERSION
+export AW_RUNNER_IMAGE=$AR/runner:$VERSION AW_RUNTIME_IMAGE=$AR/runtime-claude-agent-sdk:$VERSION
 ```
 
 `aw deploy` resolves each `AW_<NAME>_IMAGE` to its digest and pins that digest in its state, so
@@ -581,8 +586,9 @@ own Cloud Run service, `<name>-app-<app>`:
 
 Limits today:
 
-- **Agents cannot call an app's MCP endpoint on Cloud Run yet.** Sandboxes reach only the gateway,
-  and MCP connectors are dialled from the sandbox.
+- **Agents cannot call an app's MCP endpoint on Cloud Run yet.** Sandboxes reach only the gateway
+  (and `web`'s four run routes behind the same address), and MCP connectors are dialled from the
+  sandbox.
 
 ### Connecting an app to its workspace
 

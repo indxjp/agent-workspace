@@ -8,6 +8,11 @@ import { describe, expect, it } from 'vitest';
 
 import { validateWorkflowDocuments } from '../../scripts/check-workflows.mjs';
 import {
+  DOCKER_HUB_JOBS,
+  checkDockerHubJobs,
+  isDockerHubReference,
+} from '../../scripts/check-workflows/docker-hub.mjs';
+import {
   pullRequestPaths,
   scopePrefixes,
   validatePeripheralWorkflows,
@@ -211,6 +216,89 @@ describe('the Cloud Run environment rule', () => {
       ),
     ).toEqual([
       '.github/workflows/gcp-cloudrun-preview.yml: the step "Probe the runner manager\'s IAM condition" is missing',
+    ]);
+  });
+});
+
+describe('the Docker Hub rules', () => {
+  const CI = '.github/workflows/ci.yml';
+  const mirrorStep =
+    '      - name: Route Docker Hub through a mirror\n        uses: ./.github/actions/docker-hub-mirror\n';
+  const dockerHubJobs = (source: string) => {
+    const failures: string[] = [];
+    checkDockerHubJobs(failures, source);
+    return failures;
+  };
+
+  it('tells a Docker Hub reference from another registry', () => {
+    for (const reference of [
+      'postgres:18-alpine',
+      'docker.io/library/postgres:18-alpine',
+      'index.docker.io/library/postgres:18',
+      'chrislusf/seaweedfs@sha256:abc',
+    ]) {
+      expect(isDockerHubReference(reference), reference).toBe(true);
+    }
+    for (const reference of [
+      'mirror.gcr.io/library/postgres:18-alpine',
+      'mcr.microsoft.com/azure-storage/azurite@sha256:abc',
+      'localhost/x:1',
+      'registry:5000/x:1',
+    ]) {
+      expect(isDockerHubReference(reference), reference).toBe(false);
+    }
+  });
+
+  it('refuses a service image pulled from Docker Hub, in a services block only', () => {
+    const workflow = (image: string) =>
+      [
+        'jobs:',
+        '  t:',
+        '    services:',
+        '      postgres:',
+        `        image: ${image}`,
+        '        ports:',
+        '          - 5432',
+        '    steps:',
+        '      - run: docker run --rm postgres:18-alpine true',
+        '  u:',
+        '    container:',
+        '      image: node:24',
+      ].join('\n');
+    expect(treeFailures(workflow('postgres:18-alpine'))).toEqual([
+      '.github/workflows/w.yml:5: the service image postgres:18-alpine is pulled from Docker Hub before any step runs; name it through mirror.gcr.io (mirror.gcr.io/library/<name>:<tag>)',
+    ]);
+    expect(treeFailures(workflow("'docker.io/library/postgres:18-alpine'"))).toHaveLength(1);
+    expect(treeFailures(workflow('mirror.gcr.io/library/postgres:18-alpine'))).toEqual([]);
+  });
+
+  it('holds the committed workflows to both rules', () => {
+    const ci = REPOSITORY.get(CI) ?? '';
+    expect(dockerHubJobs(ci)).toEqual([]);
+    expect(
+      [...REPOSITORY].flatMap(([file, source]) => treeFailures(source).map((f) => `${file} ${f}`)),
+    ).toEqual([]);
+    expect(DOCKER_HUB_JOBS).toEqual(
+      expect.arrayContaining(['heavy-checks', 'release-checks', 'apps-e2e', 'coverage']),
+    );
+  });
+
+  it('refuses a Docker Hub job without the mirror step right after its checkout', () => {
+    const ci = REPOSITORY.get(CI) ?? '';
+    const start = ci.indexOf('\n  release-checks:\n');
+    const end = ci.indexOf('\n  release-images:\n');
+    const job = ci.slice(start, end);
+    const without = ci.slice(0, start) + job.replace(`\n${mirrorStep}`, '') + ci.slice(end);
+    expect(dockerHubJobs(without)).toEqual([
+      '.github/workflows/ci.yml: release-checks must route Docker Hub through ./.github/actions/docker-hub-mirror in the step right after its checkout',
+    ]);
+    // Later than the step right after checkout is too late: that step may already reach Docker Hub.
+    const late = job
+      .replace(`\n${mirrorStep}`, '')
+      .replace('      - name: Install\n', `${mirrorStep}\n      - name: Install\n`);
+    expect(dockerHubJobs(ci.slice(0, start) + late + ci.slice(end))).toHaveLength(1);
+    expect(dockerHubJobs(ci.replace('\n  apps-e2e:\n', '\n  apps-e2e-renamed:\n'))).toEqual([
+      '.github/workflows/ci.yml: apps-e2e must route Docker Hub through ./.github/actions/docker-hub-mirror in the step right after its checkout',
     ]);
   });
 });

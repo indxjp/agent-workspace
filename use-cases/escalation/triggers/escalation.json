@@ -1,0 +1,21 @@
+{
+  "kind": "webhook",
+  "name": "escalation",
+  "prompt": "サポート窓口に問い合わせのチケットが届きました。エスカレーションするかどうかを判定してください。 / A ticket arrived at the support desk; decide whether to escalate it.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["ticketId", "priority", "escalateTo", "owner", "reason", "draft"],
+    "properties": {
+      "ticketId": { "type": "string" },
+      "priority": { "type": "string", "enum": ["P1", "P2", "P3", "P4"] },
+      "escalateTo": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["engineering", "manager"] }
+      },
+      "owner": { "type": "string" },
+      "reason": { "type": "string" },
+      "draft": { "type": "string" }
+    }
+  }
+}

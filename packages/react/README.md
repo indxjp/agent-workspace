@@ -2,7 +2,7 @@
 
 The hosted surface chat as React. `<Chat/>` is the chat `GET /p/s/<name>` renders, with its
 message list, message, composer and tool result each replaceable; `useConversation()` is the same
-conversation without any markup. `react` (19) is a peer dependency; the transport is
+conversation without any markup. `react` (18.3 or 19) is a peer dependency; the transport is
 [`@indx-workspace/sdk`](https://www.npmjs.com/package/@indx-workspace/sdk).
 
 ```tsx title="illustrative" claim="illustrative"

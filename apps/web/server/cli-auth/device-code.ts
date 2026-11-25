@@ -11,7 +11,7 @@
  */
 import { createHmac, hkdfSync, randomInt, timingSafeEqual } from 'node:crypto';
 
-import { keyDerivation, verificationKeys } from '../auth/core/key-ring.ts';
+import { keyDerivation } from '../auth/core/key-ring.ts';
 
 /** RFC 8628 §6.1: consonants only, so a code spells no word and survives being read aloud. */
 const USER_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -57,19 +57,14 @@ function deviceCodeKey(secret: string): Buffer {
   return key;
 }
 
-function mac(key: Buffer | string, body: string): Buffer {
+function mac(key: Buffer, body: string): Buffer {
   return createHmac('sha256', key).update(`${DEVICE_CODE_PURPOSE}.${body}`).digest();
 }
 
-/** Constant-time against each key: the device-code key, then the raw secret (roll-over). */
-function signedByAnyKey(secret: string, body: string, presented: Buffer): boolean {
-  return verificationKeys<() => Buffer | string>(
-    () => deviceCodeKey(secret),
-    () => secret,
-  ).some((key) => {
-    const expected = mac(key(), body);
-    return presented.length === expected.length && timingSafeEqual(presented, expected);
-  });
+/** Constant-time against the device-code key. */
+function signedByDeviceCodeKey(secret: string, body: string, presented: Buffer): boolean {
+  const expected = mac(deviceCodeKey(secret), body);
+  return presented.length === expected.length && timingSafeEqual(presented, expected);
 }
 
 /** Sign a device code for `userCode`, valid until `expiresAtSeconds` (Unix seconds). */
@@ -100,7 +95,7 @@ export function verifyDeviceCode(
     return { ok: false, reason: 'invalid' };
   }
   const presented = Buffer.from(signature, 'base64url');
-  if (!signedByAnyKey(secret, `${version}.${userCode}.${expiry}`, presented)) {
+  if (!signedByDeviceCodeKey(secret, `${version}.${userCode}.${expiry}`, presented)) {
     return { ok: false, reason: 'invalid' };
   }
   if (normaliseUserCode(userCode) !== userCode || !/^\d{1,12}$/u.test(expiry)) {

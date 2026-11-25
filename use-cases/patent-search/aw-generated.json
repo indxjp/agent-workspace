@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "5bd8c60742d39226c66088792358f114402a8dfb414a7383785f7a792b9706dd",
+        "agents/patent-search.md": "340759c3472c03d3af2551672d6f3c47f92d6e2d50a419aaf4f24b861bb5fbbe",
+        "agents/patent-search.ts": "b52afdf983fa3a233913bd51ad1979d36d0d141a12c3cb321209fd32f96ccffe",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/patent-search.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/patent-search/SKILL.md": "809807978912d3d376055cdf167d443be7503a830476a000743b1adea19e0863",
+        "surfaces/main.ts": "e55cbaa85151317decb6ce2933da8491852301c6678d746caaf1a58b3a1d0a91"
+      },
+      "edits": []
+    }
+  }
+}

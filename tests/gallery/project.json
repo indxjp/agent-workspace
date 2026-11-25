@@ -39,6 +39,9 @@
         "{workspaceRoot}/scripts/release/package-smoke.mjs",
         "{workspaceRoot}/scripts/release/package-tar.mjs",
         "{workspaceRoot}/sites/lp/**/*",
+        "{workspaceRoot}/tests/apps/benchmark.ts",
+        "{workspaceRoot}/tests/apps/handwritten.ts",
+        "{workspaceRoot}/tests/apps/lane.mjs",
         "{workspaceRoot}/tests/docs-claims/extract.mjs",
         "{workspaceRoot}/tests/docs-claims/host.mjs",
         "{workspaceRoot}/tests/docs-claims/run-arguments.mjs",
@@ -86,7 +89,9 @@
         "{workspaceRoot}/tests/journey/run-timing.mjs",
         "{workspaceRoot}/tests/journey/run-tools.mjs",
         "{workspaceRoot}/tests/journey/run.mjs",
-        "{workspaceRoot}/tool-host.Dockerfile"
+        "{workspaceRoot}/tool-host.Dockerfile",
+        "{workspaceRoot}/use-cases/kit/archetypes.ts",
+        "{workspaceRoot}/use-cases/kit/budget.ts"
       ]
     }
   }

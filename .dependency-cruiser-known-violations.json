@@ -78,39 +78,6 @@
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/skills/pending-delete.ts",
-    "unresolvedTo": "../skills/pending-delete",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-agents-entered-through-its-entry"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/skills/service.ts",
-    "unresolvedTo": "../skills/service",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-agents-entered-through-its-entry"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/skills/tree.ts",
-    "unresolvedTo": "../skills/tree",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-agents-entered-through-its-entry"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "apps/web/server/surfaces/loader/test-runtime.ts",
     "to": "apps/web/server/agent-versions/memory-store.ts",
     "unresolvedTo": "../../agent-versions/memory-store",
@@ -1057,17 +1024,6 @@
   },
   {
     "type": "dependency",
-    "from": "apps/web/server/files/file-path-policy.ts",
-    "to": "apps/web/server/agents/index.ts",
-    "unresolvedTo": "../agents",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-storage-and-sharing-imports-only-upstream"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "apps/web/server/shares/http.ts",
     "to": "apps/web/server/resources/authorise.ts",
     "unresolvedTo": "../resources/authorise",
@@ -1082,50 +1038,6 @@
     "from": "apps/web/server/shares/session-snapshot/snapshot.ts",
     "to": "apps/web/server/execution/index.ts",
     "unresolvedTo": "../../execution",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-storage-and-sharing-imports-only-upstream"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/agents/index.ts",
-    "unresolvedTo": "../agents",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-storage-and-sharing-imports-only-upstream"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/skills/pending-delete.ts",
-    "unresolvedTo": "../skills/pending-delete",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-storage-and-sharing-imports-only-upstream"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/skills/service.ts",
-    "unresolvedTo": "../skills/service",
-    "dependencyTypes": ["local", "import"],
-    "rule": {
-      "severity": "error",
-      "name": "context-storage-and-sharing-imports-only-upstream"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "apps/web/server/storage/migrate-skills.ts",
-    "to": "apps/web/server/skills/tree.ts",
-    "unresolvedTo": "../skills/tree",
     "dependencyTypes": ["local", "import"],
     "rule": {
       "severity": "error",

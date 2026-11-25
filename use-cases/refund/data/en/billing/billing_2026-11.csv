@@ -1,0 +1,5 @@
+billing_no,contract_no,plan,billing_date,amount,refund_deadline,usage,refund_class
+B-2611-0388,C-40213,Annual plan,2026-11-05,118800,2026-11-12,used,refundable
+B-2611-0412,C-40213,Monthly plan,2026-11-10,9800,2026-11-24,partly used,refundable
+B-2611-0457,C-40388,Monthly plan (sign-up campaign),2026-11-01,4900,2026-11-15,unused,not refundable (campaign)
+B-2611-0461,C-40502,Monthly plan,2026-11-01,9800,2026-11-15,unused,refundable

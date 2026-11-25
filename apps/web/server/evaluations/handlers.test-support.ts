@@ -41,6 +41,10 @@ type Script =
   | 'hang';
 
 const PLAN_WRITE = { file_path: 'outputs/plan.json', content: '{}' };
+export const DRAFT_WRITE = {
+  file_path: 'drafts/reply.md',
+  content: 'Delivery of order 1042 moves to 2026-12-04. No discount is offered.',
+};
 
 const SCRIPTS: Readonly<Record<string, Script>> = {
   // The pause has no `agent.tool.call` frame before it, so the paused call must come from the run.
@@ -48,6 +52,16 @@ const SCRIPTS: Readonly<Record<string, Script>> = {
     frames: [assistantSays('Plan ready for approval.')],
     status: 'awaiting_approval',
     pause: { toolName: 'Write', canonicalCall: canonicalCall('Write', PLAN_WRITE) },
+  },
+  // ADR-0175: the draft is only in the paused call's content; the answer does not repeat it.
+  'Draft the reply to the supplier': {
+    frames: [
+      toolCall('search_files', 'call_search'),
+      toolResult('call_search'),
+      assistantSays('The draft is ready for your approval.'),
+    ],
+    status: 'awaiting_approval',
+    pause: { toolName: 'Write', canonicalCall: canonicalCall('Write', DRAFT_WRITE) },
   },
   'Where is order 1042?': { frames: ORDER_STATUS_FRAMES, status: 'completed' },
   'I want my money back now': {

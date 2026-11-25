@@ -45,12 +45,12 @@ export async function readAsVisitor<T>(
 /** The words of a page that has no content to show, by why. */
 const NOTICES = {
   'signed-out': {
-    ja: 'ご自身のデモを見るには、エージェントの「試す」タブでメールアドレスからサインインしてください。',
-    en: 'To see your own demo, sign in with your email from the Try tab of an agent.',
+    ja: 'ご自身のデモを見るには、エージェントのページの「試す」でメールアドレスからサインインしてください。',
+    en: 'To see your own demo, sign in with your email from the Try it section of an agent’s page.',
   },
   ended: {
-    ja: 'デモは終了しました。もう一度試すには、エージェントの「試す」タブから始めてください。',
-    en: 'Your demo has ended. To try again, start one from the Try tab of an agent.',
+    ja: 'デモは終了しました。もう一度試すには、エージェントのページの「試す」から始めてください。',
+    en: 'Your demo has ended. To try again, start one from the Try it section of an agent’s page.',
   },
   failed: {
     ja: '読み込めませんでした。しばらくしてからもう一度お試しください。',

@@ -1,0 +1,14 @@
+{
+  "ticket": {
+    "id": "TCK-2103",
+    "created_at": "2026-11-21T08:40:00+09:00",
+    "channel": "phone",
+    "subject": "朝から全員がログインできません",
+    "description": "今朝の始業から、当社の利用者全員がログイン画面で「認証サーバーに接続できません」と表示されて使えません。在庫の引き当てが止まり、配送センターの作業がすべて止まっています。今日中に直らないなら、契約の継続を社内で見直すことになります。",
+    "priority": "urgent",
+    "status": "new",
+    "tags": ["login", "outage"],
+    "requester": { "name": "朱雀院 陸", "email": "suzakuin@soyokaze-logi.example" },
+    "organization": { "name": "そよかぜ物流" }
+  }
+}

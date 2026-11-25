@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "3696bf3addf7a1209e32de44f3d954798bcb167233b3b8597039b439bc0eb2e6",
+        "agents/manual-search.md": "6f64a10f5be0fde1a3cd5787a0d4cbc5df3440c98bfa6d3c3dba4ea6ff6d2cce",
+        "agents/manual-search.ts": "694c22a61452d22d9849bcb0c980936e15b60ac79b14f189f85680e91f6b0c7e",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/manual-search.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/manual-search/SKILL.md": "3d3fe92fd2e365566d5e6dcc7380f82e3b1280d98d6a4fb64f32b6666946a3a2",
+        "surfaces/main.ts": "498b2630e6ee29b02b759502b3e571fe660588d5062eaf2f322be1e836a61268"
+      },
+      "edits": []
+    }
+  }
+}

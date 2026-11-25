@@ -22,9 +22,10 @@ export interface SignInSessionClaims {
   readonly ws: string;
   /**
    * Not used for any decision: the role is read from the membership row on every request
-   * (`rbac/principal.ts`). Still written as `'owner'` for one release so a build that requires it
-   * accepts new cookies after a rollback; read as optional, and refused if present with any other
-   * value (refactoring part 06, step 9).
+   * (`rbac/principal.ts`). No longer written (refactoring part 06, step 9: 0.6.13 stopped reading
+   * it, so a rollback to 0.6.13 accepts a session without it). Still read as optional, so a session
+   * an earlier build minted stays valid until it expires, and refused if present with any value but
+   * `'owner'`.
    */
   readonly role?: 'owner';
   /**
@@ -48,7 +49,7 @@ export function signInSessionClaimsAt(
   ttlSeconds: number = SIGN_IN_SESSION_TTL_SECONDS,
 ): SignInSessionClaims {
   const iat = Math.floor(nowMs / 1000);
-  return { sub, ws, role: 'owner', iat, exp: iat + ttlSeconds };
+  return { sub, ws, iat, exp: iat + ttlSeconds };
 }
 
 /** The claims for a new email-link session at `nowMs`: {@link signInSessionClaimsAt}, marked. */
@@ -57,8 +58,8 @@ export function emailLinkSignInSessionClaimsAt(
   ws: string,
   nowMs: number,
 ): SignInSessionClaims {
-  const { role, iat, exp } = signInSessionClaimsAt(sub, ws, nowMs);
-  return { sub, ws, ...(role === undefined ? {} : { role }), via: 'email_link', iat, exp };
+  const { iat, exp } = signInSessionClaimsAt(sub, ws, nowMs);
+  return { sub, ws, via: 'email_link', iat, exp };
 }
 
 /** Why a session was refused once its signature verified. */

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "bbc3c31d4b0b8acb256eac5ef230430c147df86e7c42a9974b2608a9cb477334",
+        "agents/competitor.md": "a041a762765fcc8fef2bb54f8e85f7358f929bb7c878c6bf444d03ee75250e31",
+        "agents/competitor.ts": "a2246960905956d791dc4b759ed82f461bacfc149f76d47554c616da0254efc9",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/competitor.yaml": "b7049ed7ae5a14354e3a1fe3c5bb1c2bb6d8998677b30bafbf71787c81d24b56",
+        "skills/competitor/SKILL.md": "1989bd4d1b15932c539d5e4f6a70a2e67506d17427d2e54c62dcc5cfe0bde39e",
+        "surfaces/main.ts": "d07a8e340ed09f0d38827ea2fee067d86b6e4e46d293bf88e045116b9d3e494a",
+        "triggers/competitor.json": "d4026b9a96b0ad913f3877453aea947ee5e527ed79b395991b4ee00638c11265"
+      },
+      "edits": []
+    }
+  }
+}

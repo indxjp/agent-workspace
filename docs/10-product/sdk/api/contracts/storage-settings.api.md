@@ -24,14 +24,14 @@ export function ignoredStorageSettingsWarning(env: StorageEnv): string | null;
 // @public
 export function ignoredStorageVariables(env: StorageEnv): string[];
 
-// @public
+// @public @deprecated
 export type LegacyAreaPrefix = {
     readonly area: StorageArea;
     readonly location: StorageLocation;
     readonly prefix: string;
 };
 
-// @public
+// @public @deprecated
 export function legacyAreaPrefixes(settings: StorageSettings): readonly LegacyAreaPrefix[];
 
 // @public @deprecated (undocumented)

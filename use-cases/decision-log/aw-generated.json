@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "bd8165b9e06b2a959bd4bf78f57515b766e4303206426461f21f4e8fd81e23f3",
+        "agents/decision-log.md": "3599b777e91482876e3611c82a937966cd23e9ce40692e279d3e5aabf1172a66",
+        "agents/decision-log.ts": "ceaeb1c058abdc511a99fdacf5366ed3eda0e3d0b4f7497517eb4e0f064602d3",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/decision-log.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/decision-log/SKILL.md": "931f93cae3cceff27da59cdd383693c166dbe7209bff1383846327be3884759d",
+        "surfaces/main.ts": "6f5ee3fb387e7aa506644b2364935e18a32310357b7c9db3edf3328aa0f494ae"
+      },
+      "edits": []
+    }
+  }
+}

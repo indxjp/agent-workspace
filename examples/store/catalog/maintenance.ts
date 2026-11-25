@@ -43,4 +43,30 @@ export default defineEntry({
     check: { tools: ['search_files'], approval: null },
   },
   safety: ['person'],
+  next: {
+    source: 'use-cases/maintenance',
+    demo: {
+      agent: 'maintenance',
+      prompts: [
+        {
+          ja: 'プレス2号機 油圧が上がらない。油面計は正常範囲。ポンプからガラガラ音がする',
+          en: 'Press No. 2: hydraulic pressure will not build. The oil gauge is in range and the pump rattles.',
+        },
+        {
+          ja: '溶接ロボット9号機 アークが出ない',
+          en: 'Welding robot No. 9: no arc.',
+        },
+      ],
+      moment: {
+        ja: '若手が症状を伝えると、安全指示のあと、ベテランの記録をもとに「次に見る場所」を1つだけ案内する。',
+        en: "A junior describes the symptom; after the safety line, the agent gives one check from veterans' records.",
+      },
+      data: {
+        ja: '設備マニュアル2冊・トラブル記録3台分・ベテランのメモ2本（日本語と英語）',
+        en: '2 equipment manuals, trouble logs for 3 machines, 2 veteran notes, in Japanese and English',
+      },
+      seed: [{ collection: 'maintenance', from: 'data' }],
+      check: { tools: ['search_files'], approval: null },
+    },
+  },
 });

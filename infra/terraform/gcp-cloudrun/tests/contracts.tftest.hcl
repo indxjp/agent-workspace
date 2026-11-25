@@ -2878,3 +2878,105 @@ run "every_env_name_web_sets_itself_is_reserved_against_web_settings" {
     error_message = "every environment name the module sets on web must be listed in local.web_reserved_env"
   }
 }
+
+# ADR-0172: a sandbox's runner mirrors its transcript to web and serves search_files from it. The
+# sandbox firewall is unchanged (one address, tcp 80); the internal load balancer there sends exactly
+# web's four run routes to web, and every other path, the model API included, to the gateway.
+run "sandboxes_reach_web_only_on_its_run_routes_at_the_gateway_load_balancer" {
+  command = plan
+
+  override_resource {
+    override_during = plan
+    target          = google_compute_region_backend_service.web_internal
+    values = {
+      id = "projects/aw-test-project/regions/asia-northeast1/backendServices/agent-workspace-web-internal"
+    }
+  }
+
+  assert {
+    condition = (
+      google_compute_region_network_endpoint_group.web_internal.network_endpoint_type == "SERVERLESS" &&
+      google_compute_region_network_endpoint_group.web_internal.cloud_run[0].service == google_cloud_run_v2_service.web.name &&
+      google_compute_region_backend_service.web_internal.load_balancing_scheme == "INTERNAL_MANAGED" &&
+      [for b in google_compute_region_backend_service.web_internal.backend : b.group] == [google_compute_region_network_endpoint_group.web_internal.id]
+    )
+    error_message = "web's internal backend must be an INTERNAL_MANAGED backend service on a serverless NEG for the web service"
+  }
+
+  assert {
+    condition = (
+      google_compute_region_url_map.gateway.default_service == google_compute_region_backend_service.gateway.id &&
+      [for h in google_compute_region_url_map.gateway.host_rule : h.path_matcher] == ["sandbox"] &&
+      alltrue([for h in google_compute_region_url_map.gateway.host_rule : toset(h.hosts) == toset(["*"])]) &&
+      [for p in google_compute_region_url_map.gateway.path_matcher : p.default_service] == [google_compute_region_backend_service.gateway.id] &&
+      length(flatten([for p in google_compute_region_url_map.gateway.path_matcher : p.path_rule])) == 0
+    )
+    error_message = "every path but web's run routes, the model API included, must stay on the gateway"
+  }
+
+  assert {
+    condition = (
+      [for r in flatten([for p in google_compute_region_url_map.gateway.path_matcher : p.route_rules]) : r.service] ==
+      ["projects/aw-test-project/regions/asia-northeast1/backendServices/agent-workspace-web-internal"] &&
+      toset(flatten([
+        for r in flatten([for p in google_compute_region_url_map.gateway.path_matcher : p.route_rules]) :
+        [for m in r.match_rules : m.path_template_match]
+        ])) == toset([
+        "/api/sessions/*/state-entries",
+        "/api/sessions/*/state-streams",
+        "/api/sessions/*/state-blobs",
+        "/api/sessions/*/file-search",
+      ]) &&
+      alltrue(flatten([
+        for r in flatten([for p in google_compute_region_url_map.gateway.path_matcher : p.route_rules]) : [
+          for m in r.match_rules : m.prefix_match == null && m.full_path_match == null && m.regex_match == null
+        ]
+      ]))
+    )
+    error_message = "the only route to web must be its four run routes (state entries, streams, blobs and file search), by exact path template"
+  }
+
+  assert {
+    condition     = [for e in google_cloud_run_v2_service.runner_manager.template[0].containers[0].env : e.value if e.name == "RUNTIME_SESSION_MIRROR_URL"] == ["http://10.10.0.50"]
+    error_message = "the runner manager must give sandboxes the gateway's internal load balancer as their session mirror"
+  }
+
+  assert {
+    condition = (
+      google_compute_firewall.sandbox_allow_gateway.destination_ranges == toset(["10.10.0.50/32"]) &&
+      flatten([for a in google_compute_firewall.sandbox_allow_gateway.allow : tolist(a.ports)]) == ["80"]
+    )
+    error_message = "the session mirror must need no firewall change: a sandbox still reaches only tcp 80 on the gateway's internal address"
+  }
+}
+
+run "the_session_mirror_host_is_bypassed_by_the_sandbox_egress_proxy" {
+  command = plan
+
+  variables {
+    sandbox_internet = true
+    images = {
+      web          = "asia-northeast1-docker.pkg.dev/aw-test-project/agent-workspace/web@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      gateway      = "asia-northeast1-docker.pkg.dev/aw-test-project/agent-workspace/gateway@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      runner       = "asia-northeast1-docker.pkg.dev/aw-test-project/agent-workspace/runner@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      runtime      = "asia-northeast1-docker.pkg.dev/aw-test-project/agent-workspace/runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      egress_proxy = "asia-northeast1-docker.pkg.dev/aw-test-project/agent-workspace/egress-proxy@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  }
+
+  override_resource {
+    override_during = plan
+    target          = google_compute_address.egress_proxy
+    values = {
+      address = "10.10.0.60"
+    }
+  }
+
+  assert {
+    condition = (
+      [for e in google_cloud_run_v2_service.runner_manager.template[0].containers[0].env : trimprefix(e.value, "http://") if e.name == "RUNTIME_SESSION_MIRROR_URL"] ==
+      [for e in google_cloud_run_v2_service.runner_manager.template[0].containers[0].env : e.value if e.name == "RUNTIME_PROXY_BYPASS"]
+    )
+    error_message = "the session mirror's host must be the proxy bypass, or the runner manager refuses to start"
+  }
+}

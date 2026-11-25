@@ -28,6 +28,8 @@ export interface Turn {
   readonly pendingApproval: RunApprovalCall | null;
   /** The engine's stop reason once it reported one, such as `max_turns`. */
   readonly stopReason: string | null;
+  /** The run's typed answer once read (`run.output.structured`), which the result charts draw. */
+  readonly structured: unknown;
 }
 
 export function beginTurn(runId: string, prompt: string): Turn {
@@ -39,6 +41,7 @@ export function beginTurn(runId: string, prompt: string): Turn {
     answers: [],
     pendingApproval: null,
     stopReason: null,
+    structured: null,
   };
 }
 

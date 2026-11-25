@@ -1,0 +1,10 @@
+{
+  "source": "email",
+  "id": "MSG-0602",
+  "received_at": "2026-11-24T17:40:00+09:00",
+  "from": { "name": "Ryo Miyamori", "email": "miyamori@tono-bungu.example" },
+  "to": [{ "name": "Saki Otobe", "email": "otobe@tono-bungu.example" }],
+  "cc": [{ "name": "Hinata Chihaya", "email": "chihaya@tono-bungu.example" }],
+  "subject": "After the promotion meeting",
+  "text": "Saki,\n\nThanks for today's promotion meeting. Two things, please.\n\nFirst, put the minutes of the meeting in the \"Promotion meeting\" shared folder by Thursday 26 November.\nSecond, book meeting room 2 for the afternoon of Wednesday 2 December for next week's meeting.\n\nHinata, please take the leftover handouts back to the storeroom. No hurry.\n\nRyo"
+}

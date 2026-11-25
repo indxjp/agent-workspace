@@ -90,6 +90,10 @@ const NON_MODULE_EXTENSIONS = new Set([
   '.md',
   '.mdx',
   '.npmrc',
+  // A font a build reads (examples/store/app/og: the social cards' Noto Sans JP subset).
+  '.otf',
+  // A sample diff an agent reviews (use-cases/code-review/data: a fictional patch, not a module).
+  '.patch',
   // A manual a tool reads (tests/gallery/manual-search/data/manuals).
   '.pdf',
   '.png',

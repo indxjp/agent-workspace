@@ -1,0 +1,33 @@
+{
+  "kind": "schedule",
+  "name": "voc",
+  "prompt": "先月のお問い合わせとレビューから、お客様の声の月次レポートを日本語で作成して、voc-reports フォルダに保存してください。",
+  "cron": "0 9 1 * *",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["month", "themes", "other", "savedTo"],
+    "properties": {
+      "month": { "type": "string" },
+      "themes": {
+        "type": "array",
+        "maxItems": 60,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["theme", "kind", "summary", "improvement", "items"],
+          "properties": {
+            "theme": { "type": "string" },
+            "kind": { "type": "string", "enum": ["issue", "praise"] },
+            "summary": { "type": "string" },
+            "improvement": { "type": "string" },
+            "items": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "other": { "type": "array", "items": { "type": "string" } },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

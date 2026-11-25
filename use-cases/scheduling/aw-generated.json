@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:ac": {
+      "files": {
+        "agent-workspace.yaml": "c6702041ba1dfc922e70efbec7528bea66cc1cf4d2ac621c178a548b86b44819",
+        "agents/scheduling.md": "3268cca69400153a58a0951e3821147a1b113684092c4d908da867e44998ffdd",
+        "agents/scheduling.ts": "5155c78f91855cfa80d031089780b796c4965ae7af6f99d5e3d57ec096c02009",
+        "data/en/example.md": "177e3fc7867932733305e67d2c5905a37e31eb905d56f5311cdbcb3e97b3b19c",
+        "data/ja/example.md": "54b7540c9069770dd1dda1eae77916256695aa6371237decd04f557136dda70e",
+        "evals/scheduling.yaml": "5194859ef59ab6cd2dffd33e5fc5fc2ce8b26b0cf018aeea00b0044e33c13fe3",
+        "skills/scheduling/SKILL.md": "73cd9fa43513e45d2eea85b2371b126e549d3b77c62197287017986a175d65fd",
+        "surfaces/main.ts": "9de215743c0f3c2e111bc16f74464ae6fd0c6f4bd3ac7d445b1e58ba6e4c20bd"
+      },
+      "edits": []
+    }
+  }
+}

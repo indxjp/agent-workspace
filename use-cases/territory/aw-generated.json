@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:an": {
+      "files": {
+        "agent-workspace.yaml": "f56e0f9754971c2806008a088e8434e87bd756c4ae01cfee5ae24cc4a8c73e41",
+        "agents/territory.md": "3a6a0402608477823a8444ea73e249bda64b894e9cb89c4b69e17eab1bd67799",
+        "agents/territory.ts": "39202361b5ab5164e55e043d3ccaefbaa4fe0fb409c7879f265934dd43f0a6b4",
+        "data/en/records.csv": "49f11cfe079c9f95d082fd8666b46ff935987716c0345313ffe300cb079bb52c",
+        "data/ja/records.csv": "8b73a591f399f59cb675be4d44da2bb0a5848ace5ae61bb11e0a478858e64622",
+        "evals/territory.yaml": "cdf4174656a6eb719fde16af4d10ec05ed375065a2d7714cf75c8f8c453aa397",
+        "skills/territory/SKILL.md": "644ba2b47b8b66581cfdd07d5c1c9d091234b24983fdbf71fea2d3558bf88984",
+        "surfaces/main.ts": "9f8c7d9a3d1c5151fda81ef99bffed255b2364c3033334c13eef86e3b7e280bc"
+      },
+      "edits": []
+    }
+  }
+}

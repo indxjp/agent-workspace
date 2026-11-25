@@ -1,0 +1,17 @@
+{
+  "alert": {
+    "id": "SEC-0502",
+    "source": "VPN",
+    "rule": "Many failed sign-ins in a short time",
+    "detected_at": "2026-11-21T02:15:40+09:00",
+    "host": "VPN-GW-01",
+    "user": "(several)",
+    "vendor_severity": "medium",
+    "description": "One source failed to sign in with many different user names over twenty minutes. No sign-in succeeded.",
+    "evidence": {
+      "source_address": "198.51.100.23",
+      "failed_attempts": 240,
+      "successful_attempts": 0
+    }
+  }
+}

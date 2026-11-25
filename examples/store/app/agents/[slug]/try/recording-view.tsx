@@ -4,7 +4,7 @@
  * `AssistantProse`), under the label that says how it was made. An approval is shown as it was
  * decided, its buttons off: a recording is not a chat.
  */
-import { ApprovalPrompt, AssistantProse, ToolTrace } from '@indx-workspace/react';
+import { ApprovalPrompt, AssistantProse, ResultChart, ToolTrace } from '@indx-workspace/react';
 
 import type { Recording } from '../../../../catalog/recording';
 import { pick, type Lang } from '../../../lang';
@@ -48,6 +48,9 @@ export function RecordingView({
           </div>
         );
       })}
+      {content.charts.map((chart, index) => (
+        <ResultChart key={index} chart={chart} structured={content.structured} locale={lang} />
+      ))}
     </article>
   );
 }

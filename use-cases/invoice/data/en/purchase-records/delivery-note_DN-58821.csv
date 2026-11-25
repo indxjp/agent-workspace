@@ -1,0 +1,5 @@
+delivery_note_no,delivered_on,po_no,line_no,part_no,description,delivered_qty,accepted_qty,unit
+DN-58821,2026-11-12,PO-2611-0315,1,BLT-M8-30,Hex bolt M8x30,2000,2000,pcs
+DN-58821,2026-11-12,PO-2611-0315,2,NUT-M8,Hex nut M8,2000,2000,pcs
+DN-58821,2026-11-12,PO-2611-0315,3,WSH-M8,Flat washer M8,1500,1500,pcs
+DN-58821,2026-11-12,PO-2611-0315,4,SPR-110,Compression spring SPR-110,500,500,pcs

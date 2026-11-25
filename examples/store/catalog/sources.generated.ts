@@ -98,6 +98,76 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "  erp.ts"
     ]
   },
+  "proposal": {
+    "agentFile": "use-cases/proposal/agents/proposal.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `proposal/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'proposal',\n  instructions: { file: './proposal.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('proposal')],\n  files: [files('proposal', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  proposal.md",
+      "  proposal.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  proposal.yaml",
+      "proposal.test.ts",
+      "skills/",
+      "  proposal/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "meeting-prep": {
+    "agentFile": "use-cases/meeting-prep/agents/meeting-prep.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Started on a schedule by the trigger in `triggers/meeting-prep.json`, which asks for the typed report\n// (ADR-0144, ADR-0154). It reads its own folder, `meeting-prep`, and writes its report under its own\n// `meeting-prep-reports`, so two entries never share a folder and the records stay read-only.\nexport default defineAgent({\n  name: 'meeting-prep',\n  instructions: { file: './meeting-prep.md' },\n  model: 'default',\n  // Reading is unattended; the report's one write waits for the owner's approval (ADR-0145).\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  permissions: { readFiles: true, writeFiles: true },\n  skills: [skill('meeting-prep')],\n  files: [files('meeting-prep', 'read'), files('meeting-prep-reports', 'read-write')],\n  limits: { maxTurns: 30 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  meeting-prep.md",
+      "  meeting-prep.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  meeting-prep.yaml",
+      "meeting-prep.test.ts",
+      "skills/",
+      "  meeting-prep/",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  meeting-prep.json"
+    ]
+  },
+  "deal-risk": {
+    "agentFile": "use-cases/deal-risk/agents/deal-risk.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Started on a schedule by the trigger in `triggers/deal-risk.json`, which asks for the typed report\n// (ADR-0144, ADR-0154). It reads its own folder, `deal-risk`, and writes its report under its own\n// `deal-risk-reports`, so two entries never share a folder and the records stay read-only.\nexport default defineAgent({\n  name: 'deal-risk',\n  instructions: { file: './deal-risk.md' },\n  model: 'default',\n  // Reading is unattended; the report's one write waits for the owner's approval (ADR-0145).\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  permissions: { readFiles: true, writeFiles: true },\n  skills: [skill('deal-risk')],\n  files: [files('deal-risk', 'read'), files('deal-risk-reports', 'read-write')],\n  limits: { maxTurns: 30 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  deal-risk.md",
+      "  deal-risk.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "deal-risk.test.ts",
+      "evals/",
+      "  deal-risk.yaml",
+      "skills/",
+      "  deal-risk/",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  deal-risk.json"
+    ]
+  },
   "customer-inquiry": {
     "agentFile": "tests/gallery/customer-inquiry/agents/customer-inquiry.ts",
     "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\nimport { crm } from '../tools/crm.ts';\n\nexport default defineAgent({\n  name: 'customer-inquiry',\n  instructions: { file: './customer-inquiry.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops the FAQ search on an approval prompt.\n  // `handoff` offers `handoff_to_person`: the agent passes the customer to an operator with it.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    handoff: true,\n  },\n  // It reads the FAQ (the one granted folder) with the built-in `search_files` and the customer's\n  // history through the read-only CRM tool; no write, no command, no network, no server of ours.\n  permissions: { readFiles: true },\n  tools: [crm],\n  skills: [skill('keigo-reply')],\n  files: [files('faq', 'read')],\n  limits: { maxTurns: 10, maxBudgetUsd: 0.3 },\n});",
@@ -196,6 +266,74 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "tsconfig.json"
     ]
   },
+  "faq-bot": {
+    "agentFile": "use-cases/faq-bot/agents/faq-bot.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Grounded answers (QA), read-only by construction: it searches its own folder, `faq-bot`, with\n// the platform's `search_files`, reads PDF, Word and Excel files through `office-reader`, and cites\n// every fact. A caller narrows each run to what that person may read with\n// `runs.start({ fileScope })` (ADR-0147). No write, no network.\nexport default defineAgent({\n  name: 'faq-bot',\n  instructions: { file: './faq-bot.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops these read-only calls on a prompt.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('faq-bot')],\n  files: [files('faq-bot', 'read')],\n  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  faq-bot.md",
+      "  faq-bot.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  faq-bot.yaml",
+      "faq-bot.test.ts",
+      "skills/",
+      "  faq-bot/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "returns": {
+    "agentFile": "use-cases/returns/agents/returns.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `returns/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `returns/standards`, and writes the report to `returns-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`returns-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'returns',\n  instructions: { file: './returns.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('returns')],\n  files: [files('returns', 'read'), files('returns-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  returns.md",
+      "  returns.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  returns.yaml",
+      "returns.test.ts",
+      "skills/",
+      "  returns/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "sla-watch": {
+    "agentFile": "use-cases/sla-watch/agents/sla-watch.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Started on a schedule by the trigger in `triggers/sla-watch.json`, which asks for the typed report\n// (ADR-0144, ADR-0154). It reads its own folder, `sla-watch`, and writes its report under its own\n// `sla-watch-reports`, so two entries never share a folder and the records stay read-only.\nexport default defineAgent({\n  name: 'sla-watch',\n  instructions: { file: './sla-watch.md' },\n  model: 'default',\n  // Reading is unattended; the report's one write waits for the owner's approval (ADR-0145).\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  permissions: { readFiles: true, writeFiles: true },\n  skills: [skill('sla-watch')],\n  files: [files('sla-watch', 'read'), files('sla-watch-reports', 'read-write')],\n  limits: { maxTurns: 30 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  sla-watch.md",
+      "  sla-watch.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  sla-watch.yaml",
+      "skills/",
+      "  sla-watch/",
+      "sla-watch.test.ts",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  sla-watch.json"
+    ]
+  },
   "manual-search": {
     "agentFile": "tests/gallery/manual-search/agents/manual-search.ts",
     "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\nexport default defineAgent({\n  name: 'manual-search',\n  instructions: { file: './manual-search.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops the tools' calls on an approval prompt.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__run_skill_script', 'mcp__agent-workspace__search_files'],\n  },\n  // Read-only by construction: it searches the manuals with the platform's `search_files` and\n  // reads the PDF through office-reader, nothing else. The portal narrows each run to the manuals\n  // the signed-in person may read (`runs.start({ fileScope })`). `runCommands` is what offers\n  // `run_skill_script`; no write, no network.\n  permissions: { readFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('cite-answer')],\n  files: [files('manuals', 'read')],\n  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },\n});",
@@ -271,6 +409,94 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "  agent-on-data.test.ts",
       "  sample-data/",
       "tsconfig.json"
+    ]
+  },
+  "policy-qa": {
+    "agentFile": "use-cases/policy-qa/agents/policy-qa.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Grounded answers (QA), read-only by construction: it searches its own folder, `policy-qa`, with\n// the platform's `search_files`, reads PDF, Word and Excel files through `office-reader`, and cites\n// every fact. A caller narrows each run to what that person may read with\n// `runs.start({ fileScope })` (ADR-0147). No write, no network.\nexport default defineAgent({\n  name: 'policy-qa',\n  instructions: { file: './policy-qa.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops these read-only calls on a prompt.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('policy-qa')],\n  files: [files('policy-qa', 'read')],\n  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  policy-qa.md",
+      "  policy-qa.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  policy-qa.yaml",
+      "policy-qa.test.ts",
+      "skills/",
+      "  policy-qa/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "newcomer": {
+    "agentFile": "use-cases/newcomer/agents/newcomer.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `newcomer/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'newcomer',\n  instructions: { file: './newcomer.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('newcomer')],\n  files: [files('newcomer', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  newcomer.md",
+      "  newcomer.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  newcomer.yaml",
+      "newcomer.test.ts",
+      "skills/",
+      "  newcomer/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "translator": {
+    "agentFile": "use-cases/translator/agents/translator.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `translator/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'translator',\n  instructions: { file: './translator.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-reader'), builtinSkill('office-writer'), skill('translator')],\n  files: [files('translator', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  translator.md",
+      "  translator.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  translator.yaml",
+      "skills/",
+      "  translator/",
+      "surfaces/",
+      "  main.ts",
+      "translator.test.ts"
+    ]
+  },
+  "glossary": {
+    "agentFile": "use-cases/glossary/agents/glossary.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `glossary/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `glossary/standards`, and writes the report to `glossary-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`glossary-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'glossary',\n  instructions: { file: './glossary.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('glossary')],\n  files: [files('glossary', 'read'), files('glossary-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  glossary.md",
+      "  glossary.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  glossary.yaml",
+      "glossary.test.ts",
+      "skills/",
+      "  glossary/",
+      "surfaces/",
+      "  main.ts"
     ]
   },
   "cad-drafting": {
@@ -381,6 +607,50 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "  maintenance.ts"
     ]
   },
+  "work-instruction": {
+    "agentFile": "use-cases/work-instruction/agents/work-instruction.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `work-instruction/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'work-instruction',\n  instructions: { file: './work-instruction.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('work-instruction')],\n  files: [files('work-instruction', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  work-instruction.md",
+      "  work-instruction.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  work-instruction.yaml",
+      "skills/",
+      "  work-instruction/",
+      "surfaces/",
+      "  main.ts",
+      "work-instruction.test.ts"
+    ]
+  },
+  "inspection": {
+    "agentFile": "use-cases/inspection/agents/inspection.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `inspection/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `inspection/standards`, and writes the report to `inspection-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`inspection-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'inspection',\n  instructions: { file: './inspection.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('inspection')],\n  files: [files('inspection', 'read'), files('inspection-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  inspection.md",
+      "  inspection.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  inspection.yaml",
+      "inspection.test.ts",
+      "skills/",
+      "  inspection/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
   "contract-review": {
     "agentFile": "tests/gallery/contract-review/agents/contract-review.ts",
     "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\nexport default defineAgent({\n  name: 'contract-review',\n  instructions: { file: './contract-review.md' },\n  model: 'default',\n  // A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.\n  // The one thing legal decides is the redline: the agent saves it with `Write`, and the run waits\n  // there for an approval (ADR-0145) before the Word file is made. Every other file is written by a\n  // script, so that `Write` is the run's only gated call.\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__run_skill_script', 'mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  // office-reader turns the draft into paragraphs JSON in `drafts` (the one read-write scratch\n  // grant); contract-playbook checks that JSON, and once legal approves the redline, office-reader\n  // writes the redlined copy to `outputs/` (the folder the run collects; the backend reads it back\n  // with `runs.outputs`). It reaches no network. `runCommands` is what offers `run_skill_script`.\n  // A question about a playbook rule is answered with the platform's `search_files` over the granted\n  // `playbook` folder: no index and no connector of ours.\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // Pinned to revision 1 of the playbook (`aw skills publish`): each review's run names this\n  // version, and the version names the rules that applied, so a later edit cannot change the answer.\n  skills: [builtinSkill('office-reader'), skill('contract-playbook', { revision: 1 })],\n  files: [files('contracts', 'read'), files('playbook', 'read'), files('drafts', 'read-write')],\n  limits: { maxTurns: 20, maxBudgetUsd: 1 },\n});",
@@ -411,6 +681,98 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "  contract-playbook/",
       "surfaces/",
       "  legal-desk.ts"
+    ]
+  },
+  "nda": {
+    "agentFile": "use-cases/nda/agents/nda.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `nda/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `nda/standards`, and writes the report to `nda-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`nda-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'nda',\n  instructions: { file: './nda.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('nda')],\n  files: [files('nda', 'read'), files('nda-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  nda.md",
+      "  nda.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  nda.yaml",
+      "nda.test.ts",
+      "skills/",
+      "  nda/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "ad-compliance": {
+    "agentFile": "use-cases/ad-compliance/agents/ad-compliance.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `ad-compliance/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `ad-compliance/standards`, and writes the report to `ad-compliance-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`ad-compliance-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'ad-compliance',\n  instructions: { file: './ad-compliance.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('ad-compliance')],\n  files: [files('ad-compliance', 'read'), files('ad-compliance-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "ad-compliance.test.ts",
+      "agent-workspace.yaml",
+      "agents/",
+      "  ad-compliance.md",
+      "  ad-compliance.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  ad-compliance.yaml",
+      "skills/",
+      "  ad-compliance/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "privacy": {
+    "agentFile": "use-cases/privacy/agents/privacy.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `privacy/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'privacy',\n  instructions: { file: './privacy.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('privacy')],\n  files: [files('privacy', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  privacy.md",
+      "  privacy.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  privacy.yaml",
+      "privacy.test.ts",
+      "skills/",
+      "  privacy/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "screening": {
+    "agentFile": "use-cases/screening/agents/screening.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\nimport publicLists from '../tools/lists.ts';\n\n// It reads the registration request in `screening/inbox` and the procedure in `screening/standards`,\n// checks each name against the public lists with `check_public_lists` (a read-only code tool, served\n// through the shared `aw-dev-tools` connector, ADR-0170), and writes the report to\n// `screening-reports` with `Write`, which waits for a person. Only the reads run unasked; a skill\n// script may write wherever the agent may, so `run_skill_script` waits too (ADR-0167 D5, #2388).\nexport default defineAgent({\n  name: 'screening',\n  instructions: { file: './screening.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__aw-dev-tools__check_public_lists'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  tools: [publicLists],\n  skills: [builtinSkill('office-reader'), skill('screening')],\n  files: [files('screening', 'read'), files('screening-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  screening.md",
+      "  screening.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "  lists.snapshot.json",
+      "evals/",
+      "  screening.yaml",
+      "screening.test.ts",
+      "skills/",
+      "  screening/",
+      "surfaces/",
+      "  main.ts",
+      "tools/",
+      "  lists.run.ts",
+      "  lists.ts"
     ]
   },
   "ringi-review": {
@@ -486,6 +848,252 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "  excel-consolidate/",
       "surfaces/",
       "  planning.ts"
+    ]
+  },
+  "expense": {
+    "agentFile": "use-cases/expense/agents/expense.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `expense/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `expense/standards`, and writes the report to `expense-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`expense-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'expense',\n  instructions: { file: './expense.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('expense')],\n  files: [files('expense', 'read'), files('expense-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  expense.md",
+      "  expense.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  expense.yaml",
+      "expense.test.ts",
+      "skills/",
+      "  expense/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "invoice": {
+    "agentFile": "use-cases/invoice/agents/invoice.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `invoice/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `invoice/standards`, and writes the report to `invoice-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`invoice-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'invoice',\n  instructions: { file: './invoice.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('invoice')],\n  files: [files('invoice', 'read'), files('invoice-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  invoice.md",
+      "  invoice.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  invoice.yaml",
+      "invoice.test.ts",
+      "skills/",
+      "  invoice/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "budget": {
+    "agentFile": "use-cases/budget/agents/budget.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Analysis (AN), read-only by construction: it finds the export in `budget` with `search_files`,\n// computes with the `budget` skill's script through `run_skill_script`, and answers in the typed\n// output a run asks for (an eval case or `runs.start`), which the surface charts (ADR-0168). No\n// grant is read-write and `writeFiles` is off, so no script can write and both calls may run\n// unattended (ADR-0167 D5, #2388). The folder is named after the entry, so two entries' demo data\n// never share one folder. The entry writes the calculation, `skills/budget/scripts/analyse.mjs`,\n// and the flow that covers it: the script reads the CSV or .xlsx with office-reader's `readTable`\n// and `runWhenMain` (ADR-0173, \"Reading a table in a skill script\" in use-cases/README.md), which\n// the office-reader grant makes importable in a run.\nexport default defineAgent({\n  name: 'budget',\n  instructions: { file: './budget.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('budget')],\n  files: [files('budget', 'read')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  budget.md",
+      "  budget.ts",
+      "aw-generated.json",
+      "budget.test.ts",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  budget.yaml",
+      "skills/",
+      "  budget/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "screening-hr": {
+    "agentFile": "use-cases/screening-hr/agents/screening-hr.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `screening-hr/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `screening-hr/standards`, and writes the report to `screening-hr-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`screening-hr-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'screening-hr',\n  instructions: { file: './screening-hr.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('screening-hr')],\n  files: [files('screening-hr', 'read'), files('screening-hr-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  screening-hr.md",
+      "  screening-hr.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  screening-hr.yaml",
+      "screening-hr.test.ts",
+      "skills/",
+      "  screening-hr/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "interview": {
+    "agentFile": "use-cases/interview/agents/interview.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `interview/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'interview',\n  instructions: { file: './interview.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('interview')],\n  files: [files('interview', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  interview.md",
+      "  interview.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  interview.yaml",
+      "interview.test.ts",
+      "skills/",
+      "  interview/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "onboarding": {
+    "agentFile": "use-cases/onboarding/agents/onboarding.ts",
+    "excerpt": "import { defineAgent, files, mcp, skill } from '@indx-workspace/sdk/define';\n\n// Action (AC): it reads its reference folder with the built-in `search_files` and the system's open\n// records with `list_tasks`, proposes the change, and makes it with `create_task`, which always\n// waits for a person's approval; one approval covers one call (ADR-0145 D2.1), so each record is\n// its own call. The connector is named after the entry, so two entries never share a demo stand-in.\n// The typed proposal is the `outputSchema` a run asks for (an eval case or `runs.start`).\n// Another record kind (calendar, access, booking) edits the tool names here and the `kind` in\n// the entry's `CONNECTOR_TOOLS` row (tests/store/seed/build.ts).\nexport default defineAgent({\n  name: 'onboarding',\n  instructions: { file: './onboarding.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__onboarding-tasks__list_tasks'],\n    requireApproval: ['mcp__onboarding-tasks__create_task'],\n  },\n  permissions: { readFiles: true },\n  tools: [mcp('onboarding-tasks')],\n  skills: [skill('onboarding')],\n  files: [files('onboarding', 'read')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  onboarding.md",
+      "  onboarding.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  onboarding.yaml",
+      "onboarding.test.ts",
+      "skills/",
+      "  onboarding/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "attendance": {
+    "agentFile": "use-cases/attendance/agents/attendance.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Started on a schedule by the trigger in `triggers/attendance.json`, which asks for the typed report\n// (ADR-0144, ADR-0154). It reads its own folder, `attendance`, and writes its report under its own\n// `attendance-reports`, so two entries never share a folder and the records stay read-only.\nexport default defineAgent({\n  name: 'attendance',\n  instructions: { file: './attendance.md' },\n  model: 'default',\n  // Reading is unattended; the report's one write waits for the owner's approval (ADR-0145).\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  permissions: { readFiles: true, writeFiles: true },\n  skills: [skill('attendance')],\n  files: [files('attendance', 'read'), files('attendance-reports', 'read-write')],\n  limits: { maxTurns: 30 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  attendance.md",
+      "  attendance.ts",
+      "attendance.test.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  attendance.yaml",
+      "skills/",
+      "  attendance/",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  attendance.json"
+    ]
+  },
+  "incident": {
+    "agentFile": "use-cases/incident/agents/incident.ts",
+    "excerpt": "import { defineAgent, files, mcp, skill } from '@indx-workspace/sdk/define';\n\n// It reads its reference folder with the built-in `search_files` and the tracker's open tasks, and\n// answers in the typed output of its webhook trigger (triggers/incident.json). The routing write,\n// `create_task`, always waits for a person's approval.\nexport default defineAgent({\n  name: 'incident',\n  instructions: { file: './incident.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__tracker__list_tasks'],\n    requireApproval: ['mcp__tracker__create_task'],\n  },\n  permissions: { readFiles: true },\n  tools: [mcp('tracker')],\n  skills: [skill('incident')],\n  files: [files('incident', 'read')],\n  limits: { maxTurns: 10, maxBudgetUsd: 0.3 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  incident.md",
+      "  incident.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  incident.yaml",
+      "incident.test.ts",
+      "skills/",
+      "  incident/",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  incident.json"
+    ]
+  },
+  "code-review": {
+    "agentFile": "use-cases/code-review/agents/code-review.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the document in `code-review/inbox` (office-reader prints Word, Excel and PDF as JSON),\n// checks each item against `code-review/standards`, and writes the report to `code-review-reports` with\n// `Write`. Both folders are the entry's own, so two entries never share one, and the input folder is\n// read-only. Only `search_files` runs unasked: a skill script may write wherever the agent may\n// (`code-review-reports`), so `run_skill_script` waits for a person like `Write` does (ADR-0167 D5,\n// #2388). The typed verdicts are the `outputSchema` a run asks for (an eval case, a trigger or\n// `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'code-review',\n  instructions: { file: './code-review.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write', 'mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  skills: [builtinSkill('office-reader'), skill('code-review')],\n  files: [files('code-review', 'read'), files('code-review-reports', 'read-write')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  code-review.md",
+      "  code-review.ts",
+      "aw-generated.json",
+      "code-review.test.ts",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  code-review.yaml",
+      "skills/",
+      "  code-review/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "release-notes": {
+    "agentFile": "use-cases/release-notes/agents/release-notes.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `release-notes/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'release-notes',\n  instructions: { file: './release-notes.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('release-notes')],\n  files: [files('release-notes', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  release-notes.md",
+      "  release-notes.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  release-notes.yaml",
+      "release-notes.test.ts",
+      "skills/",
+      "  release-notes/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "account-requests": {
+    "agentFile": "use-cases/account-requests/agents/account-requests.ts",
+    "excerpt": "import { defineAgent, files, mcp, skill } from '@indx-workspace/sdk/define';\n\n// Action (AC): it reads the access policy, the HR records and the current access in its reference\n// folder with the built-in `search_files` and the changes already made with `list_grants`, proposes\n// the change, and makes it with `change_access` (an access record, ADR-0169), which always waits for\n// a person's approval; one approval covers one call (ADR-0145 D2.1), so each grant is its own call.\n// The connector is named after the entry, so two entries never share a demo stand-in. The typed\n// proposal is the `outputSchema` a run asks for (an eval case or `runs.start`).\nexport default defineAgent({\n  name: 'account-requests',\n  instructions: { file: './account-requests.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: [\n      'mcp__agent-workspace__search_files',\n      'mcp__account-requests-grants__list_grants',\n    ],\n    requireApproval: ['mcp__account-requests-grants__change_access'],\n  },\n  permissions: { readFiles: true },\n  tools: [mcp('account-requests-grants')],\n  skills: [skill('account-requests')],\n  files: [files('account-requests', 'read')],\n  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "account-requests.test.ts",
+      "agent-workspace.yaml",
+      "agents/",
+      "  account-requests.md",
+      "  account-requests.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  account-requests.yaml",
+      "skills/",
+      "  account-requests/",
+      "surfaces/",
+      "  main.ts"
     ]
   },
   "team-chat": {
@@ -580,6 +1188,101 @@ export const SOURCES: Readonly<Record<string, SourceView>> = {
       "tracker/",
       "  fake-tracker.d.mts",
       "  fake-tracker.mjs"
+    ]
+  },
+  "standup": {
+    "agentFile": "use-cases/standup/agents/standup.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Started on a schedule by the trigger in `triggers/standup.json`, which asks for the typed report\n// (ADR-0144, ADR-0154). It reads its own folder, `standup`, and writes its report under its own\n// `standup-reports`, so two entries never share a folder and the records stay read-only.\nexport default defineAgent({\n  name: 'standup',\n  instructions: { file: './standup.md' },\n  model: 'default',\n  // Reading is unattended; the report's one write waits for the owner's approval (ADR-0145).\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  permissions: { readFiles: true, writeFiles: true },\n  skills: [skill('standup')],\n  files: [files('standup', 'read'), files('standup-reports', 'read-write')],\n  limits: { maxTurns: 30 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  standup.md",
+      "  standup.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  standup.yaml",
+      "skills/",
+      "  standup/",
+      "standup.test.ts",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  standup.json"
+    ]
+  },
+  "project-status": {
+    "agentFile": "use-cases/project-status/agents/project-status.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// Started on a schedule by the trigger in `triggers/project-status.json`, which asks for the typed report\n// (ADR-0144, ADR-0154). It reads its own folder, `project-status`, and writes its report under its own\n// `project-status-reports`, so two entries never share a folder and the records stay read-only.\nexport default defineAgent({\n  name: 'project-status',\n  instructions: { file: './project-status.md' },\n  model: 'default',\n  // Reading is unattended; the report's one write waits for the owner's approval (ADR-0145).\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['Write'],\n  },\n  permissions: { readFiles: true, writeFiles: true },\n  skills: [skill('project-status')],\n  files: [files('project-status', 'read'), files('project-status-reports', 'read-write')],\n  limits: { maxTurns: 30 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  project-status.md",
+      "  project-status.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  project-status.yaml",
+      "project-status.test.ts",
+      "skills/",
+      "  project-status/",
+      "surfaces/",
+      "  main.ts",
+      "triggers/",
+      "  project-status.json"
+    ]
+  },
+  "announce": {
+    "agentFile": "use-cases/announce/agents/announce.ts",
+    "excerpt": "import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\n// It reads the notes and sources under `announce/` (one folder per language), writes the document\n// model to `drafts/` in its session folder, and renders it with `office-writer` to `outputs/`, which\n// the run returns. The render is the one write a person approves: `run_skill_script` waits, and is\n// never auto-approved (ADR-0167 D5, #2388), and the platform denies a plain `Write` under `outputs/`\n// to an office-writer agent (#2420); only `search_files` runs unasked. The typed outline is\n// the `outputSchema` a run asks for (an eval case or `runs.start`), not part of the agent.\nexport default defineAgent({\n  name: 'announce',\n  instructions: { file: './announce.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files'],\n    requireApproval: ['mcp__agent-workspace__run_skill_script'],\n  },\n  permissions: { readFiles: true, writeFiles: true, runCommands: true },\n  // An entry whose input is Word, Excel or PDF also grants builtinSkill('office-reader'); each read\n  // then waits for approval too, since it runs through run_skill_script.\n  skills: [builtinSkill('office-writer'), skill('announce')],\n  files: [files('announce', 'read')],\n  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  announce.md",
+      "  announce.ts",
+      "announce.test.ts",
+      "aw-generated.json",
+      "data/",
+      "  en/",
+      "  ja/",
+      "evals/",
+      "  announce.yaml",
+      "skills/",
+      "  announce/",
+      "surfaces/",
+      "  main.ts"
+    ]
+  },
+  "market": {
+    "agentFile": "use-cases/market/agents/market.ts",
+    "excerpt": "import { defineAgent, files, skill } from '@indx-workspace/sdk/define';\n\nimport marketStats from '../tools/stats.ts';\n\n// Grounded answers (QA), read-only: the public statistics through `read_market_stats` (a dated\n// snapshot in the demo, ADR-0170) and the research memo in `market` through `search_files`, both\n// read unasked. It cites every figure with its source and date, and writes nothing.\nexport default defineAgent({\n  name: 'market',\n  instructions: { file: './market.md' },\n  model: 'default',\n  engine: {\n    id: 'claude-agent-sdk',\n    autoApprove: ['mcp__agent-workspace__search_files', 'mcp__aw-dev-tools__read_market_stats'],\n  },\n  permissions: { readFiles: true },\n  tools: [marketStats],\n  skills: [skill('market')],\n  files: [files('market', 'read')],\n  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },\n});",
+    "truncated": false,
+    "layout": [
+      "agent-workspace.yaml",
+      "agents/",
+      "  market.md",
+      "  market.ts",
+      "aw-generated.json",
+      "data/",
+      "  files/",
+      "  stats.snapshot.json",
+      "evals/",
+      "  market.yaml",
+      "market.test.ts",
+      "skills/",
+      "  market/",
+      "surfaces/",
+      "  main.ts",
+      "tools/",
+      "  stats.run.ts",
+      "  stats.ts"
     ]
   }
 };

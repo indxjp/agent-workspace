@@ -24,6 +24,12 @@ describe('marketing-site chrome sync', () => {
     );
   });
 
+  it('names the page itself where a partial says {{page}}', () => {
+    expect(renderBlock('compare.html', 'header', '<a href="ja/{{page}}">日本語</a>')).toContain(
+      '<a href="ja/compare.html">日本語</a>',
+    );
+  });
+
   it('rewrites every block from the partials and leaves the rest of the page alone', () => {
     const synced = syncPage('compare.html', page('stale'), partials);
     expect(synced.problems).toEqual([]);

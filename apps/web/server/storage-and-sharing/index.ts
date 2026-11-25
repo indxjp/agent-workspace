@@ -30,6 +30,7 @@
 export { encodeFileId } from '../files/file-id';
 export { narrowFileGrants } from '../files/search-terms';
 export { isUnderAllowedPrefix } from '../storage-connections/prefixes';
+export { SKILL_ROWS_ROOT } from '../storage/reserved-roots';
 export type { StorageContext, StorageService } from '../storage/service';
 export type {
   ResourceCatalogStoreProvider,

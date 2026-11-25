@@ -1,0 +1,130 @@
+---
+sidebarTitle: "Agent Store"
+title: "Agent Store: ready-made business agents"
+description: "A store of ready-made business agents you can browse, try on sample data, customize and install into your own cloud. Every entry is a complete Agent Workspace project in the repository, so what you try is what you install."
+icon: "store"
+---
+
+<Info>
+
+- **Read this when:** you would rather start from a finished agent for a business task than from
+  a blank project, or you want to see what Agent Workspace looks like at full strength.
+- **You will learn:** what the store holds, how browse, try, customize and install work, where each
+  entry's source lives, and how to run one yourself.
+- **Used in:** before or after [Chapter 1: Run your first agent](/path/first-agent). Installing an
+  entry is chapters [2](/path/build) to [5](/path/ship) with the agent already written.
+
+</Info>
+
+The Agent Store works like an app store for agents. Each entry is an agent for one job in one
+business area. You find it, try it in the browser on sample data, choose how it should behave for
+your company, and install it where your other systems are. The preview runs at
+[store-staging.indx.jp](https://store-staging.indx.jp).
+
+The store is not a separate product. It is an Agent Workspace app, its demos are ordinary runs on
+an Agent Workspace deployment, and every entry is a project you could have written with the SDK.
+That makes it the quickest way to see the platform at full strength: skills, tools on your systems,
+approvals before writes, typed results drawn as charts and tables, evaluations, and a sandbox per
+run, all in one agent.
+
+## Browse
+
+The catalog covers ten business areas:
+
+| Area          | Examples of the work                                         |
+| ------------- | ------------------------------------------------------------ |
+| Sales         | Quotations, proposals, deal risk, renewals                   |
+| Support       | Customer inquiries, FAQ answers, refunds, escalations        |
+| Finance       | Month-end close, budgets, collections, ringi review          |
+| HR            | Attendance, onboarding, interviews, HR questions             |
+| Legal         | Contract review, NDAs, ad compliance, privacy                |
+| IT            | Account requests, assets, incidents, code review             |
+| Knowledge     | Manual search, policy questions, glossaries, translation     |
+| Collaboration | Meeting minutes, announcements, handovers, stand-ups         |
+| Analytics     | KPIs, trends, churn, forecasts                               |
+| Manufacturing | CAD drafting, maintenance, quality defects, 4M changes       |
+
+An entry is either **live**, with a demo you can run, or **coming soon**, with a description and a
+form to hear when it goes live. Every entry shows what it connects to, what data its demo uses,
+and the moment it is built for, such as "every answer names the manual and page".
+
+## Try
+
+A live entry's **Try it** section runs the real agent, not a recording, on fictional sample data in
+a demo workspace of your own. You sign in with your email, and the demo then behaves as the
+installed agent would:
+
+- It acts only within the access of the person who asked.
+- A write, such as sending a mail or saving a record, stops for your approval first. In the demo,
+  the send and write tools are stand-ins: nothing is sent or written outside.
+- Each run starts in a sandbox whose network reaches only the model gateway.
+- Every run is recorded in the run history with who asked, the agent, the time and the outcome.
+
+## Customize
+
+The **Install & customize** tab shows the choices an entry offers and previews the result:
+
+- **Approval rule:** every write waits for approval, or only large amounts wait for a manager.
+- **Tone:** polite, friendly or brief.
+- **Language:** Japanese or English.
+- **Connection:** which of your systems the agent reads and writes.
+- **Company name:** used in what the agent writes.
+
+"Talk to us about this setup" sends those choices with an enquiry.
+
+## Install
+
+Every entry is a complete project in the
+[agent-workspace repository](https://github.com/indxjp/agent-workspace), so what you try is what
+you install:
+
+| Entries                                       | Source                                                                                                    |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Most agent entries                            | [`use-cases/<slug>/`](https://github.com/indxjp/agent-workspace/tree/main/use-cases)                     |
+| The ten agents of the use-case gallery        | [`tests/gallery/<slug>/`](https://github.com/indxjp/agent-workspace/tree/main/tests/gallery), each with a [tutorial](/tutorials) |
+| The apps (CRM, service desk, wiki, team chat) | [`examples/<id>/`](https://github.com/indxjp/agent-workspace/tree/main/examples)                         |
+
+A project holds what [Chapter 2](/path/build) describes: `agent-workspace.yaml`, the agent in
+`agents/`, its skills in `skills/`, the chat page in `surfaces/`, the evaluation cases in `evals/`,
+and fictional sample data in `data/`. To make one yours, start from a project of your own and copy
+the entry in:
+
+```sh title="illustrative" claim="illustrative"
+npm create @indx-workspace@latest my-agent -- --yes
+# copy agents/, skills/, surfaces/, evals/ and data/ from use-cases/<slug>/ into my-agent/,
+# and the entry's policy: block into my-agent/agent-workspace.yaml
+cd my-agent
+npm run dev
+```
+
+The comment at the top of the entry's `agent-workspace.yaml` says what else it needs before its
+first run, such as the sample data to upload with `aw files upload`, or an MCP server or stand-in
+API to start. A gallery entry's [tutorial](/tutorials) goes through every step.
+
+From there it is your agent: change its instructions and skills, point its connectors at your own
+systems, score it with [`aw eval`](/guides/evaluations), and [deploy it](/path/ship) to a VM,
+Kubernetes, Google Cloud Run or Azure. On Google Cloud you can choose Claude on Vertex AI, so the
+prompts stay inside your own project ([Claude on Google Cloud](/building/models-and-runtimes#claude-on-google-cloud-vertex-ai)).
+
+## How the entries are built
+
+Every agent entry is one of seven shapes, and starts as a copy of its shape's template:
+
+| Shape                | What it does                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| Grounded answers     | Searches the granted folders and answers with citations                                      |
+| Review to a standard | Checks a document item by item, with a fix for each, and writes the report after approval   |
+| Intake and triage    | Classifies what arrives by webhook and routes it; the routing write waits for approval      |
+| Scheduled report     | Collects on a schedule, writes a typed report to a folder and notifies the owner            |
+| Analysis             | Computes over a spreadsheet or CSV with a deterministic script, then explains the table     |
+| Drafting             | Writes a Markdown, Word, PowerPoint or Excel document from notes and sources, after approval |
+| Action               | Changes a record in a system through a connector, after approval                             |
+
+The platform does the rest, so an entry is mostly instructions, skills and evaluation cases: a
+grounded-answers entry has about 40 lines of code of its own. Each entry carries at least four
+evaluation cases, and its tests run in the repository's CI.
+
+## Next
+
+- Build one of the ten gallery agents step by step: [Enterprise use-case gallery](/tutorials).
+- Write your own from a blank project: [Chapter 1: Run your first agent](/path/first-agent).

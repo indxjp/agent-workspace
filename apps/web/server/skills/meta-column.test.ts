@@ -1,6 +1,6 @@
 /**
- * The meta-column view pages the skill records of the catalog and the legacy `skill-meta/` objects
- * as one listing. A walk over that listing reads the catalog once, not once per page.
+ * The meta-column view pages the skill records of the catalog as one listing, and never reads an
+ * object under `skill-meta/`. A walk over that listing reads the catalog once, not once per page.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -24,15 +24,13 @@ async function seeded() {
       enabled: true,
       ownerPrincipalId: crypto.randomUUID(),
     });
-    // Odd skills keep their record in the column, even ones only as a legacy object.
-    if (index % 2 === 1) await catalog.setSkillMeta(name, { name, enabled: true });
-    else {
-      const bytes = new TextEncoder().encode(JSON.stringify({ name, enabled: true }));
-      await store.write(skillMetaKey(name), bytesToStream(bytes), {
-        contentType: 'application/json',
-      });
-    }
+    await catalog.setSkillMeta(name, { name, enabled: true });
   }
+  // An object an earlier release wrote under the prefix is neither listed nor read.
+  const bytes = new TextEncoder().encode(JSON.stringify({ name: 'stray', enabled: true }));
+  await store.write(skillMetaKey('stray'), bytesToStream(bytes), {
+    contentType: 'application/json',
+  });
   return { catalog, store };
 }
 
@@ -40,7 +38,7 @@ describe('withSkillMetaColumn listPage', () => {
   it('[US-STO-08][unit][sdk] a paged walk lists every record and reads the skills once', async () => {
     const { catalog, store } = await seeded();
     const listSkills = vi.spyOn(catalog, 'listSkills');
-    const legacyPages = vi.spyOn(store, 'listPage');
+    const storePages = vi.spyOn(store, 'listPage');
     const view = withSkillMetaColumn(store, catalog);
 
     const keys: string[] = [];
@@ -61,7 +59,8 @@ describe('withSkillMetaColumn listPage', () => {
       Array.from({ length: SKILLS }, (_, index) => skillMetaKey(`skill-${String(index)}`)),
     );
     expect(listSkills).toHaveBeenCalledTimes(1);
-    expect(legacyPages).toHaveBeenCalledTimes(1);
+    expect(storePages).not.toHaveBeenCalled();
+    expect(await view.read(skillMetaKey('stray'))).toBeNull();
   });
 
   it('[US-STO-08][unit][sdk] a new walk sees a record written after the previous walk', async () => {

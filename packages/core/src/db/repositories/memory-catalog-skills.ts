@@ -27,7 +27,6 @@ export function createMemorySkillCatalog(
   | 'createSkill'
   | 'deleteSkill'
   | 'markSkillDeleting'
-  | 'backfillSkillPendingDelete'
   | 'setSkillMeta'
   | 'setSkillBuiltinDigest'
   | 'publishSkillRevision'
@@ -111,21 +110,11 @@ export function createMemorySkillCatalog(
         return { kind: 'marked', pending };
       }),
 
-    backfillSkillPendingDelete: (name, pending) =>
+    setSkillMeta: (name, meta) =>
       later(() => {
         const skill = state.skills.get(name);
         if (skill === undefined) return false;
-        if (skill.pendingDelete !== null) return true;
-        if ((state.assignments.get(skill.id)?.size ?? 0) > 0) return false;
-        state.skills.set(name, { ...skill, pendingDelete: pending });
-        return true;
-      }),
-
-    setSkillMeta: (name, meta, onlyIfEmpty = false) =>
-      later(() => {
-        const skill = state.skills.get(name);
-        if (skill === undefined) return false;
-        if (!onlyIfEmpty || skill.meta === null) state.skills.set(name, { ...skill, meta });
+        state.skills.set(name, { ...skill, meta });
         return true;
       }),
 

@@ -1,0 +1,17 @@
+{
+  "form": "Legal request form",
+  "id": "LGL-0101",
+  "submitted_at": "2026-11-19T15:20:00+09:00",
+  "requester": {
+    "name": "Haruto Usami",
+    "department": "Sales",
+    "email": "usami@yukimi-seiko.example"
+  },
+  "type": "Contract review",
+  "title": "Review of the services agreement from Mizukane Trading (their template)",
+  "counterparty": "Mizukane Trading",
+  "details": "Mizukane Trading wants us to maintain the inspection machines we sold them, and sent a services agreement on their own template. The work is one scheduled inspection a year and on-site repair when a machine breaks down. Please check whether the clause capping damages is unfavourable to us.",
+  "urgent": false,
+  "urgent_reason": "",
+  "attachments": ["Mizukane_services_agreement_their_draft.docx"]
+}

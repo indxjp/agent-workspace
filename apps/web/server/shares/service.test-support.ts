@@ -68,6 +68,6 @@ export const ownerActor = {
   principalId: '00000000-0000-4000-8000-000000000004',
   ownerPrincipalId: '00000000-0000-4000-8000-000000000004',
   userId: 'user-1',
-  userLabel: 'user@example.test',
+  label: 'user@example.test',
   role: 'owner',
 } as const;

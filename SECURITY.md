@@ -31,4 +31,8 @@ registries). Report those to the provider concerned.
 ## Hardening guidance
 
 For the threat model and the controls a deployment should apply, read
-[`docs/spec.md`](docs/spec.md) and [`docs/40-operate/deploy/single-vm.md`](docs/40-operate/deploy/single-vm.md).
+[Self-host securely](https://docs.agentworkspace.indx.jp/features/self-host-securely), the
+specification in [`docs/spec.md`](docs/spec.md), and the deploy guide for your target:
+[single VM](docs/40-operate/deploy/single-vm.md), [Kubernetes](docs/40-operate/deploy/kubernetes.md),
+[Google Cloud Run](docs/40-operate/deploy/gcp-cloudrun.md) or
+[Azure Container Apps](docs/40-operate/deploy/azure-container-apps.md).

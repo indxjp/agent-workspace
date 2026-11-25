@@ -29,9 +29,21 @@ import {
 export function describeExcelConversion(): void {
   it("the skill's copy of the reader gives the built-in office-reader's results on every shipped workbook", () => {
     expect(COPIED_LIMITS).toStrictEqual(OOXML_LIMITS);
+    // The copy promises the reading half that consolidate.mjs uses: each sheet's name, rows, merges
+    // and cells. The built-in also lists date cells, error cells and the date system (ADR-0173),
+    // which the copy does not carry. Those four fields must be equal, and the copy must return
+    // nothing else, so a change to how the built-in reads a value still shows up here.
+    const promised = (workbook: ReturnType<typeof readXlsx>) => ({
+      sheets: workbook.sheets.map(({ name, rows, merges, cells }) => ({
+        name,
+        rows,
+        merges,
+        cells,
+      })),
+    });
     for (const file of BRANCH_FILES) {
       const bytes = readFileSync(path.join(DATA, file.path));
-      expect(readXlsxCopy(bytes), file.path).toStrictEqual(readXlsx(bytes));
+      expect(readXlsxCopy(bytes), file.path).toStrictEqual(promised(readXlsx(bytes)));
     }
     const refusal = (read: (bytes: Buffer) => unknown): string => {
       try {

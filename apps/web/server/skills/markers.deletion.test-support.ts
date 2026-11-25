@@ -1,8 +1,6 @@
 import { expect, it } from 'vitest';
-import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
+import { listAll } from '@agent-workspace/core/storage/streams';
 import { deleteSkill } from './delete';
-import { skillDeleteMarkerKey } from './keys';
-import { pendingSkillDelete } from './pending-delete';
 import {
   getSkillWithId,
   importSkillWithId,
@@ -11,7 +9,7 @@ import {
 } from './service';
 import type { SkillRowsAccess } from './tree';
 import type { SkillMarkerFixture } from './markers.harness.test-support';
-import { skillMd, importBody } from './markers.fixture.test-support';
+import { importBody } from './markers.fixture.test-support';
 export function registerSkillMarkerDeletionTests(
   getFixture: () => Pick<SkillMarkerFixture, 'world'>,
 ) {
@@ -95,44 +93,6 @@ export function registerSkillMarkerDeletionTests(
 
     expect((await catalog.listSkills())[0]).toMatchObject({ name: 'dup', pendingDelete: null });
     expect(legacyPuts(puts)).toEqual([]);
-  });
-
-  // @story US-STO-08
-  it('[US-STO-08][unit][sdk] a delete recorded only by a legacy marker object is finished by its owner', async () => {
-    const testContext3 = getFixture();
-
-    const { principal, catalog, shared, rows, saveRow, skillRowPaths, putLegacy } =
-      await testContext3.world();
-    await saveRow('.skills/dup/SKILL.md', skillMd('A'));
-    await saveRow('.skills/dup@1/SKILL.md', skillMd('A'));
-    await putLegacy(skillDeleteMarkerKey('dup'), {
-      ownerPrincipalId: principal.ownerPrincipalId,
-      revisions: [1],
-    });
-
-    expect(await pendingSkillDelete(shared, catalog, 'dup')).toEqual({
-      ownerPrincipalId: principal.ownerPrincipalId,
-      revisions: [1],
-    });
-    expect(await deleteSkill(shared, catalog, 'dup', rows)).toEqual({ status: 204, body: null });
-
-    expect(await skillRowPaths()).toEqual([]);
-    expect(await readWhole(shared, skillDeleteMarkerKey('dup'))).toBeNull();
-  });
-
-  // @story US-STO-08
-  it('[US-STO-08][unit][sdk] a legacy delete marker on a live row is read and its column backfilled', async () => {
-    const testContext4 = getFixture();
-
-    const { principal, catalog, shared, rows, putLegacy } = await testContext4.world();
-    await importSkillWithId(shared, catalog, principal, importBody('A'), rows);
-    const pending = { ownerPrincipalId: principal.ownerPrincipalId, revisions: [2, 5] };
-    await putLegacy(skillDeleteMarkerKey('dup'), pending);
-
-    expect(await pendingSkillDelete(shared, catalog, 'dup')).toEqual(pending);
-
-    expect((await catalog.listSkills())[0]?.pendingDelete).toEqual(pending);
-    expect(await readWhole(shared, skillDeleteMarkerKey('dup'))).not.toBeNull();
   });
 }
 

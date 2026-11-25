@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "62afc72caea380930e9db55e2e008ac01ba8134df951f21adf02d12c13818390",
+        "agents/renewal.md": "6866adef6142b10e1a2e48b71aeea00342685fe6bf6e926ecc3fcf9b2f6ed4c4",
+        "agents/renewal.ts": "6921c8bf5f0f57bf979684d50a419c5de61e2f98872f31e89e4eb0b27cf9c562",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/renewal.yaml": "31b26b97aa6c2f81a05da6f852d836888846d0a30816d3da82ddbd2811e76bac",
+        "skills/renewal/SKILL.md": "14d2960821d01a31a72a21a3922fb84d3a39444a88e3306d2e8694e400004b52",
+        "surfaces/main.ts": "60eccf01f82b59afb0b631c45c446adf90a2aae45df7fd7c28d320403ace3b6c",
+        "triggers/renewal.json": "fa83048253410023d6e92113b460ac3125ef479180e0b1798de6fe0496db6b9c"
+      },
+      "edits": []
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "3035a58e0e579498036ed8a5055c2c8fe4f0350363ced618f980c8c0f386c95d",
+        "agents/faq-bot.md": "39c9c352afc6afd6b3a80f25cd26e5a2d1264e6ef5582b0f60e0f1ee5202ef69",
+        "agents/faq-bot.ts": "5563b5663f8c6f45b44a723537d2ca2979d2e03821cdf727a674835e5be53406",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/faq-bot.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/faq-bot/SKILL.md": "f0cc65e9edcef64714234726497cc65ac8c785f65a8510a5f3259e09b8d7d7e3",
+        "surfaces/main.ts": "72241b020db3e9a3eea20fa9396cd53c97923bd08eca27b756c18e2d5111ddde"
+      },
+      "edits": []
+    }
+  }
+}

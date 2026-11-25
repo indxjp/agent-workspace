@@ -1,6 +1,6 @@
 'use client';
 /**
- * The Try tab of a live entry (spec "How Try it works"): the sign-up gate for a visitor with no
+ * The Try it section of a live entry (spec "How Try it works"): the sign-up gate for a visitor with no
  * session, a real chat in their demo workspace for one with a session. A guest of a demo workspace
  * counts as signed in. The visitor's session is the platform's cookie, so the probe is `GET
  * /api/me` and a `401` (or no answer) means the gate.

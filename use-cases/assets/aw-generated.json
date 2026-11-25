@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:an": {
+      "files": {
+        "agent-workspace.yaml": "1092765546df06119ee689deffd11df57afa55461ec4648b438448debf835495",
+        "agents/assets.md": "57434cff32c0052820145b8b8f57781e26b715b8209ad5717811b1be8c29e490",
+        "agents/assets.ts": "ce2d23cd55f87d5e539668c8c64280b6251ba733d0f13c52e0f05a0502665e6d",
+        "data/en/records.csv": "49f11cfe079c9f95d082fd8666b46ff935987716c0345313ffe300cb079bb52c",
+        "data/ja/records.csv": "8b73a591f399f59cb675be4d44da2bb0a5848ace5ae61bb11e0a478858e64622",
+        "evals/assets.yaml": "d5f954838abeea967df97d416b445558cd3d14a81ca3c129b15a3f9e61e5aff9",
+        "skills/assets/SKILL.md": "f48fc724c4018caa9b64006d662e6e1a1fe1a23c056372e9031631b806c394f7",
+        "surfaces/main.ts": "a75eddf57a623a3702d4c4be6b460ca4f7f1fff04acabde6e40a81cc33d4f52e"
+      },
+      "edits": []
+    }
+  }
+}

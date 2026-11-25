@@ -1,0 +1,32 @@
+{
+  "kind": "schedule",
+  "name": "trend",
+  "prompt": "今朝のトレンドダイジェストを作成して、trend-reports フォルダに保存してください。 / Write this morning's trend digest and save it to the trend-reports folder.",
+  "cron": "0 9 * * *",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "asOf", "items", "savedTo"],
+    "properties": {
+      "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "asOf": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["item", "topic", "headline", "publishedAt", "says"],
+          "properties": {
+            "item": { "type": "string", "pattern": "^[A-Z]{3}-\\d{4}-\\d{2}$" },
+            "topic": { "type": "string", "pattern": "^T-\\d{2}$" },
+            "headline": { "type": "string" },
+            "publishedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+            "says": { "type": "string" }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

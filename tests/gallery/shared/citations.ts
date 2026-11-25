@@ -2,9 +2,11 @@
  * Citations written as 〔source p.page §section〕, the convention the gallery's grounded agents are
  * taught in their skills.
  *
- * A run cannot return typed data today (no output schema; see `../harness/probes.ts`), so the
- * citations an answer makes are recovered from its text. The bracket pair 〔〕 is chosen because it
- * almost never appears in Japanese business prose, so a match is a citation and not a quotation.
+ * The answers themselves are typed (`outputSchema`, ADR-0143), but what the agent's tools return
+ * is text: the 〔…〕 in a tool's result is how the backend learns which sources a run actually saw,
+ * and a reply's own text is read too so the schema is no way around the check. The bracket pair
+ * 〔〕 is chosen because it almost never appears in Japanese business prose, so a match is a
+ * citation and not a quotation.
  */
 export interface Citation {
   readonly source: string;

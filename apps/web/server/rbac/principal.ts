@@ -19,9 +19,9 @@
  *
  * ## The role does NOT come from the session token
  *
- * `apps/web/server/auth/session.ts` mints and verifies `role: 'owner'` and rejects any other
- * value, and that file is W1-CP-06's, not this task's. That constraint turns out to be the right
- * shape anyway and this module keeps it deliberately: the role is read from the directory at
+ * A session carries no role: `apps/web/server/auth/session.ts` no longer writes one (refactoring
+ * part 06 step 9) and accepts only `'owner'` from an older cookie, which nothing reads. This module
+ * keeps that shape deliberately: the role is read from the directory at
  * request time, not carried in the cookie. A role in a bearer token is a role that keeps working
  * for the rest of the token's life after an administrator takes it away; a role read per request
  * takes effect on the next request. That is the same property R-12 §1.5 gives as the reason to
@@ -119,21 +119,45 @@ function isIncompleteIdentity(identity: SessionPrincipalIdentity): boolean {
   return [identity.principalId, identity.userId, identity.label].some((v) => v.trim() === '');
 }
 
-/** Everything a `Principal` is built from; `oauth` is absent except for an OAuth token. */
-interface PrincipalFields {
+/**
+ * The one caller type a domain receives (refactoring part 06, step 9): the facts of an
+ * authenticated caller, as {@link Principal} carries them. A domain takes `Caller`, or a
+ * `Pick<Caller, …>` of the fields it reads, never an actor type of its own, so a caller is
+ * described once and every domain names a field the same way (`label`, not `userLabel`).
+ *
+ * `Principal` implements it, so the two cannot drift: a field added to one and not the other fails
+ * to compile. A plain object of this shape is a description of a caller, not proof of one; only a
+ * `Principal` is (its constructor is private and its provenance is nominal).
+ */
+export interface Caller {
+  /** `workspace_principals.id` of the principal that acted. Actor attribution records it. */
   readonly principalId: string;
+  /** The principal that owns what this caller writes (issue #509). See {@link Principal.ownerPrincipalId}. */
   readonly ownerPrincipalId: string;
+  /** Which durable source this principal represents. */
   readonly kind: PrincipalKind;
+  /** The tenant, as `workspaces.id`. Spec §25. */
   readonly workspaceId: string;
+  /** Stable display attribution. Never used for authorization. */
   readonly label: string;
-  readonly actor: string;
-  readonly role: Role;
-  readonly via: Via;
+  /** `users.id`, present exactly for a Membership principal. */
   readonly userId: string | null;
+  /** Compatibility identity: session email or machine label. Never use it for own/other checks. */
+  readonly actor: string;
+  /** One of spec §21's four roles, read from a membership row or from an `api_keys` row. */
+  readonly role: Role;
+  /** Which verifier produced this caller. */
+  readonly via: Via;
+  /** `api_keys.id`, present exactly when `via === 'api-key'`. */
   readonly apiKeyId: string | null;
+  /** The attenuation a scoped credential carries, or `null`. See {@link Principal.scope}. */
   readonly scope: TokenScope | null;
-  readonly oauth?: OAuthGrant | null;
+  /** The client and audience of an OAuth access token; `null` for every other credential. */
+  readonly oauth: OAuthGrant | null;
 }
+
+/** Everything a `Principal` is built from; `oauth` is absent except for an OAuth token. */
+type PrincipalFields = Omit<Caller, 'oauth'> & { readonly oauth?: OAuthGrant | null };
 
 /**
  * An authenticated caller.
@@ -141,7 +165,7 @@ interface PrincipalFields {
  * The public fields are plain, enumerable and frozen, so a handler reads them as it would from any
  * object and `JSON.stringify` produces exactly them, while nothing can write them.
  */
-export class Principal {
+export class Principal implements Caller {
   /** `workspace_principals.id` of the principal that acted. Actor attribution records it. */
   public readonly principalId: string;
 

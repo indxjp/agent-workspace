@@ -15,6 +15,10 @@ const scanFiles = (files: Record<string, string>): Report => scan(new Map(Object
 const lost = (base: Record<string, string>, head: Record<string, string>) =>
   lostCells(scanFiles(base), scanFiles(head)).map((c) => `${c.story} ${c.entry}`);
 
+// The tests that start the checker (and `git`, for a scratch repository) as child processes take
+// 30 s instead of the default 5: a few hundred milliseconds idle, but process start-up is what a
+// loaded CI host slows most. The bound sits above the speed budgets two of them assert, so a slow
+// scan fails on that assertion rather than on the timeout.
 const temps: string[] = [];
 afterEach(() => {
   for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -210,7 +214,7 @@ describe('stories:check', () => {
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout)).toMatchObject({ errors: [] });
     expect(Date.now() - started).toBeLessThan(5000);
-  });
+  }, 30_000);
 
   it('base comparison fails on an uncovered cell', () => {
     const dir = repoWith({ 'tests/a.test.ts': tagged(TAG) }, { 'tests/a.test.ts': null });
@@ -218,12 +222,12 @@ describe('stories:check', () => {
     expect(run.status).toBe(1);
     expect(run.stdout).toContain('US-STO-03 sdk:api');
     expect(run.stdout).toContain('tests/a.test.ts');
-  });
+  }, 30_000);
 
   it('base comparison passes on new coverage', () => {
     const dir = repoWith({ 'tests/x.test.ts': '' }, { 'tests/a.test.ts': tagged(TAG) });
     expect(check(dir, '--base', 'HEAD~1').status).toBe(0);
-  });
+  }, 30_000);
 
   it('base comparison passes on a renamed tagged test', () => {
     const dir = repoWith(
@@ -231,13 +235,34 @@ describe('stories:check', () => {
       { 'tests/a.test.ts': null, 'tests/b.test.ts': tagged(TAG) },
     );
     expect(check(dir, '--base', 'HEAD~1').status).toBe(0);
-  });
+  }, 30_000);
+
+  it('base comparison reads the files on disk: an uncommitted deletion or comment-out fails', () => {
+    const dir = repoWith({
+      'tests/a.test.ts': tagged(TAG),
+      'tests/b.test.ts': tagged('[US-STO-03][api][cli]'),
+      'tests/c.test.ts': '',
+    });
+    rmSync(path.join(dir, 'tests/a.test.ts'));
+    writeFileSync(path.join(dir, 'tests/b.test.ts'), `// ${tagged('[US-STO-03][api][cli]')}`);
+    const run = check(dir, '--base', 'HEAD');
+    expect(run.status).toBe(1);
+    expect(run.stdout).toContain('lost: US-STO-03 sdk:api');
+    expect(run.stdout).toContain('lost: US-STO-03 cli:api');
+  }, 30_000);
+
+  it('a repository without any tag reports every gap and passes', () => {
+    const dir = repoWith({ 'tests/a.test.ts': "it('x')", 'packages/x/a.ts': 'export {};' });
+    const run = check(dir, '--base', 'HEAD');
+    expect(run.status).toBe(0);
+    expect(run.stdout).toMatch(/22 stories with gaps · 59 missing tests$/m);
+  }, 30_000);
 
   it('--report never fails on a lost cell, and an unknown flag exits 2', () => {
     const dir = repoWith({ 'tests/a.test.ts': tagged(TAG) }, { 'tests/a.test.ts': null });
     expect(check(dir, '--report').status).toBe(0);
     expect(check(dir, '--bogus').status).toBe(2);
-  });
+  }, 30_000);
 
   it('--require-complete fails on one gap', () => {
     // Every storage cell but one: US-STO-13 cli has no test.
@@ -259,17 +284,17 @@ describe('stories:check', () => {
       'tests/a.test.ts': [...covering, tagged('[US-STO-13][api][cli]')].join('\n'),
     });
     expect(check(whole, '--report', '--require-complete').status).toBe(0);
-  });
+  }, 30_000);
 
   it('the repository has no storage gap', () => {
     expect(check(process.cwd(), '--report', '--require-complete').status).toBe(0);
-  });
+  }, 30_000);
 
   it('comparing the repository with itself passes in under 10 s', () => {
     const started = Date.now();
     expect(check(process.cwd(), '--base', 'HEAD').status).toBe(0);
     expect(Date.now() - started).toBeLessThan(10_000);
-  });
+  }, 30_000);
 
   it('lostCells: a removed test fails', () => {
     expect(lost({ 'tests/a.test.ts': tagged(TAG) }, {})).toEqual(['US-STO-03 sdk']);

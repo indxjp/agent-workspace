@@ -173,6 +173,12 @@ it("clamps the steps a delegating model asks a subagent for to the run's maxTurn
   // The subagent stopped after three steps, so the parent's second step got `Done.`.
   expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'end_turn' });
   expect(scriptedGateway.seen).toHaveLength(5);
+  // The subagent's own reads never surface as the run's tool answers, so the kit cannot record
+  // one for run_skill_script (ADR-0176).
+  const answered = frames.flatMap((frame) =>
+    frame.frame === 'agent.tool.result' ? [frame.toolCallId] : [],
+  );
+  expect(answered).toEqual(['t1']);
 });
 
 it("releases a subagent's workspace, killing its background process, when the run fails", async () => {

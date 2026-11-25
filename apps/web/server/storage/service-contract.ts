@@ -1,4 +1,5 @@
 import type { Clock } from '../clock';
+import type { Caller } from '../identity';
 import type { IdGenerator } from '../ids';
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import type { AuditAction } from '@indx-workspace/contracts/observability';
@@ -18,12 +19,11 @@ import {
 } from './store';
 export type { SessionStateBlobCatalog } from './store';
 
-/** Who acted, for the audit row: the signed-in principal, never a request field. */
-interface StorageActor {
-  readonly principalId: string;
-  readonly userId: string | null;
-  readonly label: string;
-}
+/**
+ * Who acted, for the audit row: the signed-in principal, never a request field. The fields of the
+ * one {@link Caller} type the audit row reads (part 06 step 9).
+ */
+type StorageActor = Pick<Caller, 'principalId' | 'userId' | 'label'>;
 
 /**
  * One row of the audit trail for a file action (the storage design, §05). No URL, ever.

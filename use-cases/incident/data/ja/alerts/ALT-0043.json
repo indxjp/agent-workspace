@@ -1,0 +1,27 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"JobDelayed\"}",
+  "status": "firing",
+  "receiver": "agent-workspace-incident",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alert_id": "ALT-0043",
+        "alertname": "JobDelayed",
+        "service": "nightly-report",
+        "env": "production",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "nightly-report のジョブが予定より 90 分遅れています",
+        "description": "店舗向け売上帳票の作成が集計の工程で止まっています。"
+      },
+      "startsAt": "2026-11-21T04:30:00+09:00",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://monitoring.example.invalid/alerts/ALT-0043",
+      "fingerprint": "00000000005a17c1"
+    }
+  ],
+  "externalURL": "https://alertmanager.example.invalid"
+}

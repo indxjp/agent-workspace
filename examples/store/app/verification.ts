@@ -45,7 +45,7 @@ export function verificationLabel(
     : t('台本どおりのモデルで検証済み', 'Verified with the scripted model');
 }
 
-/** The Try tab: the live demo, or, under maintenance, the "unavailable" fallback with its recording. */
+/** The Try it section: the live demo, or, under maintenance, the "unavailable" fallback with its recording. */
 export type TryChoice =
   | { readonly kind: 'live' }
   | { readonly kind: 'unavailable'; readonly recording: Recording | null };

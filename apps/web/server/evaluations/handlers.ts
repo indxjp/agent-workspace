@@ -62,7 +62,7 @@ import {
 } from '../execution';
 import { startRunOnSession } from '../runs/service';
 import { JUDGE_SYSTEM, judgePrompt, parseJudgeVerdict } from './judge';
-import { checkCase, pausedCall, score, toolCalls, turnAnswer } from './score';
+import { checkCase, pausedCall, score, toolCallLog, toolCalls, turnAnswer } from './score';
 
 /**
  * The server's budget for one evaluation request: the ACA session-run cap, under ACA's 240 s
@@ -313,12 +313,17 @@ async function settleCase(
   }
 
   const answer = turnAnswer(frames);
-  const calls = paused
-    ? [...toolCalls(frames), ...pausedCall(run?.pendingApproval)]
-    : toolCalls(frames);
-  const failures = [...checkCase(evalCase.expect, answer, calls, run?.output?.structured ?? null)];
+  const stoppedOn = paused ? pausedCall(run?.pendingApproval) : [];
+  const structured = run?.output?.structured ?? null;
+  const calls = [...toolCalls(frames), ...stoppedOn];
+  const failures = [...checkCase(evalCase.expect, answer, calls, structured)];
   if (evalCase.expect.judge !== undefined) {
-    const prompt = judgePrompt(evalCase.expect.judge, evalCase.input, answer);
+    // ADR-0175: the judge also reads what the run did, so a rubric can speak of the paused call.
+    const prompt = judgePrompt(evalCase.expect.judge, evalCase.input, answer, {
+      calls: toolCallLog(frames),
+      paused: stoppedOn[0] ?? null,
+      structured,
+    });
     failures.push(
       ...(await judgeFailures(runs, principal, agent, versionId, runId, prompt, deadline)),
     );

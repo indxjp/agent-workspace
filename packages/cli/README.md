@@ -1,7 +1,7 @@
 # Agent Workspace CLI
 
-`@indx-workspace/cli` on npm, released in lock-step with `@indx-workspace/contracts`, `sdk`, `aw`
-and `create` (ADR-0082). `npm create @indx-workspace@latest <directory>` runs its generator through
+`@indx-workspace/cli` on npm, released in lock-step with the other published `@indx-workspace` packages
+(ADR-0082). `npm create @indx-workspace@latest <directory>` runs its generator through
 `@indx-workspace/create`; `npx -p @indx-workspace/cli agent-workspace --help` prints the operator
 usage. The package exposes two commands:
 
@@ -478,6 +478,10 @@ redirect users to the unscoped `create-agent-workspace` package name, which is n
 Release engineering can override source tags with `AW_WEB_IMAGE`, `AW_GATEWAY_IMAGE`,
 `AW_RUNNER_IMAGE`, `AW_RUNTIME_IMAGE`, `AW_POSTGRES_IMAGE`, and `AW_SEAWEEDFS_IMAGE`. Overrides must
 already be digest references. Mutable tags never reach the generated `.env` file.
+`AW_DOCKER_HUB_MIRROR` names a pull-through mirror of Docker Hub (a registry host such as
+`mirror.gcr.io`): the digest of a Docker Hub image is then looked up there first, and Docker Hub
+itself only when the mirror cannot answer. The `.env` still pins the Docker Hub repository by
+that digest. CI sets it, because Docker Hub rate-limits anonymous lookups per address.
 `AW_RUNTIME_IMAGE` is the `claude-agent-sdk` engine's runtime image; the generated `.env` pins it
 as `AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK` (ADR-0073). The MinIO-era
 `AW_MINIO_IMAGE` is refused by name rather than ignored: the bundled object store is SeaweedFS

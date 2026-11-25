@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "de1dea3981782dac297a6cb21651ba3f2b4d026085dbd7054ec8c7d9d049dce6",
+        "agents/okr.md": "218a1efcf4dea4123d1b8a498c2a13b74e358c608a091e2c02fdb28801d377dd",
+        "agents/okr.ts": "8b4ceaddeac73226f14eb401d3532f7d448c0a09f466468602371dbfa83a77a0",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/okr.yaml": "e8a888ea86f7c3c076ef0902b9bc9471cd50c4b2465c976a0a609095938a3577",
+        "skills/okr/SKILL.md": "2fbba214756116eb0ae831d636271cb97d17afd2567001a00f79ffe889da14b2",
+        "surfaces/main.ts": "1963509c0bfa6435f72a1a5ae707b2a0d0b048ad3e6c0bb23cc22605fa2acdc9",
+        "triggers/okr.json": "e39836f35e624e694ba72b9b61fbff4d3b26f173fa694cf91efa315932423a9e"
+      },
+      "edits": []
+    }
+  }
+}

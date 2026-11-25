@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "c2895798f6e10ac92b0fcd2744aacf91034cea84f3f04028d9aea19c21ce657b",
+        "agents/hr-qa.md": "51521cabbd8013d9c21853df4e28d16106affb23bd5542eeb52988397aa143c2",
+        "agents/hr-qa.ts": "984d0f94cee7e41f3bfbc436acb9a9e50bf08014175a273028e1c9a0083a804c",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/hr-qa.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/hr-qa/SKILL.md": "3f62ff25809c63d351b931a7bb2d9b656bb8b425c0df4d25bd09c497265eab8f",
+        "surfaces/main.ts": "bf6e68b041a5c3d62fa54c39dd5f60914638833e30f337801015b61abafc791c"
+      },
+      "edits": []
+    }
+  }
+}

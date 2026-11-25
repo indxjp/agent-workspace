@@ -8,25 +8,44 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { LiveEntry } from '../../examples/store/catalog/define.ts';
+import {
+  hasSource,
+  type LiveEntry,
+  type SourcedEntry,
+} from '../../examples/store/catalog/define.ts';
 import { CATALOG } from '../../examples/store/catalog/index.ts';
 import { REPOSITORY_ROOT } from '../apps/registry.ts';
 import { demoAgentDefinition } from './demo-agents.test-support.ts';
+import { stagedView } from './live-verify/source-hash.ts';
+import { CONNECTOR_TOOLS } from './seed/build.ts';
 
 export const live = CATALOG.filter((entry): entry is LiveEntry => entry.status === 'live');
+/**
+ * The entries with a demo block: the live ones and the coming-soon ones seeded with their code, and
+ * a live entry's staged rebuild (`next`, ADR-0174) beside it. A demo rule that can be checked before
+ * the flip or the repoint is checked on all of them, because the demo block is part of the source
+ * hash an R1 record carries: a fix made at the flip or the repoint would make R1 stale.
+ */
+export const withDemo: readonly SourcedEntry[] = [
+  ...CATALOG.filter(hasSource),
+  ...CATALOG.filter(hasSource)
+    .map((entry) => stagedView(entry))
+    .filter((entry) => !CATALOG.includes(entry)),
+];
 export const LANGS = ['ja', 'en'] as const;
 export type Lang = (typeof LANGS)[number];
 
-export const sourceOf = (entry: LiveEntry): string => path.join(REPOSITORY_ROOT, entry.source);
+export const sourceOf = (entry: SourcedEntry): string => path.join(REPOSITORY_ROOT, entry.source);
 export const readJson = (file: string): unknown =>
   JSON.parse(readFileSync(file, 'utf8')) as unknown;
 
 /** The entries as `[slug, entry]` rows, the shape `it.each` takes. */
-export const bySlugRows = (entries: readonly LiveEntry[]): (readonly [string, LiveEntry])[] =>
-  entries.map((entry) => [entry.slug, entry] as const);
+export const bySlugRows = <E extends SourcedEntry>(
+  entries: readonly E[],
+): (readonly [string, E])[] => entries.map((entry) => [entry.slug, entry] as const);
 
 /** The entry of `entries` with this slug; a missing one is a broken test, not a result. */
-export function entryOf(entries: readonly LiveEntry[], slug: string): LiveEntry {
+export function entryOf<E extends SourcedEntry>(entries: readonly E[], slug: string): E {
   const entry = entries.find((candidate) => candidate.slug === slug);
   if (entry === undefined) throw new Error(`no entry ${slug}`);
   return entry;
@@ -55,6 +74,7 @@ interface DefinedAgent {
 
 type DefinedTool =
   | { readonly connector: string }
+  | { readonly name: string; readonly run: string }
   | { readonly name: string; readonly spec: string; readonly allow?: readonly string[] };
 
 /**
@@ -212,18 +232,28 @@ function builtInTools(defined: DefinedAgent): string[] {
   ];
 }
 
-/** The tool names one declared tool of the entry's agent brings. */
-function declaredToolNames(entry: LiveEntry, tool: DefinedTool): string[] {
+/**
+ * The tool names one declared tool of the entry's agent brings. A connector of an agent entry
+ * brings the tools its server code serves and the ones the seed's `CONNECTOR_TOOLS` table declares
+ * for it (a use case's connector has no server in its folder: the copy's stand-in serves the table).
+ * A code tool (`defineTool`, such as a public-source tool) brings its own name, served through the
+ * shared code-tool connector.
+ */
+function declaredToolNames(entry: SourcedEntry, tool: DefinedTool): string[] {
   if ('connector' in tool) {
-    return entry.kind === 'app'
-      ? readApp(sourceOf(entry)).flatMap(appToolNames)
-      : serverTools(sourceOf(entry), tool.connector);
+    if (entry.kind === 'app') return readApp(sourceOf(entry)).flatMap(appToolNames);
+    const declared = CONNECTOR_TOOLS[entry.slug]?.[tool.connector];
+    return [
+      ...serverTools(sourceOf(entry), tool.connector),
+      ...(declared === undefined ? [] : [...declared.reads, ...declared.writes]),
+    ];
   }
+  if ('run' in tool) return [tool.name];
   return admittedOperations(path.join(sourceOf(entry), tool.spec), tool.allow);
 }
 
 /** Every tool the demo agent of `entry` can call, by the plain name a run reports. */
-export function callableTools(entry: LiveEntry): Set<string> {
+export function callableTools(entry: SourcedEntry): Set<string> {
   const defined = demoAgentDefinition(entry) as DefinedAgent;
   return new Set([
     ...builtInTools(defined),

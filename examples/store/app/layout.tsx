@@ -5,6 +5,7 @@ import { AppTheme } from '@indx-workspace/app/react';
 import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 
+import { PUBLIC_REPOSITORY_URL } from '../catalog/index.ts';
 import { LangSwitch } from './lang-switch';
 import { LANG_COOKIE, langOf } from './lang';
 import { theme } from './theme';
@@ -22,6 +23,7 @@ export default async function RootLayout({ children }: { readonly children: Reac
         <AppTheme theme={theme} locale={lang}>
           <header className="store-header">
             <a href="/" className="store-logo">
+              <span className="store-logo-mark" aria-hidden="true" />
               {t('エージェントストア', 'Agent Store')}
             </a>
             <form
@@ -47,7 +49,18 @@ export default async function RootLayout({ children }: { readonly children: Reac
           </header>
           {children}
           <footer className="store-footer">
-            <a href="/privacy">{t('プライバシー通知', 'Privacy notice')}</a>
+            <p>
+              {t(
+                'このストアも、ここに並ぶエージェントと同じ Agent Workspace の SDK で作られています。',
+                'This store is built with the same Agent Workspace SDK as the agents on its shelves.',
+              )}
+            </p>
+            <nav aria-label={t('フッター', 'Footer')}>
+              <a href="/platform">{t('安全性と仕組み', 'Safety and platform')}</a>
+              <a href="/contact">{t('相談する', 'Talk to us')}</a>
+              <a href="/privacy">{t('プライバシー通知', 'Privacy notice')}</a>
+              <a href={PUBLIC_REPOSITORY_URL}>GitHub</a>
+            </nav>
           </footer>
         </AppTheme>
       </body>

@@ -19,7 +19,7 @@ import type { SkillObjects } from '../storage-and-sharing';
 import { withSkillMetaColumn } from './meta-column';
 import { skillSyncContext } from './pending-delete';
 import { applicationContext } from '../application-context';
-import { skillBuiltinMarkerKey, skillFilesPrefix, skillMetaKey, skillRowFolder } from './keys';
+import { skillMetaKey, skillRowFolder } from './keys';
 import {
   importReserved,
   importSkillWithId,
@@ -54,52 +54,17 @@ function shippedEntries(name: BuiltinSkillName): Entry[] {
   }));
 }
 
-function storedFiles(
-  store: SkillObjects,
-  rows: SkillRowsAccess | undefined,
-  name: string,
-): Promise<SkillFile[]> {
-  return skillFiles(store, rows, skillRowFolder(name), skillFilesPrefix(name));
+function storedFiles(rows: SkillRowsAccess, name: string): Promise<SkillFile[]> {
+  return skillFiles(rows, skillRowFolder(name));
 }
 
-async function storedEntries(
-  store: SkillObjects,
-  rows: SkillRowsAccess | undefined,
-  name: string,
-): Promise<Entry[]> {
+async function storedEntries(rows: SkillRowsAccess, name: string): Promise<Entry[]> {
   const entries: Entry[] = [];
-  for (const file of await storedFiles(store, rows, name)) {
+  for (const file of await storedFiles(rows, name)) {
     const bytes = await file.read();
     if (bytes !== null) entries.push({ path: file.relativePath, bytes });
   }
   return entries;
-}
-
-/**
- * The digest recorded for the installed built-in: the row's column, else the marker object an
- * earlier release wrote, which is copied to the column (the marker object stays).
- */
-async function installedDigest(
-  store: SkillObjects,
-  catalog: SkillCatalog,
-  name: string,
-): Promise<string | null> {
-  const row = (await catalog.listSkills()).find((skill) => skill.name === name);
-  const recorded = row?.builtinDigest ?? null;
-  if (recorded !== null) return recorded;
-  // storage-bridge(#1699): read `skill-builtin/<name>.json` until the marker objects are removed (#1676)
-  const marker = await readWhole(store, skillBuiltinMarkerKey(name));
-  if (marker === null) return null;
-  let digest: unknown;
-  try {
-    digest = (JSON.parse(new TextDecoder().decode(marker.body)) as { digest?: unknown } | null)
-      ?.digest;
-  } catch {
-    return null;
-  }
-  if (typeof digest !== 'string') return null;
-  if (row !== undefined) await catalog.setSkillBuiltinDigest(name, digest);
-  return digest;
 }
 
 async function ensureOne(
@@ -121,15 +86,13 @@ async function ensureOne(
   // An existence test that reads the record whole: `head` bypasses the meta-column view, so it
   // would miss a record held only in the column.
   if ((await readWhole(store, skillMetaKey(name))) === null) {
-    if ((await skillSyncContext(store, catalog)).pendingDeletes.has(name)) return;
+    if ((await skillSyncContext(catalog)).pendingDeletes.has(name)) return;
     let imported = await importSkillWithId(store, catalog, principal, { name, ...body }, rows);
     // 409 with no SKILL.md: a crashed import left its reserved row and no files. That row must not
     // hide the built-in, so the install completes into it.
     if (
       imported.status === 409 &&
-      !(await storedFiles(store, rows, name)).some(
-        (file) => file.relativePath === SKILL_MD_FILENAME,
-      )
+      !(await storedFiles(rows, name)).some((file) => file.relativePath === SKILL_MD_FILENAME)
     )
       imported = await importReserved(store, catalog, principal, { name, ...body }, rows);
     // 409: another request installed it between the check and the import.
@@ -140,10 +103,10 @@ async function ensureOne(
     return;
   }
 
-  const recorded = await installedDigest(store, catalog, name);
+  const recorded = (await catalog.getSkill(name))?.builtinDigest ?? null;
   if (recorded === null || recorded === shippedDigest) return;
 
-  const stored = await storedEntries(store, rows, name);
+  const stored = await storedEntries(rows, name);
   if (digestOf(stored) !== recorded) return;
   const shippedPaths = new Set(shipped.map((entry) => entry.path));
   const removeFiles = stored

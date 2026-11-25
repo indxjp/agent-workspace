@@ -1,8 +1,7 @@
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 import { expect, it } from 'vitest';
 import { ensureBuiltinSkills } from './builtin';
-import { skillFileKey, skillFilesPrefix, skillRowFolder } from './keys';
-import { seedBareSkill } from './rows-fixture';
+import { skillRowFolder } from './keys';
 import { importSkillWithId } from './service';
 import {
   b64,
@@ -10,7 +9,6 @@ import {
   importBody,
   runSh,
   skillMd,
-  textAt,
 } from './service-storage-fixture.test-support';
 import { skillFiles } from './tree';
 
@@ -143,7 +141,7 @@ export function registerImportsTests(rowsWorld: RowsWorldFactory): void {
 
     await ensureBuiltinSkills(shared, catalogs[1], principal, [name], rows);
 
-    const files = await skillFiles(shared, rows, skillRowFolder(name), skillFilesPrefix(name));
+    const files = await skillFiles(rows, skillRowFolder(name));
     for (const file of builtinSkillFiles(name)) {
       const bytes = await files.find((found) => found.relativePath === file.path)?.read();
       expect(
@@ -153,21 +151,5 @@ export function registerImportsTests(rowsWorld: RowsWorldFactory): void {
     const listed = await catalogs[0].listSkills();
     expect(listed.map((row) => row.id)).toEqual([orphan?.id]);
     expect(listed[0]?.skillMd).not.toBe('# crashed');
-  });
-
-  // @story US-STO-08
-  it('[US-STO-08][api][sdk] an import over a skill stored before the catalog had rows answers 409 and keeps its files', async () => {
-    const { principal, catalogs, shared, rows } = await rowsWorld();
-    await seedBareSkill(shared, importBody('old'));
-
-    const result = await importSkillWithId(shared, catalogs[0], principal, importBody('new'), rows);
-
-    expect(result).toMatchObject({
-      status: 409,
-      body: { error: { code: 'skill_already_exists' } },
-    });
-    await expect(catalogs[0].listSkills()).resolves.toEqual([]);
-    expect(await textAt(shared, skillFileKey('dup', 'SKILL.md'))).toBe(skillMd('old'));
-    expect(await textAt(shared, skillFileKey('dup', 'scripts/run.sh'))).toBe(runSh('old'));
   });
 }

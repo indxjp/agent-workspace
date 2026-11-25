@@ -1,8 +1,4 @@
-import {
-  createInMemoryStorageMigrationRuns,
-  type DatabaseRoot,
-  type StorageMigrationRunRepository,
-} from '@agent-workspace/core/db';
+import type { DatabaseRoot } from '@agent-workspace/core/db';
 import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
@@ -125,32 +121,4 @@ export function useStorageTestHooks(): {
   });
 
   return { info: () => logInfo, error: () => logError };
-}
-
-export type Lock = <T>(
-  name: string,
-  work: () => Promise<T>,
-) => Promise<{ readonly acquired: true; readonly value: T } | { readonly acquired: false }>;
-
-/** Install the skills API with the skills adopt wiring; `workspaceIds` runs only inside the pass. */
-export function installSkillsWithAdopt(
-  lock: Lock,
-  workspaceIds: () => Promise<readonly string[]> = () => Promise.resolve([]),
-  migrationRuns: StorageMigrationRunRepository = createInMemoryStorageMigrationRuns(),
-) {
-  return installSkillsApi(deps, createUnusedStorageService(), {
-    lock,
-    workspaceIds,
-    migrationRuns,
-    owners: { ownerPrincipalId: () => Promise.resolve(null) },
-  });
-}
-
-export function recordingLock() {
-  const locked: string[] = [];
-  const lock: Lock = async (name, work) => {
-    locked.push(name);
-    return { acquired: true, value: await work() };
-  };
-  return { lock, locked };
 }

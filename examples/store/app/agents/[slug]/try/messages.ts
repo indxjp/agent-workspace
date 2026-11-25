@@ -1,5 +1,5 @@
 /**
- * Every word of the Try tab and the sign-in page that depends on what the platform answered, and
+ * Every word of the Try it section and the sign-in page that depends on what the platform answered, and
  * the pure rules that choose them. It imports only `lang.ts` and the contracts, so
  * `tests/store/try-*.test.ts` runs it under `pnpm test`.
  */
@@ -167,6 +167,10 @@ const FALLBACK_REASONS: Readonly<
     ja: 'デモは現在ご利用いただけません。',
     en: 'The demo is not available right now.',
   },
+  format: {
+    ja: 'デモの回答が決まった形式で返りませんでした。',
+    en: 'The demo answer did not come back in the expected form.',
+  },
 };
 
 /** Where a cap came from: the platform refusing a start, or one run stopping at its own cap. */
@@ -206,21 +210,26 @@ export function fallbackReasonText(reason: DemoFallbackReason, lang: Lang): stri
   return pick(FALLBACK_REASONS[reason], lang);
 }
 
-const RUN_STOPS: Readonly<Record<'count' | 'cost', { readonly ja: string; readonly en: string }>> =
-  {
-    count: {
-      ja: 'この回答は、1回の実行で使える長さの上限に達したため途中で止まりました。',
-      en: 'This answer stopped because it reached the length limit of a single run.',
-    },
-    cost: {
-      ja: 'この回答は、1回の実行で使える費用の上限に達したため途中で止まりました。',
-      en: 'This answer stopped because it reached the cost limit of a single run.',
-    },
-  };
+const RUN_STOPS: Readonly<
+  Record<'count' | 'cost' | 'format', { readonly ja: string; readonly en: string }>
+> = {
+  count: {
+    ja: 'この回答は、1回の実行で使える長さの上限に達したため途中で止まりました。',
+    en: 'This answer stopped because it reached the length limit of a single run.',
+  },
+  cost: {
+    ja: 'この回答は、1回の実行で使える費用の上限に達したため途中で止まりました。',
+    en: 'This answer stopped because it reached the cost limit of a single run.',
+  },
+  format: {
+    ja: 'この回答は決まった形式で返らなかったため、表示できませんでした。もう一度お試しください。',
+    en: 'This answer could not be shown because it did not come back in the expected form. Please try again.',
+  },
+};
 
 /** The sentence for a run that stopped at its own cap; the visitor's other runs are unaffected. */
 export function runStopText(reason: DemoFallbackReason, lang: Lang): string {
-  return pick(reason === 'cost' ? RUN_STOPS.cost : RUN_STOPS.count, lang);
+  return pick(reason === 'cost' || reason === 'format' ? RUN_STOPS[reason] : RUN_STOPS.count, lang);
 }
 
 /**
@@ -271,7 +280,7 @@ const BACK_LABELS = {
 
 /**
  * The words of the sign-in page's way back, matching where it goes: the shelves (`/`), or an
- * entry's Try tab, where the visitor asks for a new link.
+ * entry's Try it section, where the visitor asks for a new link.
  */
 export function signInBackLabel(back: string, lang: Lang): string {
   return pick(back === '/' ? BACK_LABELS.shelves : BACK_LABELS.newLink, lang);

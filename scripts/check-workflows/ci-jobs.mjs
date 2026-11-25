@@ -1,6 +1,7 @@
 // The job-level policy of ci.yml, checked as text. Each function adds its failures to the shared
 // list in the order validateCiWorkflow calls it, so the gate's output order never changes.
 import { CI_WORKFLOW, WAVE_GATE_STEP, jobBlock, requireIncludes, withJob } from './ci-text.mjs';
+import { checkDockerHubJobs } from './docker-hub.mjs';
 import { validateScopedRequiredJobs } from './scoped-jobs.mjs';
 
 /** @param {string[]} failures @param {string} fastChecks */
@@ -185,9 +186,26 @@ function checkCancelOnFastFailure(failures, job) {
 // THE FAST PATH (ADR-0053, Amendment 2026-11-19b): the jobs `plan` may skip. Each runs exactly when
 // the plan's output of its own name is 'true' and needs the plan, and `CI success` accepts its skip
 // only where that output is "false" (scripts/ci/ci-success.test.mjs runs the gate script itself).
-const PLANNED_JOBS = ['build', 'build-embedded', 'typecheck-lint', 'heavy-checks'];
+// `coverage` joined them with the use cases' suite (the Agent Store 100-use-case plan, §7): the plan
+// runs every suite in the heavy tier and the use cases' alone where a diff reaches their tests.
+const PLANNED_JOBS = ['build', 'build-embedded', 'typecheck-lint', 'heavy-checks', 'coverage'];
 const PLANNED_SKIP_RULE =
-  'elif (.key | IN("build", "build-embedded", "typecheck-lint", "heavy-checks")) then (($edited or $plan[.key] == "false") | not)';
+  'elif (.key | IN("build", "build-embedded", "typecheck-lint", "heavy-checks", "coverage")) then (($edited or $plan[.key] == "false") | not)';
+
+/**
+ * The coverage suites come from the plan (scripts/ci/ci-plan.mjs COVERAGE_SUITES), and the use cases'
+ * scoreboard is checked against the summary its suite writes.
+ * @param {string[]} failures @param {string} job
+ */
+function checkCoverage(failures, job) {
+  requireIncludes(failures, job, 'coverage', [
+    '        suite: ${{ fromJSON(needs.plan.outputs.coverage-suites) }}\n',
+    '      - run: pnpm ${{ matrix.suite.script }}\n',
+    '        if: matrix.suite.scoreboard\n',
+    '          USE_CASES_COVERAGE_SUMMARY: ${{ matrix.suite.summary }}\n',
+    '        run: pnpm vitest run --project use-cases kit/scoreboard.test.ts\n',
+  ]);
+}
 
 /** @param {string[]} failures @param {string} ciSource */
 function checkPlan(failures, ciSource) {
@@ -204,7 +222,7 @@ function checkPlan(failures, ciSource) {
     "    if: >-\n      github.event.action != 'edited'\n",
     'id: plan',
     'run: node scripts/ci/ci-plan.mjs',
-    ...[...PLANNED_JOBS, 'test-shards'].map(
+    ...[...PLANNED_JOBS, 'test-shards', 'coverage-suites'].map(
       (key) => `      ${key}: \${{ steps.plan.outputs.${key} }}\n`,
     ),
   ]);
@@ -248,7 +266,7 @@ function checkCiSuccess(failures, ciSource) {
   }
   if (ciSuccess !== null && !ciSuccess.includes(PLANNED_SKIP_RULE)) {
     failures.push(
-      `${CI_WORKFLOW}: ci-success must accept a skipped build, build-embedded, typecheck-lint or heavy-checks only where the plan said "false" for it`,
+      `${CI_WORKFLOW}: ci-success must accept a skipped build, build-embedded, typecheck-lint, heavy-checks or coverage only where the plan said "false" for it`,
     );
   }
 }
@@ -298,6 +316,7 @@ export function validateCiWorkflow(failures, ciSource) {
     ]),
   );
   withJob(failures, ciSource, 'heavy-checks', (job) => checkHeavyChecks(failures, job));
+  withJob(failures, ciSource, 'coverage', (job) => checkCoverage(failures, job));
   const fullE2e = jobBlock(ciSource, 'full-e2e');
   if (fullE2e === null || !/^ {4}needs: \[fast-checks, heavy-checks\]$/mu.test(fullE2e)) {
     failures.push(`${CI_WORKFLOW}: full-e2e must depend on fast-checks and heavy-checks`);
@@ -316,4 +335,5 @@ export function validateCiWorkflow(failures, ciSource) {
     checkCancelOnFastFailure(failures, job),
   );
   checkCiSuccess(failures, ciSource);
+  checkDockerHubJobs(failures, ciSource);
 }

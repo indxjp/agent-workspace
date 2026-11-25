@@ -13,11 +13,17 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CATALOG, type LiveEntry, type SourceView } from '../../examples/store/catalog/index.ts';
+import { SOURCE_HASHES } from '../../examples/store/catalog/source-hashes.generated.ts';
 import { SOURCES } from '../../examples/store/catalog/sources.generated.ts';
 import { REPOSITORY_ROOT } from '../apps/registry.ts';
+import { entrySourceHash } from './live-verify/source-hash.ts';
 
 const WRITE = process.env['APPS_WRITE'] === '1';
 const GENERATED = path.join(REPOSITORY_ROOT, 'examples/store/catalog/sources.generated.ts');
+const HASHES_GENERATED = path.join(
+  REPOSITORY_ROOT,
+  'examples/store/catalog/source-hashes.generated.ts',
+);
 
 /** The most lines of a demo agent's file the tab shows. */
 export const EXCERPT_MAX_LINES = 40;
@@ -97,6 +103,32 @@ import type { SourceView } from './define.ts';
 export const SOURCES: Readonly<Record<string, SourceView>> = ${JSON.stringify(views, null, 2)};
 `;
 }
+
+function renderHashes(hashes: Readonly<Record<string, string>>): string {
+  return `// Generated from each live entry's source folder and demo by \`APPS_WRITE=1 pnpm vitest run --project tests-store tests/store\`.
+// Do not edit by hand: tests/store/sources.test.ts fails when it differs from the sources.
+
+/**
+ * The source hash each live entry runs now (tests/store/live-verify/source-hash.ts), keyed by slug:
+ * a card counts only the real-model records made for it (verification.ts, ADR-0174).
+ */
+export const SOURCE_HASHES: Readonly<Record<string, string>> = ${JSON.stringify(hashes, null, 2)};
+`;
+}
+
+describe('the live entries’ source hashes', () => {
+  it('examples/store/catalog/source-hashes.generated.ts matches each live entry’s current source', async () => {
+    const hashes = Object.fromEntries(
+      liveEntries.map((entry) => [entry.slug, entrySourceHash(entry)]),
+    );
+    expect(Object.values(hashes).every((hash) => hash !== null)).toBe(true);
+    if (WRITE) await writeFile(HASHES_GENERATED, renderHashes(hashes as Record<string, string>));
+    expect(
+      SOURCE_HASHES,
+      'examples/store/catalog/source-hashes.generated.ts is stale; run with APPS_WRITE=1',
+    ).toEqual(hashes);
+  });
+});
 
 describe('the Under the hood sources', () => {
   const views = Object.fromEntries(liveEntries.map((entry) => [entry.slug, viewOf(entry)]));

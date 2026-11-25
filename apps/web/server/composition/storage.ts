@@ -5,7 +5,7 @@ import type { WorkspaceResolution } from '../agents/wiring';
 import type { Files } from '../files/wiring';
 import { readStorageCleanupMode, STORAGE_CLEANUP_ENV } from '../storage/cleanup-cron';
 import type { StorageService } from '../storage/service';
-import type { createResourceCatalogStoreProvider, MigrationRuns } from '../storage/store';
+import type { createResourceCatalogStoreProvider } from '../storage/store';
 import { configuredPath } from './config';
 import { startCleanupJob, type SessionStateOf, type StorageCleanupSetup } from './storage-jobs';
 import {
@@ -29,12 +29,6 @@ export interface StorageCleanupWiring {
   /** The audit trail's sink; the storage service records file actions through it. */
   readonly audit?: DatabaseRoot['recordAuditEvent'];
   readonly stopOnClose: (stop: () => void) => void;
-}
-
-/** What the skills adopt pass needs from the database root. */
-export interface SkillsAdoptWiring extends Pick<StorageCleanupWiring, 'lock' | 'workspaceIds'> {
-  readonly migrationRuns: MigrationRuns;
-  readonly owners: Pick<DatabaseRoot['workspaces'], 'ownerPrincipalId'>;
 }
 
 /** What both storage-backed APIs are built over: who the caller's workspace is, and its catalog. */

@@ -247,4 +247,35 @@ export const fixture: Readonly<Record<string, string>> = {
   'apps/web/server/rbac/ctx.ts': "export * from '../auth/ctx-target';\n",
   'apps/web/server/composition/ctx-identity.ts': "export * from '../auth/ctx-target';\n",
   'apps/web/server/runs/ctx-deep.test.ts': "export * from '../auth/ctx-target';\n",
+  // use-cases/: a use case's own file reaches the platform through its packages, never an app, the
+  // kit or a test; its test may use the kit and import its own files.
+  'use-cases/kit/index.ts': 'export const kit = 1;\n',
+  // The kit is test machinery: it may import itself, tests/ and test-support files.
+  'use-cases/kit/scripted.ts': [
+    "export * from './index';",
+    "export * from './kit.test-support';",
+    "export * from '../../tests/use-case-helper';",
+    '',
+  ].join('\n'),
+  'use-cases/kit/kit.test-support.ts': 'export const kitSupport = 1;\n',
+  'tests/use-case-helper.ts': 'export const helper = 1;\n',
+  // A template is copied into every entry, so it may not import the kit either.
+  'use-cases/templates/qa/agents/qa.ts': "export * from '../../../kit/index';\n",
+  // One use case never imports another; the shared code belongs in the platform.
+  'use-cases/faq/agents/faq.ts': 'export const faq = 1;\n',
+  'use-cases/sample-entry/agents/sample-entry.ts': [
+    "export * from '../../../apps/web/server/agents/ctx-target';",
+    "export * from '../../kit/index';",
+    "export * from '../../faq/agents/faq';",
+    "export * from '../sample-entry.test-support';",
+    "export * from '../../../packages/contracts/src/index';",
+    '',
+  ].join('\n'),
+  'use-cases/sample-entry/sample-entry.test-support.ts': 'export const support = 1;\n',
+  'use-cases/sample-entry/sample-entry.test.ts': [
+    "export * from '../kit/index';",
+    "export * from './agents/sample-entry';",
+    "export * from './sample-entry.test-support';",
+    '',
+  ].join('\n'),
 };

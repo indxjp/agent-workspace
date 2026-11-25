@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { RUN_START_PROBLEM_CODES } from './runs.js';
 import {
+  bareToolName,
+  namesTool,
   SURFACE_AGENT_SWITCHER_MAX,
   SURFACE_ALLOWED_ORIGINS_MAX,
   SURFACE_ATTACHMENT_MAX_BYTES,
@@ -215,6 +217,25 @@ describe('SurfaceDefinitionSchema', () => {
       Array.from({ length: SURFACE_TOOL_RESULTS_MAX_ENTRIES + 1 }, (_, i) => [`t${i}`, 'text']),
     );
     expect(paths({ ...minimal, toolResults: tooMany })).toEqual(['toolResults']);
+  });
+
+  describe('bareToolName and namesTool', () => {
+    it('strips the engine prefix up to the last double underscore, and only that', () => {
+      expect(bareToolName('mcp__agent-workspace__search_files')).toBe('search_files');
+      expect(bareToolName('search_files')).toBeNull();
+      expect(bareToolName('server_search_files')).toBeNull();
+    });
+
+    it('names a run tool by its exact or its bare name', () => {
+      expect(namesTool('search_files', 'mcp__agent-workspace__search_files')).toBe(true);
+      expect(
+        namesTool('mcp__agent-workspace__search_files', 'mcp__agent-workspace__search_files'),
+      ).toBe(true);
+      expect(namesTool('search_files', 'search_files')).toBe(true);
+      expect(namesTool('files', 'mcp__agent-workspace__search_files')).toBe(false);
+      expect(namesTool('search_files', 'server_search_files')).toBe(false);
+      expect(namesTool('mcp__tracker__create_task', 'mcp__other__create_task')).toBe(false);
+    });
   });
 
   describe('toolResultFor', () => {

@@ -10,11 +10,13 @@ import { JourneyFailure } from '../journey/harness.mjs';
 import { scrub } from '../journey/run.mjs';
 import {
   chatFailedRunId,
+  chatPausedRunId,
   devEnvironment,
   failedRuns,
   firstPrompt,
   identityEnvironment,
   identityTargets,
+  printedRun,
   serverCommands,
   STAND_IN,
   workspaceSecrets,
@@ -23,6 +25,7 @@ import {
   fileSetupCommands,
   listening,
   pointApisAtLoopback,
+  skillPublishCommands,
   startServer,
 } from './use-cases-server.mjs';
 import { storeSecretsAsOwner } from './use-cases-console.mjs';
@@ -39,6 +42,7 @@ const STEPS = [
   'aw dev',
   'secrets, in the console as the Owner',
   'aw files',
+  'aw skills publish',
   'aw push',
   'MCP servers, with ids',
   'aw check',
@@ -194,6 +198,14 @@ async function uploadFiles({ aw, dir }) {
 }
 
 /** @param {Session} session */
+async function publishPinnedSkills({ aw, dir }) {
+  // The tutorial publishes a pinned skill's revision before aw push (aw dev only imports it).
+  const commands = skillPublishCommands(dir);
+  if (commands.length === 0) return 'no pinned skill revision to publish';
+  return (await aw(commands.join(' && '), { times: commands.length })).output;
+}
+
+/** @param {Session} session */
 async function restartVerifyingServers({ aw, dir, running }) {
   // A server that verifies the caller assertion was started with the project file's
   // `<tool-id>` and `<workspace-id>`; the ids exist only now that aw push registered them.
@@ -218,6 +230,8 @@ async function restartVerifyingServers({ aw, dir, running }) {
 async function chatOnce({ aw, id }, tracer, prompt) {
   const command = `aw chat ${id} -p "$AW_PROMPT"`;
   const reply = await aw(command, { env: { AW_PROMPT: prompt }, allowFailure: true });
+  const paused = reply.status === 0 ? undefined : chatPausedRunId(reply.output);
+  if (paused !== undefined) return `${reply.output}\n${await approveUntilDone({ aw }, paused)}`;
   if (reply.status !== 0) {
     const runId = chatFailedRunId(reply.output);
     if (runId !== undefined) await tracer.traceRun(`aw chat -p (${runId})`, runId);
@@ -225,6 +239,36 @@ async function chatOnce({ aw, id }, tracer, prompt) {
   }
   if (reply.stdout.trim() === '') throw new JourneyFailure('aw chat printed no answer');
   return reply.output;
+}
+
+/** How many approvals a chat may need before it counts as stuck; each tutorial asks for one. */
+const APPROVALS_MAX = 3;
+
+/**
+ * A use case whose tutorial has a person approve a tool call (cad-drafting's change set,
+ * excel-consolidation's workbook) pauses `aw chat -p` at `awaiting_approval`. Approve it as that
+ * person would, and follow each continuation run to its end: the chat passes when one completes
+ * with an answer.
+ *
+ * @param {Pick<Session, 'aw'>} session @param {string} pausedId
+ */
+async function approveUntilDone({ aw }, pausedId) {
+  const log = [];
+  let id = pausedId;
+  for (let round = 0; round < APPROVALS_MAX; round += 1) {
+    const continuation = printedRun((await aw(`aw runs approve ${id} --json`)).stdout);
+    const settled = printedRun((await aw(`aw runs wait ${continuation.id} --json`)).stdout);
+    log.push(`approved ${id}: continuation ${settled.id} ended ${settled.status}`);
+    if (settled.status === 'completed') {
+      if (settled.text.trim() === '') throw new JourneyFailure(`${log.join('\n')}\nno answer`);
+      return [...log, settled.text].join('\n');
+    }
+    if (settled.status !== 'awaiting_approval') throw new JourneyFailure(log.join('\n'));
+    id = settled.id;
+  }
+  throw new JourneyFailure(
+    `${log.join('\n')}\nstill awaiting approval after ${String(APPROVALS_MAX)}`,
+  );
 }
 
 /** @param {Session} session */
@@ -247,6 +291,7 @@ async function runJourney(session, tracer, prompt) {
   await step('aw dev', () => startDev(session));
   await step('secrets, in the console as the Owner', () => addSecrets(session));
   await step('aw files', () => uploadFiles(session));
+  await step('aw skills publish', () => publishPinnedSkills(session));
   await step('aw push', async () => (await aw('aw push --yes', { env: devEnv })).output);
   await step('MCP servers, with ids', () => restartVerifyingServers(session));
   await step('aw check', async () => (await aw('aw check')).output);

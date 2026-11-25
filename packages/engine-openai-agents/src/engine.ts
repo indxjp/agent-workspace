@@ -63,7 +63,7 @@ export function createOpenAiAgentsEngine(
     // `skills: false`: the kit places nothing, and `compile` refuses a granted skill by name.
     protectedConfigDirectory: OPENAI_AGENTS_PROTECTED_CONFIG_DIRECTORY,
     compile: compileOpenAiAgentsRun,
-    plan(configuration, request, { sessionStore, abortController }) {
+    plan(configuration, request, { sessionStore, abortController, toolAnswers }) {
       const { engineSessionId, mode, projectKey } = configuration.session;
       const session =
         sessionStore === undefined
@@ -81,7 +81,11 @@ export function createOpenAiAgentsEngine(
           raw: { type: 'openai-agents.session', sessionId: engineSessionId, mode },
         },
         events: () =>
-          runStarter(configuration, request.prompt, { session, signal: abortController.signal }),
+          runStarter(configuration, request.prompt, {
+            session,
+            signal: abortController.signal,
+            toolAnswers,
+          }),
         map: (event) => mapper.map(event),
         isTerminal: (event) => event.kind === 'run_completed',
         cancelled: { kind: 'run_completed', stopReason: 'cancelled', turns: 0, usage: null },

@@ -38,6 +38,7 @@ function wireWith(
     withCeiling: {},
     policyCeiling,
     runs: { create },
+    connectors: { kind: 'unavailable' },
     ...parts,
   } as unknown as Parameters<typeof wireRunApi>[0]);
   return { environment, create };

@@ -1,0 +1,14 @@
+{
+  "ticket": {
+    "id": "TCK-2101",
+    "created_at": "2026-11-20T10:05:00+09:00",
+    "channel": "email",
+    "subject": "入出庫データの取り込みがすべて失敗します",
+    "description": "昨日の夕方から、ハンディ端末の入出庫データを取り込むと、どのファイルでも「E-412 取り込みに失敗しました」と表示されます。担当者全員で試しましたが同じです。手入力では件数が多すぎて追いつかず、今日の出荷ができません。",
+    "priority": "high",
+    "status": "new",
+    "tags": ["import", "error"],
+    "requester": { "name": "沢渡 瑞穂", "email": "sawatari@mizunara.example" },
+    "organization": { "name": "みずなら工房" }
+  }
+}

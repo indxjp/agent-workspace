@@ -1,0 +1,13 @@
+{
+  "id": "INQ-4002",
+  "received_at": "2026-11-19T15:40:00+09:00",
+  "channel": "form",
+  "from": {
+    "name": "槙野 宗介",
+    "email": "sosuke.makino@mail.example"
+  },
+  "subject": "届いたコーヒーミルが動きません",
+  "text": "11月12日に届いた電動コーヒーミル（注文 MS-30352）が、スイッチを入れても動きません。交換してもらえますか。",
+  "order_id": "MS-30352",
+  "to": "support@midori-kurashikan.example"
+}

@@ -1,0 +1,6 @@
+changed_code,changed_item,kind,product_no,product_name,process,customer,customer_notice
+RM-PA66-GF30,PA66 with 30% glass fibre,material,BK-310,Bracket (left),Injection moulding,Yamasemi Auto Parts Co.,required
+RM-PA66-GF30,PA66 with 30% glass fibre,material,BK-312,Bracket (right),Injection moulding,Yamasemi Auto Parts Co.,required
+RM-PA66-GF30,PA66 with 30% glass fibre,material,CV-120,Wiring cover,Injection moulding,In-house (own product),not required
+IM-07,Injection moulding machine No. 7,machine,CV-120,Wiring cover,Injection moulding,In-house (own product),not required
+IM-07,Injection moulding machine No. 7,machine,CV-125,Terminal cover,Injection moulding,Kaitsuburi Electric Co.,not required

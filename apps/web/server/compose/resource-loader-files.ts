@@ -99,8 +99,8 @@ function withAttachedFiles(
 }
 
 /**
- * The size and checksum a reference carries: the row's own. A skill file read from a bare object
- * prefix has no row and so no checksum; its bytes are hashed in one streaming pass.
+ * The size and checksum a reference carries: the row's own. `files.sha256` is nullable, so a row
+ * whose writer recorded no checksum has its bytes hashed in one streaming pass.
  */
 async function referenceOf(
   row: { readonly sizeBytes: number; readonly sha256?: string | null },
@@ -110,7 +110,6 @@ async function referenceOf(
   if (row.sha256 !== undefined && row.sha256 !== null) {
     return { size: row.sizeBytes, sha256: row.sha256 };
   }
-  // storage-bridge(#1699): a skill file of a bare object prefix has no recorded sha256
   const body = await source.open();
   if (body === null) throw new Error(`${what} has no stored bytes`);
   const hash = createHash('sha256');

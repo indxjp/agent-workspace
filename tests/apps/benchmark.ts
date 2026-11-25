@@ -14,19 +14,27 @@
  *
  * Pure apart from reading the app's files.
  */
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import {
-  revertGeneratedEdit,
-  type GeneratedEdit,
-  type GeneratedManifest,
-} from '@indx-workspace/sdk/project';
+import type { GeneratedManifest } from '@indx-workspace/sdk/project';
 import ts from 'typescript';
 
 import { PUBLISHED_PACKAGES } from '../../scripts/release/pack-packages.mjs';
+import {
+  countHandwritten as countShared,
+  filesOf,
+  type GeneratedFileState,
+  type HandwrittenCount,
+} from './handwritten.ts';
+
+export {
+  countedLines,
+  generatedFileStates,
+  isBinary,
+  type HandwrittenCount,
+} from './handwritten.ts';
 
 /** The six cells, in the scoreboard's column order. */
 export const APP_CELLS = [
@@ -132,160 +140,148 @@ export function isExcludedFromCount(file: string): boolean {
   return EXCLUDED.some((pattern) => pattern.test(file));
 }
 
-/** Files whose comments start with `#`, not `//`. */
-const HASH_COMMENTS = /\.(?:sh|ya?ml)$/u;
+/**
+ * The store app's landing copy (Owner decision, 2026-11-21): each entry's page prose lives in
+ * `catalog/landing/<slug>.md`, JA then EN, and a generator turns it into `landing.generated.ts`.
+ * SSOT §4 (the maintainers' plan, `use-cases-100-plan.md`) counts no Markdown: it is knowledge,
+ * reviewed as prose. Exactly those files of exactly the store app are left out; any other `.md`
+ * under `catalog/`, and every other app's files, still count.
+ */
+export const STORE_APP_ID = 'store';
+const STORE_LANDING_COPY = /^catalog\/landing\/[a-z0-9-]+\.md$/u;
 
 /**
- * The lines of `text` that count: not blank, and not only a comment (`//`, a `/* … *\/` block and
- * its `*` lines, or `#` in a shell or YAML file).
+ * The store app's per-entry catalog files (Owner decision, 2026-11-21, SSOT §4 and §11):
+ * `catalog/<slug>.ts` is one entry's pure `defineEntry` data, like its landing copy, and is not
+ * counted. A file is an entry file only when `<slug>` is an actual catalog entry: a default import of
+ * `catalog/index.ts`, the catalog's one list of entries (tests/store/catalog.test.ts keeps it equal
+ * to the entries). The catalog's own modules (`define.ts`, `index.ts`, `recording.ts`,
+ * `verification.ts`) and any helper beside them are no entry and still count.
  */
-export function countedLines(file: string, text: string): number {
-  const hash = HASH_COMMENTS.test(file);
-  let inBlock = false;
-  let counted = 0;
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    if (inBlock) {
-      if (line.includes('*/')) {
-        inBlock = false;
-        if (line.slice(line.indexOf('*/') + 2).trim() !== '') counted += 1;
+const STORE_CATALOG_INDEX = 'catalog/index.ts';
+const STORE_ENTRY_IMPORT = /^import [A-Za-z0-9_$]+ from '\.\/([a-z0-9]+(?:-[a-z0-9]+)*)\.ts';$/gmu;
+const STORE_CATALOG_FILE = /^catalog\/([a-z0-9]+(?:-[a-z0-9]+)*)\.ts$/u;
+
+/** The entry slugs `catalog/index.ts` (its text) imports, one default import per entry file. */
+export function storeEntrySlugs(indexText: string): ReadonlySet<string> {
+  return new Set([...indexText.matchAll(STORE_ENTRY_IMPORT)].map((match) => match[1] ?? ''));
+}
+
+/** Why `node` is not plain data: a literal, an array of them or an object literal of them. */
+function dataProblem(node: ts.Expression): string | null {
+  if (
+    ts.isStringLiteral(node) ||
+    ts.isNoSubstitutionTemplateLiteral(node) ||
+    ts.isNumericLiteral(node) ||
+    node.kind === ts.SyntaxKind.TrueKeyword ||
+    node.kind === ts.SyntaxKind.FalseKeyword ||
+    node.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return null;
+  }
+  if (ts.isArrayLiteralExpression(node)) {
+    for (const element of node.elements) {
+      const problem = dataProblem(element);
+      if (problem !== null) return problem;
+    }
+    return null;
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    for (const property of node.properties) {
+      if (
+        !ts.isPropertyAssignment(property) ||
+        !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
+      ) {
+        return `${ts.SyntaxKind[property.kind]} where only a literal key and value may be`;
       }
-      continue;
+      const problem = dataProblem(property.initializer);
+      if (problem !== null) return problem;
     }
-    if (line === '' || (hash && line.startsWith('#')) || (!hash && line.startsWith('//'))) continue;
-    if (!hash && line.startsWith('/*')) {
-      inBlock = !line.includes('*/');
-      if (!inBlock && line.slice(line.indexOf('*/') + 2).trim() !== '') counted += 1;
-      continue;
-    }
-    counted += 1;
+    return null;
   }
-  return counted;
-}
-
-/** Every file under `appDir`, relative, with `/` separators, sorted; `node_modules` and `.next` aside. */
-export async function filesOf(appDir: string): Promise<string[]> {
-  const entries = await readdir(appDir, { recursive: true, withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) =>
-      path.relative(appDir, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'),
-    )
-    .filter((file) => !/(?:^|\/)(?:node_modules|\.next)\//u.test(file))
-    .sort();
-}
-
-const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
-
-/** Each recorded file, its sha256 and the recorded edits that target it, newest kind first. */
-interface RecordedFile {
-  readonly sha256: string;
-  readonly edits: readonly GeneratedEdit[];
+  return `${ts.SyntaxKind[node.kind]} where only data may be`;
 }
 
 /**
- * The entries in the order they were generated, as far as the manifest says: the project and the
- * app first (create writes them), then everything generated over them. The manifest keeps no
- * time, so entries of one kind are in key order.
+ * Why the text of a store entry file is not pure `defineEntry` data, or `null` when it is: exactly
+ * `import { defineEntry } from './define.ts';` and `export default defineEntry({...});`, the object
+ * holding only literal keys and literal, array and object values (no spread, identifier, call,
+ * function or `${}` template). This keeps the Owner's exception to data: code in an entry file
+ * fails the benchmark instead of leaving the count.
  */
-function generationRank(key: string): number {
-  if (key.startsWith('project:')) return 0;
-  if (key.startsWith('app:')) return 1;
-  return 2;
-}
-
-function recordedFiles(manifest: GeneratedManifest): Map<string, RecordedFile> {
-  const entries = Object.entries(manifest.entries).sort(
-    ([left], [right]) => generationRank(right) - generationRank(left),
-  );
-  const edits = entries.flatMap(([, entry]) => entry.edits);
-  const recorded = new Map<string, RecordedFile>();
-  for (const [, entry] of entries) {
-    for (const [file, hash] of Object.entries(entry.files)) {
-      recorded.set(file, { sha256: hash, edits: edits.filter((edit) => edit.path === file) });
-    }
+export function storeEntryFileProblem(text: string): string | null {
+  const source = ts.createSourceFile('entry.ts', text, ts.ScriptTarget.Latest, false);
+  const [first, second, ...rest] = source.statements;
+  const imports =
+    first !== undefined &&
+    ts.isImportDeclaration(first) &&
+    ts.isStringLiteral(first.moduleSpecifier) &&
+    first.moduleSpecifier.text === './define.ts' &&
+    first.importClause?.name === undefined &&
+    first.importClause?.isTypeOnly === false &&
+    first.importClause.namedBindings !== undefined &&
+    ts.isNamedImports(first.importClause.namedBindings) &&
+    first.importClause.namedBindings.elements.length === 1 &&
+    first.importClause.namedBindings.elements[0]?.propertyName === undefined &&
+    first.importClause.namedBindings.elements[0]?.name.text === 'defineEntry';
+  if (!imports) return "the first statement is not import { defineEntry } from './define.ts'";
+  const call =
+    second !== undefined &&
+    ts.isExportAssignment(second) &&
+    second.isExportEquals !== true &&
+    ts.isCallExpression(second.expression) &&
+    ts.isIdentifier(second.expression.expression) &&
+    second.expression.expression.text === 'defineEntry' &&
+    second.expression.typeArguments === undefined &&
+    second.expression.arguments.length === 1
+      ? second.expression.arguments[0]
+      : undefined;
+  if (call === undefined || !ts.isObjectLiteralExpression(call)) {
+    return 'the second statement is not export default defineEntry({...})';
   }
-  return recorded;
+  if (rest.length > 0) return 'it has statements beyond the import and the default export';
+  return dataProblem(call);
 }
 
 /**
- * Whether `text` is what the generator recorded: its sha256 matches as it is, or once the edits
- * recorded for it are reverted, newest entry first. A revert that cannot apply yet (a journal entry
- * a later one follows) is tried again after the others, until none applies.
+ * Whether the handwritten count of the app `appId` leaves `file` out. `entrySlugs` are the store's
+ * catalog entries ({@link storeEntrySlugs}); no other app has any.
  */
-export function isUnedited(text: string, recorded: RecordedFile): boolean {
-  let current = text;
-  if (sha256(current) === recorded.sha256) return true;
-  let pending = [...recorded.edits];
-  for (let progressed = true; progressed && pending.length > 0;) {
-    progressed = false;
-    const next: GeneratedEdit[] = [];
-    for (const edit of pending) {
-      const outcome = revertGeneratedEdit(current, edit);
-      if (outcome.kind !== 'reverted') {
-        next.push(edit);
-        continue;
-      }
-      current = outcome.text;
-      progressed = true;
-      if (sha256(current) === recorded.sha256) return true;
-    }
-    pending = next;
-  }
-  return false;
-}
-
-export type GeneratedFileState = 'unedited' | 'edited' | 'missing';
-
-/** Each file the manifest records, and whether the app still holds it as generated. */
-export async function generatedFileStates(
-  appDir: string,
-  manifest: GeneratedManifest,
-): Promise<Map<string, GeneratedFileState>> {
-  const states = new Map<string, GeneratedFileState>();
-  for (const [file, recorded] of recordedFiles(manifest)) {
-    const target = path.join(appDir, file);
-    if (!existsSync(target)) {
-      states.set(file, 'missing');
-      continue;
-    }
-    states.set(file, isUnedited(await readFile(target, 'utf8'), recorded) ? 'unedited' : 'edited');
-  }
-  return new Map([...states].sort(([left], [right]) => left.localeCompare(right)));
-}
-
-/** One file counted as handwritten, and its counted lines. */
-export interface HandwrittenFile {
-  readonly file: string;
-  readonly lines: number;
-}
-
-/** What {@link countHandwritten} found. */
-export interface HandwrittenCount {
-  readonly lines: number;
-  readonly files: readonly HandwrittenFile[];
+export function isExcludedFromAppCount(
+  appId: string,
+  file: string,
+  entrySlugs: ReadonlySet<string> = new Set(),
+): boolean {
+  if (isExcludedFromCount(file)) return true;
+  if (appId !== STORE_APP_ID) return false;
+  const entry = STORE_CATALOG_FILE.exec(file)?.[1];
+  return STORE_LANDING_COPY.test(file) || (entry !== undefined && entrySlugs.has(entry));
 }
 
 /**
  * The handwritten code of an app: every file the generators did not write, and every one they did
- * that has been edited since (counted in full), except the paths {@link isExcludedFromCount}
- * leaves out. `aw-generated.json` is the generators' record and never counts.
+ * that has been edited since (counted in full), except the paths {@link isExcludedFromAppCount}
+ * leaves out. `aw-generated.json` is the generators' record and never counts. The counting rule is
+ * `./handwritten.ts`, which the use cases' benchmark shares.
  */
 export async function countHandwritten(
   appDir: string,
   manifest: GeneratedManifest,
 ): Promise<HandwrittenCount> {
-  const states = await generatedFileStates(appDir, manifest);
-  const files: HandwrittenFile[] = [];
-  for (const file of await filesOf(appDir)) {
-    if (file === 'aw-generated.json' || isExcludedFromCount(file)) continue;
-    if (states.get(file) === 'unedited') continue;
-    files.push({
-      file,
-      lines: countedLines(file, await readFile(path.join(appDir, file), 'utf8')),
-    });
+  const appId = path.basename(appDir);
+  const index = path.join(appDir, STORE_CATALOG_INDEX);
+  const entrySlugs =
+    appId === STORE_APP_ID && existsSync(index)
+      ? storeEntrySlugs(await readFile(index, 'utf8'))
+      : new Set<string>();
+  for (const slug of entrySlugs) {
+    const file = path.join(appDir, 'catalog', `${slug}.ts`);
+    const problem = storeEntryFileProblem(await readFile(file, 'utf8'));
+    if (problem !== null) {
+      throw new Error(`catalog/${slug}.ts is not pure defineEntry data: ${problem}`);
+    }
   }
-  return { lines: files.reduce((sum, file) => sum + file.lines, 0), files };
+  return countShared(appDir, manifest, (file) => isExcludedFromAppCount(appId, file, entrySlugs));
 }
 
 /** Files whose module specifiers {@link importOffenders} reads. */

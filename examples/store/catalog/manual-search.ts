@@ -39,4 +39,30 @@ export default defineEntry({
     check: { tools: ['search_files'], approval: null },
   },
   safety: ['person', 'files'],
+  next: {
+    source: 'use-cases/manual-search',
+    demo: {
+      agent: 'manual-search',
+      prompts: [
+        {
+          ja: '油圧ユニットの定期点検の周期は？',
+          en: "How often is the hydraulic unit's periodic inspection due?",
+        },
+        {
+          ja: '作動油はいつ交換すればいいですか',
+          en: 'When should the hydraulic oil be replaced?',
+        },
+      ],
+      moment: {
+        ja: '答えに必ず「どのマニュアルの何ページ・何節か」が付き、検索結果から原文が開く。',
+        en: 'Every answer names the manual, page and section, and the search hit opens the original.',
+      },
+      data: {
+        ja: '設備・安全のマニュアル2冊（日本語と英語）',
+        en: '2 manuals (equipment, safety) in Japanese and English',
+      },
+      seed: [{ collection: 'manual-search', from: 'data' }],
+      check: { tools: ['search_files'], approval: null },
+    },
+  },
 });

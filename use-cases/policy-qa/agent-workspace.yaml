@@ -1,0 +1,21 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: policy-qa
+engine: claude-agent-sdk
+# Grounded answers (archetype QA): the documents are in the entry's own folder, `policy-qa/`, so two
+# entries never share one. Upload them with
+#   for f in $(cd data && find . -type f); do aw files upload "policy-qa/${f#./}" "data/${f#./}"; done
+policy:
+  permissions:
+    writeFiles: false
+    runCommands: true # run_skill_script, for the office-reader skill that reads PDF, Word and Excel files
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 1
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

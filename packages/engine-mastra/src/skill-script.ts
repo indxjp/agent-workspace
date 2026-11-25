@@ -3,7 +3,7 @@
  * The decisions are `@agent-workspace/engine`'s `runSkillScript`.
  */
 import { execFile } from 'node:child_process';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -17,6 +17,8 @@ export const MASTRA_SKILL_SCRIPT_INPUT = z.object({
   skill: z.string(),
   script: z.string(),
   args: z.array(z.string()).optional(),
+  /** ADR-0176: the earlier tool call whose answer the script reads. */
+  input: z.strictObject({ fromToolUse: z.string() }).optional(),
 });
 
 const execFileAsync = promisify(execFile);
@@ -63,5 +65,10 @@ export const nodeSkillScriptHost: SkillScriptHost = {
   realpath,
   path,
   makeScratchDirectory: async () => realpath(await mkdtemp(join(tmpdir(), 'skill-script-'))),
+  // `wx`: the file is new, in a directory made for this call; nothing is overwritten or followed.
+  writeFile: (file, content) => writeFile(file, content, { encoding: 'utf8', flag: 'wx' }),
+  makeDirectory: async (directory) => {
+    await mkdir(directory, { recursive: true });
+  },
   removeDirectory: (directory) => rm(directory, { recursive: true, force: true }),
 };

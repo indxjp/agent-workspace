@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:tr": {
+      "files": {
+        "agent-workspace.yaml": "3e1a99312ed6cffd898e61ba1b342538268caf9c1c1e6f8a2cff9eb93fba83e4",
+        "agents/customer-inquiry.md": "c9949718c5aeab8e5908a7830f28168e8c29e390eb384d0666a32bed104d9198",
+        "agents/customer-inquiry.ts": "90e9a8e8dcb2fb74c92f5f2fed04778e2f4f596403e8dc0e70e9e10df02b1b5c",
+        "data/en/event.json": "248885839cc8daad2e06cb2bfba4cc468aada1c72a8af40a6180eeaf0d7b325a",
+        "data/ja/event.json": "9559947d26c25853d0fa05c41fb7693e479263ebde2b66da65c057682c6d6d13",
+        "evals/customer-inquiry.yaml": "1841eedbeb247162c9f70721d5af50b26952115cb6d70af75053e99c1c8ff98a",
+        "skills/customer-inquiry/SKILL.md": "343e0f1c782bbf77973eae3ed3c8eaaf1d0cc0b8ce236e3696eb2af805fef661",
+        "surfaces/main.ts": "0e349e84a556556168ea24db6fd9ba766f95a61855b6fef670c1a7ea7e386e0f",
+        "triggers/customer-inquiry.json": "d98ae7c98ca67c0e6eeecdcf2edf6447a65328e96d3b8d8538399b4d5879a395"
+      },
+      "edits": []
+    }
+  }
+}

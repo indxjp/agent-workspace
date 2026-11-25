@@ -10,8 +10,20 @@ import {
   signInSessionCookie,
   verifySignInSessionToken,
 } from '../apps/web/server/auth/session.js';
+import { derivePurposeKey } from '../apps/web/server/auth/core/key-ring.js';
 
 const SECRET = 'a'.repeat(MIN_SESSION_SECRET_LENGTH);
+
+/** The session's purpose key (part 06 steps 5–6): a token signed with the raw secret no longer verifies. */
+async function sessionSigningKey(): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw',
+    await derivePurposeKey(crypto.subtle, SECRET, 'session'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+}
 
 describe('readSessionSecret', () => {
   it('fails closed when the secret is absent, blank or short', () => {
@@ -136,13 +148,7 @@ describe('verifySignInSessionToken', () => {
     for (const payload of payloads) {
       const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
       const signed = `aw1.${encoded}`;
-      const key = await crypto.subtle.importKey(
-        'raw',
-        new TextEncoder().encode(SECRET),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      );
+      const key = await sessionSigningKey();
       const signature = Buffer.from(
         await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed)),
       ).toString('base64url');
@@ -156,13 +162,7 @@ describe('verifySignInSessionToken', () => {
     for (const scalar of ['"hello"', '42', 'null', '[1,2]']) {
       const encoded = Buffer.from(scalar).toString('base64url');
       const signed = `aw1.${encoded}`;
-      const key = await crypto.subtle.importKey(
-        'raw',
-        new TextEncoder().encode(SECRET),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      );
+      const key = await sessionSigningKey();
       const signature = Buffer.from(
         await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed)),
       ).toString('base64url');

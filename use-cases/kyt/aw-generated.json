@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": {
+    "project:dr": {
+      "files": {
+        "agent-workspace.yaml": "8e276a895adfec1e714b0a8b0a2ebc5b71690ed6a4c7c3b712bbf7982f6fec63",
+        "agents/kyt.md": "8189f005d9ffacca665829cc48906c83da17653fad3e3bb0e6c3bc16362b2189",
+        "agents/kyt.ts": "00e3a5d829bbe06f8cf9582b8554b97ba2a88c79257e26019297b38946dabb9a",
+        "data/en/notes/example.md": "a2fda10bcf92d6441173e6ef7542e8089c8adf7bd3273ffb54be014698dd419e",
+        "data/en/sources/example.md": "baa491b90e7e23c0c3836668b887ded1a9b5a4e2307c3960bec66c600e080be1",
+        "data/ja/notes/example.md": "c50ab8ff9f5680507de81a93ed6e90bd9fa077c193428147fa4ca15e0447eff8",
+        "data/ja/sources/example.md": "caf5f94898409ece5593f8760142b2a184c33f5f1cb2af1eef83c4ac534d9483",
+        "evals/kyt.yaml": "4318f930f5a6e10021514c82ededecf435ba36c75fb02f59463ea1f6147afe5e",
+        "skills/kyt/SKILL.md": "fe35e0529a60d42bf1f295b948f5ab779681288669349fcce427998f26bb4e0f",
+        "surfaces/main.ts": "72a43101ad0b816fe64a9e0fae74a2936e435bc53c40f225d212cb8312f63426"
+      },
+      "edits": []
+    }
+  }
+}

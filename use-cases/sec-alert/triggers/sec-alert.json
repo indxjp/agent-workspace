@@ -1,0 +1,22 @@
+{
+  "kind": "webhook",
+  "name": "sec-alert",
+  "prompt": "セキュリティ監視からアラートが届きました。一次分析して、調査のタスクを担当者に渡してください。 / A security alert arrived from monitoring; triage it and hand the investigation to the analyst.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["alertId", "category", "severity", "owner", "reason", "playbook", "notes"],
+    "properties": {
+      "alertId": { "type": "string" },
+      "category": {
+        "type": "string",
+        "enum": ["malware", "credential", "account", "phishing", "other"]
+      },
+      "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+      "owner": { "type": "string" },
+      "reason": { "type": "string" },
+      "playbook": { "type": "string" },
+      "notes": { "type": "string" }
+    }
+  }
+}

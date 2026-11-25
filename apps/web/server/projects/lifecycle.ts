@@ -118,7 +118,7 @@ async function recordTransition(
     await audit.write({
       actorPrincipalId: actor.principalId,
       actorUserId: actor.userId,
-      actorLabel: actor.userLabel,
+      actorLabel: actor.label,
       action: transition.action,
       subjectId: project.id,
       subjectLabel: project.name,

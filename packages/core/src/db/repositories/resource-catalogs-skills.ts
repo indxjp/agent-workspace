@@ -13,7 +13,6 @@ import {
   type CatalogSkillRevision,
   type DeleteCatalogSkillOutcome,
   type MarkSkillDeletingOutcome,
-  type PendingSkillDelete,
   type SkillInput,
 } from './resource-catalogs-model.js';
 import type { ResourceCatalogRepository } from './resource-catalogs-port.js';
@@ -149,53 +148,17 @@ export async function markSkillDeleting(
   });
 }
 
-export async function backfillSkillPendingDelete(
-  { db, workspaceId }: CatalogContext,
-  name: string,
-  pending: PendingSkillDelete,
-): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [found] = await lockSkillRow(tx, workspaceId, name);
-    if (found === undefined) return false;
-    if (found.pendingDelete !== null) return true;
-    const [assigned] = await tx
-      .select({ agentId: agentSkills.agentId })
-      .from(agentSkills)
-      .where(and(eq(agentSkills.workspaceId, workspaceId), eq(agentSkills.skillId, found.id)))
-      .limit(1);
-    if (assigned !== undefined) return false;
-    await tx
-      .update(skills)
-      .set({ pendingDelete: pending })
-      .where(and(eq(skills.workspaceId, workspaceId), eq(skills.id, found.id)));
-    return true;
-  });
-}
-
 export async function setSkillMeta(
   { db, workspaceId }: CatalogContext,
   name: string,
   meta: unknown,
-  onlyIfEmpty: boolean,
 ): Promise<boolean> {
   const rows = await db
     .update(skills)
     .set({ meta })
-    .where(
-      and(
-        eq(skills.workspaceId, workspaceId),
-        eq(skills.name, name),
-        onlyIfEmpty ? isNull(skills.meta) : undefined,
-      ),
-    )
+    .where(and(eq(skills.workspaceId, workspaceId), eq(skills.name, name)))
     .returning({ id: skills.id });
-  if (rows.length > 0) return true;
-  // Nothing updated: no such row, or (onlyIfEmpty) one that already has its record.
-  const [row] = await db
-    .select({ id: skills.id })
-    .from(skills)
-    .where(and(eq(skills.workspaceId, workspaceId), eq(skills.name, name)));
-  return row !== undefined && onlyIfEmpty;
+  return rows.length > 0;
 }
 
 export async function setSkillBuiltinDigest(

@@ -137,11 +137,11 @@ describe('the OIDC transaction carries the post-sign-in destination', () => {
     await expect(jwtVerify(transaction, new TextEncoder().encode(secret))).rejects.toThrow();
   });
 
-  it('finishes a sign-in that began before the deploy (raw-secret transaction, roll-over)', async () => {
+  it('refuses a transaction signed with the raw secret (roll-over ended, step 6)', async () => {
     const legacy = await transactionSignedWith(new TextEncoder().encode(secret));
-    expect(await finishOidcLogin(configuration, secret, callback, legacy)).toMatchObject({
-      email: 'a@example.com',
-    });
+    await expect(finishOidcLogin(configuration, secret, callback, legacy)).rejects.toThrow(
+      /signature/,
+    );
   });
 
   it('refuses a transaction signed with another purpose key', async () => {
@@ -151,7 +151,7 @@ describe('the OIDC transaction carries the post-sign-in destination', () => {
     );
   });
 
-  it('refuses an expired transaction without trying the old key', async () => {
+  it('refuses an expired transaction', async () => {
     const expired = await new SignJWT({ verifier: 'verifier', state: 'state' })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt(1_000)

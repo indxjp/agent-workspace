@@ -7,5 +7,6 @@ import type { SurfaceTheme } from '@indx-workspace/contracts/surfaces';
  */
 export const theme = {
   locale: 'ja',
-  radius: 8,
+  colour: '#0070e0',
+  radius: 12,
 } as const satisfies SurfaceTheme;

@@ -108,6 +108,9 @@ export function cloudRunDriverOptions(
     egressProxyUrl === ''
       ? undefined
       : { url: egressProxyUrl, key: egressProxyKey, bypass: proxyBypassFor(env) };
+  // ADR-0172: the control plane as a sandbox reaches it, so its runs are mirrored and can search
+  // their files. Only the agent driver gets it; a tool host mirrors nothing.
+  const sessionMirrorUrl = (env['RUNTIME_SESSION_MIRROR_URL'] ?? '').trim();
   const shared = {
     project,
     region,
@@ -134,6 +137,7 @@ export function cloudRunDriverOptions(
       images,
       ...shared,
       ...(egressProxy === undefined ? {} : { egressProxy }),
+      ...(sessionMirrorUrl === '' ? {} : { sessionMirrorUrl }),
     }),
     expectedDriver: 'cloud-run-service',
     runtimeOrigin: (handle) => cloudRunSandboxOrigin(handle.externalId),

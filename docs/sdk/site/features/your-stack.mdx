@@ -277,15 +277,15 @@ Add your site's origin to the surface's `allowedOrigins`. The
 
 ## Ship it to your infrastructure
 
-**What it is.** The same project, deployed to servers you operate. `aw deploy` handles a single VM
-and Google Cloud Run; Kubernetes is a Helm chart.
+**What it is.** The same project, deployed to servers you operate. `aw deploy` handles a single VM,
+Google Cloud Run, Kubernetes (through the Helm chart) and Vercel.
 
 | Builder chip     | How, today                                                                                                                              | Status                                                                           |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Laptop           | `npm run dev`                                                                                                                           | Available                                                                        |
 | On-prem VM       | `target: single-vm`: Docker Compose (web, runner, gateway, PostgreSQL, object storage) behind your TLS proxy                            | Available through `aw deploy`                                                    |
 | Google Cloud Run | `target: gcp-cloudrun`: the CLI ships the Terraform module and copies the images by digest; `--infra <dir>` is optional                  | Available through `aw deploy`                                                    |
-| Kubernetes       | `helm upgrade --install agent-workspace ./infra/helm/agent-workspace -f values.yaml`, with values files for EKS, GKE, AKS and OpenShift | Helm chart; not `aw deploy`                                                      |
+| Kubernetes       | `helm upgrade --install agent-workspace ./infra/helm/agent-workspace -f values.yaml`, with values files for EKS, GKE, AKS and OpenShift | Available through `aw deploy` (`target: kubernetes`), or the Helm chart directly |
 | AWS AgentCore    | The `aws-agentcore` runtime driver is named in the contract, not implemented                                                            | Roadmap, [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud) |
 
 <Steps>
@@ -419,7 +419,7 @@ flowchart TD
 ```
 
 The gateway holds the provider key; the sandbox only gets a token for one run. A runtime profile
-names one of eleven driver ids. Their standing today, from
+names one of thirteen driver ids. Their standing today, from
 [Self-hosting](/building/self-hosting#which-runtime-drivers-are-real-today):
 
 | Driver                                                                           | Standing                                                                                                        |
@@ -428,16 +428,19 @@ names one of eleven driver ids. Their standing today, from
 | `sandbox-runtime`                                                                | Reserved id; not implemented, so a project that names it runs on `local`                                        |
 | `docker`                                                                         | Implemented; isolation live-verified; the single-VM default; `restricted` needs the egress proxy image         |
 | `kubernetes`                                                                     | Implemented; partially verified (one Pod per runtime, default-deny NetworkPolicy, optional gVisor RuntimeClass) |
-| `aca-sessions`, `cloud-run-service`                                              | Implemented; not live-verified                                                                                  |
+| `cloud-run-service`                                                              | Implemented; the `gcp-cloudrun` default; isolation live-verified                                                |
+| `aca-sessions`                                                                   | Implemented; not live-verified                                                                                  |
 | `gke-agent-sandbox`, `aws-agentcore`, `aws-ecs`, `cloud-run-sandbox`             | Named; not implemented ([D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud))                |
 | `external`                                                                       | Available (E2B); passed the provider live lane (run 37809484699)                                                |
+| `vercel-sandbox`                                                                 | Implemented; passed the providers-live lane                                                                     |
+| `cloudflare-sandbox`                                                             | Implemented; refuses every run until its network control is proven (ADR-0131)                                   |
 
 <Accordion title="Everything the 'works with' strip names, and where it is used">
 
 | Area     | Names                                                                  | Where                                                                                  |
 | -------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Engines  | Claude Agent SDK, Mastra, OpenAI Agents SDK, pi                        | [Engines](/resources/engines)                                                          |
-| Models   | Anthropic, Azure OpenAI, OpenAI, OpenAI-compatible                     | [Models](/resources/models)                                                            |
+| Models   | Anthropic, Claude on Vertex AI, Azure OpenAI, OpenAI, compatible APIs | [Models](/resources/models)                                                            |
 | Tools    | MCP over HTTP / SSE, OpenAPI tools                                     | [MCP servers](/building/mcp-servers), [Tools from code](/guides/tools-from-code)       |
 | Runtimes | Docker, Kubernetes, gVisor RuntimeClass, Node 24                       | The driver table above                                                                 |
 | Stores   | PostgreSQL 18, S3, GCS, Azure Blob, SeaweedFS (S3-compatible endpoint) | [Data plane](/concepts/data-plane); native S3, GCS and Blob adapters await live proofs |
@@ -499,18 +502,18 @@ not a billing system. If you want a visual canvas or a vector store, Dify or n8n
 ## Limits today
 
 - **Your model provider sees your prompts.** The control plane, its database, files and keys stay
-  on your servers, but with Anthropic, OpenAI or Azure OpenAI each model call goes to that provider.
-  Only a self-hosted `openai-compatible` model keeps model traffic inside your network.
+  on your servers, but with Anthropic, OpenAI or Azure OpenAI each model call goes to that provider. Claude on
+  Vertex AI keeps it inside your own Google Cloud project, and a self-hosted `openai-compatible`
+  model keeps it inside your network.
 - **Not every choice is a flag.** The generator has no flag for the frontend, the production target
   or an MCP server; you edit `surfaces/main.ts`, `environments:` and `connectors:`.
-- **`aw deploy` covers a VM and Cloud Run.** Kubernetes is the Helm chart; `aw deploy` has no AWS
-  or Azure target yet.
+- **`aw deploy` covers a VM, Cloud Run, Kubernetes and Vercel.** It has no AWS or Azure target
+  yet; Azure Container Apps is a Terraform module you apply yourself.
 - **`aw login` cannot push.** `aw push` and `aw promote` against a deployment need an API key.
-- **AWS AgentCore, GKE Agent Sandbox, ECS, Cloud Run sandboxes and external sandboxes** are named,
-  not implemented, and no managed-cloud driver has a live isolation proof:
+- **AWS AgentCore, GKE Agent Sandbox, ECS and Cloud Run sandboxes** are named, not implemented:
   [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud).
-- **Kubernetes** is partially verified; **`aca-sessions`** and **`cloud-run-service`** are not
-  live-verified.
+- **Kubernetes** is partially verified, and **`aca-sessions`** is not live-verified.
+  `cloud-run-service` is.
 - **stdio MCP connectors** run only in the per-session tool sandbox, which is off by default and not
   yet wired end to end ([Connect an MCP server](/building/mcp-servers)); use HTTP or SSE.
 - **Engine gaps:** OpenAI Agents SDK has no skills; pi has no MCP connectors; only pi can fork a

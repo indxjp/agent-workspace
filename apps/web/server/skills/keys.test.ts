@@ -12,16 +12,10 @@ import {
   isValidSkillName,
   SKILL_FILES_PREFIX,
   SKILL_META_PREFIX,
-  SKILL_REVISIONS_PREFIX,
-  skillDeleteMarkerKey,
   skillFileKey,
-  skillFilesPrefix,
   skillMetaKey,
   skillNameFromMetaKey,
-  skillRevisionKey,
-  skillRevisionPrefix,
   skillRevisionRowFolder,
-  skillRevisionsPrefix,
   skillRowFolder,
 } from './keys';
 
@@ -139,7 +133,6 @@ describe('key composition', () => {
     expect(SKILL_META_PREFIX).toBe('skill-meta');
     expect(skillFileKey('demo', 'SKILL.md')).toBe('skills/demo/SKILL.md');
     expect(skillFileKey('demo', 'scripts/run.sh')).toBe('skills/demo/scripts/run.sh');
-    expect(skillFilesPrefix('demo')).toBe('skills/demo');
     expect(skillMetaKey('demo')).toBe('skill-meta/demo.json');
   });
 
@@ -248,24 +241,6 @@ describe('createCaseFoldGuard — round 4, ADR-0048 (B2-PATCH)', () => {
     // It performs no Unicode-aware folding itself; this test pins that `.toLowerCase()` is all it does.
     const guard = createCaseFoldGuard(['a.txt']);
     expect(guard.check('A.txt')).toBe('a.txt');
-  });
-});
-
-describe('published revision keys (SDK-19, N-1)', () => {
-  it('live under a prefix no mutable builder can produce', () => {
-    expect(skillRevisionKey('demo', 2, 'SKILL.md')).toBe('skill-revisions/demo/2/SKILL.md');
-    expect(skillRevisionPrefix('demo', 2)).toBe('skill-revisions/demo/2');
-    expect(skillRevisionsPrefix('demo')).toBe('skill-revisions/demo');
-    // A legal supporting file called `2/x.md` stays inside the skill's own prefix.
-    const mutable = [
-      skillFileKey('demo', '2/x.md'),
-      skillFileKey('demo', 'skill-revisions/demo/2/SKILL.md'),
-      skillMetaKey('demo'),
-      skillDeleteMarkerKey('demo'),
-    ];
-    for (const key of mutable) {
-      expect(key.startsWith(`${SKILL_REVISIONS_PREFIX}/`), key).toBe(false);
-    }
   });
 });
 

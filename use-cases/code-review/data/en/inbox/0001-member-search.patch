@@ -1,0 +1,55 @@
+From 3b1f0c7a9d2e4f6081a2b3c4d5e6f708192a3b4c Mon Sep 17 00:00:00 2001
+From: Ren Tsukishiro <tsukishiro.ren@example.com>
+Date: Tue, 17 Nov 2026 10:24:00 +0900
+Subject: [PATCH] Add an API that searches members by name
+
+---
+ src/members/search.test.ts | 12 ++++++++++++
+ src/members/search.ts      | 17 +++++++++++++++++
+ 2 files changed, 29 insertions(+)
+ create mode 100644 src/members/search.test.ts
+ create mode 100644 src/members/search.ts
+
+diff --git a/src/members/search.test.ts b/src/members/search.test.ts
+new file mode 100644
+index 0000000..8c1d2e4
+--- /dev/null
++++ b/src/members/search.test.ts
+@@ -0,0 +1,12 @@
++import { describe, expect, it } from 'vitest';
++
++import { searchMembers } from './search.ts';
++
++describe('searchMembers', () => {
++  it('refuses an empty name', async () => {
++    await expect(searchMembers(new URL('https://app.test/members?name='))).rejects.toThrow();
++  });
++  it('returns the members whose name matches', async () => {
++    expect(await searchMembers(new URL('https://app.test/members?name=tsuki'))).toHaveLength(1);
++  });
++});
+diff --git a/src/members/search.ts b/src/members/search.ts
+new file mode 100644
+index 0000000..5f7a9b1
+--- /dev/null
++++ b/src/members/search.ts
+@@ -0,0 +1,17 @@
++import { z } from 'zod';
++
++import { db } from '../db.ts';
++import { logger } from '../logger.ts';
++
++// A search term is a name of 1 to 50 characters, nothing else.
++const SearchQuerySchema = z.object({ name: z.string().trim().min(1).max(50) });
++
++export async function searchMembers(url: URL): Promise<unknown[]> {
++  const query = SearchQuerySchema.parse({ name: url.searchParams.get('name') });
++  logger.info(`member search: ${query.name}`);
++  try {
++    return await db.query(`SELECT id, name FROM members WHERE name LIKE '%${query.name}%'`);
++  } catch {
++    return [];
++  }
++}
+--
+2.47.0

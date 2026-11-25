@@ -7,6 +7,7 @@
  * session in the workspace.
  */
 import { applicationContext } from '../application-context';
+import type { Caller } from '../identity';
 import { log } from '../telemetry/logger';
 
 /** About ten, as §44 says. */
@@ -19,11 +20,8 @@ export interface RecentChatEntry {
   readonly label: string | null;
 }
 
-/** The person whose chats are listed: their workspace and their membership principal. */
-export interface RecentChatsOwner {
-  readonly workspaceId: string;
-  readonly principalId: string;
-}
+/** The person whose chats are listed: their workspace and membership principal, a Pick of {@link Caller}. */
+type RecentChatsOwner = Pick<Caller, 'workspaceId' | 'principalId'>;
 
 /**
  * The owner's recent chats, or `[]` when nothing is wired or the read fails: the list is a

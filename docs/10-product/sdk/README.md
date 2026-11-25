@@ -6,7 +6,8 @@ frontend or backend can consume as a real SDK — not a set of internal helpers.
 Two words are overloaded in this repository and this directory keeps them apart:
 
 - **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) is Anthropic's package. Spec §5 and §42
-  confine it to `apps/runner/src/claude.ts`; `tests/no-sdk-import.test.ts` enforces that.
+  confine it to its engine adapter's boundary, `packages/engine-claude-agent-sdk/src/boundary.ts`;
+  `tests/no-sdk-import.test.ts` enforces that.
 - **Agent Workspace SDK** (`@indx-workspace/contracts` and `@indx-workspace/sdk`) is what this
   directory designs: the published contracts of _our_ control-plane API and a typed client for it.
 
@@ -16,7 +17,7 @@ Two words are overloaded in this repository and this directory keeps them apart:
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1 — Clean up and formalise the specs     | Wire contracts as executable Zod schemas with derived types, one package, no framework or database dependency. Stable problem codes. Event vocabulary.    | Landed: `packages/contracts` covers every resource family the control plane exposes today (workspaces, sharing policy, team, invitations, API keys, models, runtimes, secrets, files, skills, connectors, agents, projects, sessions and transcripts, runs, run events, shares, metrics, audit) and the three error envelopes.                                                               |
 | 2 — Build a clean SDK on the specs       | An isomorphic client: authentication, transport, typed failures, resource clients, an SSE follower with resume.                                           | Landed: `packages/sdk` has a client per family (`aw.<family>`), the neutral `AgentEvent` view, and reads every error envelope; browser and Node. The `aw` CLI (`packages/aw`) wraps every ✅ method.                                                                                                                                                                                         |
-| 3 — Have the application consume the SDK | The web application imports contracts from the package and the SDK's parsers instead of keeping its own; one domain at a time, behind a conformance gate. | In progress: `apps/web/contracts/{agents,projects,team,invitations,files,runtimes}.ts` re-export the package; `components/run/live.ts` uses the SDK's SSE parser and `components/run/model.ts` its assistant-message parser; `apps/web/server/sdk-conformance.test.ts` pins every family's real serializer to the contracts. The browser screens still call `fetch` themselves (next phase). |
+| 3 — Have the application consume the SDK | The web application imports contracts from the package and the SDK's parsers instead of keeping its own; one domain at a time, behind a conformance gate. | In progress: `apps/web/contracts/{agents,projects,team,invitations,files,runtimes}.ts` re-export the package; `components/run/live.ts` uses the SDK's SSE parser; the `apps/web/server/sdk-conformance.*.test.ts` files pin every family's real serializer to the contracts. The browser screens still call `fetch` themselves (next phase). |
 
 ## Developer documentation
 
@@ -25,7 +26,7 @@ reference generated from the contracts and the SDK — lives in [`site/`](../../
 (Mintlify; `npx mint dev` to preview, `pnpm docs:generate` / `pnpm docs:check` to regenerate and
 verify the reference pages). The decision is
 [ADR-0054](../../adr/0054-developer-documentation-is-a-mintlify-site-generated-from-the-contracts.md).
-The public API of the four published consumer packages (contracts, sdk, react, aw) is also
+The public API of the published consumer packages is also
 committed as [API Extractor](https://api-extractor.com/) reports, one `.api.md` per `exports`
 subpath, under [`api/`](api/): every exported declaration with its full signature.
 `pnpm docs:check` fails when source and reports differ; when the change is deliberate, run
@@ -83,9 +84,7 @@ portable core every engine honours or refuses by name — which is the format th
 deferred — and states what the platform still refuses to own (an agent loop, a tool executor, a
 memory system, prompt templates). Skills move with it, from Claude-native to
 portable-with-refusal. The eleven units that implement it are tracked on
-[#299](https://github.com/indxjp/agent-workspace/issues/299); two of them (#301 and #302)
-must land before the first npm publish (#246), because they rename `AgentPolicy.provider` to
-`engine` and replace the relayed event names.
+[#299](https://github.com/indxjp/agent-workspace/issues/299).
 
 ## Coverage after the second phase (2026-09-21)
 
@@ -93,11 +92,10 @@ Every route of `apps/web/app/api/**` that needs no server change has a contract,
 case, a client method and a consumer (the `aw` CLI, or an application re-export). What remains
 ⬜ in [04 §5](04-api-specification.md#5-resources) is exactly the set of server changes in
 [04 §8](04-api-specification.md#8-server-changes-this-specification-requires) plus the
-refactoring items RF-103 (share publish), RF-201 (agent archive) and the agent policy/export
-surface (S-13). Implementing the phase surfaced seven more server changes, S-16 to S-22, recorded
+refactoring items RF-103 (share publish) and RF-201 (agent archive); the agent policy and export
+surface (S-13) has since landed. Implementing the phase surfaced seven more server changes, S-16 to S-22, recorded
 there; the most consequential was S-16 — the RBAC layer's `{ code, detail }` envelope — which SDK
 unit 6 (#238, ADR-0075) replaced with the standard `{ code, message }`, keeping `detail` as a
-deprecated duplicate until the next major release (ADR-0078 D7). S-22 is the CLI's: the workspace
-and invitation routes refuse an API-key principal (ADR W9-WS-119), and a key is the only
-credential `aw` can hold, so those eight commands exist in the SDK but not in the binary until a
-person can sign the CLI in.
+deprecated duplicate until the next major release (ADR-0078 D7). S-22 was the CLI's: the workspace
+and invitation routes refuse an API-key principal (ADR W9-WS-119); `aw login` now signs a person
+in, so those commands exist in the binary too.

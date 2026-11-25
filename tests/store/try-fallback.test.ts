@@ -1,5 +1,5 @@
 /**
- * What the Try tab's fallback and the home page's featured chat show of a recording (spec, "How
+ * What the Try it section's fallback and the home page's featured chat show of a recording (spec, "How
  * Try it works"): its steps in order, the approval wait as it was decided, the label that says it
  * was recorded with the scripted model, and "recording coming" for an entry with none.
  */

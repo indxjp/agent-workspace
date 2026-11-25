@@ -152,9 +152,10 @@ describe('bounds and vocabulary', () => {
   });
 
   it('publishes built-in skill names that are valid skill names', () => {
-    expect(BUILTIN_SKILL_NAMES).toContain('office-reader');
+    expect(BUILTIN_SKILL_NAMES).toStrictEqual(['office-reader', 'office-writer']);
     for (const name of BUILTIN_SKILL_NAMES) expect(SKILL_NAME_PATTERN.test(name)).toBe(true);
     expect(isBuiltinSkillName('office-reader')).toBe(true);
+    expect(isBuiltinSkillName('office-writer')).toBe(true);
     expect(isBuiltinSkillName('my-own-skill')).toBe(false);
   });
 

@@ -15,7 +15,7 @@ function initCopyButtons() {
       navigator.clipboard.writeText(text).then(
         function () {
           var was = b.textContent;
-          b.textContent = 'Copied';
+          b.textContent = document.documentElement.lang === 'ja' ? 'コピーしました' : 'Copied';
           setTimeout(function () {
             b.textContent = was;
           }, COPIED_LABEL_MS);

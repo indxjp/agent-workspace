@@ -1,13 +1,12 @@
 import * as oidc from 'openid-client';
-import { SignJWT, errors, jwtVerify, type JWTVerifyResult } from 'jose';
+import { SignJWT, jwtVerify, type JWTVerifyResult } from 'jose';
 
 import type { OidcConfiguration, OidcIdentity } from '@agent-workspace/core/auth';
 import { isLoopbackHost, readDeploymentPosture } from '@agent-workspace/core/posture';
 
 import { systemClock } from '../clock.ts';
-import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
+import { derivePurposeKey } from './core/key-ring.ts';
 
-const encoder = new TextEncoder();
 /** The unscoped base name; routes use `oidcTransactionCookieName()` from `index.ts` (issue #394). */
 export const OIDC_TRANSACTION_COOKIE_BASE_NAME = 'aw_oidc_transaction';
 const TRANSACTION_TTL_SECONDS = 600;
@@ -134,24 +133,11 @@ function transactionKey(signingSecret: string): Promise<Uint8Array<ArrayBuffer>>
 }
 
 /**
- * The purpose key, then the raw secret every transaction was signed with before step 5, so a
- * sign-in that began before a deploy still finishes. Only a bad signature moves on to the next
- * key; an expired or malformed transaction is refused as it was.
+ * The transaction verifies under its purpose key only: the raw-secret roll-over of step 5 ended in
+ * part 06 step 6. An expired, malformed or wrongly signed transaction is refused.
  */
 async function verifyTransaction(token: string, signingSecret: string): Promise<JWTVerifyResult> {
-  const keys = verificationKeys(
-    () => transactionKey(signingSecret),
-    () => Promise.resolve(encoder.encode(signingSecret)),
-  );
-  for (const [index, key] of keys.entries()) {
-    try {
-      return await jwtVerify(token, await key(), { algorithms: ['HS256'] });
-    } catch (error) {
-      const lastKey = index === keys.length - 1;
-      if (lastKey || !(error instanceof errors.JWSSignatureVerificationFailed)) throw error;
-    }
-  }
-  throw new Error('OIDC transaction has no verification key.');
+  return jwtVerify(token, await transactionKey(signingSecret), { algorithms: ['HS256'] });
 }
 
 /** `next` must already have passed `safeNextPath`; it rides in the signed transaction. */

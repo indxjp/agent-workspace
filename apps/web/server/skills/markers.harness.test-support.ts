@@ -39,10 +39,6 @@ export function createSkillMarkerFixture(setup: () => Promise<Fixture>) {
         .filter((row) => row.kind === 'file' && row.path.startsWith('.skills/'))
         .map((row) => row.path)
         .sort();
-    const putLegacy = (key: string, json: unknown) =>
-      shared.write(key, new TextEncoder().encode(JSON.stringify(json)), {
-        contentType: 'application/json',
-      });
     return {
       principal,
       catalog,
@@ -54,7 +50,6 @@ export function createSkillMarkerFixture(setup: () => Promise<Fixture>) {
       rows,
       saveRow,
       skillRowPaths,
-      putLegacy,
     };
   }
   return {

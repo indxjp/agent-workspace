@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:an": {
+      "files": {
+        "agent-workspace.yaml": "ada751fa2108975860c9d935eb7f15681848276e8609e7722946899ce1107850",
+        "agents/quality-defect.md": "3733ac9b0381fda8188d80956d8ce004751074c4254aef29d3830079a6a38745",
+        "agents/quality-defect.ts": "d7b6ffeb844d10df426e6f2636b80cf1c21ac278979ef7b51f4114b26bc39544",
+        "data/en/records.csv": "49f11cfe079c9f95d082fd8666b46ff935987716c0345313ffe300cb079bb52c",
+        "data/ja/records.csv": "8b73a591f399f59cb675be4d44da2bb0a5848ace5ae61bb11e0a478858e64622",
+        "evals/quality-defect.yaml": "e90297b4dda65ef5604f3645339f4f80eff6434eaee35dd55aa95c9edf40e9d7",
+        "skills/quality-defect/SKILL.md": "6c93e88a31a9c7fe59d3204b77b177f949e9ac1747de426f376cd94428234895",
+        "surfaces/main.ts": "41cb328aee0008b680d604737dee227df4c93e0767982ea902a2ee90b841426c"
+      },
+      "edits": []
+    }
+  }
+}

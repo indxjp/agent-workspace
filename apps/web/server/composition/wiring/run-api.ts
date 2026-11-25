@@ -4,7 +4,7 @@ import { wireRunEvaluations } from './run-api-evaluations';
 import { wireRunSessions } from './run-api-sessions';
 import { createRunTokenRevoker } from './run-api-credentials';
 import { wireRunDailyCostCap } from './run-api-daily-cost';
-import { wireDemoSweep, wireRunDemoCaps } from './run-api-demo-caps';
+import { wireDemoSweep, wireRunDemoApprovedWrites, wireRunDemoCaps } from './run-api-demo-caps';
 /**
  * The run API (`ApplicationContext.runs`) and the five domains that exist only with a run runtime:
  * the A2A and tool endpoints, `POST /api/tokens`, the triggers and the public surfaces. Built after
@@ -104,6 +104,8 @@ export function wireRunApi(wired: RunApiWiring): RunApiEnvironment {
     ...withDailyCostCap,
 
     ...wireRunDemoCaps(wired),
+
+    ...wireRunDemoApprovedWrites(wired),
 
     store: runs,
 

@@ -1,0 +1,25 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: sla-watch
+engine: claude-agent-sdk
+# A scheduled report (archetype RP). The agent reads its own folder, `sla-watch/`, and writes its
+# report to its own `sla-watch-reports/` with `Write`, which waits for a person's approval (ADR-0145).
+#   for f in $(cd data/ja && find . -type f); do aw files upload "sla-watch/${f#./}" "data/ja/${f#./}"; done
+# The schedule is the platform's trigger (ADR-0144), installed once from its file:
+#   aw triggers create --file triggers/sla-watch.json --agent <agent-id>
+# Every run it starts answers in the trigger's output schema (ADR-0154) and acts for the trigger's
+# owner, whose approval the write waits for. A schedule's run is handed no date (its body is empty)
+# and the runtime clock is UTC, so the cron fires at 09:00 Asia/Tokyo or later: from then on
+# "today" is the same date in Japan and in UTC.
+policy:
+  permissions:
+    writeFiles: true
+    runCommands: false
+    unrestrictedNetwork: false
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

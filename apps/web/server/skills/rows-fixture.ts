@@ -1,11 +1,8 @@
 /**
  * Test world for the skills code: an in-memory catalog and object store behind the real storage
- * service, so a skill is written as `skills` rows the way a deployment does it. A skill stored the
- * old way (a bare object prefix, still read by the bridge) is seeded with {@link seedBareSkill}.
+ * service, so a skill is written as `skills` rows the way a deployment does it.
  */
 import { createStorageService } from '../storage/service';
-import type { SkillObjects } from '../storage-and-sharing';
-import { skillFileKey, skillMetaKey } from './keys';
 import type { SkillRowsWriter } from './tree';
 
 /** The object store a rows service saves into; spelled by the service so the fixture needs no barrel import. */
@@ -38,25 +35,4 @@ export function createSkillRowsWorld<Catalog extends RowsCatalog>(
   });
   const rows: SkillRowsWriter = { storage, workspaceId, principal };
   return { catalog, objects, storage, rows, workspaceId };
-}
-
-/** One file of a bare-prefix skill, as the import body spells it. */
-export interface BareSkillFile {
-  readonly path: string;
-  readonly contentBase64: string;
-}
-
-/** Store a skill the way releases before the catalog did: its files under the bare prefix, then its record. */
-export async function seedBareSkill(
-  store: SkillObjects,
-  skill: { readonly name: string; readonly files: readonly BareSkillFile[] },
-): Promise<void> {
-  for (const file of skill.files) {
-    const body = new Uint8Array(Buffer.from(file.contentBase64, 'base64'));
-    await store.write(skillFileKey(skill.name, file.path), body, { contentType: null });
-  }
-  const now = new Date().toISOString();
-  const record = { name: skill.name, enabled: true, createdAt: now, updatedAt: now };
-  const body = new TextEncoder().encode(JSON.stringify(record));
-  await store.write(skillMetaKey(skill.name), body, { contentType: 'application/json' });
 }

@@ -1,0 +1,7 @@
+task_id,updated_at,assignee,title,status,comment
+TSK-412,2026-11-24 17:20,Minato Chihaya,Order list filters,Done,Fixed the review comments and merged.
+TSK-415,2026-11-24 15:05,Minato Chihaya,Faster order detail page,In Progress,Found the slow query. Will fix it tomorrow.
+TSK-418,2026-11-24 16:40,Tsumugi Yuzuki,Garbled text in invoice PDFs,In Progress,Cannot reproduce it: the test environment lacks the production font.
+TSK-420,2026-11-24 11:30,Saku Noto,Monitoring for the nightly batch,Done,Set the alert to post to the team channel.
+TSK-421,2026-11-24 18:10,Saku Noto,Renew the staging certificate,To Do,Requested the access needed for the renewal. Waiting for approval.
+TSK-409,2026-11-20 10:00,Tsumugi Yuzuki,Input checks on the contact form,Done,Added tests and merged.

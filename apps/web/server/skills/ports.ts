@@ -77,10 +77,8 @@ export interface SkillCatalog {
   deleteSkill(name: string, onlyId?: string): Promise<DeleteSkillRowOutcome>;
   /** Start a delete: record the owner and every revision number, unless the skill is in use. */
   markSkillDeleting(name: string): Promise<MarkSkillDeletingOutcome>;
-  /** Copy a legacy marker into the row unless it already has one or is in use; whether it now has one. */
-  backfillSkillPendingDelete(name: string, pending: PendingSkillDelete): Promise<boolean>;
-  /** Write the platform record (`null` clears it), or with `onlyIfEmpty` only when there is none. */
-  setSkillMeta(name: string, meta: unknown, onlyIfEmpty?: boolean): Promise<boolean>;
+  /** Write the platform record (`null` clears it); `false` when no row has that name. */
+  setSkillMeta(name: string, meta: unknown): Promise<boolean>;
   /** Record the digest of the built-in release installed into the row. */
   setSkillBuiltinDigest(name: string, digest: string): Promise<void>;
   /** Allocate the next revision number, call `write`, then record it complete; `null` for no skill. */

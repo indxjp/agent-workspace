@@ -62,6 +62,12 @@ export interface ScriptedOptions {
   readonly requireApproval?: readonly string[] | undefined;
   readonly handoff?: boolean | undefined;
   /**
+   * Answers a Claude built-in call (`Read`) as the engine would, once it is not gated or is
+   * approved; `null` for a call it does not answer, which is answered `ok`, as without it.
+   */
+  readonly native?:
+    ((name: string, input: Record<string, unknown>) => Promise<McpToolResult> | null) | undefined;
+  /**
    * The agent as pushed (issue #1571): `body` is its `toAgentVersionBody`, saved as version 1 with
    * `local` pointing at it, so each run reports `agentVersion: 1`, `GET /api/agents/:id/versions`
    * lists it, and `GET /api/skills/:name` answers one published revision per entry of

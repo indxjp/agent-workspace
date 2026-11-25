@@ -81,18 +81,21 @@ export type DemoRunStartProblemCode = keyof typeof DEMO_RUN_START_PROBLEM_CODES;
 
 /**
  * Why the store shows the recording instead of a live run, in the words the visitor reads: the
- * person's or the run's count, the cost, the load from one address, or the demo being unavailable.
+ * person's or the run's count, the cost, the load from one address, the demo being unavailable, or
+ * a run's answer that did not come back in the form its `outputSchema` asked for (`format`).
  */
-export const DEMO_FALLBACK_REASONS = ['count', 'cost', 'load', 'unavailable'] as const;
+export const DEMO_FALLBACK_REASONS = ['count', 'cost', 'load', 'unavailable', 'format'] as const;
 export const DemoFallbackReasonSchema = z.enum(DEMO_FALLBACK_REASONS);
 export type DemoFallbackReason = z.infer<typeof DemoFallbackReasonSchema>;
 
-/** A run's own stop at its per-run caps, as the run API reports it. */
+/** A run's own stop at its per-run caps or without its typed answer, as the run API reports it. */
 const RUN_CAP_REASONS: Readonly<Record<string, DemoFallbackReason>> = {
   /** The run's stored error code when the gateway stopped it at its spend ceiling. */
   run_budget_reached: 'cost',
   /** The run's stop reason when it used its turns. */
   max_turns: 'count',
+  /** The run's stored error code when its answer did not satisfy its `outputSchema` (ADR-0143). */
+  output_schema_unsatisfied: 'format',
 };
 
 const START_REASONS: Readonly<Record<DemoRunStartProblemCode, DemoFallbackReason>> = {
@@ -104,8 +107,9 @@ const START_REASONS: Readonly<Record<DemoRunStartProblemCode, DemoFallbackReason
 };
 
 /**
- * The reason to show for a demo start refusal code, or for a run that stopped at a per-run cap
- * (`run_budget_reached`, `max_turns`); `null` for anything else, which is not a cap.
+ * The reason to show for a demo start refusal code, for a run that stopped at a per-run cap
+ * (`run_budget_reached`, `max_turns`), or for one whose answer missed its schema
+ * (`output_schema_unsatisfied`); `null` for anything else.
  */
 export function demoFallbackReason(code: string): DemoFallbackReason | null {
   if (Object.hasOwn(START_REASONS, code)) return START_REASONS[code as DemoRunStartProblemCode];

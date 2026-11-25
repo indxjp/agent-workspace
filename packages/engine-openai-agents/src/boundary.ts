@@ -47,6 +47,7 @@ import {
 } from '@openai/agents';
 import { aisdk } from '@openai/agents-extensions/ai-sdk';
 import { z } from 'zod';
+import type { ToolAnswers } from '@agent-workspace/engine';
 
 import type { OpenAiAgentsCompiled, OpenAiAgentsMcpServer } from './compile.js';
 import {
@@ -173,6 +174,7 @@ function toolsFor(
   compiled: OpenAiAgentsCompiled,
   signal: AbortSignal,
   subagentNames?: readonly OpenAiAgentsToolName[],
+  toolAnswers?: ToolAnswers,
 ): Tool[] {
   const context = toolContextOf(compiled, signal);
   const specs = (subagentNames ?? compiled.agent.tools).map((name) =>
@@ -180,7 +182,7 @@ function toolsFor(
   );
   const { skillScript } = compiled;
   if (skillScript !== null && subagentNames === undefined) {
-    specs.push(skillScriptToolSpec(skillScript, signal));
+    specs.push(skillScriptToolSpec(skillScript, signal, toolAnswers));
   }
   return specs.map((spec) => tool(spec));
 }
@@ -220,6 +222,8 @@ function toEvent(event: RunStreamEvent): OpenAiAgentsEvent {
 export type OpenAiAgentsRunDeps = {
   readonly session: EngineStoreSession | null;
   readonly signal: AbortSignal;
+  /** The answers the run received, which a `run_skill_script` call may hand its script (ADR-0176). */
+  readonly toolAnswers?: ToolAnswers | undefined;
 };
 
 /** How a run is started. A parameter of the engine so the conformance kit can replay events. */
@@ -274,7 +278,7 @@ async function mainAgentFor(
     name: compiled.agent.name,
     instructions: compiled.agent.instructions,
     model: await modelFor(compiled),
-    tools: [...toolsFor(compiled, deps.signal), ...delegates],
+    tools: [...toolsFor(compiled, deps.signal, undefined, deps.toolAnswers), ...delegates],
     mcpServers: [...servers],
     modelSettings: modelSettingsOf(compiled.agent.modelSettings),
     // `strict: false`: the provider sees the caller's schema as written; the answer is checked

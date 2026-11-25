@@ -2,7 +2,7 @@
  * `DELETE /api/skills/:name` — remove a skill nothing is assigned to (S-12, ADR-0077).
  *
  * A skill lives in two places: its catalog row (`skills`, which agent assignments reference) and
- * its bytes in the workspace (`.skills/<name>…` rows, plus the bare objects of earlier releases).
+ * its bytes in the workspace (`.skills/<name>…` rows).
  * The two cannot share one transaction, so the delete is ordered to be recoverable instead:
  *
  * 1. The row is marked first (`SkillCatalog.markSkillDeleting`), in one transaction
@@ -14,27 +14,17 @@
  * 2. The skill's files go, then its platform record.
  * 3. The row goes last. A delete interrupted anywhere after step 1 leaves the mark, and retrying
  *    `DELETE` finishes the job.
- *
- * A skill whose delete an earlier release recorded as a marker object (no row, or a row without a
- * mark) is finished the same way; its marker object is removed with it.
  */
 import { formatInUseReferrer } from '@indx-workspace/contracts';
 
 import type { ApiResult } from '../http/result';
 import { problem } from './handlers';
-import {
-  skillFilesPrefix,
-  skillMetaKey,
-  skillRevisionRowFolder,
-  skillRevisionsPrefix,
-  skillRowFolder,
-} from './keys';
+import { skillMetaKey, skillRevisionRowFolder, skillRowFolder } from './keys';
 import { readWhole } from '../storage/objects';
 import type { SkillObjects } from '../storage-and-sharing';
 import { withSkillMetaColumn } from './meta-column';
-import { clearLegacyPendingSkillDelete, pendingSkillDelete } from './pending-delete';
 import type { SkillCatalog } from './ports';
-import { walkFiles, type SkillRowsAccess } from './tree';
+import type { SkillRowsAccess } from './tree';
 
 /** `204` once the skill's row and bytes are gone; `409 skill_in_use`; `404 skill_not_found`. */
 export async function deleteSkill(
@@ -44,34 +34,18 @@ export async function deleteSkill(
   rows?: SkillRowsAccess,
 ): Promise<ApiResult> {
   const store = withSkillMetaColumn(objects, catalog);
-  const earlier = await pendingSkillDelete(store, catalog, name);
   const marked = await catalog.markSkillDeleting(name);
   if (marked.kind === 'in-use') {
-    // A mark that stands is never undone: only a marker that did not count (no mark) is cleared.
-    if (earlier === null) await clearLegacyPendingSkillDelete(store, name);
     return problem(409, 'skill_in_use', inUseMessage(name), inUseReferrers(marked.agentIds));
   }
   // The revision numbers are only readable while the skill row exists, so the mark keeps them.
-  const revisions = new Set([
-    ...(earlier?.revisions ?? []),
-    ...(marked.kind === 'marked' ? marked.pending.revisions : []),
-  ]);
+  const revisions = new Set(marked.kind === 'marked' ? marked.pending.revisions : []);
 
   const removedRows = await removeRowFolders(name, revisions, rows);
-  // storage-bridge(#1699): a skill stored as a bare object prefix is deleted from the store
-  const files = await walkFiles(store, skillFilesPrefix(name));
   const meta = await readWhole(store, skillMetaKey(name));
-  if (marked.kind === 'not-found' && removedRows === 0 && files.length === 0 && meta === null) {
-    await clearLegacyPendingSkillDelete(store, name);
+  if (marked.kind === 'not-found' && removedRows === 0 && meta === null) {
     return problem(404, 'skill_not_found', 'No skill has that name.');
   }
-  for (const file of files) await store.delete(file.key);
-  for (const file of await walkFiles(store, skillRevisionsPrefix(name))) {
-    await store.delete(file.key);
-  }
-  // storage-bridge(#1699): the skills adopt stage may have moved the bare prefix into rows after the
-  // first sweep (it read the skill before the mark); sweeping again removes them.
-  await removeRowFolders(name, revisions, rows);
   await store.delete(skillMetaKey(name));
   // A sync that read the platform record before the mark existed may have inserted a row for a
   // skill that had none; with the record gone, no later sync can. An assignment to such a row cannot
@@ -81,7 +55,6 @@ export async function deleteSkill(
   if (removed.kind === 'in-use') {
     return problem(409, 'skill_in_use', inUseMessage(name), inUseReferrers(removed.agentIds));
   }
-  await clearLegacyPendingSkillDelete(store, name);
   return { status: 204, body: null };
 }
 

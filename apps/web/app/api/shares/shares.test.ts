@@ -87,7 +87,7 @@ function install(role: Role, ownership: Ownership) {
           principalId: CALLER,
           ownerPrincipalId: CALLER,
           userId: null,
-          userLabel: 'Share test key',
+          label: 'Share test key',
           role,
         }),
       forWorkspace: () => Promise.resolve(sharing),

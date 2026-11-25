@@ -1,0 +1,8 @@
+material,name,density (g/cm3),material (yen/kg),yield,max thickness (mm),cutting (yen/m),bending (yen/bend),setup (yen/lot),margin,effective from
+SS400,General structural rolled steel,7.85,150,0.8,3.2,80,40,6000,0.25,2026-04-01
+SS400,General structural rolled steel,7.85,150,0.8,6,120,40,6000,0.25,2026-04-01
+SS400,General structural rolled steel,7.85,150,0.8,12,200,40,6000,0.25,2026-04-01
+SUS304,Stainless steel sheet (austenitic),7.93,620,0.75,3,110,60,9000,0.25,2026-04-01
+SUS304,Stainless steel sheet (austenitic),7.93,620,0.75,6,180,60,9000,0.25,2026-04-01
+A5052,Aluminium alloy sheet,2.68,900,0.8,3,70,50,5000,0.3,2026-04-01
+A5052,Aluminium alloy sheet,2.68,900,0.8,6,100,50,5000,0.3,2026-04-01

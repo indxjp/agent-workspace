@@ -7,13 +7,30 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DemoTemplateSeedSchema } from '@indx-workspace/contracts/demo-operator';
+import {
+  DemoSeedConnectorSchema,
+  DemoTemplateSeedSchema,
+  type DemoTemplateSeed,
+} from '@indx-workspace/contracts/demo-operator';
 import { isBuiltinSkillName } from '@indx-workspace/contracts/skills';
+import { PUBLIC_SOURCE_RECORDS_RESOURCE } from '@indx-workspace/sdk/define';
 import { describe, expect, it } from 'vitest';
 
+import { defineEntry, hasSource, type LiveEntry } from '../../../examples/store/catalog/define.ts';
+import { CATALOG } from '../../../examples/store/catalog/index.ts';
 import { expectedTemplate } from '../daily/sample-check.ts';
-import { buildSeed, liveEntries } from './build.ts';
+import {
+  buildSeed,
+  CONNECTOR_TOOLS,
+  declaredConnector,
+  liveEntries,
+  PUBLIC_SOURCES,
+  publicSourceSets,
+  seededEntries,
+} from './build.ts';
+import { stagedView } from '../live-verify/source-hash.ts';
 import { readSettings, seedEntry } from './run.ts';
+import { fillVerification, readFillSettings } from './verification.ts';
 
 const entries = liveEntries();
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -31,35 +48,52 @@ describe('the seed of every live entry', () => {
   );
 
   it('covers every live entry and no other', () => {
-    expect(entries).toHaveLength(14);
+    // Production seeds the live entries; each must be an entry with its source and demo.
+    expect(entries.map((entry) => entry.slug)).toEqual(
+      seededEntries('production').map((entry) => entry.slug),
+    );
+    expect(entries.every(hasSource)).toBe(true);
     expect(new Set(entries.map((entry) => entry.slug)).size).toBe(entries.length);
     expect(entries.every((entry) => entry.status === 'live')).toBe(true);
   });
 
-  it('carries records for the five entries with a records folder and the three whose gallery fixtures a read tool answers from', () => {
+  it('carries records for the five entries with a records folder, the three whose gallery fixtures a read tool answers from and the two that read a public source', () => {
     const withRecords = entries
       .filter((entry) => buildSeed(entry).records.length > 0)
       .map((entry) => entry.slug)
       .sort();
     expect(withRecords).toEqual([
       'crm-sales',
+      'market',
       'meeting-minutes',
       'quality-defect',
       'quotation',
       'ringi-review',
+      'screening',
       'service-desk',
       'team-chat',
       'wiki',
     ]);
   });
 
-  it("carries a records folder's sets in both languages, and a gallery fixture's in Japanese", () => {
+  it("carries a records folder's sets and a public source's snapshot in both languages, and a gallery fixture's in Japanese", () => {
     for (const entry of entries) {
       const seed = buildSeed(entry);
+      const snapshot = (set: { readonly resource: string }) =>
+        set.resource === PUBLIC_SOURCE_RECORDS_RESOURCE;
       const byLang = (lang: string) =>
-        seed.records.filter((set) => set.lang === lang).map((set) => set.resource);
+        seed.records
+          .filter((set) => set.lang === lang && !snapshot(set))
+          .map((set) => set.resource);
       if (entry.demo.records === undefined) expect(byLang('en'), entry.slug).toEqual([]);
       else expect(byLang('ja').sort(), entry.slug).toEqual(byLang('en').sort());
+      expect(
+        seed.records
+          .filter(snapshot)
+          .map((set) => set.lang)
+          .sort(),
+        entry.slug,
+      ).toEqual(PUBLIC_SOURCES[entry.slug] === undefined ? [] : ['en', 'ja']);
     }
   });
 
@@ -148,12 +182,10 @@ describe('the seed of every live entry', () => {
       }
       if (named.length > 0) withSkills.push(entry.slug);
     }
-    // Every gallery entry's agent uses a skill; the example apps' agents use none.
+    // Every gallery and use-cases entry's agent uses a skill; the example apps' agents use none.
     expect(withSkills.length).toBeGreaterThan(0);
     expect(withSkills).toEqual(
-      entries
-        .filter((entry) => entry.source.startsWith('tests/gallery/'))
-        .map((entry) => entry.slug),
+      entries.filter((entry) => !entry.source.startsWith('examples/')).map((entry) => entry.slug),
     );
   });
 
@@ -171,8 +203,13 @@ describe('the seed of every live entry', () => {
         ),
       });
       expect(text, entry.slug).not.toMatch(CREDENTIAL);
-      for (const connector of seed.connectors) {
+      // A connector names its tools and, for a records stand-in (ADR-0169), the writes it keeps by
+      // tool name and record kind: no address, header or secret.
+      for (const { recorded, ...connector } of seed.connectors) {
         expect(Object.keys(connector).sort(), entry.slug).toEqual(['name', 'reads', 'writes']);
+        for (const kept of recorded ?? []) {
+          expect(Object.keys(kept).sort(), entry.slug).toEqual(['kind', 'read', 'write']);
+        }
       }
     }
   });
@@ -207,14 +244,24 @@ describe('the seed of every live entry', () => {
 describe('the seeding command', () => {
   const settings = { baseUrl: 'https://platform.example.test', token: 't'.repeat(40) };
 
-  it('needs the platform URL and the operator token, and names the missing one only', () => {
+  it('needs the platform URL, the operator token and the environment, and names the missing one only', () => {
     expect(readSettings({})).toEqual({ missing: 'STORE_PLATFORM_URL' });
     expect(readSettings({ STORE_PLATFORM_URL: 'https://p.example.test' })).toEqual({
       missing: 'STORE_OPERATOR_TOKEN',
     });
-    expect(
-      readSettings({ STORE_PLATFORM_URL: 'https://p.example.test/', STORE_OPERATOR_TOKEN: 'x' }),
-    ).toEqual({ baseUrl: 'https://p.example.test', token: 'x' });
+    const operator = { STORE_PLATFORM_URL: 'https://p.example.test/', STORE_OPERATOR_TOKEN: 'x' };
+    expect(readSettings(operator)).toEqual({ missing: 'STORE_SEED_ENVIRONMENT' });
+    expect(readSettings({ ...operator, STORE_SEED_ENVIRONMENT: 'preview' })).toEqual({
+      missing: 'STORE_SEED_ENVIRONMENT',
+    });
+    expect(readSettings({ ...operator, STORE_SEED_ENVIRONMENT: ' staging ' })).toEqual({
+      baseUrl: 'https://p.example.test',
+      token: 'x',
+      environment: 'staging',
+    });
+    expect(readSettings({ ...operator, STORE_SEED_ENVIRONMENT: 'production' })).toMatchObject({
+      environment: 'production',
+    });
   });
 
   it('PUTs the seed to the entry with the operator token, and prints the entry and whether it changed', async () => {
@@ -264,5 +311,278 @@ describe('the seeding command', () => {
       line: 'wiki: refused 502 unknown',
       ok: false,
     });
+  });
+});
+
+/** `entry` without its staged rebuild (`next`, ADR-0174), as a fixture for another shape. */
+function withoutRebuild(entry: LiveEntry): LiveEntry {
+  const { next, ...current } = entry;
+  return next === undefined ? entry : current;
+}
+
+describe('the seed of a coming-soon entry with its code merged', () => {
+  // A batch PR merges an entry's code while it is still coming soon; the staging deploy seeds it so
+  // R1 can verify it before the flip. Any entry with a source stands in for one here.
+  const listed = entries.find((entry) => entry.slug === 'ringi-review');
+  if (listed === undefined) throw new Error('the catalog has no ringi-review entry');
+  const base = withoutRebuild(listed);
+  const soon = defineEntry({ ...base, status: 'soon', wave: 2 });
+  const bare = defineEntry({
+    slug: 'proposal',
+    area: 'sales',
+    status: 'soon',
+    wave: 2,
+    name: { ja: '提案書ドラフト', en: 'Proposal drafter' },
+    summary: { ja: '骨子を作る。', en: 'Drafts an outline.' },
+  });
+
+  it('is seeded in staging, beside every live entry, and never in production', () => {
+    const staging = seededEntries('staging', [base, soon, bare]).map((entry) => entry.status);
+    expect(staging).toEqual(['live', 'soon']);
+    expect(seededEntries('production', [base, soon, bare])).toEqual([base]);
+    // The catalog as it is: production seeds exactly the live entries, staging every one with a
+    // source.
+    expect(seededEntries('production')).toEqual(entries);
+    expect(seededEntries('staging').map((entry) => entry.slug)).toEqual(
+      CATALOG.filter(hasSource).map((entry) => entry.slug),
+    );
+  });
+
+  it('builds the same seed it will have once live', () => {
+    if (!hasSource(soon)) throw new Error('the soon entry has no source');
+    const seed = buildSeed(soon);
+    expect(DemoTemplateSeedSchema.safeParse(seed).success).toBe(true);
+    expect(seed).toEqual(buildSeed(base));
+    expect(seed.definition.agent.name).toBe(soon.demo.agent);
+  });
+});
+
+describe('the seed of a live entry with a staged rebuild (next, ADR-0174)', () => {
+  // A rebuild is merged beside the live entry's current source: staging seeds and R1 verifies the
+  // rebuild, production keeps the source visitors try. Another entry's use case stands in for it.
+  const listed = entries.find((entry) => entry.slug === 'ringi-review');
+  const nda = CATALOG.find((entry) => entry.slug === 'nda');
+  if (listed === undefined || nda === undefined || !hasSource(nda)) {
+    throw new Error('the catalog has no ringi-review or nda entry with a source');
+  }
+  const base = withoutRebuild(listed);
+  const rebuilt = defineEntry({ ...base, next: { source: nda.source, demo: nda.demo } });
+  if (rebuilt.status !== 'live') throw new Error('the rebuilt entry is live');
+
+  it('is seeded as its rebuild in staging and as its current source in production', () => {
+    const [staging] = seededEntries('staging', [rebuilt]);
+    expect(staging).toEqual({ ...base, source: nda.source, demo: nda.demo });
+    expect(staging).toEqual(stagedView(rebuilt));
+    expect(seededEntries('production', [rebuilt])).toEqual([rebuilt]);
+    if (staging === undefined) throw new Error('staging seeds the rebuilt entry');
+    expect(buildSeed(staging).definition.agent.name).toBe(nda.demo.agent);
+    expect(buildSeed(staging).files).toEqual(buildSeed(nda).files);
+    // The gallery's authority fixture belongs to the gallery source, not to the rebuild.
+    expect(buildSeed(staging).records).toEqual(buildSeed(nda).records);
+    expect(buildSeed(rebuilt).records.map((set) => set.connector)).toEqual(['authority']);
+    expect(buildSeed(rebuilt)).toEqual(buildSeed(base));
+  });
+
+  it('leaves an entry with no rebuild as it is', () => {
+    expect(stagedView(base)).toBe(base);
+    expect(stagedView(nda)).toBe(nda);
+  });
+});
+
+/**
+ * What one workspace cannot hold for two entries at once (the verification workspace holds every
+ * seeded entry, runbook §10): two agents with one name (the harness finds an entry's copy by its
+ * agent's name), or one sample file path or one carried skill name with two contents (a folder and a
+ * skill are found by path and name, so the second copy would replace the first's). A connector name
+ * is not among them: each entry's stand-in is its own (`template-copy-connectors.ts`).
+ */
+function sharedContentConflicts(
+  seeds: readonly { readonly slug: string; readonly seed: DemoTemplateSeed }[],
+): readonly string[] {
+  const held = new Map<string, { readonly slug: string; readonly content: string }>();
+  const conflicts: string[] = [];
+  const hold = (key: string, slug: string, content: string) => {
+    const first = held.get(key);
+    if (first === undefined) held.set(key, { slug, content });
+    else if (first.content !== content) conflicts.push(`${key}: ${first.slug} and ${slug}`);
+  };
+  for (const { slug, seed } of seeds) {
+    hold(`agent ${seed.definition.agent.name}`, slug, slug);
+    for (const file of seed.files) hold(`file ${file.path}`, slug, file.base64);
+    for (const skill of seed.skills) hold(`skill ${skill.name}`, slug, JSON.stringify(skill.files));
+  }
+  return conflicts;
+}
+
+describe('what the verification workspace holds for every seeded entry at once', () => {
+  it('no two seeded entries share an agent name, or a sample file path or skill name with other content', () => {
+    const seeds = seededEntries('staging').map((entry) => ({
+      slug: entry.slug,
+      seed: buildSeed(entry),
+    }));
+    expect(sharedContentConflicts(seeds)).toEqual([]);
+  });
+
+  it('names each kind of conflict, and lets two entries share the same file or skill', () => {
+    const base = entries.find((entry) => entry.slug === 'contract-review');
+    if (base === undefined) throw new Error('the catalog has no contract-review entry');
+    const seed = buildSeed(base);
+    const [file] = seed.files;
+    const [skill] = seed.skills;
+    if (file === undefined || skill === undefined) throw new Error('contract-review has no file');
+    const other: DemoTemplateSeed = {
+      ...seed,
+      files: [{ ...file, base64: Buffer.from('other').toString('base64') }],
+      skills: [{ ...skill, files: [] }],
+    };
+    expect(
+      sharedContentConflicts([
+        { slug: 'a', seed },
+        { slug: 'b', seed: other },
+      ]),
+    ).toEqual([
+      `agent ${seed.definition.agent.name}: a and b`,
+      `file ${file.path}: a and b`,
+      `skill ${skill.name}: a and b`,
+    ]);
+    const renamed = {
+      ...seed,
+      definition: { ...seed.definition, agent: { ...seed.definition.agent, name: 'other' } },
+    };
+    expect(
+      sharedContentConflicts([
+        { slug: 'a', seed },
+        { slug: 'b', seed: renamed },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe('the connectors a seed declares', () => {
+  it("declares the incident router's tracker with the task write a records stand-in keeps", () => {
+    const tracker = CONNECTOR_TOOLS['incident']?.['tracker'];
+    expect(tracker).toBeDefined();
+    const declared = declaredConnector('tracker', tracker ?? { reads: [], writes: [] });
+    expect(DemoSeedConnectorSchema.parse(declared)).toEqual({
+      name: 'tracker',
+      reads: ['list_tasks'],
+      writes: ['create_task'],
+      recorded: [{ write: 'create_task', kind: 'task', read: 'list_tasks' }],
+    });
+  });
+
+  it('names recorded only for a connector that keeps a write, and every recorded write is its own', () => {
+    expect(declaredConnector('authority', { reads: ['check_authority'], writes: [] })).toEqual({
+      name: 'authority',
+      reads: ['check_authority'],
+      writes: [],
+    });
+    for (const [slug, connectors] of Object.entries(CONNECTOR_TOOLS)) {
+      for (const [name, tools] of Object.entries(connectors)) {
+        expect(
+          DemoSeedConnectorSchema.safeParse(declaredConnector(name, tools)).success,
+          `${slug}: ${name}`,
+        ).toBe(true);
+      }
+    }
+  });
+});
+
+describe('the public-source tools a seed declares (ADR-0170 D4)', () => {
+  it("declares each entry's public-source tool as a read and files the project's own snapshot for it", () => {
+    for (const [slug, { tool, source }] of Object.entries(PUBLIC_SOURCES)) {
+      const entry = CATALOG.find((candidate) => candidate.slug === slug);
+      if (entry === undefined || !hasSource(entry)) throw new Error(`${slug}: no sourced entry`);
+      const seed = buildSeed(entry);
+      expect(seed.connectors).toContainEqual({
+        name: 'aw-dev-tools',
+        reads: [tool.name],
+        writes: [],
+      });
+      const sets = seed.records.filter((set) => set.resource === 'public-source-snapshot');
+      expect(sets.map((set) => [set.connector, set.lang, set.tools])).toEqual([
+        ['aw-dev-tools', 'ja', [tool.name]],
+        ['aw-dev-tools', 'en', [tool.name]],
+      ]);
+      for (const set of sets) expect(set.data).toEqual(source.snapshot);
+    }
+  });
+
+  it('files no public-source set for an entry without one', () => {
+    expect(publicSourceSets('policy-qa')).toEqual([]);
+  });
+});
+
+describe('the verification refresh', () => {
+  const WORKSPACE = '0b8f4f2e-6a51-4c43-9d55-2f0b0f6d7c11';
+  const operator = { STORE_PLATFORM_URL: 'https://p.example.test/', STORE_OPERATOR_TOKEN: 'x' };
+  const settings = {
+    baseUrl: 'https://p.example.test',
+    token: 't'.repeat(40),
+    workspaceId: WORKSPACE,
+  };
+  const answering =
+    (response: Response): typeof fetch =>
+    () =>
+      Promise.resolve(response);
+
+  it('needs the platform URL, the operator token and a workspace id, and names the missing one only', () => {
+    expect(readFillSettings({})).toEqual({ missing: 'STORE_PLATFORM_URL' });
+    expect(readFillSettings(operator)).toEqual({ missing: 'STORE_VERIFICATION_WORKSPACE_ID' });
+    expect(
+      readFillSettings({ ...operator, STORE_VERIFICATION_WORKSPACE_ID: '../templates' }),
+    ).toEqual({ missing: 'STORE_VERIFICATION_WORKSPACE_ID' });
+    expect(
+      readFillSettings({ ...operator, STORE_VERIFICATION_WORKSPACE_ID: ` ${WORKSPACE} ` }),
+    ).toEqual({ baseUrl: 'https://p.example.test', token: 'x', workspaceId: WORKSPACE });
+  });
+
+  it('PUTs the fill with the operator token and no body, and prints the entries copied', async () => {
+    const calls: { url: string; method: string; authorization: string | null; body: unknown }[] =
+      [];
+    const send = ((url: string, init: RequestInit) => {
+      calls.push({
+        url,
+        method: init.method ?? '',
+        authorization: new Headers(init.headers).get('authorization'),
+        body: init.body,
+      });
+      return Promise.resolve(Response.json({ workspaceId: WORKSPACE, entries: ['wiki', 'nda'] }));
+    }) as unknown as typeof fetch;
+    expect(await fillVerification(settings, ['nda', 'wiki'], send)).toEqual({
+      line: 'verification workspace: copied wiki, nda',
+      ok: true,
+    });
+    expect(calls).toEqual([
+      {
+        url: `https://p.example.test/api/demo/verification/${WORKSPACE}`,
+        method: 'PUT',
+        authorization: `Bearer ${settings.token}`,
+        body: undefined,
+      },
+    ]);
+  });
+
+  it('fails when a seeded entry was not copied, the answer is unreadable or the platform refuses', async () => {
+    const partial = Response.json({ workspaceId: WORKSPACE, entries: ['wiki'] });
+    expect(await fillVerification(settings, ['wiki', 'nda'], answering(partial))).toEqual({
+      line: 'verification workspace: copied wiki; not copied nda',
+      ok: false,
+    });
+    const unreadable = Response.json({ entries: 'all' });
+    expect(await fillVerification(settings, [], answering(unreadable))).toEqual({
+      line: 'verification workspace: the answer is not readable',
+      ok: false,
+    });
+    const refused = Response.json(
+      { error: { code: 'verification_workspace_refused', message: settings.token } },
+      { status: 409 },
+    );
+    const result = await fillVerification(settings, [], answering(refused));
+    expect(result).toEqual({
+      line: 'verification workspace: refused 409 verification_workspace_refused',
+      ok: false,
+    });
+    expect(result.line).not.toContain(settings.token);
   });
 });

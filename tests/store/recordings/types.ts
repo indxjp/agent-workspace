@@ -17,6 +17,11 @@ export interface Ask {
   readonly ja: string;
   /** The entry's `demo.records` folder, absolute, with a `ja` and an `en` set; `null` when it has none. */
   readonly records: string | null;
+  /**
+   * The entry's `demo.outputSchema`, `null` when it declares none. `playTurn` starts the run with it,
+   * as the Try it section does, so a charted entry's recording keeps its typed answer.
+   */
+  readonly outputSchema: Readonly<Record<string, unknown>> | null;
 }
 
 /** Plays one entry's moment and answers the runs it made, every approval approved. */

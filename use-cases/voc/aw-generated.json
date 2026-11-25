@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "e401cf6da659a360707a7db637967cb1202d915a632159f4530cbf2ee719e4e1",
+        "agents/voc.md": "0c4ba544c9c26b30abca094ee13fd0664ec697723c005117c4fa69c07a00ec95",
+        "agents/voc.ts": "bdb42978ef6e0b19b40ffa7e9aae9be02f0d729a2bdcfcb70769b6b582071907",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/voc.yaml": "37c2cd2ee3080808fc4422cf462c22fcfb75d30b70ba750480899528b5a5daf2",
+        "skills/voc/SKILL.md": "c1558c436c80db70dfed31533beb33c254033becc38db190478a9e70b96aacb8",
+        "surfaces/main.ts": "46e1cfb317230360215e4f9ec85e825c4c275b009acc27e8adea334f3df94c5c",
+        "triggers/voc.json": "b7a4a93c5b6163601aee7f238462ae294059da8fdbd8dfbcfb48ec5ee3ada5d3"
+      },
+      "edits": []
+    }
+  }
+}

@@ -1,0 +1,5 @@
+po_no,po_date,supplier,line_no,part_no,description,quantity,unit,unit_price,amount
+PO-2611-0315,2026-11-02,Misago Kogyo Co. Ltd.,1,BLT-M8-30,Hex bolt M8x30,2000,pcs,18,36000
+PO-2611-0315,2026-11-02,Misago Kogyo Co. Ltd.,2,NUT-M8,Hex nut M8,2000,pcs,6,12000
+PO-2611-0315,2026-11-02,Misago Kogyo Co. Ltd.,3,WSH-M8,Flat washer M8,2000,pcs,4,8000
+PO-2611-0315,2026-11-02,Misago Kogyo Co. Ltd.,4,SPR-110,Compression spring SPR-110,500,pcs,42,21000

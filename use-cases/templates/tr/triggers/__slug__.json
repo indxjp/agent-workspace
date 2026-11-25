@@ -1,0 +1,17 @@
+{
+  "kind": "webhook",
+  "name": "__slug__",
+  "prompt": "届いたイベントを振り分けてください。 / Triage the event below.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["category", "severity", "owner", "reason", "draft"],
+    "properties": {
+      "category": { "type": "string" },
+      "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+      "owner": { "type": "string" },
+      "reason": { "type": "string" },
+      "draft": { "type": "string" }
+    }
+  }
+}

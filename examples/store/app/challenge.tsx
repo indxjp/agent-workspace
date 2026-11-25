@@ -1,7 +1,7 @@
 'use client';
 /**
  * The slot the sign-up challenge (CAPTCHA or an equivalent) sits in, on every form that leaves an
- * address: the Try tab's sign-up, the enquiry form and Notify me. The provider is an open decision
+ * address: the Try it section's sign-up, the enquiry form and Notify me. The provider is an open decision
  * (spec §08), so no provider's widget is drawn yet: the slot reports the answer {@link NO_CHALLENGE}
  * and the platform, which has no challenge provider configured either, answers
  * `503 email_link_unavailable` or `503 store_lead_unavailable`, which each form shows as "not

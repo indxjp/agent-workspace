@@ -1,9 +1,42 @@
-import { createLocalFilesystemObjectStoreProvider } from '@agent-workspace/core/storage';
+import { bytesToStream } from '@agent-workspace/core/storage';
 import { describe, expect, it } from 'vitest';
 import { GET as detailRoute, PATCH as patchRoute } from '../../app/api/skills/[name]/route';
 import { POST as importRoute, GET as listRoute } from '../../app/api/skills/route';
-import { skillFileKey, skillMetaKey } from './keys';
+import { skillRowFolder } from './keys';
 import { fixture, nameContext, postJson, req, WORKSPACE_A } from './skill-routes.test-support';
+
+const OWNER_PRINCIPAL = 'ab152b86-785a-4b7d-9e6a-6c329ca7e085';
+
+/**
+ * A skill row and its platform record written straight to the catalog, bypassing the route layer's
+ * UTF-8 guard, as a pre-K-4 release (or `patchSkill`'s rollback) could leave them.
+ */
+async function seedRecord(name: string): Promise<void> {
+  const catalog = await fixture.catalogs.forWorkspace(WORKSPACE_A);
+  const now = new Date().toISOString();
+  await catalog.putSkill({
+    name,
+    skillMd: `# ${name}`,
+    enabled: true,
+    ownerPrincipalId: OWNER_PRINCIPAL,
+  });
+  await catalog.setSkillMeta(name, { name, enabled: true, createdAt: now, updatedAt: now });
+}
+
+/** Save `bytes` as the skill's SKILL.md row, with no check of what they hold. */
+async function seedSkillMd(name: string, bytes: Uint8Array): Promise<void> {
+  const saved = await fixture.skillsService.save(
+    { workspaceId: WORKSPACE_A, principalId: OWNER_PRINCIPAL, userId: null },
+    {
+      area: 'skills',
+      path: `${skillRowFolder(name)}/SKILL.md`,
+      body: bytesToStream(bytes),
+      maxBytes: 1024,
+      replace: true,
+    },
+  );
+  if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
+}
 
 describe('K-4: a non-UTF-8 SKILL.md is refused', () => {
   // A lone continuation byte (0x80) is never valid UTF-8 on its own.
@@ -95,22 +128,10 @@ async function hidesWholeGETApiSkillsListRatherThan() {
       files: [{ path: 'SKILL.md', contentBase64: Buffer.from('# Fine').toString('base64') }],
     }),
   );
-  // Simulate a pre-K-4 row: write the meta record and an unreadable SKILL.md directly to the
-  // object store, bypassing the route layer's new UTF-8 guard entirely.
-  const objectStore = createLocalFilesystemObjectStoreProvider(fixture.rootDir).forWorkspace(
-    WORKSPACE_A,
-  );
-  const now = new Date().toISOString();
-  await objectStore.write(
-    skillMetaKey('broken'),
-    new TextEncoder().encode(
-      JSON.stringify({ name: 'broken', enabled: true, createdAt: now, updatedAt: now }),
-    ),
-    { contentType: 'application/json' },
-  );
-  await objectStore.write(skillFileKey('broken', 'SKILL.md'), Uint8Array.from([0x80]), {
-    contentType: null,
-  });
+  // Simulate a pre-K-4 row: write the record and an unreadable SKILL.md straight to the catalog,
+  // bypassing the route layer's UTF-8 guard entirely.
+  await seedRecord('broken');
+  await seedSkillMd('broken', Uint8Array.from([0x80]));
 
   const response = await listRoute(req('GET', '/api/skills', { workspace: WORKSPACE_A }));
   expect(response.status).toBe(500);
@@ -120,17 +141,7 @@ async function hidesWholeGETApiSkillsListRatherThan() {
 async function answers500GETPATCHApiSkillsNameRow() {
   // A meta record with no SKILL.md object at all: reachable from a pre-existing row, and from
   // `patchSkill`'s rollback path when no prior copy of SKILL.md was available to restore.
-  const objectStore = createLocalFilesystemObjectStoreProvider(fixture.rootDir).forWorkspace(
-    WORKSPACE_A,
-  );
-  const now = new Date().toISOString();
-  await objectStore.write(
-    skillMetaKey('orphan'),
-    new TextEncoder().encode(
-      JSON.stringify({ name: 'orphan', enabled: true, createdAt: now, updatedAt: now }),
-    ),
-    { contentType: 'application/json' },
-  );
+  await seedRecord('orphan');
 
   const getResponse = await detailRoute(
     req('GET', '/api/skills/orphan', { workspace: WORKSPACE_A }),
@@ -152,21 +163,9 @@ async function answers500GETPATCHApiSkillsNameRow() {
 }
 
 async function answers500GETPATCHApiSkillsNameSKILL() {
-  const objectStore = createLocalFilesystemObjectStoreProvider(fixture.rootDir).forWorkspace(
-    WORKSPACE_A,
-  );
-  const now = new Date().toISOString();
-  await objectStore.write(
-    skillMetaKey('broken'),
-    new TextEncoder().encode(
-      JSON.stringify({ name: 'broken', enabled: true, createdAt: now, updatedAt: now }),
-    ),
-    { contentType: 'application/json' },
-  );
+  await seedRecord('broken');
   // The same lone continuation byte the list test above writes: never valid UTF-8 on its own.
-  await objectStore.write(skillFileKey('broken', 'SKILL.md'), Uint8Array.from([0x80]), {
-    contentType: null,
-  });
+  await seedSkillMd('broken', Uint8Array.from([0x80]));
 
   const getResponse = await detailRoute(
     req('GET', '/api/skills/broken', { workspace: WORKSPACE_A }),
@@ -188,17 +187,7 @@ async function answers500GETPATCHApiSkillsNameSKILL() {
 }
 
 async function stillExportsSameRowBecauseExportCarriesNo() {
-  const objectStore = createLocalFilesystemObjectStoreProvider(fixture.rootDir).forWorkspace(
-    WORKSPACE_A,
-  );
-  const now = new Date().toISOString();
-  await objectStore.write(
-    skillMetaKey('orphan'),
-    new TextEncoder().encode(
-      JSON.stringify({ name: 'orphan', enabled: true, createdAt: now, updatedAt: now }),
-    ),
-    { contentType: 'application/json' },
-  );
+  await seedRecord('orphan');
 
   const response = await detailRoute(
     req('GET', '/api/skills/orphan?export=true', { workspace: WORKSPACE_A }),

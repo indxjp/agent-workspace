@@ -62,9 +62,13 @@ export function registerEngineCompatibilityCases({
       readonly base?: readonly string[];
       readonly autoApprove?: readonly string[];
       readonly deny?: readonly string[];
+      readonly requireApproval?: readonly string[];
     }): AgentPolicy {
       return {
         engine: 'claude-agent-sdk',
+        ...(rules.requireApproval === undefined
+          ? {}
+          : { requireApproval: [...rules.requireApproval] }),
         tools: {
           base: rules.base === undefined ? 'claude_code_preset' : [...rules.base],
           autoApprove: [...(rules.autoApprove ?? [])],
@@ -131,6 +135,24 @@ export function registerEngineCompatibilityCases({
       const compiled = compileRunRequest(request);
       expect(compiled.allowedTools).toContain('mcp__file-finder__find_files');
       expect(compiled.disallowedTools).toContain(legacy(OTHER_MCP_ID, 'delete'));
+    });
+
+    it('points an approval gate written against connector-<id> at the run key, so the write still waits', async () => {
+      const request = await compose(
+        slugLoader(),
+        undefined,
+        claudeRules({
+          requireApproval: [legacy(MCP_ID, 'create_task'), legacy(OTHER_MCP_ID, 'send'), 'Write'],
+        }),
+      );
+      expect(request.policy).toMatchObject({
+        requireApproval: [
+          'mcp__file-finder__create_task',
+          `mcp__connector-${OTHER_MCP_ID}__send`,
+          'Write',
+        ],
+      });
+      expect(JSON.stringify(request.policy)).not.toContain(`connector-${MCP_ID}`);
     });
 
     describe('a rule written against the slug is saved by id, so it follows the connector', () => {

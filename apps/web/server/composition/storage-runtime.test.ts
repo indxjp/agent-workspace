@@ -305,7 +305,6 @@ describe('AW_STORAGE_CLEANUP', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     try {
       useS3Root();
-      vi.stubEnv('AW_STORAGE_MIGRATE', 'off');
       vi.stubEnv('CRON_SECRET', '');
       vi.stubEnv('AW_STORAGE_CLEANUP', 'delete');
       const sessionState: DatabaseRoot['sessionState'] = {

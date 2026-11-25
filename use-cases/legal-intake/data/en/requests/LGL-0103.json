@@ -1,0 +1,17 @@
+{
+  "form": "Legal request form",
+  "id": "LGL-0103",
+  "submitted_at": "2026-11-20T16:40:00+09:00",
+  "requester": {
+    "name": "Hiyori Semba",
+    "department": "Communications",
+    "email": "semba@yukimi-seiko.example"
+  },
+  "type": "Law or policy check",
+  "title": "Check of a prize draw for visitors who answer the trade show survey",
+  "counterparty": "",
+  "details": "At the trade show next February, we plan a draw that gives travel vouchers to some of the visitors who answer our survey. Please check that it does not break the rules on prizes. The campaign plan is attached.",
+  "urgent": false,
+  "urgent_reason": "",
+  "attachments": ["Trade_show_campaign_plan.pptx"]
+}

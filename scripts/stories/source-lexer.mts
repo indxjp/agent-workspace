@@ -11,20 +11,27 @@ const isSpace = (c: string): boolean => c === ' ' || c === '\n' || c === '\t' ||
 /** One lexing pass over `text`; every method returns the index after what it consumed. */
 class CommentBlanker {
   private readonly text: string;
-  private readonly out: string[];
+  /** The pieces of the result: code as it is and each comment blanked, in order (#2394). */
+  private readonly out: string[] = [];
+  /** The index after the last piece in `out`. */
+  private copied = 0;
 
   constructor(text: string) {
     this.text = text;
-    this.out = text.split('');
   }
 
   result(): string {
     this.code(0, false);
+    this.out.push(this.text.slice(this.copied));
     return this.out.join('');
   }
 
   private blank(from: number, to: number): void {
-    for (let k = from; k < to; k += 1) if (this.out[k] !== '\n') this.out[k] = ' ';
+    this.out.push(
+      this.text.slice(this.copied, from),
+      this.text.slice(from, to).replace(/[^\n]/g, ' '),
+    );
+    this.copied = to;
   }
 
   /** A string from its opening quote; a template's `${…}` is code. */

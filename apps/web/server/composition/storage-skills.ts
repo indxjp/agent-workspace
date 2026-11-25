@@ -2,9 +2,8 @@
 import { log } from '../telemetry/logger';
 import type { Skills } from '../skills/wiring';
 import type { StorageService } from '../storage/service';
-import { startSkillsAdopt } from './storage-jobs';
 import { describePlace, logAreaNotOpened, openArea, storageReadinessFailure } from './storage-open';
-import type { ApiWiring, SkillsAdoptWiring } from './storage';
+import type { ApiWiring } from './storage';
 
 /**
  * Build `/api/skills*` (spec §7, W2-CP-04) over its own private object-store root, for the root to
@@ -13,7 +12,6 @@ import type { ApiWiring, SkillsAdoptWiring } from './storage';
 export async function installSkillsApi(
   { resolveWorkspace, scopes, catalog }: ApiWiring,
   storage?: StorageService,
-  adopt?: SkillsAdoptWiring,
 ): Promise<Skills> {
   const selection = await openArea('skills');
   if (selection.kind !== 'opened') {
@@ -29,9 +27,6 @@ export async function installSkillsApi(
       ...(storage === undefined ? {} : { storage }),
     };
     log.info(`[compose] skills API installed: ${describePlace(selection.location, 'skills')}`);
-    if (storage !== undefined && adopt !== undefined) {
-      void startSkillsAdopt(runtime.store, catalog, storage, adopt);
-    }
     return { kind: 'serving', runtime };
   } catch (error) {
     log.error(storageReadinessFailure('skills', error));

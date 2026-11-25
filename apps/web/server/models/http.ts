@@ -8,7 +8,7 @@ import type { TestConnectionResult } from './probe';
 // Read-only, per issue #149's card: `decide()` is the one place in the program that answers "may
 // this role do this to this route?" and this file adds no second one. `apps/web/server/rbac/**`
 // is not edited by this task — W9-WS-119 owns that directory this wave.
-import { decide, type Ownership, type Role } from '../identity';
+import { decide, type Caller, type Ownership } from '../identity';
 
 export async function readJsonBody(
   request: Request,
@@ -39,12 +39,7 @@ export type ModelsRequestContext = {
   readonly store: WorkspaceModelsStore;
   /** The install's `vertex` defaults; empty when the composition root passes none. */
   readonly vertexDefaults: VertexDefaults;
-  readonly actor: {
-    readonly workspaceId: string;
-    readonly userId: string | null;
-    readonly userLabel: string;
-    readonly role: Role;
-  };
+  readonly actor: Pick<Caller, 'workspaceId' | 'userId' | 'label' | 'role'>;
   readonly probe: (
     resolved: NonNullable<Awaited<ReturnType<WorkspaceModelsStore['resolve']>>>,
   ) => Promise<TestConnectionResult>;
@@ -133,7 +128,7 @@ export async function withModelsRuntime(
         workspaceId: actor.workspaceId,
         actorPrincipalId: actor.principalId,
         actorUserId: actor.userId,
-        actorLabel: actor.userLabel,
+        actorLabel: actor.label,
         action: 'provider-credential-changed',
       }),
     log: (message) => runtime.log(message),

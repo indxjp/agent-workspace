@@ -64,11 +64,11 @@ describe('signIn', () => {
       expect(verified.claims.ws).toBe('default');
       // Not exposed after verifying: the role is read from the membership row, never the token.
       expect(verified.claims).not.toHaveProperty('role');
-      // Still written for one release, so a rollback to a build that requires it accepts the cookie.
+      // No longer written (part 06 step 9): 0.6.13 stopped reading it, so a rollback accepts this.
       const payload = result.token.split('.')[1] ?? '';
-      expect(JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))).toMatchObject({
-        role: 'owner',
-      });
+      expect(JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))).not.toHaveProperty(
+        'role',
+      );
     }
     expect(result.cookie.name).toBe(signInSessionCookieName(GOOD_ENV));
   });

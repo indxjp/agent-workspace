@@ -152,3 +152,12 @@ import; `npx tsc -p tsconfig.root.json` type-checks it under NodeNext; and
 `apps/web/server/auth/clock-defaults.test.ts` (with one case in `oidc.test.ts`) pins that an
 omitted `nowMs` is the current time for every one of the 8 functions. It passes on the code before
 and after this change, and it fails when any one default is moved.
+
+## Amendment — the signed-token codec is in `core/` (refactoring part 06, step 6, 2026-11-24)
+
+Step 6 landed the one signed-token codec in `apps/web/server/auth/core/signed-token.ts`: base64url,
+the HMAC key import, `sealSignedToken` and `openSignedToken` (signature verified with
+`subtle.verify` before the payload is decoded or parsed). `session.ts`, `selection.ts` and
+`invitation-identity.ts` import it by the explicit `.ts` path the 2026-11-09 amendment allows and
+pass it `crypto.subtle`, so the codec stays pure; each keeps its own key, claims and refusal words,
+and `session-golden.test.ts` passes unchanged.

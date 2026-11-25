@@ -4,9 +4,8 @@ import {
   type SkillDetail as ContractSkillDetail,
   type SkillSummary as ContractSkillSummary,
 } from '@indx-workspace/contracts/skills';
-import { skillFilesPrefix, skillRowFolder } from './keys';
+import { skillRowFolder } from './keys';
 import { extractSkillInstructions, parseSkillFrontmatter } from './frontmatter';
-import type { SkillObjects } from '../storage-and-sharing';
 import type { ApiResult } from '../http/result';
 import { problem } from './result';
 import { skillFiles, type SkillRows } from './tree';
@@ -26,17 +25,8 @@ export type SkillSummary = Omit<ContractSkillSummary, 'id'>;
 export type SkillDetail = Omit<ContractSkillDetail, 'id'>;
 
 // @story US-STO-08
-export async function describeSkill(
-  store: SkillObjects,
-  meta: SkillMetaRecord,
-  rows?: SkillRows,
-): Promise<SkillDetail> {
-  const files = await skillFiles(
-    store,
-    rows,
-    skillRowFolder(meta.name),
-    skillFilesPrefix(meta.name),
-  );
+export async function describeSkill(meta: SkillMetaRecord, rows?: SkillRows): Promise<SkillDetail> {
+  const files = await skillFiles(rows, skillRowFolder(meta.name));
   const skillMd =
     (await files.find((file) => file.relativePath === SKILL_MD_FILENAME)?.read()) ?? null;
   const frontmatter = skillMd === null ? {} : parseSkillFrontmatter(skillMd);
@@ -45,7 +35,7 @@ export async function describeSkill(
     skillMd === null || instructions === null
       ? null
       : new TextDecoder('utf-8', { fatal: true }).decode(skillMd);
-  // Sizes come from the `list` that `walkFiles` already performed. Reading each file back with
+  // Sizes come from the `list` that `skillFiles` already performed. Reading each file back with
   // `get` would make describing one skill cost its whole directory in bytes, and `listSkills`
   // calls this once per skill — a workspace's entire skill corpus, read on every list request.
   const sizes = files.map((file) => ({ path: file.relativePath, sizeBytes: file.sizeBytes }));

@@ -1,0 +1,47 @@
+{
+  "kind": "schedule",
+  "name": "close",
+  "prompt": "今日時点の月次決算の進捗レポートを作成して、close-reports フォルダに保存してください。 / Write today's month-end close progress report and save it to the close-reports folder.",
+  "cron": "0 9 * * 1-5",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["date", "period", "progress", "stuck", "savedTo"],
+    "properties": {
+      "date": { "type": "string" },
+      "period": { "type": "string" },
+      "progress": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "total", "done", "blocked", "overdue"],
+        "properties": {
+          "scope": { "type": "string" },
+          "total": { "type": "integer" },
+          "done": { "type": "integer" },
+          "blocked": { "type": "integer" },
+          "overdue": { "type": "integer" }
+        }
+      },
+      "stuck": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["task", "name", "owner", "dueDate", "kind", "reason", "nextStep", "sources"],
+          "properties": {
+            "task": { "type": "string" },
+            "name": { "type": "string" },
+            "owner": { "type": "string" },
+            "dueDate": { "type": "string" },
+            "kind": { "type": "string", "enum": ["blocked", "late"] },
+            "reason": { "type": "string" },
+            "nextStep": { "type": "string" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

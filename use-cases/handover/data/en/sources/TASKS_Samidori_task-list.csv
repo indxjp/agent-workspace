@@ -1,0 +1,5 @@
+task_id,title,status,due,next_action
+TASK-01,Monthly payment data,routine,5th business day of each month,Prepare it as PROC-01 says and pass it to Accounts
+TASK-02,Unit price negotiation with Nagisa Kogyo,in progress,2026-12-10,Wait for the supplier's reply and get internal approval (THREAD-01)
+TASK-03,Register the new supplier Miyama Seimitsu,done,2026-11-15,none
+TASK-04,Check the gap between Hayate Kasei's invoice and the delivered quantity,not started,2026-11-28,Match the delivery note to the invoice and ask the supplier (THREAD-02)

@@ -69,7 +69,7 @@ export async function POST(request: Request) {
         await audit.write({
           actorPrincipalId: actor.principalId,
           actorUserId: actor.userId,
-          actorLabel: actor.userLabel,
+          actorLabel: actor.label,
           action: 'project-created',
           subjectId: created.id,
           subjectLabel: created.name,

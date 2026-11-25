@@ -76,7 +76,7 @@ export async function installModelsApi(
           workspaceId: actor.workspaceId,
           principalId: actor.principalId,
           userId: actor.userId,
-          userLabel: actor.label,
+          label: actor.label,
           // issue #149: the membership's role, carried through rather than discarded — every write
           // on a model connection now reaches `decide()` with it (`server/models/http.ts`).
           role: actor.role,
@@ -320,17 +320,7 @@ export async function installRuntimesApi(
 
   const runtimeSwitchAudit = auditModule.createRuntimeSwitchAudit({
     profiles,
-    identifyActor: async (request) => {
-      const actor = await identifyActor(request);
-      return actor === null
-        ? null
-        : {
-            workspaceId: actor.workspaceId,
-            principalId: actor.principalId,
-            userId: actor.userId,
-            userLabel: actor.label,
-          };
-    },
+    identifyActor,
     recordAuditEvent: (event) => root.recordAuditEvent(event),
   });
   return { runtimes: { kind: 'serving', runtime }, runtimeSwitchAudit };

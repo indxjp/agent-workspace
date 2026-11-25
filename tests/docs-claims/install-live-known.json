@@ -1,5 +1,5 @@
 [
-  { "lane": "claims-windows-pwsh", "where": "README.md:90", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "README.md:137", "issue": 892 },
   {
     "lane": "claims-windows-pwsh",
     "where": "docs/sdk/site/getting-started/quickstart.mdx:70",
@@ -10,10 +10,10 @@
     "where": "docs/sdk/site/features/self-host-securely.mdx:195",
     "issue": 892
   },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:159", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:446", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:878", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/examples.html:107", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:390", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:636", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:1054", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/examples.html:110", "issue": 892 },
   {
     "lane": "claims-windows-pwsh",
     "where": "docs/sdk/site/features/run-observe-evaluate.mdx:52",
@@ -24,7 +24,7 @@
     "where": "docs/sdk/site/features/your-stack.mdx:76",
     "issue": 892
   },
-  { "lane": "claims-windows-bash", "where": "README.md:90", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "README.md:137", "issue": 892 },
   {
     "lane": "claims-windows-bash",
     "where": "docs/sdk/site/getting-started/quickstart.mdx:70",
@@ -35,10 +35,10 @@
     "where": "docs/sdk/site/features/self-host-securely.mdx:195",
     "issue": 892
   },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:159", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:446", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:878", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/examples.html:107", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:390", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:636", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:1054", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/examples.html:110", "issue": 892 },
   {
     "lane": "claims-windows-bash",
     "where": "docs/sdk/site/features/run-observe-evaluate.mdx:52",

@@ -39,7 +39,7 @@ describe('public sharing policy', () => {
     await setPublicSharingPolicy(false, 'owner', repositories, {
       principalId: '00000000-0000-4000-8000-000000000004',
       userId: 'user-1',
-      userLabel: 'owner@example.test',
+      label: 'owner@example.test',
     });
 
     expect(setPublicSharingEnabled).toHaveBeenCalledWith(false);
@@ -53,7 +53,7 @@ describe('public sharing policy', () => {
       setPublicSharingPolicy(true, 'admin', repositories, {
         principalId: '00000000-0000-4000-8000-000000000005',
         userId: 'user-1',
-        userLabel: 'admin@example.test',
+        label: 'admin@example.test',
       }),
     ).rejects.toThrow('Only an Owner');
     expect(setPublicSharingEnabled).not.toHaveBeenCalled();

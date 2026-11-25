@@ -23,7 +23,6 @@ import {
 } from './resource-catalogs-file-reads.js';
 import { createFolder, reserveFile } from './resource-catalogs-reserve.js';
 import {
-  backfillSkillPendingDelete,
   createSkill,
   deleteSkill,
   getSkill,
@@ -95,10 +94,7 @@ function repositoryFor(context: CatalogContext): ResourceCatalogRepository {
     createSkill: (input) => createSkill(context, input),
     deleteSkill: (name, onlyId) => deleteSkill(context, name, onlyId),
     markSkillDeleting: (name) => markSkillDeleting(context, name),
-    backfillSkillPendingDelete: (name, pending) =>
-      backfillSkillPendingDelete(context, name, pending),
-    setSkillMeta: (name, meta, onlyIfEmpty = false) =>
-      setSkillMeta(context, name, meta, onlyIfEmpty),
+    setSkillMeta: (name, meta) => setSkillMeta(context, name, meta),
     setSkillBuiltinDigest: (name, digest) => setSkillBuiltinDigest(context, name, digest),
     publishSkillRevision: (name, input) => publishSkillRevision(context, name, input),
     listSkillRevisions: (name, options) => listSkillRevisions(context, name, options),

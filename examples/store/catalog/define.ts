@@ -3,7 +3,7 @@
  * loaded, so an invalid entry fails any build or test that imports the catalog.
  *
  * This folder imports nothing but `zod` and its own files (the No fork cell of the apps
- * benchmark): it cannot read the repository around it. What it cannot check itself (that a live
+ * benchmark): it cannot read the repository around it. What it cannot check itself (that an
  * entry's source folder and demo agent exist, that the published line counts match the apps
  * benchmark) the repository's tests check from outside: `tests/store/catalog.test.ts` and
  * `tests/apps/store-line-counts.test.ts`.
@@ -205,21 +205,24 @@ const common = {
 };
 
 /**
- * A live entry runs for real: it names the repository folder its source is in (an example app
- * under `examples/` or a gallery use case under `tests/gallery/`) and the agent of that source
- * its demo runs.
+ * What makes an entry runnable: the kind of its source, the repository folder its source is in (an
+ * example app under `examples/`, a gallery use case under `tests/gallery/` or a store use case under
+ * `use-cases/`), the demo of that source and the safety it shows. A live entry has them all; a
+ * coming-soon entry whose code is merged may carry them too, so the staging deploy seeds its
+ * template and the real-model verification (R1) runs before it goes live (the Agent Store
+ * 100-use-case plan, section 7).
  */
-const liveEntry = z.strictObject({
-  ...common,
-  status: z.literal('live'),
-  wave: z.literal(1),
-  /** `app`: an example app with agents (`examples/<id>`). `agent`: one agent (`tests/gallery/<id>`). */
+const runnable = {
+  /**
+   * `app`: an example app with agents (`examples/<id>`). `agent`: one agent (`tests/gallery/<id>`
+   * or `use-cases/<slug>`).
+   */
   kind: z.enum(['agent', 'app']),
   source: z
     .string()
     .regex(
-      /^(?:examples|tests\/gallery)\/[a-z0-9]+(?:-[a-z0-9]+)*$/u,
-      'examples/<id> or tests/gallery/<id>',
+      /^(?:examples|tests\/gallery|use-cases)\/[a-z0-9]+(?:-[a-z0-9]+)*$/u,
+      'examples/<id>, tests/gallery/<id> or use-cases/<slug>',
     ),
   demo: z.strictObject({
     /** The agent, by file name under `<source>/agents/`, that the visitor's demo workspace gets. */
@@ -248,21 +251,128 @@ const liveEntry = z.strictObject({
     records: relativeFolder.optional(),
     /** The moment as a check; every live entry has one (`tests/store/catalog.test.ts`). */
     check: momentCheck.optional(),
+    /**
+     * The JSON Schema the demo's runs ask their answer in (ADR-0143), so the Try it section can
+     * chart it with the source's surface `resultCharts`. Data, never code: a JSON object whose root
+     * is `type: 'object'`. The platform's limits, and the match with the suggested eval case and the
+     * charts, are checked from outside (`tests/store/result-charts.test.ts`).
+     */
+    outputSchema: z
+      .record(z.string(), z.json())
+      .refine((schema) => schema['type'] === 'object', 'a JSON Schema whose type is object')
+      .readonly()
+      .optional(),
   }),
   safety: z.array(z.enum(SAFETY_PROPERTIES)).min(1).readonly(),
+};
+
+/** A live entry runs for real, and the store shows its source and its Try it. */
+const liveEntry = z.strictObject({
+  ...common,
+  status: z.literal('live'),
+  /** Any wave: waves 2 and 3 go live through the promotion check (tests/store/catalog.test.ts). */
+  wave: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  ...runnable,
+  /**
+   * A rebuild of this entry staged in `use-cases/<slug>` with its demo (the Agent Store 100-use-case
+   * plan, section 7; ADR-0174): the staging deploy seeds it and R1 verifies it, while visitors,
+   * production and the promotion check keep `source` and `demo`. The repoint moves both into place
+   * and drops `next`, so the record R1 made for it stays current.
+   */
+  next: z
+    .strictObject({
+      source: z.string().regex(/^use-cases\/[a-z0-9]+(?:-[a-z0-9]+)*$/u, 'use-cases/<slug>'),
+      demo: runnable.demo,
+    })
+    .optional(),
 });
 
-/** A coming-soon entry has no source and no demo yet, so the store shows no link and no Try it. */
+/**
+ * A coming-soon entry: the store shows no link and no Try it, whatever it carries (`status` is the
+ * switch). Once its code is merged it may carry its `kind`, `source` and `demo` (the three together,
+ * {@link catalogProblems}) and its `safety`, so the flip to live changes only `status`.
+ */
 const soonEntry = z.strictObject({
   ...common,
   status: z.literal('soon'),
   wave: z.union([z.literal(2), z.literal(3)]),
+  kind: runnable.kind.optional(),
+  source: runnable.source.optional(),
+  demo: runnable.demo.optional(),
+  safety: runnable.safety.optional(),
 });
+
+/**
+ * A quantity a page could claim without a test to prove it: a numeral (Arabic, full-width, kanji
+ * or an English word) followed by a unit of time, share, multiple or count ("三割", "２倍",
+ * "二十四時間", "five hours", "3x"). A numeral that names something is allowed ("ISO 27001",
+ * "Step 1", "第1条", "36協定", "Excel 2019"). After kanji, 分, 日 and 人 count only as 分間, 日間
+ * and 人分, and 件 not at all, so 十分, 一日, 一人 and 一件ずつ stay ordinary words.
+ */
+const QUANTITY = new RegExp(
+  [
+    String.raw`[0-9０-９][0-9０-９.,]*\s?(?:%|％|時間|分|日|割|倍|件|人|x\b|(?:hours?|minutes?|days?|times|percent)\b)`,
+    String.raw`[〇一二三四五六七八九十百千万数]+(?:時間|分間|日間|割|倍|人分|%|％)`,
+    String.raw`\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand|half)[\s-](?:hours?|minutes?|days?|times|percent)\b`,
+  ].join('|'),
+  'iu',
+);
+
+/** Landing-page copy claims no quantity: the store claims only what a test proves. */
+const copy = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((text) => !QUANTITY.test(text), 'copy with no unmeasured number');
+const copyPair = z.strictObject({ ja: copy, en: copy });
+const step = z.strictObject({
+  text: copyPair,
+  safety: z.array(z.enum(SAFETY_PROPERTIES)).readonly(),
+});
+
+/**
+ * An entry's landing page (the detail page's sections): `catalog/landing/<slug>.md`, JA first, which
+ * `tests/store/landing.test.ts` turns into `landing.generated.ts`. Optional for an entry until every
+ * entry has its copy.
+ */
+const landingSchema = z.strictObject({
+  headline: copyPair,
+  audience: copyPair,
+  problem: copyPair,
+  steps: z.tuple([step, step, step, step, step]).readonly(),
+  outputs: z.array(copyPair).min(1).max(4).readonly(),
+  faq: z
+    .array(z.strictObject({ q: copyPair, a: copyPair }))
+    .min(3)
+    .max(5)
+    .readonly(),
+  limits: z.array(copyPair).min(1).max(4).readonly(),
+});
+
+export type Landing = z.infer<typeof landingSchema>;
+
+/** Validate the landing copy, keyed by slug; a `ZodError` here fails whatever loads it. */
+export function defineLanding(pages: unknown): Readonly<Record<string, Landing>> {
+  return z.record(slug, landingSchema).readonly().parse(pages);
+}
 
 export const catalogEntrySchema = z.discriminatedUnion('status', [liveEntry, soonEntry]);
 
 export type CatalogEntry = z.infer<typeof catalogEntrySchema>;
 export type LiveEntry = Extract<CatalogEntry, { status: 'live' }>;
+type SoonEntry = Extract<CatalogEntry, { status: 'soon' }>;
+
+/**
+ * An entry with code to run: a live entry, or a coming-soon one that carries its source and demo.
+ * The staging deploy seeds a template for each and R1 verifies them; the store reads only `status`.
+ */
+export type SourcedEntry =
+  LiveEntry | (SoonEntry & { [K in 'kind' | 'source' | 'demo']-?: NonNullable<SoonEntry[K]> });
+
+/** Whether `entry` has code to run ({@link SourcedEntry}). */
+export function hasSource(entry: CatalogEntry): entry is SourcedEntry {
+  return entry.kind !== undefined && entry.source !== undefined && entry.demo !== undefined;
+}
 
 /** Validate one entry; a `ZodError` here fails whatever loads the entry's file. */
 export function defineEntry(entry: z.input<typeof catalogEntrySchema>): CatalogEntry {
@@ -270,9 +380,12 @@ export function defineEntry(entry: z.input<typeof catalogEntrySchema>): CatalogE
 }
 
 /**
- * Why a list of valid entries is not a catalog: a slug used twice, a live entry whose `kind` and
- * `source` disagree, a list of safety properties or customize controls with a repeat, or a seed
- * collection listed twice. Empty when it is one.
+ * Why a list of valid entries is not a catalog: a slug used twice, a coming-soon entry carrying only
+ * part of its source (`kind`, `source` and `demo` go together), an entry whose `kind` and `source`
+ * disagree, a list of safety properties or customize controls with a repeat, a seed collection
+ * listed twice, or a staged rebuild (`next`) of an app or of the source the entry already has (that
+ * it is the entry's own `use-cases/<slug>` is checked with the folders, `tests/store/catalog.test.ts`).
+ * Empty when it is one.
  */
 export function catalogProblems(entries: readonly CatalogEntry[]): string[] {
   const problems: string[] = [];
@@ -283,16 +396,27 @@ export function catalogProblems(entries: readonly CatalogEntry[]): string[] {
     if (entry.customize !== undefined && new Set(entry.customize).size !== entry.customize.length) {
       problems.push(`${entry.slug}: a customize control is listed twice`);
     }
-    if (entry.status !== 'live') continue;
-    const isApp = entry.source.startsWith('examples/');
-    if (isApp !== (entry.kind === 'app')) {
-      problems.push(`${entry.slug}: kind '${entry.kind}' does not match source ${entry.source}`);
+    if (!hasSource(entry)) {
+      if (entry.kind !== undefined || entry.source !== undefined || entry.demo !== undefined) {
+        problems.push(`${entry.slug}: kind, source and demo go together`);
+      }
+    } else {
+      const isApp = entry.source.startsWith('examples/');
+      if (isApp !== (entry.kind === 'app')) {
+        problems.push(`${entry.slug}: kind '${entry.kind}' does not match source ${entry.source}`);
+      }
+      const next = entry.status === 'live' ? entry.next : undefined;
+      for (const demo of next === undefined ? [entry.demo] : [entry.demo, next.demo]) {
+        const collections = demo.seed.map((folder) => folder.collection);
+        if (new Set(collections).size !== collections.length) {
+          problems.push(`${entry.slug}: a seed collection is listed twice`);
+        }
+      }
+      if (next !== undefined && (entry.kind !== 'agent' || entry.source === next.source)) {
+        problems.push(`${entry.slug}: next must be a new source of an agent entry`);
+      }
     }
-    const collections = entry.demo.seed.map((folder) => folder.collection);
-    if (new Set(collections).size !== collections.length) {
-      problems.push(`${entry.slug}: a seed collection is listed twice`);
-    }
-    if (new Set(entry.safety).size !== entry.safety.length) {
+    if (entry.safety !== undefined && new Set(entry.safety).size !== entry.safety.length) {
       problems.push(`${entry.slug}: a safety property is listed twice`);
     }
   }

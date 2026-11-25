@@ -84,6 +84,9 @@ async function main() {
     NEXT_TELEMETRY_DISABLED: '1',
     npm_config_cache:
       process.env['npm_config_cache'] ?? path.join(process.env['HOME'] ?? home, '.npm'),
+    // `aw deploy` resolves postgres:18-alpine's digest; CI sends that lookup to a Docker Hub mirror
+    // (.github/actions/docker-hub-mirror), since Docker Hub rate-limits shared addresses.
+    AW_DOCKER_HUB_MIRROR: process.env['AW_DOCKER_HUB_MIRROR'],
   };
   console.log(`== packing the @indx-workspace packages into ${work}/packs`);
   const tarballs = packPackages(path.join(work, 'packs'));

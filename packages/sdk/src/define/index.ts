@@ -103,3 +103,41 @@ export {
   type ToolDefinition,
 } from './version-body.js';
 export { DefinitionError, issuesFromZod, type DefinitionIssue } from './errors.js';
+export {
+  PUBLIC_SOURCE_CONTENT_TYPES,
+  PUBLIC_SOURCE_ERROR_CODES,
+  PUBLIC_SOURCE_FORMATS,
+  PUBLIC_SOURCE_LIMITS,
+  PUBLIC_SOURCE_NOTICE,
+  PUBLIC_SOURCE_RECORDS_RESOURCE,
+  PublicSourceAnswerSchema,
+  PublicSourceConfigSchema,
+  PublicSourceError,
+  PublicSourceFeedSchema,
+  PublicSourceItemSchema,
+  PublicSourceMappingSchema,
+  PublicSourceQuerySchema,
+  PublicSourceSnapshotSchema,
+  definePublicSource,
+  type PublicSourceAnswer,
+  type PublicSourceConfig,
+  type PublicSourceConfigInput,
+  type PublicSourceErrorCode,
+  type PublicSourceFeed,
+  type PublicSourceFeedInput,
+  type PublicSourceFormat,
+  type PublicSourceItem,
+  type PublicSourceMapping,
+  type PublicSourceQuery,
+  type PublicSourceSnapshot,
+} from './public-source.js';
+export { readPublicSource, type PublicSourceDependencies } from './public-source-read.js';
+export { PUBLIC_SOURCE_SNAPSHOT_SCRIPT } from './public-source-select.js';
+export {
+  publicSourceRecords,
+  publicSourceRun,
+  publicSourceTool,
+  type PublicSourceRecordsInput,
+  type PublicSourceRunOverrides,
+  type PublicSourceToolInput,
+} from './public-source-tool.js';

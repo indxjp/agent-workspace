@@ -13,7 +13,7 @@ The body of `POST /api/runtime-connections`. Every field is a non-empty string; 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `driver` | `"local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
 | `endpoint` | `string` | Yes |  |
 | `credential` | `string` | Yes |  |
 
@@ -27,7 +27,7 @@ any depth, is refused with `400 invalid_body`: put the credential on a runtime c
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `driver` | `"local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
 | `runtimeConnectionId` | `undefined \| string` | No |  |
 | `cpu` | `undefined \| number` | No |  |
 | `memoryMb` | `undefined \| number` | No |  |
@@ -124,7 +124,7 @@ The body of `GET /api/runtime-connections`.
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `driver` | `"local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 
 ## RuntimeConnectionResourceSchema
@@ -138,12 +138,13 @@ form — upper-cased, with every other character folded to `_` — not the calle
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `driver` | `"local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 
 ## RuntimeDriver
 
 - `"local"`
+- `"external"`
 - `"sandbox-runtime"`
 - `"docker"`
 - `"kubernetes"`
@@ -153,7 +154,6 @@ form — upper-cased, with every other character folded to `_` — not the calle
 - `"aws-ecs"`
 - `"cloud-run-sandbox"`
 - `"cloud-run-service"`
-- `"external"`
 - `"vercel-sandbox"`
 - `"cloudflare-sandbox"`
 
@@ -189,7 +189,7 @@ The body of `GET /api/runtime-profiles`: the caller's workspace's profiles, olde
 | `id` | `string` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `driver` | `"local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
 | `runtimeConnectionId` | `null \| string` | Yes | The stored runtime connection (cluster, pool, image registry…) the driver uses, if any. |
 | `cpu` | `null \| number` | Yes |  |
 | `memoryMb` | `null \| number` | Yes |  |
@@ -218,7 +218,7 @@ connection, ADR-0088); the rule applies on write only, so a row stored before it
 | `id` | `string` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `driver` | `"local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
 | `runtimeConnectionId` | `null \| string` | Yes | The stored runtime connection (cluster, pool, image registry…) the driver uses, if any. |
 | `cpu` | `null \| number` | Yes |  |
 | `memoryMb` | `null \| number` | Yes |  |
@@ -241,7 +241,7 @@ does not accept `null`, so a sizing field that was once set cannot be cleared by
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `undefined \| string` | No |  |
-| `driver` | `undefined \| "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | No |  |
+| `driver` | `undefined \| "local" \| "external" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "vercel-sandbox" \| "cloudflare-sandbox"` | No |  |
 | `runtimeConnectionId` | `undefined \| string` | No |  |
 | `cpu` | `undefined \| number` | No |  |
 | `memoryMb` | `undefined \| number` | No |  |

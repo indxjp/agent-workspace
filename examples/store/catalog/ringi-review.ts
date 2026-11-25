@@ -42,4 +42,30 @@ export default defineEntry({
     check: { tools: ['check_authority', 'search_files'], approval: null },
   },
   safety: ['person', 'approval', 'structured'],
+  next: {
+    source: 'use-cases/ringi-review',
+    demo: {
+      agent: 'ringi-review',
+      prompts: [
+        {
+          ja: 'ringi-review/inbox/R-2026-0101.md を回す前に点検して',
+          en: 'Check ringi-review/inbox/R-2026-0101.md before it is circulated',
+        },
+        {
+          ja: 'ringi-review/inbox/R-2026-0115.md を点検して',
+          en: 'Check ringi-review/inbox/R-2026-0115.md',
+        },
+      ],
+      moment: {
+        ja: '稟議を回す前に、決裁ルートの誤りと添付漏れを指摘し、レビューシートの保存は承認を待つ。',
+        en: 'Before circulating, it catches the wrong approval route and a missing attachment, and the review sheet waits for approval.',
+      },
+      data: {
+        ja: '起案中の稟議のサンプル・稟議規程・職務権限規程と決裁権限の別表・寄付金取扱基準',
+        en: 'sample draft ringi, ringi rules, authority rules with the approval schedule, donation rules',
+      },
+      seed: [{ collection: 'ringi-review', from: 'data/ja' }],
+      check: { tools: ['search_files', 'run_skill_script'], approval: 'Write' },
+    },
+  },
 });

@@ -1,0 +1,5 @@
+service,team,tier,description,runbook
+order-api,Order Platform,1,Places and looks up orders for the online store,RB-ORDER-01
+payment-gateway,Payments,1,Authorizes and voids card payments,RB-PAY-01
+nightly-report,Data Platform,3,Builds the stores' sales reports overnight,RB-DATA-03
+shared-db,Infrastructure,1,The shared database behind orders and payments,RB-INFRA-02

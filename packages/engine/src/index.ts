@@ -20,6 +20,8 @@
  *                        the answer before it writes a byte (ENG-04b).
  *   * `skill-script.ts` — `run_skill_script`: a skill's Node script, run with no shell under Node's
  *                        permission model, over an injected host (ADR-0137).
+ *   * `tool-answers.ts` — the tool answers a run received, which a script may read by reference
+ *                        (ADR-0176).
  *   * `refusal.ts`    — `EngineRefusalError`, the typed refusal an adapter can only reach in
  *                        `start()`, which the runner answers like a `compile` refusal.
  *
@@ -36,6 +38,7 @@ export * from './sandbox-env.js';
 export * from './session-state.js';
 export * from './skills.js';
 export * from './skill-script.js';
+export * from './tool-answers.js';
 export * from './credential-rejection.js';
 export * from './refusal.js';
 export * from './compile-checks.js';

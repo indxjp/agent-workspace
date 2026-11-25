@@ -302,7 +302,7 @@ Two ways to give an agent a tool without running an MCP server of your own:
 | -------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | What it is     | An OpenAPI 3.0 or 3.1 document becomes tools, one per allowed operation                            | Your own TypeScript function, with a Zod input schema                        |
 | Who runs it    | The gateway, which holds the credential (on the `local` driver this is advisory: see below)        | A tool host `aw dev` starts on your machine                                  |
-| What it may do | Reads only: `GET` and `HEAD`. `openapiTool()` refuses a write rule for now; the gateway already runs a write only after approval. | Anything your code does                                                      |
+| What it may do | Reads, and writes that wait for a person: a rule that picks a `POST`, `PUT`, `PATCH` or `DELETE` is admitted, and the gateway runs that call only once a person approves it. | Anything your code does                                                      |
 | Deployable     | **Yes.** Once the tool is registered in the workspace, a version that uses it can be promoted.     | **Only where the operator enables the tool sandbox.** Elsewhere `aw promote` refuses with `422 code_tool_needs_host`. |
 
 <Accordion title="An openapiTool() in code">

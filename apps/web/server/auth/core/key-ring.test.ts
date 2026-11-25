@@ -2,13 +2,7 @@ import { hkdfSync } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  KEY_PURPOSES,
-  PURPOSE_KEY_BYTES,
-  derivePurposeKey,
-  keyDerivation,
-  verificationKeys,
-} from './key-ring.ts';
+import { KEY_PURPOSES, PURPOSE_KEY_BYTES, derivePurposeKey, keyDerivation } from './key-ring.ts';
 
 const SECRET = 'key-ring-test-secret-0123456789abcdef';
 
@@ -58,9 +52,5 @@ describe('one key per purpose', () => {
       hkdfSync('sha256', SECRET, derivation.salt, derivation.info, derivation.lengthBytes),
     );
     expect(key.equals(expectedKey(SECRET, 'cli-device-code'))).toBe(true);
-  });
-
-  it('tries the purpose key first, then the old one, during the roll-over', () => {
-    expect(verificationKeys('purpose', 'legacy')).toEqual(['purpose', 'legacy']);
   });
 });

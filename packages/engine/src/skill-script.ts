@@ -14,14 +14,107 @@
  * has no `@types/node`, and each adapter hands over ten lines of `node:child_process` and
  * `node:fs/promises`.
  *
+ * A script may import a built-in skill's module by its package path (ADR-0173,
+ * {@link builtinImportHook}); the process's one `--import` maps it to the placed built-in skill.
+ *
+ * A call may name an earlier tool call of the run (`input: { fromToolUse }`, ADR-0176): the engine
+ * writes that call's answer, as the model received it, into a directory of the call's own that the
+ * script may read and not write, and names the file in `SKILL_SCRIPT_INPUT`. The model chooses the
+ * answer; it cannot change a byte of it.
+ *
  * The script must resolve — symbolic links included — inside the placed skill's `scripts/`
  * directory. The permission model follows links that already exist, so the containment check is
  * ours; it is the second check after the runner refusing to place a link at all.
  */
 import { normaliseGrants } from './path-grant.js';
 import type { EngineRunRequest } from './port.js';
+import type { ToolAnswers } from './tool-answers.js';
 
 export const RUN_SKILL_SCRIPT_TOOL = 'run_skill_script';
+
+/**
+ * The package name a skill script imports a built-in skill's module by (ADR-0173):
+ * `<package>/<skill>/scripts/lib/<file>.mjs`. In this repository, the use cases install the
+ * skills-office package under this name, so the path resolves through `node_modules`. A run's
+ * sandbox has no `node_modules`, so {@link builtinImportHook} maps the same path to the built-in
+ * skill as it is placed beside the script's own skill: one specifier, both places. The name is in
+ * the platform's own npm scope, so no package someone else publishes can answer to it.
+ */
+export const BUILTIN_SKILL_PACKAGE = '@indx-workspace/builtin-skills';
+
+/**
+ * What a skill script may import from each built-in skill, and the sha256 of every file those
+ * modules load, as this platform ships them (ADR-0173). A skill a person imported or edited under a
+ * built-in's name is theirs (`apps/web/server/skills/builtin.ts`), so the hook imports from a placed
+ * built-in only when each of these files is byte for byte the shipped one.
+ * `tests/engine/run-skill-script.test.ts` fails when a shipped file and this table differ.
+ */
+export const BUILTIN_IMPORTS: Readonly<
+  Record<
+    string,
+    { readonly modules: readonly string[]; readonly sha256: Readonly<Record<string, string>> }
+  >
+> = {
+  'office-reader': {
+    modules: ['scripts/lib/cli.mjs', 'scripts/lib/public-source.mjs', 'scripts/lib/table.mjs'],
+    sha256: {
+      'scripts/lib/cli.mjs': '58723c51defa158b7610d24334abc3737b265b4743720f27af4809c524a6ed67',
+      'scripts/lib/public-source.mjs':
+        '5f8bcdd34b41edddc5888b359197cdc9846449b238fe61e6f32624dab50611d7',
+      'scripts/lib/table.mjs': 'ee5c8534533cbe449fe3f86f137780d399327250ff3f04c5ee442348718777e0',
+      'scripts/ooxml.mjs': 'b45288c1cd8d486b578f7c94499d4070fc2b7249d3a0165f72be51f492a4bd85',
+    },
+  },
+};
+
+/**
+ * The `--import` argument that installs, before the script runs, a resolve hook for
+ * {@link BUILTIN_SKILL_PACKAGE}. `<package>/<skill>/<module>`, for a module {@link BUILTIN_IMPORTS}
+ * lists, resolves to `<skillsRoot>/<skill>/<module>`, a placed file the process may already read,
+ * once every file the table lists for that skill hashes to the shipped digest. Otherwise the
+ * script stops with one JSON line on stderr and exit code 1, as a refused script does:
+ *
+ * - `not_importable`: any other specifier of the package, so none falls through to a
+ *   `node_modules` folder the workspace could hold;
+ * - `builtin_skill_not_granted`: the skill is not placed, because the run does not grant it;
+ * - `builtin_skill_modified`: the placed skill is a person's own under the built-in's name.
+ *
+ * The hook is a `data:` module (`module.registerHooks`, Node 22.15 and later), so it needs no
+ * permission of its own; it reads only placed files.
+ *
+ * @param skillsRoot the absolute directory skills are placed in.
+ */
+export function builtinImportHook(skillsRoot: string): string {
+  const offered = Object.entries(BUILTIN_IMPORTS)
+    .flatMap(([skill, { modules }]) => modules.map((module) => `${skill}/${module}`))
+    .join(', ');
+  const source = [
+    `import{registerHooks}from'node:module';import{pathToFileURL}from'node:url';`,
+    `import{readFileSync}from'node:fs';import{createHash}from'node:crypto';`,
+    `const root=${JSON.stringify(skillsRoot)};`,
+    `const imports=${JSON.stringify(BUILTIN_IMPORTS)};`,
+    `const name=${JSON.stringify(BUILTIN_SKILL_PACKAGE)};`,
+    `const offered=${JSON.stringify(offered)};`,
+    `const checked=new Set();`,
+    `const refuse=(error,message)=>{process.stderr.write(JSON.stringify({error,message})+String.fromCharCode(10));process.exit(1);};`,
+    `registerHooks({resolve(specifier,context,nextResolve){`,
+    `if(specifier!==name&&!specifier.startsWith(name+'/'))return nextResolve(specifier,context);`,
+    `const rest=specifier.slice(name.length+1);const slash=rest.indexOf('/');`,
+    `const skill=rest.slice(0,slash);const module=rest.slice(slash+1);`,
+    `const entry=slash>0&&Object.hasOwn(imports,skill)?imports[skill]:undefined;`,
+    `if(entry===undefined||!entry.modules.includes(module))`,
+    `refuse('not_importable',specifier+' is not a module a built-in skill offers ('+name+'/: '+offered+')');`,
+    `if(!checked.has(skill)){for(const[file,digest]of Object.entries(entry.sha256)){let bytes;`,
+    `try{bytes=readFileSync(root+'/'+skill+'/'+file);}catch{`,
+    `refuse('builtin_skill_not_granted',specifier+" needs the built-in skill "+skill+", which this run does not grant: the agent grants builtinSkill('"+skill+"')");}`,
+    `if(createHash('sha256').update(bytes).digest('hex')!==digest)`,
+    `refuse('builtin_skill_modified','the skill '+skill+' in this run is not the built-in one ('+file+' differs), so '+specifier+' is not imported');}`,
+    `checked.add(skill);}`,
+    `return{url:pathToFileURL(root+'/'+skill+'/'+module).href,shortCircuit:true};`,
+    `}});`,
+  ].join('');
+  return `--import=data:text/javascript,${encodeURIComponent(source)}`;
+}
 
 /** The limits one call runs under. */
 export type SkillScriptLimits = {
@@ -30,6 +123,8 @@ export type SkillScriptLimits = {
   readonly maxOutputBytes: number;
   readonly maxArguments: number;
   readonly maxArgumentBytes: number;
+  /** The largest tool answer a call may hand its script by reference (ADR-0176). */
+  readonly maxInputBytes: number;
 };
 
 export const SKILL_SCRIPT_LIMITS: SkillScriptLimits = {
@@ -37,7 +132,17 @@ export const SKILL_SCRIPT_LIMITS: SkillScriptLimits = {
   maxOutputBytes: 1024 * 1024,
   maxArguments: 64,
   maxArgumentBytes: 8 * 1024,
+  maxInputBytes: 2 * 1024 * 1024,
 };
+
+/** The environment variable that names the file holding a referenced tool answer (ADR-0176). */
+export const SKILL_SCRIPT_INPUT_ENV = 'SKILL_SCRIPT_INPUT';
+
+/** The file name of a referenced answer in the call's input directory. */
+const INPUT_FILE = 'tool-answer.txt';
+
+/** How many held answers a refusal names; the oldest are left out past it. */
+const NAMED_ANSWERS = 20;
 
 /** Why a call was refused. A script that merely exits non-zero is not a refusal. */
 export const SKILL_SCRIPT_REFUSALS = [
@@ -51,6 +156,10 @@ export const SKILL_SCRIPT_REFUSALS = [
   'outside_skill_directory',
   'timeout',
   'output_too_large',
+  /** `input.fromToolUse` names no tool call whose answer this run received (ADR-0176). */
+  'unknown_tool_answer',
+  /** The referenced answer is an error, or larger than `maxInputBytes` (ADR-0176). */
+  'unusable_tool_answer',
 ] as const;
 export type SkillScriptRefusal = (typeof SKILL_SCRIPT_REFUSALS)[number];
 
@@ -91,6 +200,10 @@ export type SkillScriptHost = {
   };
   /** A new, empty, real directory the call may write to. */
   makeScratchDirectory(): Promise<string>;
+  /** Write `content` as UTF-8 to `path`, a new file in a directory {@link makeScratchDirectory} made. */
+  writeFile(path: string, content: string): Promise<void>;
+  /** `mkdir -p`: creates `path` and its missing parents; resolves when it already exists. */
+  makeDirectory(path: string): Promise<void>;
   removeDirectory(path: string): Promise<void>;
 };
 
@@ -107,6 +220,12 @@ export type SkillScriptSetup = {
   readonly skills: readonly { readonly name: string; readonly scripts: readonly string[] }[];
   /** Workspace-relative read-write grants a script may write; empty unless `writeFiles` is on. */
   readonly writable: readonly string[];
+  /**
+   * The members of `writable` that are folders (directory grants and `outputs`), which the tool
+   * creates before a call when they are missing. A file grant is never one: making a folder with a
+   * file's name would break the grant and its write-back.
+   */
+  readonly writableDirectories: readonly string[];
 };
 
 export type SkillScriptOutcome =
@@ -152,10 +271,14 @@ export function skillScriptSetup(
   // A grant that does not normalise already refuses the run in every adapter's compile; offering no
   // write access is the safe reading if one reaches here anyway.
   const grants = normaliseGrants(request.resources.files, protectedConfigDirectory);
-  const grantedPaths =
+  const writableGrants =
     permissions.writeFiles && grants.ok
-      ? grants.grants.filter((grant) => grant.access === 'read-write').map((grant) => grant.path)
+      ? grants.grants.filter((grant) => grant.access === 'read-write')
       : [];
+  const grantedPaths = writableGrants.map((grant) => grant.path);
+  const grantedDirectories = writableGrants
+    .filter((grant) => grant.kind === 'directory')
+    .map((grant) => grant.path);
   // `outputs` is where a completed run's files are collected into the run's record, so a script of a
   // `writeFiles` agent may write there without a grant — unless a read-only grant is `outputs` or lies
   // under it, because `--allow-fs-write` never names a read-only grant (ADR-0137).
@@ -164,15 +287,17 @@ export function skillScriptSetup(
     grants.grants.some(
       (grant) => grant.access !== 'read-write' && grant.segments[0] === RUN_OUTPUTS_DIRECTORY,
     );
-  const writable =
-    permissions.writeFiles && grants.ok && !outputsHoldsReadOnly
-      ? [...new Set([...grantedPaths, RUN_OUTPUTS_DIRECTORY])]
-      : grantedPaths;
+  const outputs = permissions.writeFiles && grants.ok && !outputsHoldsReadOnly;
+  const writable = outputs ? [...new Set([...grantedPaths, RUN_OUTPUTS_DIRECTORY])] : grantedPaths;
+  const writableDirectories = outputs
+    ? [...new Set([...grantedDirectories, RUN_OUTPUTS_DIRECTORY])]
+    : grantedDirectories;
   return {
     cwd: request.cwd.replace(/\/+$/u, ''),
     skillsDirectory: `${protectedConfigDirectory}/skills`,
     skills: granted.map((skill) => ({ name: skill.name, scripts: directScripts(skill.files) })),
     writable,
+    writableDirectories,
   };
 }
 
@@ -194,6 +319,7 @@ export function skillScriptToolDescription(setup: SkillScriptSetup): string {
     `and write only where this agent may write${setup.writable.length === 0 ? ' (a temporary directory, $TMPDIR)' : ` (${setup.writable.join(', ')} and a temporary directory, $TMPDIR)`}.`,
     `It is stopped after ${String(SKILL_SCRIPT_LIMITS.timeoutMs / 1000)} seconds, and output beyond ${String(SKILL_SCRIPT_LIMITS.maxOutputBytes / 1024)} KiB per stream is refused.`,
     `Scripts by skill: ${setup.skills.map((skill) => `${skill.name} (${skill.scripts.length === 0 ? 'none directly in scripts/' : listedScripts(skill.scripts)})`).join('; ')}.`,
+    `To give a script the answer of an earlier tool call of this run, pass input: { fromToolUse: "<that call's id>" } instead of copying the answer into args: the script reads it, unchanged, from the file named in $${SKILL_SCRIPT_INPUT_ENV}. A call that needs approval is approved with that id, and runs on the answer the id names.`,
     `Read the skill (its SKILL.md) for a script's arguments before the first call.`,
   ].join(' ');
 }
@@ -208,6 +334,20 @@ export const RUN_SKILL_SCRIPT_INPUT_JSON_SCHEMA = {
       description: 'A file name in the skill’s scripts/ directory, for example "check.mjs".',
     },
     args: { type: 'array', items: { type: 'string' }, description: 'Arguments, one string each.' },
+    input: {
+      type: 'object',
+      properties: {
+        fromToolUse: {
+          type: 'string',
+          description:
+            'The id of an earlier tool call in this run. Its answer, exactly as you received it, is given to the script as a file; you cannot change it.',
+        },
+      },
+      required: ['fromToolUse'],
+      additionalProperties: false,
+      description:
+        'Hand the script the answer of an earlier tool call instead of copying it into args.',
+    },
   },
   required: ['skill', 'script'],
   additionalProperties: false,
@@ -217,13 +357,43 @@ export type RunSkillScriptInput = {
   readonly skill: string;
   readonly script: string;
   readonly args: readonly string[];
+  /** The tool call whose answer the script reads (ADR-0176); absent when the call names none. */
+  readonly fromToolUse?: string;
 };
+
+/** The longest tool call id a reference may carry; engine ids are far shorter. */
+const MAX_TOOL_USE_ID_CHARACTERS = 256;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-const INPUT_KEYS: ReadonlySet<string> = new Set(['skill', 'script', 'args']);
+const INPUT_KEYS: ReadonlySet<string> = new Set(['skill', 'script', 'args', 'input']);
+
+/**
+ * `input`: absent or `null` (OpenAI's strict schema sends `null`) means no reference; otherwise
+ * exactly `{ fromToolUse }`, a non-empty id without NUL.
+ */
+function parseReference(
+  value: unknown,
+):
+  | { readonly ok: true; readonly fromToolUse?: string }
+  | { readonly ok: false; readonly reason: string } {
+  if (value === undefined || value === null) return { ok: true };
+  if (!isRecord(value) || Object.keys(value).some((key) => key !== 'fromToolUse')) {
+    return { ok: false, reason: 'input must be { fromToolUse: "<tool call id>" }.' };
+  }
+  const id = value['fromToolUse'];
+  if (
+    typeof id !== 'string' ||
+    id.length === 0 ||
+    id.length > MAX_TOOL_USE_ID_CHARACTERS ||
+    id.includes('\0')
+  ) {
+    return { ok: false, reason: 'input.fromToolUse must be the id of an earlier tool call.' };
+  }
+  return { ok: true, fromToolUse: id };
+}
 
 /** A strict parse of a model-supplied call: unknown keys, non-strings and oversize arguments are refused. */
 export function parseRunSkillScriptInput(
@@ -241,7 +411,7 @@ export function parseRunSkillScriptInput(
     return {
       ok: false,
       refusal: 'unusable_arguments',
-      reason: `${JSON.stringify(unknownKey)} is not a field of this tool (skill, script, args).`,
+      reason: `${JSON.stringify(unknownKey)} is not a field of this tool (skill, script, args, input).`,
     };
   }
   const skill = record['skill'];
@@ -278,7 +448,19 @@ export function parseRunSkillScriptInput(
   if (args.some((arg) => arg.includes('\0'))) {
     return { ok: false, refusal: 'unusable_arguments', reason: 'an argument contains NUL.' };
   }
-  return { ok: true, input: { skill, script, args } };
+  const reference = parseReference(record['input']);
+  if (!reference.ok) {
+    return { ok: false, refusal: 'unusable_arguments', reason: reference.reason };
+  }
+  return {
+    ok: true,
+    input: {
+      skill,
+      script,
+      args,
+      ...(reference.fromToolUse === undefined ? {} : { fromToolUse: reference.fromToolUse }),
+    },
+  };
 }
 
 /** A name that is not a file name at all: empty, too long, or holding NUL. */
@@ -370,6 +552,103 @@ function classifyFailure(error: unknown, limits: SkillScriptLimits): SkillScript
   throw error;
 }
 
+/** Whether `real`, a resolved path, is `root` or lies under it. */
+function isInside(path: SkillScriptHost['path'], root: string, real: string): boolean {
+  const inside = path.relative(root, real);
+  return inside === '' || (!path.isAbsolute(inside) && !/^\.\.(?:[\\/]|$)/u.test(inside));
+}
+
+/**
+ * Whether the nearest existing ancestor of `relative` (itself included), links resolved, is inside
+ * `root`: a link already in a parent path would otherwise carry the folder made under it out of
+ * the run directory. Nothing below `root` existing means `root` itself, which is real.
+ */
+async function ancestorInside(
+  host: SkillScriptHost,
+  root: string,
+  relative: string,
+): Promise<boolean> {
+  const segments = relative.split('/');
+  for (let length = segments.length; length > 0; length -= 1) {
+    let real: string;
+    try {
+      real = await host.realpath(host.path.join(root, ...segments.slice(0, length)));
+    } catch (error) {
+      if (isMissing(error)) continue;
+      return false;
+    }
+    return isInside(host.path, root, real);
+  }
+  return true;
+}
+
+/**
+ * Creates each writable directory (`setup.writableDirectories`, never a file grant) that does not
+ * exist yet, before the process starts. Node's permission model reads an `--allow-fs-write` path
+ * that is missing at start as one file, not a folder: the script may then create the folder but
+ * nothing in it (`ERR_ACCESS_DENIED`). That is how a run's first `outputs/` file was refused (an
+ * `office-writer` render, R1 run 44985488322): nothing makes `outputs/` before the script, since
+ * `Write` there is denied to such an agent. A directory whose nearest existing ancestor resolves
+ * outside `root`, or that cannot be made (a file holds the name), is left to the script, which then
+ * meets the permission model's refusal and reports it as its own answer.
+ */
+async function makeWritableDirectories(
+  host: SkillScriptHost,
+  root: string,
+  directories: readonly string[],
+): Promise<void> {
+  for (const directory of directories) {
+    if (!(await ancestorInside(host, root, directory))) continue;
+    try {
+      await host.makeDirectory(host.path.join(root, directory));
+    } catch {
+      // Left to the script: its write is refused there, and the refusal is its answer.
+    }
+  }
+}
+
+/**
+ * The answer `fromToolUse` names, as the model received it, or the refusal: no such answer in this
+ * run (the refusal names the ones it holds, so the model can correct the id), an error answer, or
+ * one over `maxInputBytes`. A run without a record of answers holds none.
+ */
+async function referencedAnswer(
+  answers: ToolAnswers | undefined,
+  fromToolUse: string,
+  limits: SkillScriptLimits,
+  signal: AbortSignal | undefined,
+): Promise<{ readonly ok: true; readonly output: string } | (SkillScriptOutcome & { ok: false })> {
+  const answer = (await answers?.find(fromToolUse, signal)) ?? null;
+  if (answer === null) {
+    const held = (answers?.held() ?? []).slice(-NAMED_ANSWERS);
+    return {
+      ok: false,
+      refusal: 'unknown_tool_answer',
+      reason: `this run received no answer to a tool call ${JSON.stringify(fromToolUse)}. ${
+        held.length === 0
+          ? 'It has received no tool answer yet.'
+          : `Answers it holds: ${held.map((call) => `${call.toolCallId} (${call.name === '' ? 'unnamed' : call.name})`).join(', ')}.`
+      }`,
+    };
+  }
+  if (answer.isError) {
+    return {
+      ok: false,
+      refusal: 'unusable_tool_answer',
+      reason: `the answer to ${JSON.stringify(fromToolUse)} (${answer.name}) is an error, not a result a script can read.`,
+    };
+  }
+  const bytes = new TextEncoder().encode(answer.output).length;
+  if (bytes > limits.maxInputBytes) {
+    return {
+      ok: false,
+      refusal: 'unusable_tool_answer',
+      reason: `the answer to ${JSON.stringify(fromToolUse)} is ${String(bytes)} bytes; a script may be handed at most ${String(limits.maxInputBytes)}.`,
+    };
+  }
+  return { ok: true, output: answer.output };
+}
+
 /**
  * Run one call. Returns a named refusal or the script's exit code and output; throws only when the
  * host itself fails (the Node binary does not start, the scratch directory cannot be made) or the
@@ -381,6 +660,7 @@ export async function runSkillScript(
   input: RunSkillScriptInput,
   limits: SkillScriptLimits = SKILL_SCRIPT_LIMITS,
   signal?: AbortSignal,
+  answers?: ToolAnswers,
 ): Promise<SkillScriptOutcome> {
   const skill = setup.skills.find((candidate) => candidate.name === input.skill);
   if (skill === undefined) {
@@ -431,16 +711,33 @@ export async function runSkillScript(
       `scripts/${input.script} of skill ${JSON.stringify(input.skill)} resolves outside the skill's scripts/ directory.`,
     );
   }
+  const reference =
+    input.fromToolUse === undefined
+      ? null
+      : await referencedAnswer(answers, input.fromToolUse, limits, signal);
+  if (reference !== null && !reference.ok) return reference;
+  await makeWritableDirectories(host, root, setup.writableDirectories);
   const scratch = await host.makeScratchDirectory();
+  // The answer sits in a directory of its own that the process may read and never write, so the
+  // script reads exactly what the model received. It is made, like `scratch`, for this call only.
+  let inputDirectory: string | null = null;
   try {
+    let inputFile: string | null = null;
+    if (reference !== null) {
+      inputDirectory = await host.makeScratchDirectory();
+      inputFile = path.join(inputDirectory, INPUT_FILE);
+      await host.writeFile(inputFile, reference.output);
+    }
     const { stdout, stderr } = await host.execFile(
       host.execPath,
       [
         '--permission',
         `--allow-fs-read=${root}`,
         `--allow-fs-read=${scratch}`,
+        ...(inputDirectory === null ? [] : [`--allow-fs-read=${inputDirectory}`]),
         `--allow-fs-write=${scratch}`,
         ...setup.writable.map((grant) => `--allow-fs-write=${path.join(root, grant)}`),
+        builtinImportHook(path.join(root, setup.skillsDirectory)),
         realScript,
         ...input.args,
       ],
@@ -448,7 +745,10 @@ export async function runSkillScript(
         cwd: root,
         timeout: limits.timeoutMs,
         maxBuffer: limits.maxOutputBytes,
-        env: { TMPDIR: scratch },
+        env:
+          inputFile === null
+            ? { TMPDIR: scratch }
+            : { TMPDIR: scratch, [SKILL_SCRIPT_INPUT_ENV]: inputFile },
         killSignal: 'SIGKILL',
         ...(signal === undefined ? {} : { signal }),
       },
@@ -457,7 +757,12 @@ export async function runSkillScript(
   } catch (error) {
     return classifyFailure(error, limits);
   } finally {
-    await host.removeDirectory(scratch);
+    // Each directory is removed even when removing the other fails.
+    try {
+      await host.removeDirectory(scratch);
+    } finally {
+      if (inputDirectory !== null) await host.removeDirectory(inputDirectory);
+    }
   }
 }
 
@@ -481,11 +786,12 @@ export async function executeRunSkillScript(
   setup: SkillScriptSetup,
   input: unknown,
   signal?: AbortSignal,
+  answers?: ToolAnswers,
 ): Promise<{ readonly text: string; readonly isError: boolean }> {
   const parsed = parseRunSkillScriptInput(input);
   return skillScriptResultText(
     parsed.ok
-      ? await runSkillScript(host, setup, parsed.input, SKILL_SCRIPT_LIMITS, signal)
+      ? await runSkillScript(host, setup, parsed.input, SKILL_SCRIPT_LIMITS, signal, answers)
       : parsed,
   );
 }

@@ -322,6 +322,9 @@ means setting one such variable per engine.
   [Versions and deprecation](/concepts/public-surface#versions-and-deprecation) states the
   compatibility rules; the steps are in
   [Upgrade, roll back, back up](/guides/deploy#upgrade-roll-back-and-back-up).
+  Upgrading straight from 0.6.12 or earlier signs every user out once: sessions are now verified
+  only with keys derived from `SESSION_SECRET` per purpose, so a sign-in, invitation or `aw login`
+  in flight during the upgrade must be started again.
 - **Observe:** `metrics.recentRuns` and `audit.list` over the API
   ([Observability](/resources/observability)); telemetry export at the platform level
   (`packages/core/src/telemetry`).
@@ -400,7 +403,7 @@ id (the storage design, §06). Files an install older than 0.6.11 wrote under th
 by the release after 0.6.11, which is a **required stop**: `db:migrate` of any later release refuses
 with `legacy_storage_rows_remain` until that release has recorded a clean pass of both of its
 storage migration steps, and nothing is deleted or rewritten while it refuses. On the release after
-0.6.11, before you upgrade further:
+0.6.11 (0.6.12), before you upgrade further:
 
 1. Start it once with `AW_STORAGE_MIGRATE=copy` and wait for a `storage-migrate` progress line with
    `"done":true` and `0` for every area's `failed`, `missing` and `mismatched`. It gives each file
@@ -430,6 +433,13 @@ row's `legacy_rows`. Clear each cause, then start the release again with `AW_STO
 - The skills record's `legacy_rows`, with a skill whose delete is pending (a delete that did not
   finish on 0.6.x): its old files are left for the delete to remove. Its owner retries
   `DELETE /api/skills/<name>`, which finishes the delete.
+
+<Warning>
+  Run these steps on 0.6.12. Later releases no longer run the adopt pass, and ignore
+  `AW_STORAGE_MIGRATE`: they read skills and files only through their catalog rows, and their
+  upgrade guard refuses an install that never recorded a clean pass. An install older than 0.6.11
+  therefore upgrades through 0.6.12 first.
+</Warning>
 
 A fresh install has nothing to move and upgrades with no step.
 
@@ -537,7 +547,7 @@ answers `401`. The gateway's `GET /health` and the runner manager's `GET /health
 
 ## Which runtime drivers are real today
 
-A runtime profile names one of eleven driver ids (`RUNTIME_DRIVERS` in
+A runtime profile names one of thirteen driver ids (`RUNTIME_DRIVERS` in
 `@indx-workspace/contracts/runtimes`). Not all of them have the same standing, and the platform is
 explicit about it:
 
@@ -547,9 +557,12 @@ explicit about it:
 | `sandbox-runtime`                                                                | Reserved id; not implemented. A project file that names it still starts, on `local` with no isolation and the `local` warning, and `aw dev` says so; the runner manager refuses it |
 | `docker`                                                                         | Implemented; isolation live-verified by the isolation workflow; the single-VM default; removes a session at its `timeoutSeconds`; with `workspaceStorage: "anonymous-volume"` `/workspace` is a tmpfs of `diskMb` and `--memory` is memory plus workspace; `restricted` and `open` go through a per-session egress proxy once its image is configured (unit-tested; not yet live-verified), and are refused or unproxied without it |
 | `kubernetes`                                                                     | Implemented; isolation live-verified on a kind cluster with Calico by the isolation workflow; the Kubernetes target runs agents, checked on kind by the isolation workflow's kind-deploy lane (not yet live-verified); `restricted` and `open` need `runtime.egressProxyImage` to reach the internet and go through a per-session egress proxy (unit-tested; not yet live-verified); without it `restricted` is refused and `open` reaches only the gateway; no managed-cluster proof |
-| `aca-sessions`, `cloud-run-service`                                              | Implemented; not exercised by the live driver suite                                                                                                                                      |
+| `cloud-run-service`                                                              | Implemented; the `gcp-cloudrun` default; `none` isolation live-verified (no route to the internet, private ranges or Google's private API ranges); `restricted` and `open` go through a shared egress proxy when the project file sets `gcp.sandboxInternet: true`, and that lane is live-verified too |
+| `aca-sessions`                                                                   | Implemented; not exercised by the live driver suite; refuses `restricted`                                                                                                               |
 | `gke-agent-sandbox`, `aws-agentcore`, `aws-ecs`, `cloud-run-sandbox`             | Named in the contract; not implemented in the current release                                                                                                                            |
 | `external`                                                                       | Available (E2B); passed the provider live lane (run 37809484699)                                                                                                                         |
+| `vercel-sandbox`                                                                 | Implemented; passed the providers-live lane                                                                                                                                              |
+| `cloudflare-sandbox`                                                             | Implemented; refuses every network policy until a live run proves egress is denied (ADR-0131), so it runs nothing yet                                                                   |
 
 [Choose models and runtimes](/building/models-and-runtimes) explains what a profile controls and
 how to pick a driver for a job; [Extend the platform](/building/extending-the-platform) is how a new
@@ -567,8 +580,9 @@ driver is added.
   refused, no external name resolves), `open` (the public internet through the proxy, never the
   private network), the cloud metadata address `169.254.169.254` blocked, no route around the
   proxy, and the proxy removed at teardown; until they run green on both lanes these are covered by
-  unit tests only. Cloud Run accepts `restricted` and `open` only with `gcp.sandboxInternet: true`, ACA sessions refuse
-  `restricted`, and neither has a live proof for those policies yet. **Target:** one verified sandbox driver per cloud. Tracked as
+  unit tests only. Cloud Run accepts `restricted` and `open` only with `gcp.sandboxInternet: true`, and its live
+  workflow proves both `none` and that allow-list lane; ACA sessions refuse `restricted` and have no
+  live proof yet. **Target:** one verified sandbox driver per cloud. Tracked as
   [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud).
 </Note>
 

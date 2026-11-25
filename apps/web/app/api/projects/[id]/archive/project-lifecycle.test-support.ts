@@ -251,7 +251,7 @@ class ProjectLifecycleFixture {
                   principalId: principalIdFor(actor),
                   ownerPrincipalId: principalIdFor(actor),
                   userId: actor,
-                  userLabel: actor,
+                  label: actor,
                 },
           );
         },

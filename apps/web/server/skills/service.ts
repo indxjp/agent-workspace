@@ -41,6 +41,7 @@ import { readBytes } from '../storage/objects';
 import type { SkillObjects } from '../storage-and-sharing';
 import { skillSyncContext, syncSkillCatalogRow } from './pending-delete';
 import type { ApiResult } from '../http/result';
+import type { Caller } from '../identity';
 import { log } from '../telemetry/logger';
 import { json, problem, type ApiProblem } from './result';
 import {
@@ -52,11 +53,8 @@ import {
 } from './tree';
 import { validateImportBody } from './validate';
 
-/** The part of the authenticated principal a catalog write is stamped with. */
-export interface SkillPrincipal {
-  readonly ownerPrincipalId: string;
-  readonly userId: string | null;
-}
+/** The part of the one {@link Caller} type a catalog write is stamped with (part 06 step 9). */
+export type SkillPrincipal = Pick<Caller, 'ownerPrincipalId' | 'userId'>;
 
 /**
  * K-4: every `SkillDetail` now carries a required `id`, and an id comes only from a catalog row. A
@@ -115,7 +113,7 @@ export async function listSkillsWithIds(
   //
   // ADR-0077 D3: a skill with a delete pending gets no new row — a list must not resurrect a
   // half-deleted skill, nor hand it to the caller as owner — and it is left out of the list.
-  const syncContext = await skillSyncContext(store, catalog);
+  const syncContext = await skillSyncContext(catalog);
   const synced = await Promise.all(
     body.skills.map(async (summary) => {
       const id = await syncSkillCatalogRow(
@@ -152,7 +150,7 @@ async function removeImportedSkill(
   rows: SkillRowsWriter,
 ): Promise<void> {
   await store.delete(skillMetaKey(name));
-  await skillWriter(store, rows, name).clear();
+  await skillWriter(rows, name).clear();
 }
 
 // @story US-STO-08
@@ -421,7 +419,7 @@ export async function importSkillMultipartWithId(
       return existing;
     }
 
-    const files = skillWriter(store, writer, name);
+    const files = skillWriter(writer, name);
     await files.put(SKILL_MD_FILENAME, head.skillMd);
     const seen = new Set([SKILL_MD_FILENAME]);
     const caseFold = createCaseFoldGuard([SKILL_MD_FILENAME]);
@@ -516,7 +514,7 @@ export async function getSkillWithId(
       ownerPrincipalId: principal.ownerPrincipalId,
       createdBy: principal.userId,
     },
-    await skillSyncContext(store, catalog),
+    await skillSyncContext(catalog),
   );
   if (id === null) return problem(404, 'skill_not_found', 'No skill has that name.');
   const revisions = (await catalog.listSkillRevisions(name)).map(revisionBody);
@@ -575,12 +573,12 @@ export async function publishSkillRevisionWithId(
     catalog.publishSkillRevision(name, {
       fileCount: validated.value.files.length,
       write: async (number, abandoned) => {
-        for (const stale of abandoned) await skillWriter(store, writer, name, stale).clear();
+        for (const stale of abandoned) await skillWriter(writer, name, stale).clear();
         const replaced = await replaceSkillFiles(store, name, rawFiles, writer);
         if (!replaced.ok) throw new PublishRefused(replaced.result);
         const { source, enabled } = replaced.skill;
         if (source === null) throw new PublishRefused(unreadableSkillMdProblem(name));
-        const revision = skillWriter(store, writer, name, number);
+        const revision = skillWriter(writer, name, number);
         try {
           await revision.clear();
           for (const file of replaced.files) await revision.put(file.path, file.bytes);
@@ -596,27 +594,7 @@ export async function publishSkillRevisionWithId(
       },
     });
   try {
-    let revision = await publish();
-    if (revision === null) {
-      // No row to lock: a skill stored before the catalog had rows is synced once, then published.
-      const current = await getSkill(store, name, rows);
-      if (current.status !== 200) return current;
-      const detail = skillOf(current);
-      if (detail.source === null) return unreadableSkillMdProblem(name);
-      const id = await syncSkillCatalogRow(
-        store,
-        catalog,
-        {
-          name,
-          skillMd: detail.source,
-          enabled: detail.enabled,
-          ownerPrincipalId: principal.ownerPrincipalId,
-          createdBy: principal.userId,
-        },
-        await skillSyncContext(store, catalog),
-      );
-      if (id !== null) revision = await publish();
-    }
+    const revision = await publish();
     if (revision === null) return problem(404, 'skill_not_found', 'No skill has that name.');
     return json(201, { revision: revisionBody(revision) });
   } catch (error) {

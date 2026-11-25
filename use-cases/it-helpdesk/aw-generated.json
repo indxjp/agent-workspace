@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": {
+    "project:qa": {
+      "files": {
+        "agent-workspace.yaml": "d5a31cc49ec674ed8396db6f2da10c847a9f4cdc3d78dfd3473c2ae0fc7205bb",
+        "agents/it-helpdesk.md": "7381df93aac1219466a0e7170cb8ae4ef474821bfbfa06da4a7e24bfa969ce82",
+        "agents/it-helpdesk.ts": "2db28d93011c05408d4319dd08b1c08e88650c0ff1282aa1c18e064a95fb43da",
+        "data/en/example.md": "228e8a2baaeaccc11eb9bea5ef964e8f291bc1daef4b015bfa917306bc646191",
+        "data/ja/example.md": "027165bbf50373f5f243dcc0e5dab3c2928bc19a28dbf1ae053810f90d97ae3b",
+        "evals/it-helpdesk.yaml": "efa241ba339bb90808d4cab4a08cb2d51708f1afec6dac0518c197c6e97004d5",
+        "skills/it-helpdesk/SKILL.md": "4dd691e08fe03cabdc3f447b71c5d69d8bd4dec51a11ac27d9a8e90125324298",
+        "surfaces/main.ts": "6b40e3f840b5c34ad8bb458d6d416ae20d1ce664bb6b1ddf62ac857130c9fb18"
+      },
+      "edits": []
+    }
+  }
+}

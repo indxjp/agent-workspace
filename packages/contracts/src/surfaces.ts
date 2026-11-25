@@ -5,8 +5,11 @@ import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 import { NAME_KEY_PATTERN } from './project-file.js';
 import { SURFACE_ATTACHMENT_MAX_BYTES } from './attachment-limits.js';
 import { RUN_START_PROBLEM_CODES } from './runs.js';
+import { ResultChartsSchema } from './surface-result-charts.js';
 import { HEX_COLOUR_PATTERN, SURFACE_TITLE_MAX_LENGTH, SURFACE_TITLE_PATTERN } from './setup.js';
 import { BROWSER_TOKEN_PATTERN } from './tokens.js';
+
+export * from './surface-result-charts.js';
 
 /**
  * Issue #440 (S1-02): a surface as code — what `defineSurface()` returns (C3), what a version's
@@ -344,9 +347,26 @@ export const SurfaceToolResultsSchema = z
   );
 
 /**
+ * A run's tool name without its engine prefix: the part after the last `__`, so Claude's
+ * `mcp__<connector>__find_files` is `find_files` (issue #1276). `null` when the name has no `__`.
+ * A single `_` is never a separator: Mastra's `<server>_<tool>` is ambiguous.
+ */
+export function bareToolName(toolName: string): string | null {
+  return toolName.includes('__') ? toolName.slice(toolName.lastIndexOf('__') + 2) : null;
+}
+
+/**
+ * Whether a run's tool `toolName` is the tool a definition names `name`: the exact name, or `name`
+ * equal to its {@link bareToolName}. So `search_files` names Claude's
+ * `mcp__agent-workspace__search_files`, and the prefixed name still names itself.
+ */
+export function namesTool(name: string, toolName: string): boolean {
+  return name === toolName || name === bareToolName(toolName);
+}
+
+/**
  * The component `toolResults` names for a run's tool: the exact key first, else the key equal to
- * the part after the last `__`, so `find_files` matches Claude's `mcp__<connector>__find_files`
- * (issue #1276). A single `_` is never a separator: Mastra's `<server>_<tool>` is ambiguous.
+ * its {@link bareToolName} (issue #1276).
  */
 export function toolResultFor(
   toolName: string,
@@ -354,10 +374,8 @@ export function toolResultFor(
 ): SurfaceToolResultComponent | undefined {
   if (toolResults === undefined) return undefined;
   if (Object.hasOwn(toolResults, toolName)) return toolResults[toolName];
-  const bare = toolName.slice(toolName.lastIndexOf('__') + 2);
-  return toolName.includes('__') && Object.hasOwn(toolResults, bare)
-    ? toolResults[bare]
-    : undefined;
+  const bare = bareToolName(toolName);
+  return bare !== null && Object.hasOwn(toolResults, bare) ? toolResults[bare] : undefined;
 }
 
 /** Hosts that may be named over plain `http`, so a local runtime and browser tests can embed. */
@@ -414,8 +432,8 @@ export type SurfaceLimits = z.infer<typeof SurfaceLimitsSchema>;
 /**
  * One surface as code: what `defineSurface()` returns (C3) and what each entry of a version's
  * `surfaces` holds (ADR-0101). It accepts ADR-0108's rungs ① and ②, rung ② complete with
- * `toolResults` (SD10; issue #537), and the embedding keys `allowedOrigins` and `limits` (issue
- * #622); `audience` and any other key are refused by the strict object (issues #440, #537).
+ * `toolResults` (SD10; issue #537), the embedding keys `allowedOrigins` and `limits` (issue
+ * #622) and the result card's `resultCharts` (ADR-0168); `audience` and any other key are refused by the strict object (issues #440, #537).
  */
 export const SurfaceDefinitionSchema = z
   .object({
@@ -442,6 +460,11 @@ export const SurfaceDefinitionSchema = z
     layout: SurfaceLayoutSchema.optional(),
     parts: SurfacePartsSchema.optional(),
     toolResults: SurfaceToolResultsSchema.optional(),
+    /**
+     * The charts a run's result card draws from the run's typed output, 1–`RESULT_CHARTS_MAX`
+     * (ADR-0168): no use case draws a chart of its own.
+     */
+    resultCharts: ResultChartsSchema.optional(),
     allowedOrigins: SurfaceAllowedOriginsSchema.optional(),
     limits: SurfaceLimitsSchema.optional(),
   })

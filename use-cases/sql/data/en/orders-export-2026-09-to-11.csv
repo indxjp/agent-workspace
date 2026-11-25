@@ -1,0 +1,25 @@
+order_id,order_date,region,category,amount,status
+SO-26101,2026-09-03,Kanto,Stationery,184000,shipped
+SO-26102,2026-09-08,Kansai,Paper goods,96000,shipped
+SO-26103,2026-09-12,Chubu,Office equipment,412000,shipped
+SO-26104,2026-09-17,Kanto,Office equipment,268000,cancelled
+SO-26105,2026-09-22,Kyushu,Stationery,73000,shipped
+SO-26106,2026-09-26,Kansai,Stationery,121000,shipped
+SO-26107,2026-10-01,Kanto,Paper goods,152000,shipped
+SO-26108,2026-10-02,Kansai,Office equipment,338000,shipped
+SO-26109,2026-10-06,Kanto,Stationery,207000,shipped
+SO-26110,2026-10-09,Chubu,Stationery,88000,shipped
+SO-26111,2026-10-14,Kanto,Office equipment,515000,cancelled
+SO-26112,2026-10-15,Kyushu,Paper goods,64000,shipped
+SO-26113,2026-10-20,Kansai,Paper goods,113000,cancelled
+SO-26114,2026-10-21,Kanto,Office equipment,296000,shipped
+SO-26115,2026-10-23,Chubu,Office equipment,247000,shipped
+SO-26116,2026-10-27,Kyushu,Office equipment,182000,pending
+SO-26117,2026-10-29,Kansai,Stationery,79000,shipped
+SO-26118,2026-10-31,Kanto,Paper goods,58000,shipped
+SO-26119,2026-11-02,Chubu,Stationery,143000,shipped
+SO-26120,2026-11-05,Chubu,Paper goods,92000,shipped
+SO-26121,2026-11-09,Kansai,Office equipment,274000,pending
+SO-26122,2026-11-11,Kyushu,Stationery,51000,shipped
+SO-26123,2026-11-13,Kanto,Office equipment,389000,shipped
+SO-26124,2026-11-16,Kanto,Paper goods,67000,cancelled

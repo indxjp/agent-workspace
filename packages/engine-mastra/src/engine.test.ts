@@ -23,7 +23,7 @@ import {
 import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import { describe, expect, it } from 'vitest';
 
-import { MASTRA_CORE_VERSION, type MastraRunStarter } from './boundary.js';
+import { MASTRA_CORE_VERSION, type MastraRunDeps, type MastraRunStarter } from './boundary.js';
 import type { MastraCompiled } from './compile.js';
 import { MASTRA_ADAPTER_VERSION, MASTRA_CAPABILITIES, createMastraEngine } from './engine.js';
 import type { MastraEvent } from './frames.js';
@@ -315,5 +315,23 @@ describe('the Mastra adapter', () => {
         request({ session: { mode: 'fork', engineSessionId: 'other' } }),
       ),
     ).toThrow(/fork: false/u);
+  });
+});
+
+describe('the answers a run_skill_script call may reference (ADR-0176)', () => {
+  it('hands the run starter the kit’s record, filled from the run’s own tool frames', async () => {
+    const handed: MastraRunDeps[] = [];
+    const starter = replayingStarter();
+    const connection = createMastraEngine((compiled, prompt, deps) => {
+      handed.push(deps);
+      return starter(compiled, prompt, deps);
+    }).start(request());
+    for await (const frame of connection.frames) expect(frame.engine).toBe('mastra');
+    expect(await handed[0]?.toolAnswers?.find('toolu_1')).toEqual({
+      toolCallId: 'toolu_1',
+      name: 'mastra_workspace_read_file',
+      output: 'a.md (9 bytes)\n     1→hello doc',
+      isError: false,
+    });
   });
 });

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rv": {
+      "files": {
+        "agent-workspace.yaml": "8ff6d653b14389e65be70721668a38c75f0ea652caf60048e438d41cfe2f0791",
+        "agents/tax.md": "a4223bc25c15e21a8f7ca2632a96b4bbeedffd8d84db64c801b661456f77d71a",
+        "agents/tax.ts": "52119b3ac5575d61c5fc00c97f906c94a04124fcbdc4994f395c3d8fcaf7e89d",
+        "evals/tax.yaml": "2d8e7c469a653db6e4c424a21eebdc096b8748cf5072dba358de0cf70a9ac085",
+        "skills/tax/SKILL.md": "40159c37e97dfb7d7971f78aa1fbc8dd3cf8fe5b8e6a847dbd8497e3beb38afe",
+        "surfaces/main.ts": "000cf51384c042beb05229b2a4ad58d5dd6951c6998cc2408a29209612018345"
+      },
+      "edits": []
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "machineId": "PR-03",
+  "name": "Press No. 3",
+  "model": "AP-200",
+  "line": "Press line 1",
+  "records": [
+    {
+      "id": "T-0009",
+      "citation": "[Trouble record T-0009]",
+      "date": "2023-08-10",
+      "symptom": "Pressing force too low; parts not formed deep enough",
+      "cause": "Pressure switch setting drifted",
+      "action": "Reset the pressure switch to the specified value. Checked the depth with a trial stroke",
+      "durationMin": 30,
+      "technician": "Ken Shiomi"
+    },
+    {
+      "id": "T-0010",
+      "citation": "[Trouble record T-0010]",
+      "date": "2024-02-27",
+      "symptom": "Pressure will not build. The motor runs but the pump side makes noise",
+      "cause": "Worn rubber spider in the coupling between pump and motor",
+      "action": "Replaced the rubber spider. Checked the alignment and ran a trial",
+      "durationMin": 150,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0011",
+      "citation": "[Trouble record T-0011]",
+      "date": "2024-06-14",
+      "symptom": "The hydraulic oil is white and cloudy",
+      "cause": "Cooling water entering through an internal leak in the oil cooler",
+      "action": "Replaced the oil cooler and all the hydraulic oil. Cleaned the tank",
+      "durationMin": 480,
+      "technician": "Koji Mikoshiba"
+    },
+    {
+      "id": "T-0012",
+      "citation": "[Trouble record T-0012]",
+      "date": "2024-09-30",
+      "symptom": "The slide comes down slowly",
+      "cause": "Debris in the throttle of the flow control valve",
+      "action": "Took the flow control valve apart, cleaned it and readjusted the speed",
+      "durationMin": 60,
+      "technician": "Ken Shiomi"
+    },
+    {
+      "id": "T-0013",
+      "citation": "[Trouble record T-0013]",
+      "date": "2025-02-11",
+      "symptom": "Pressure will not build. The pump is quiet and the gauge is near zero",
+      "cause": "Broken coil in the unloading solenoid valve",
+      "action": "Measured the coil resistance with a tester and found it open. Replaced the coil",
+      "durationMin": 90,
+      "technician": "Shota Kashiki"
+    },
+    {
+      "id": "T-0014",
+      "citation": "[Trouble record T-0014]",
+      "date": "2025-08-02",
+      "symptom": "The emergency stop cannot be reset",
+      "cause": "Poor contact in the emergency stop button",
+      "action": "Replaced the button unit and checked the emergency stop circuit",
+      "durationMin": 40,
+      "technician": "Shota Kashiki"
+    }
+  ]
+}

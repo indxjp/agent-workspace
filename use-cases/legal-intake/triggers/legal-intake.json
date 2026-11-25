@@ -1,0 +1,32 @@
+{
+  "kind": "webhook",
+  "name": "legal-intake",
+  "prompt": "法務相談フォームから相談が届きました。分類して資料をそろえ、法務の担当者に渡してください。 / A request arrived from the legal request form; sort it, gather its documents and hand it to a lawyer.\n\n{{body}}",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "requestId",
+      "category",
+      "urgency",
+      "owner",
+      "documents",
+      "missing",
+      "reason",
+      "handover"
+    ],
+    "properties": {
+      "requestId": { "type": "string" },
+      "category": {
+        "type": "string",
+        "enum": ["contract", "dispute", "compliance", "ip", "other"]
+      },
+      "urgency": { "type": "string", "enum": ["high", "normal", "low"] },
+      "owner": { "type": "string" },
+      "documents": { "type": "array", "items": { "type": "string" } },
+      "missing": { "type": "array", "items": { "type": "string" } },
+      "reason": { "type": "string" },
+      "handover": { "type": "string" }
+    }
+  }
+}

@@ -116,7 +116,7 @@ describe.skipIf(!hasDatabase)('runtime switch audit through PATCH /api/agents/:i
             Promise.resolve({
               principalId: apiKeyPrincipalId,
               userId: null,
-              userLabel: 'Runtime switch audit key',
+              label: 'Runtime switch audit key',
               workspaceId: workspace.id,
             }),
           recordAuditEvent: async (event) => {

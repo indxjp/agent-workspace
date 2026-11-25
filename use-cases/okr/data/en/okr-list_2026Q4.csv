@@ -1,0 +1,8 @@
+kr_id,objective_id,objective,team,owner,key_result,start,target,unit
+KR-101,O-1,Deliver value to new customers quickly,Customer Success,Chikage Uzuki,Days from setup to first use,14,7,days
+KR-102,O-1,Deliver value to new customers quickly,Customer Success,Chikage Uzuki,Onboarding completion rate,60,85,%
+KR-201,O-2,Raise product quality,Engineering,Hayate Narumi,Production incidents per month,6,2,incidents
+KR-202,O-2,Raise product quality,Engineering,Hayate Narumi,Automated test coverage,62,80,%
+KR-301,O-3,Create new deals in Kansai,Sales,Haruka Kirishima,New deals in Kansai,0,30,deals
+KR-302,O-3,Create new deals in Kansai,Sales,Haruka Kirishima,Deals through partners,0,12,deals
+KR-401,O-4,Build the base for hiring,People,Mio Nanase,Engineering offers accepted,0,4,people

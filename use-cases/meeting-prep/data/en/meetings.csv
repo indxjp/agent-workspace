@@ -1,0 +1,5 @@
+meeting_id,date,start,end,subject,account_id,attendees,owner
+MTG-0311,2026-11-24,10:00,11:00,Maintenance contract renewal,ACC-001,Kenta Nakajima (Harukaze Works Ltd.);Misaki Yamamoto,Misaki Yamamoto
+MTG-0312,2026-11-24,14:00,15:00,New proposal: warehouse management system,ACC-002,Yuki Onishi (Mizunagi Transport Co.);Hiroyuki Mori (Mizunagi Transport Co.);Misaki Yamamoto,Misaki Yamamoto
+MTG-0313,2026-11-24,16:30,17:00,Apology for the late delivery and next steps,ACC-003,Takashi Ishii (Tsukimi Foods Inc.);Misaki Yamamoto;Sho Okada,Misaki Yamamoto
+MTG-0314,2026-11-25,13:00,14:00,Annual plan interview,ACC-001,Kenta Nakajima (Harukaze Works Ltd.);Misaki Yamamoto,Misaki Yamamoto

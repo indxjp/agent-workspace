@@ -1,0 +1,44 @@
+{
+  "kind": "schedule",
+  "name": "okr",
+  "prompt": "最新のチェックインから、OKRの進捗レポートを日本語で作成して、okr-reports フォルダに保存してください。",
+  "cron": "0 9 * * 1",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["asOf", "keyResults", "savedTo"],
+    "properties": {
+      "asOf": { "type": "string" },
+      "keyResults": {
+        "type": "array",
+        "maxItems": 60,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kr",
+            "objective",
+            "team",
+            "progress",
+            "expected",
+            "status",
+            "note",
+            "sources"
+          ],
+          "properties": {
+            "kr": { "type": "string" },
+            "objective": { "type": "string" },
+            "team": { "type": "string" },
+            "progress": { "type": "integer" },
+            "expected": { "type": "integer" },
+            "status": { "type": "string", "enum": ["on_track", "behind", "no_update"] },
+            "note": { "type": "string" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

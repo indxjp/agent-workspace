@@ -1,0 +1,338 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1027
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+ 70
+4
+  0
+LAYER
+  2
+OUTLINE
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+HOLE
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+TITLE
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+NOTE
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+LINE
+  8
+OUTLINE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+140.0
+ 21
+0.0
+ 31
+0.0
+  0
+LINE
+  8
+OUTLINE
+ 10
+140.0
+ 20
+0.0
+ 30
+0.0
+ 11
+140.0
+ 21
+80.0
+ 31
+0.0
+  0
+LINE
+  8
+OUTLINE
+ 10
+140.0
+ 20
+80.0
+ 30
+0.0
+ 11
+0.0
+ 21
+80.0
+ 31
+0.0
+  0
+LINE
+  8
+OUTLINE
+ 10
+0.0
+ 20
+80.0
+ 30
+0.0
+ 11
+0.0
+ 21
+0.0
+ 31
+0.0
+  0
+CIRCLE
+  8
+HOLE
+ 10
+15.0
+ 20
+15.0
+ 30
+0.0
+ 40
+4.5
+  0
+CIRCLE
+  8
+HOLE
+ 10
+125.0
+ 20
+15.0
+ 30
+0.0
+ 40
+4.5
+  0
+CIRCLE
+  8
+HOLE
+ 10
+15.0
+ 20
+65.0
+ 30
+0.0
+ 40
+4.5
+  0
+CIRCLE
+  8
+HOLE
+ 10
+125.0
+ 20
+65.0
+ 30
+0.0
+ 40
+4.5
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+60.0
+ 30
+0.0
+ 40
+3.5
+  1
+No. BRK-1003
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+53.0
+ 30
+0.0
+ 40
+3.5
+  1
+Part Bracket
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+46.0
+ 30
+0.0
+ 40
+3.5
+  1
+Material SUS304
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+39.0
+ 30
+0.0
+ 40
+3.5
+  1
+Thickness t2.0
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+32.0
+ 30
+0.0
+ 40
+3.5
+  1
+Scale 1:1
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+25.0
+ 30
+0.0
+ 40
+3.5
+  1
+Drawn 2024-06-03 Seryu
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+18.0
+ 30
+0.0
+ 40
+3.5
+  1
+Checked 2024-06-05 Higaki
+  0
+TEXT
+  8
+TITLE
+ 10
+170.0
+ 20
+11.0
+ 30
+0.0
+ 40
+3.5
+  1
+Status Released
+  0
+TEXT
+  8
+NOTE
+ 10
+0.0
+ 20
+-15.0
+ 30
+0.0
+ 40
+3.5
+  1
+Note1 Unspecified corners C0.5
+  0
+TEXT
+  8
+NOTE
+ 10
+0.0
+ 20
+-22.0
+ 30
+0.0
+ 40
+3.5
+  1
+Note2 No burrs
+  0
+TEXT
+  8
+NOTE
+ 10
+0.0
+ 20
+-29.0
+ 30
+0.0
+ 40
+3.5
+  1
+Note3 Finish none (2B)
+  0
+ENDSEC
+  0
+EOF

@@ -161,7 +161,7 @@ describe.skipIf(!hasDatabase)(
                     ownerPrincipalId:
                       actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
                     userId: actor,
-                    userLabel: actor,
+                    label: actor,
                   },
             );
           },

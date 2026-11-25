@@ -4,7 +4,8 @@
  * hook, `useConversation()`, for a page that draws everything itself (issue #623). The tool
  * trace and the attachment chips are exported as parts, so another chat (the console's composer,
  * an app's agent panel) draws the same ones (R-F5a, issue #1489); `prepareAttachment` shrinks a
- * large photo before an upload, for an app's channel composer too (issue #1519).
+ * large photo before an upload, for an app's channel composer too (issue #1519). `<ResultChart/>`
+ * draws a chart a surface declares in `resultCharts` from a run's typed output (ADR-0168).
  */
 export {
   Chat,
@@ -37,3 +38,10 @@ export {
 } from './use-conversation.js';
 export type { Message, Speaker } from './run-model.js';
 export { SURFACE_DEFAULTS } from './theme.js';
+export {
+  RESULT_CHART_TICK_MAX_CHARACTERS,
+  ResultChart,
+  resultChartGeometry,
+  type ResultChartGeometry,
+  type ResultChartProps,
+} from './result-chart.js';

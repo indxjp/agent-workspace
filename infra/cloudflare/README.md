@@ -19,6 +19,13 @@ editing a partial or adding a page, run `node scripts/sites/chrome.mjs --write`.
 to run while any page has drifted from the partials. The Worker's `auto-trailing-slash` handling
 serves `use-cases.html` at `/use-cases`, and `404.html` for any missing path.
 
+The build also writes each page in Japanese under `ja/` (`/ja/use-cases`, with `ja/404.html` for a
+missing Japanese path), from the English page and the strings in `sites/lp/_i18n/ja/`
+(`scripts/sites/i18n.mjs`; `node scripts/sites/i18n.mjs --missing` lists the English strings that
+have no Japanese one yet, and the build refuses to run while there are any). It fills each
+`<!-- data:… -->` slot, the Agent Store's entries and counts, from the store catalog
+(`scripts/sites/store-data.mjs`, which also holds the store's address, `STORE_ORIGIN`).
+
 `wrangler deploy` attaches each host as a Workers Custom Domain (the `custom_domain` route), which
 creates the DNS record and certificate in the `indx.jp` zone. It needs `wrangler login`, or
 `CLOUDFLARE_API_TOKEN` with Workers Scripts:Edit, Workers Routes:Edit, DNS:Edit and Zone:Read.

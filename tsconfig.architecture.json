@@ -189,6 +189,15 @@
       "@agent-workspace/skills-office/office-reader/scripts/dxf.mjs": [
         "./packages/skills-office/office-reader/scripts/dxf.d.mts"
       ],
+      "@agent-workspace/skills-office/office-reader/scripts/lib/cli.mjs": [
+        "./packages/skills-office/office-reader/scripts/lib/cli.d.mts"
+      ],
+      "@agent-workspace/skills-office/office-reader/scripts/lib/public-source.mjs": [
+        "./packages/skills-office/office-reader/scripts/lib/public-source.d.mts"
+      ],
+      "@agent-workspace/skills-office/office-reader/scripts/lib/table.mjs": [
+        "./packages/skills-office/office-reader/scripts/lib/table.d.mts"
+      ],
       "@agent-workspace/skills-office/office-reader/scripts/ooxml.mjs": [
         "./packages/skills-office/office-reader/scripts/ooxml.d.mts"
       ],
@@ -206,6 +215,12 @@
       "embedded-postgres": ["./packages/embedded/node_modules/embedded-postgres/dist/index.js"]
     }
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "use-cases/**/*.ts"
+  ],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/coverage/**"]
 }

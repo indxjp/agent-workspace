@@ -169,6 +169,23 @@ export function scanSource(fileAbs, source, topLevel) {
   const out = [];
   /** @type {Set<ts.Node>} */
   const consumed = new Set();
+  // The SDK's definition helpers (`files('manuals', 'read')`, `skill('manuals')`) take names of a
+  // workspace's folders and skills, never repository paths, so their arguments are not reads.
+  /** @type {Set<string>} */
+  const definitionHelpers = new Set();
+  for (const statement of sf.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== '@indx-workspace/sdk/define'
+    ) {
+      continue;
+    }
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings !== undefined && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) definitionHelpers.add(element.name.text);
+    }
+  }
   const lineOf = (/** @type {ts.Node} */ node) =>
     sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
   const literalText = (/** @type {ts.Node | undefined} */ node) =>
@@ -212,6 +229,7 @@ export function scanSource(fileAbs, source, topLevel) {
       return false;
     }
     const callee = call.expression.getText(sf);
+    if (definitionHelpers.has(callee)) return false;
     return (
       !/^(describe|it|test|expect|vi)\b|\.(toBe|toEqual|toContain|toMatch|toStrictEqual|includes|startsWith|endsWith|has|get|set|add|push|split|replace|join|resolve|log|error|warn)$|^(console|String|Number|Symbol)\b/u.test(
         callee,

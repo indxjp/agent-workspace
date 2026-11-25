@@ -12,6 +12,7 @@ import { randomIds } from '../../ids';
 import { createStorageService } from '../../storage/service';
 import { createInMemoryObjectStore } from '../../storage/testing';
 import { createWorkspaceSkills } from '../../skills/workspace-skills';
+import { allCatalogRows } from './catalog-rows';
 import type { DemoSandbox } from './ports';
 import type { DemoTemplatesWorld } from './templates.contract';
 import { createDemoTemplateOperations } from './seed';
@@ -20,9 +21,6 @@ import type { WorldParts } from './templates.world.parts.test-support';
 import { seedTemplateWorkspace } from './templates.world.seed-template.test-support';
 
 const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
-
-/** How many catalog rows a world reads at once. */
-const READ_ROWS_LIMIT = 1000;
 
 /** The skills service a world uses: its objects held per workspace, its rows in the catalog. */
 function buildSkills(parts: WorldParts, storage: Storage) {
@@ -94,10 +92,8 @@ function worldReaders(
   | 'entry'
   | 'seedTemplate'
 > {
-  const readRows = async (workspaceId: string) => {
-    const catalog = await parts.catalogs(workspaceId);
-    return (await catalog.list('', { limit: READ_ROWS_LIMIT })).rows;
-  };
+  // Every page: a workspace every entry was copied into holds more rows than one page.
+  const readRows = (workspaceId: string) => allCatalogRows(parts.catalogs, workspaceId);
 
   return {
     agents: (workspaceId) => parts.agents.forWorkspace(workspaceId).list(),
@@ -114,6 +110,7 @@ function worldReaders(
       return (await readRows(workspaceId)).find((row) => row.id === fileId)?.path ?? null;
     },
     connectors: (workspaceId) => parts.connectors.forWorkspace(workspaceId).list(),
+    connectorStores: parts.connectors,
     models: (workspaceId) => parts.models.forWorkspace(workspaceId),
     profiles: (workspaceId) => parts.runtimeProfiles.forWorkspace(workspaceId).list(),
     profileStore: (workspaceId) => parts.runtimeProfiles.forWorkspace(workspaceId),
@@ -123,6 +120,9 @@ function worldReaders(
     granted: (workspaceId, agentId) =>
       parts.grants.forWorkspace(workspaceId).listPrincipalIds(agentId),
     skills: (workspaceId) => skills.list(workspaceId),
+    skillsDomain: skills,
+    skillRevisions: async (workspaceId, name) =>
+      (await (await parts.skillCatalogs(workspaceId)).listSkillRevisions(name)).length,
     async skillFiles(workspaceId, name) {
       const files = await skills.files(workspaceId, name);
       return files === null

@@ -3,10 +3,10 @@
  * examples/store's journeys, run by the apps lane (`tests/apps/lane.mjs`) against the app under
  * `aw dev`, in English and in Japanese (`APPS_E2E_LOCALE`, with `app/theme.ts` set to each; every
  * assertion uses that language's words). The visitor is anonymous: the shelf, the filters, an agent's
- * detail page and its tabs, the sign-up gate of the Try tab, /platform, /privacy and /contact. `aw
+ * detail page and its sections, the sign-up gate of Try it, /platform, /privacy and /contact. `aw
  * dev` has no email sender and no challenge provider, so the gate and the forms end at a message that it is
  * not available yet, which is what they must say until a provider is chosen. The sign-in and the chat that follows
- * it are the Try tab's own journeys and are not in this file.
+ * it are Try it's own journeys and are not in this file.
  *
  * The accessibility check is role-and-name: each screen has one banner, main and contentinfo, one h1,
  * the page language, and every control is named. This file imports only `@playwright/test`.
@@ -38,12 +38,16 @@ const WORDS = {
     notAvailable: 'not available yet',
     planned: 'Planned ·',
     tryNow: 'Try now',
-    scripted: 'Verified with the scripted model',
+    verified: 'Verified with real Claude (',
     recorded: 'Recorded with the scripted model',
     search: 'Search agents',
     other: 'Japanese',
     otherName: '日本語',
     privacy: 'Privacy notice',
+    contract: 'Contract review agent',
+    notice: 'Get a launch notice',
+    landing: { live: 'contract-review', soon: 'legal-intake' },
+    sections: ['The problem', 'How it works', 'What you get', 'FAQ', 'Limits', 'Related agents'],
   },
   ja: {
     live: { slug: 'ringi-review', name: '稟議レビュー', area: '財務・経理' },
@@ -62,23 +66,35 @@ const WORDS = {
     notAvailable: 'まだ使えません',
     planned: '計画 ·',
     tryNow: '今すぐ試せる',
-    scripted: '台本どおりのモデルで検証済み',
+    verified: '実際のClaudeで検証済み（',
     recorded: '台本どおりのモデルで録画',
     search: 'エージェントを検索',
     other: '英語',
     otherName: 'English',
     privacy: 'プライバシー通知',
+    contract: '契約書レビュー',
+    notice: '公開の通知を受け取る',
+    landing: { live: 'contract-review', soon: 'legal-intake' },
+    sections: [
+      'いまの課題',
+      '処理の流れ',
+      '得られるもの',
+      'よくある質問',
+      'しないこと',
+      '同じ分野のエージェント',
+    ],
   },
 };
 const words = WORDS[LOCALE];
 
 test.use({ baseURL: APP_URL });
 
-/** @param {import('@playwright/test').Page} page */
-async function openTab(page, name) {
-  await page.getByRole('tab', { name }).click();
-  await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
-}
+/**
+ * A section of the detail page: a region named by its heading.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} name
+ */
+const section = (page, name) => page.getByRole('region', { name, exact: true });
 
 test('J1: a visitor finds an agent on the shelf and reaches the sign-up gate', async ({ page }) => {
   await page.goto('/');
@@ -88,8 +104,9 @@ test('J1: a visitor finds an agent on the shelf and reaches the sign-up gate', a
   await expect(page).toHaveURL(/\/agents\/ringi-review$/u);
   await expect(page.getByRole('heading', { level: 1, name: words.live.name })).toBeVisible();
 
-  await openTab(page, words.tryIt);
+  await page.getByRole('main').getByRole('link', { name: words.tryIt, exact: true }).click();
   await expect(page).toHaveURL(/#try$/u);
+  await expect(section(page, words.tryIt)).toBeVisible();
   const gate = page.getByTestId('try-gate');
   await expect(gate).toBeVisible();
   // Without consent the gate refuses on the page, and nothing is sent.
@@ -140,10 +157,7 @@ test('customize: the preview follows the choices and ends at a prefilled enquiry
   page,
 }) => {
   await page.goto(`/agents/${words.live.slug}#customize`);
-  await expect(page.getByRole('tab', { name: words.customize })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expect(section(page, words.customize)).toBeVisible();
   const reply = page.getByTestId('preview-reply');
   const before = await reply.innerText();
   await page.getByLabel(words.company).fill('Acme KK');
@@ -181,10 +195,11 @@ test('under the hood: a live entry links to GitHub and a coming-soon one does no
   await expect(page.getByRole('progressbar')).toBeVisible();
 
   await page.goto(`/agents/${words.soon.slug}`);
-  await expect(page.getByRole('tab', { name: words.code })).toHaveCount(0);
+  await expect(section(page, words.code)).toHaveCount(0);
   await expect(page.getByRole('link', { name: words.github })).toHaveCount(0);
-  await openTab(page, LOCALE === 'ja' ? '近日公開' : 'Coming soon');
-  const form = page.getByTestId('lead-form');
+  await page.getByRole('link', { name: words.notice }).click();
+  await expect(page).toHaveURL(/#notify$/u);
+  const form = section(page, words.notice).getByTestId('lead-form');
   await form.getByRole('button', { name: words.notify }).click();
   await expect(form.getByRole('alert')).toBeVisible();
 });
@@ -218,7 +233,7 @@ test('language: the switch at top right changes the page and remembers it', asyn
   await page.goto('/');
   await page
     .getByRole('group', { name: LOCALE === 'ja' ? '言語' : 'Language' })
-    .getByRole('button', { name: words.otherName })
+    .getByRole('link', { name: words.otherName })
     .click();
   await expect(page.locator('html')).not.toHaveAttribute('lang', LOCALE);
   expect((await context.cookies()).some((cookie) => cookie.name === 'store_lang')).toBe(true);
@@ -260,15 +275,89 @@ test('accessibility: every screen has landmarks, one h1, a language and named co
     );
     expect(unnamed, `${screen}: controls with no name`).toEqual([]);
   }
-  // The detail page's tabs: one tablist, exactly one selected tab and one visible panel.
+  // The detail page is one page of sections, each a region named by its h2: no tabs hide any.
   await page.goto(`/agents/${words.live.slug}`);
-  await expect(page.getByRole('tablist')).toHaveCount(1);
-  await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
-  await expect(page.getByRole('tabpanel')).toHaveCount(1);
+  await expect(page.getByRole('tablist')).toHaveCount(0);
+  for (const name of [words.tryIt, words.customize, words.code]) {
+    await expect(section(page, name), name).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name, exact: true }), name).toHaveCount(1);
+  }
   await expect(page.getByText(words.tryNow).first()).toBeVisible();
-  // The home page: every live card says how it was verified (scripted until a real run passes),
-  // and the featured chat is a recording that says how it was made.
+  // The home page: every live card says how it was verified (with real Claude and the date of its
+  // passing R1 run, which every live entry now has), and the featured chat is a recording that
+  // says how it was made.
   await page.goto('/');
-  await expect(page.getByText(words.scripted).first()).toBeVisible();
+  await expect(page.getByText(words.verified).first()).toBeVisible();
   await expect(page.getByTestId('try-recording').getByText(words.recorded)).toBeVisible();
+});
+
+test('landing: a live and a coming-soon page show every section of their copy', async ({
+  page,
+}) => {
+  await page.goto(`/agents/${words.landing.live}`);
+  for (const name of [...words.sections, words.tryIt, words.customize, words.code]) {
+    await expect(section(page, name), name).toBeVisible();
+  }
+  await expect(section(page, words.notice)).toHaveCount(0);
+
+  await page.goto(`/agents/${words.landing.soon}`);
+  for (const name of [...words.sections, words.notice]) {
+    await expect(section(page, name), name).toBeVisible();
+  }
+  for (const name of [words.tryIt, words.customize, words.code]) {
+    await expect(section(page, name), name).toHaveCount(0);
+  }
+  // Related entries share the area: the soon page links to the live one.
+  await expect(
+    section(page, words.sections[5] ?? '').getByRole('link', { name: words.contract }),
+  ).toBeVisible();
+});
+
+test('search and social: ?lang pages, their head, the screenshot, robots, the sitemap and the card', async ({
+  page,
+  context,
+  request,
+}) => {
+  // The lane sets no STORE_PUBLIC_URL, so every URL stays relative and no host is named.
+  const other = LOCALE === 'ja' ? 'en' : 'ja';
+  const slug = words.landing.live;
+  const href = (lang) => `/agents/${slug}?lang=${lang}`;
+  await page.goto(href(other));
+  await expect(page.locator('html')).toHaveAttribute('lang', other);
+  const cookie = (await context.cookies()).find(({ name }) => name === 'store_lang');
+  expect(cookie?.value).toBe(other);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', href(other));
+  for (const lang of ['ja', 'en']) {
+    await expect(page.locator(`link[rel="alternate"][hreflang="${lang}"]`)).toHaveAttribute(
+      'href',
+      href(lang),
+    );
+  }
+  await expect(page.locator('link[rel="alternate"][hreflang="x-default"]')).toHaveAttribute(
+    'href',
+    `/agents/${slug}`,
+  );
+  const jsonLd = JSON.parse(
+    (await page.locator('script[type="application/ld+json"]').textContent()) ?? '',
+  );
+  expect(jsonLd).toMatchObject({ '@type': 'SoftwareApplication', inLanguage: other });
+  const shot = page.locator('#outputs img');
+  await expect(shot).toHaveAttribute('src', `/shots/${slug}.${other}.webp`);
+  expect(
+    await shot.evaluate((image) => image instanceof HTMLImageElement && image.naturalWidth > 0),
+  ).toBe(true);
+
+  expect(await (await request.get('/robots.txt')).text()).toContain('Disallow: /api/');
+  expect(await (await request.get('/robots.txt')).text()).not.toContain('Sitemap:');
+  expect(await (await request.get('/sitemap.xml')).text()).not.toContain('<loc>');
+  // The cards are drawn at build time with the committed font: both languages, no cookie, and
+  // nothing but a known slug and language.
+  for (const lang of ['ja', 'en']) {
+    const card = await request.get(`/og/${slug}/${lang}?lang=${other}&extra=1`);
+    expect(card.status()).toBe(200);
+    expect(card.headers()['content-type']).toBe('image/png');
+    expect(card.headers()['set-cookie']).toBeUndefined();
+  }
+  expect((await request.get(`/og/${slug}/fr`)).status()).toBe(404);
+  expect((await request.get('/og/no-such-agent/en')).status()).toBe(404);
 });

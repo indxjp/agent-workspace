@@ -531,8 +531,34 @@ export default {
     {
       name: 'production-does-not-import-tests',
       severity: 'error',
-      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
+      from: {
+        path: '^(apps|packages|use-cases)/',
+        // use-cases/kit/ is test machinery (use-cases/README.md), so it may import test files.
+        pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$|^use-cases/kit/',
+      },
       to: { path: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$' },
+    },
+    {
+      name: 'use-cases-reach-the-platform-through-its-packages',
+      severity: 'error',
+      comment:
+        'use-cases/README.md: a use case writes no code for something the platform does, and what it imports counts toward its budget. Its own files (agent, surface, skill scripts) import the platform by package name, never a file of an app, a test, an example, or the test machinery and generator templates of use-cases/ itself. The generator templates are held to the same rule, since every entry starts as a copy of one: a template agent file may not import the kit either. Tests may use the kit, and the kit (test machinery only) is out of scope. Zero known violations, ceiling 0.',
+      from: {
+        path: '^use-cases/',
+        pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$|^use-cases/kit/',
+      },
+      to: { path: '^(?:apps|tests|examples)/|^use-cases/(?:kit|templates)/' },
+    },
+    {
+      name: 'use-cases-do-not-import-each-other',
+      severity: 'error',
+      comment:
+        'use-cases/README.md: when two use cases would share production code, that code moves into the platform, so one use case never imports a file of another (the kit and templates are the rule above). Zero known violations, ceiling 0.',
+      from: {
+        path: '^use-cases/(?!kit/)([^/]+)/',
+        pathNot: '\\.(?:test|spec|test-support)\\.[cm]?[jt]sx?$',
+      },
+      to: { path: '^use-cases/', pathNot: '^use-cases/(?:$1|kit|templates)/' },
     },
   ],
   options: {

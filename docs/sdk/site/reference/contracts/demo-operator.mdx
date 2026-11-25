@@ -37,6 +37,57 @@ key or any part of it.
 
 Value: `'/api/demo/readiness'`
 
+## DEMO_RECORD_ISSUES_MAX
+
+The most issues one refusal names.
+
+Value: `20`
+
+## DEMO_RECORD_KINDS
+
+The kinds of change a demo's records stand-in keeps once a person approved the write (ADR-0169):
+a calendar event, a task, an access change and a booking.
+
+- `'calendar'`
+- `'task'`
+- `'access'`
+- `'booking'`
+
+## DEMO_RECORD_SAMPLES
+
+One fictional record of each kind, Japanese first, as an entry's agent would write it.
+
+| Key | Value |
+| --- | --- |
+| `calendar` | `{ ja: { title: '新任者オリエンテーション', start: '2026-12-01T10:00:00+09:00', end: '2026-12-01T11:00:00+09:00', attendees: ['佐藤 美咲', '田中 健一'], location: '本社 3階 会議室A', }, en: { title: 'New starter orientation', start: '2026-12-01T10:00:00+09:00', end: '2026-12-01T11:00:00+09:00', attendees: ['Misaki Sato', 'Kenichi Tanaka'], location: 'Head office, 3F meeting room A', }, }` |
+| `task` | `{ ja: { title: 'ノートPCを準備する', assignee: '情報システム部 山田', due: '2026-11-28' }, en: { title: 'Prepare a laptop', assignee: 'IT, Yamada', due: '2026-11-28' }, }` |
+| `access` | `{ ja: { person: '佐藤 美咲', system: '経費精算システム', level: 'read', change: 'grant' }, en: { person: 'Misaki Sato', system: 'Expense system', level: 'read', change: 'grant' }, }` |
+| `booking` | `{ ja: { resource: '本社 3階 会議室A', start: '2026-12-02T14:00:00+09:00', end: '2026-12-02T15:00:00+09:00', bookedFor: '田中 健一', purpose: '取引先との打ち合わせ', }, en: { resource: 'Head office, 3F meeting room A', start: '2026-12-02T14:00:00+09:00', end: '2026-12-02T15:00:00+09:00', bookedFor: 'Kenichi Tanaka', purpose: 'Meeting with a client', }, }` |
+
+## DEMO_RECORD_SCHEMAS
+
+The arguments a recorded write of each kind must have; anything else is refused.
+
+| Key | Value |
+| --- | --- |
+| `calendar` | `DemoCalendarEventSchema` |
+| `task` | `DemoTaskSchema` |
+| `access` | `DemoAccessChangeSchema` |
+| `booking` | `DemoBookingSchema` |
+
+## DEMO_RECORD_WRITE_PROBLEM_CODES
+
+The codes a records stand-in refuses a recorded write with (ADR-0169 D4).
+
+- `'demo_record_invalid'`
+- `'demo_write_not_recorded'`
+
+## DEMO_RECORD_WRITES_MAX
+
+The most changes one records stand-in keeps, recorded and refused together.
+
+Value: `50`
+
 ## DEMO_SEED_CONNECTORS_MAX
 
 The most connectors one seed declares.
@@ -107,6 +158,42 @@ are refused (`409 verification_workspace_refused`).
 
 Value: `'/api/demo/verification'`
 
+## DemoAccessChangeSchema
+
+An access change: a grant or a revocation of one level on one system for one person.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `person` | `string` | Yes |  |
+| `system` | `string` | Yes |  |
+| `level` | `"read" \| "write" \| "admin"` | Yes |  |
+| `change` | `"grant" \| "revoke"` | Yes |  |
+| `until` | `undefined \| string` | No |  |
+
+## DemoBookingSchema
+
+A booking of a room, a desk, a car or another shared resource.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resource` | `string` | Yes |  |
+| `start` | `string` | Yes |  |
+| `end` | `string` | Yes |  |
+| `bookedFor` | `string` | Yes |  |
+| `purpose` | `undefined \| string` | No |  |
+
+## DemoCalendarEventSchema
+
+A calendar event the agent puts on a calendar.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `title` | `string` | Yes |  |
+| `start` | `string` | Yes |  |
+| `end` | `string` | Yes |  |
+| `attendees` | `undefined \| readonly string[]` | No |  |
+| `location` | `undefined \| string` | No |  |
+
 ## DemoEntryState
 
 - `"maintenance"`
@@ -145,6 +232,73 @@ Value: `'/api/demo/verification'`
 | `apiKeyConfigured` | `false \| true` | Yes |  |
 | `apiReachable` | `false \| true` | Yes |  |
 
+## DemoRecordedWrite
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `write` | `string` | Yes |  |
+| `kind` | `"task" \| "access" \| "calendar" \| "booking"` | Yes |  |
+| `read` | `string` | Yes |  |
+
+## DemoRecordedWriteSchema
+
+One write tool of a declared connector whose approved calls the stand-in keeps (ADR-0169): the
+write tool, the kind of record its arguments are, and the read tool that answers with it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `write` | `string` | Yes |  |
+| `kind` | `"task" \| "access" \| "calendar" \| "booking"` | Yes |  |
+| `read` | `string` | Yes |  |
+
+## DemoRecordIssue
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## DemoRecordIssueSchema
+
+One reason the arguments of a write were refused: the field's path (`$` for the root) and why.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## DemoRecordKind
+
+- `"task"`
+- `"access"`
+- `"calendar"`
+- `"booking"`
+
+## DemoRecordKindSchema
+
+- `"task"`
+- `"access"`
+- `"calendar"`
+- `"booking"`
+
+## DemoRecordWriteAnswer
+
+- `Readonly<{ demoOnly: true; recorded: true; tool: string; record: Record<string, unknown>; }>`
+- `Readonly<{ demoOnly: true; recorded: false; tool: string; code: "demo_record_invalid" | "demo_write_not_recorded"; issues?: readonly Readonly<{ path: string; message: string; }>[] | undefined; }>`
+
+## DemoRecordWriteAnswerSchema
+
+What a records stand-in's recorded write answers in `structuredContent` (ADR-0169 D4): the record
+it kept, or the typed reason it kept nothing. A refusal is also a tool error.
+
+- `Readonly<{ demoOnly: true; recorded: true; tool: string; record: Record<string, unknown>; }>`
+- `Readonly<{ demoOnly: true; recorded: false; tool: string; code: "demo_record_invalid" | "demo_write_not_recorded"; issues?: readonly Readonly<{ path: string; message: string; }>[] | undefined; }>`
+
+## DemoRecordWriteProblemCode
+
+- `"demo_record_invalid"`
+- `"demo_write_not_recorded"`
+
 ## DemoSampleRecords
 
 | Name | Type | Required | Description |
@@ -176,19 +330,22 @@ answer with them. Fictional data only.
 | `name` | `string` | Yes |  |
 | `reads` | `readonly string[]` | Yes |  |
 | `writes` | `readonly string[]` | Yes |  |
+| `recorded` | `undefined \| readonly DemoRecordedWrite[]` | No |  |
 
 ## DemoSeedConnectorSchema
 
 One connector the demo agent names, as the seed declares it: the tools that only read and the
 tools that would send or write outside. The template keeps no address and no secret of it. In a
 visitor's copy a read tool answers from the entry's sample records (`DemoSampleRecordsSchema`)
-and a write tool answers `DEMO_SEND_RESULT` (`./demo`).
+and a write tool answers `DEMO_SEND_RESULT` (`./demo`). A write named in `recorded` is kept in
+the visitor's workspace once a person approved it, and its read tool answers with it (ADR-0169).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
 | `reads` | `readonly string[]` | Yes |  |
 | `writes` | `readonly string[]` | Yes |  |
+| `recorded` | `undefined \| readonly DemoRecordedWrite[]` | No |  |
 
 ## DemoSeedFile
 
@@ -224,6 +381,17 @@ own release. The template keeps the skill under its name, and a visitor's copy g
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
 | `files` | `readonly DemoSeedFile[]` | Yes |  |
+
+## DemoTaskSchema
+
+A task the agent opens for a person.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `title` | `string` | Yes |  |
+| `assignee` | `string` | Yes |  |
+| `due` | `undefined \| string` | No |  |
+| `notes` | `undefined \| string` | No |  |
 
 ## DemoTemplateReport
 

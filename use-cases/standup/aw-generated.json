@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": {
+    "project:rp": {
+      "files": {
+        "agent-workspace.yaml": "b62b71035b02fbacd219c2a32fb9bfff6966cc04f25171de95a09d18761b3bd5",
+        "agents/standup.md": "acd5b759271d2d55ce0de816661ccc4881e65eb996dc7eeb046cf0c60b434589",
+        "agents/standup.ts": "0896ab0579b320778d725073c368fd58a393f9572e74f1d89add75fb79ac4111",
+        "data/en/records.csv": "23f8c59d2ad4ea7d822f58e15f0c93056a409dcc540add251ad020b0c1a85deb",
+        "data/ja/records.csv": "787e0ac3393c66ec732602269cf3d4e11d8d6878057a6a718f7e104a759f030a",
+        "evals/standup.yaml": "ed9706c6d345fd1bab1b7f19c8154b54f89d3dc33377ba20016b2d651f332055",
+        "skills/standup/SKILL.md": "aa378bb4f7349ced9a1ceef840a7159626c6be9b21ac1a35d4f2bb9f5caefdfa",
+        "surfaces/main.ts": "ac8f8bf3dbe8ed1ef43071a8b4b9d5c20b7e78d59097ac583de87ee0a19ff386",
+        "triggers/standup.json": "5696b9fc8a75b3a0709758c8e671a9dc14072b0941be33e9639e6af8234b76a5"
+      },
+      "edits": []
+    }
+  }
+}

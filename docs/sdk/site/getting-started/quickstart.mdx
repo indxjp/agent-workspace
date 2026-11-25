@@ -132,13 +132,14 @@ It prints one screen when everything is up, about five seconds later:
 > dev
 > aw dev
 
-Sign in at http://127.0.0.1:3000 as admin@localhost.test with password … (shown once; it is kept in /home/node/my-agent/.agent-workspace/local-secrets.json)
 model connection: default (anthropic)
 
   Agent Workspace · my-agent · local
 
   try       http://127.0.0.1:3000/p/s/main/try
-  console   http://127.0.0.1:3000  sign in as admin@localhost.test · password in .agent-workspace/local-secrets.json
+  console   http://127.0.0.1:3000
+            sign in as admin@localhost.test
+            password in .agent-workspace/secrets/local-secrets.json
   chat      npx aw chat
 
     runtime   ready in 3.6 s   logs: .aw/logs/runtime.log
@@ -159,8 +160,8 @@ synced: skill refund-policy (new, 1 file) · "assistant" created at version 1
   <img src="/images/quickstart/02-ready-screen.png" alt="The aw dev ready screen: the try URL, the console URL with the sign-in email and where the password is, and the chat command, then ticks for runtime, model, sign-in, agent and surface" />
 </Frame>
 
-The first line shows the console password once (masked here); you need it for the
-[console tour](/getting-started/console-tour). Leave this terminal running: it watches your files.
+The `console` rows say which email to sign in with and which file holds the password; the
+password itself is never printed. You need it for the [console tour](/getting-started/console-tour). Leave this terminal running: it watches your files.
 On a terminal, `aw dev` then asks `Open the chat in your browser? (Y/n)`. Every row is explained in
 [aw dev in depth](/cli/dev#the-ready-screen-line-by-line).
 
@@ -287,7 +288,8 @@ starts it again with everything you made. Anything else:
 Run `npx @indx-workspace/aw init` in it. It asks the same setup questions as `npm create`, writes
 the same project files, refuses to overwrite a file that exists and never edits `package.json`.
 It then prints what to run next: `npm init -y` when the directory has no `package.json`, the
-`npm install -D` line for the three packages, and `next: npx aw dev`. Details:
+`npm install -D` line for `@indx-workspace/aw`, `@indx-workspace/embedded`,
+`@indx-workspace/sdk` and the chosen engine's packages, and `next: npx aw dev`. Details:
 [aw init](/cli/dev#start-in-an-existing-directory-aw-init).
 
 ## Install with Claude Code

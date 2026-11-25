@@ -1,0 +1,51 @@
+{
+  "kind": "schedule",
+  "name": "attendance",
+  "prompt": "先週（月曜から金曜）の勤怠チェックを日本語で作成して、attendance-reports フォルダに保存してください。",
+  "cron": "0 9 * * 1",
+  "timezone": "Asia/Tokyo",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["week", "managers", "savedTo"],
+    "properties": {
+      "week": { "type": "string" },
+      "managers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manager", "team", "gaps"],
+          "properties": {
+            "manager": { "type": "string" },
+            "team": { "type": "string" },
+            "gaps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["employee", "kind", "dates", "detail", "sources"],
+                "properties": {
+                  "employee": { "type": "string" },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "missed_clock_in",
+                      "missed_clock_out",
+                      "overtime_nearing_limit",
+                      "overtime_over_limit"
+                    ]
+                  },
+                  "dates": { "type": "array", "items": { "type": "string" } },
+                  "detail": { "type": "string" },
+                  "sources": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      },
+      "savedTo": { "type": "string" }
+    }
+  }
+}

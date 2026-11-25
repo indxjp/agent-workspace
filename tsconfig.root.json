@@ -54,6 +54,8 @@
     "vitest.coverage.config.ts",
     "vitest.apps.coverage.config.ts",
     "vitest.ui-cli.coverage.config.ts",
+    "vitest.use-cases.coverage.config.ts",
+    "vitest.gallery.coverage.config.ts",
     "playwright.config.ts",
     "eslint.config.mjs",
     "scripts/**/*.mjs",

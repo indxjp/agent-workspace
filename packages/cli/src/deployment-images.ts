@@ -160,8 +160,8 @@ function inspectManifest(reference: string) {
   );
 }
 
-function resolveTaggedImage(reference: string, releaseDefault = false): string {
-  if (reference.includes('@')) return assertDigestReference(reference);
+/** One registry lookup of `reference`, with a transient failure retried per `REGISTRY_RETRY`. */
+function inspectWithRetry(reference: string) {
   let result = inspectManifest(reference);
   let attempts = 1;
   // A null status (docker missing, or killed by the timeout) is not retried: it is not the network.
@@ -175,6 +175,73 @@ function resolveTaggedImage(reference: string, releaseDefault = false): string {
     result = inspectManifest(reference);
     attempts += 1;
   }
+  return { result, attempts };
+}
+
+/**
+ * The variable that names a pull-through mirror of Docker Hub, such as `mirror.gcr.io`. CI sets it
+ * (.github/actions/docker-hub-mirror): the anonymous Docker Hub limit is per address, and several
+ * runners behind one address exhaust it, so a lookup answered `429 Too Many Requests` failed the
+ * release smoke and the apps lane.
+ */
+const DOCKER_HUB_MIRROR_VARIABLE = 'AW_DOCKER_HUB_MIRROR';
+
+/** A registry host, with an optional port: no scheme, no path, no credentials. */
+const REGISTRY_HOST = /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::\d{1,5})?$/u;
+
+/** The mirror host the environment names, validated, or undefined when it names none. */
+export function dockerHubMirror(environment: NodeJS.ProcessEnv): string | undefined {
+  const value = environment[DOCKER_HUB_MIRROR_VARIABLE]?.trim();
+  if (value === undefined || value === '') return undefined;
+  if (!REGISTRY_HOST.test(value)) {
+    throw new Error(
+      `${DOCKER_HUB_MIRROR_VARIABLE} must be a registry host such as mirror.gcr.io, without a scheme or a path.`,
+    );
+  }
+  return value;
+}
+
+const DOCKER_HUB_HOSTS = new Set(['docker.io', 'index.docker.io', 'registry-1.docker.io']);
+
+/**
+ * The repository path and tag of a Docker Hub reference (`library/postgres:18-alpine` for
+ * `docker.io/library/postgres:18-alpine` or `postgres:18-alpine`), or undefined for another
+ * registry. A first component with a dot, a colon or `localhost` names a registry.
+ */
+export function dockerHubPath(reference: string): string | undefined {
+  const slash = reference.indexOf('/');
+  const first = slash < 0 ? '' : reference.slice(0, slash);
+  if (DOCKER_HUB_HOSTS.has(first)) return reference.slice(slash + 1);
+  if (slash >= 0 && (first.includes('.') || first.includes(':') || first === 'localhost')) {
+    return undefined;
+  }
+  return slash < 0 ? `library/${reference}` : reference;
+}
+
+/**
+ * The digest of `reference`, looked up at `mirror` first when it is a Docker Hub reference and a
+ * mirror is named. The reference stays a Docker Hub one, and a pull from Docker Hub verifies the
+ * digest: a digest Docker Hub does not hold for that repository fails the pull. A mirror that cannot
+ * answer falls back to Docker Hub itself.
+ */
+function inspectThroughMirror(reference: string, mirror: string | undefined) {
+  const path = mirror === undefined ? undefined : dockerHubPath(reference);
+  if (path !== undefined) {
+    const mirrored = inspectWithRetry(`${mirror}/${path}`);
+    if (mirrored.result.status === 0 && manifestDigest(mirrored.result.stdout) !== undefined) {
+      return mirrored;
+    }
+  }
+  return inspectWithRetry(reference);
+}
+
+function resolveTaggedImage(
+  reference: string,
+  releaseDefault = false,
+  mirror: string | undefined = undefined,
+): string {
+  if (reference.includes('@')) return assertDigestReference(reference);
+  const { result, attempts } = inspectThroughMirror(reference, mirror);
   if (result.status !== 0) {
     const cause = result.stderr?.trim() || 'docker buildx failed';
     const tries = attempts > 1 ? ` (after ${attempts} attempts)` : '';
@@ -220,10 +287,16 @@ function resolveImage(
   const named = NAMED_OVERRIDES[name];
   const override =
     named === undefined ? environment[`AW_${name.toUpperCase()}_IMAGE`] : environment[named];
-  if (override !== undefined) return resolveTaggedImage(override);
+  if (override !== undefined) {
+    return resolveTaggedImage(override, false, dockerHubMirror(environment));
+  }
   const pin = pinned[name];
   if (pin !== undefined) return assertDigestReference(pin, `the pinned ${name} image`);
-  return resolveTaggedImage(releaseTags[name], name !== 'postgres' && name !== 'seaweedfs');
+  return resolveTaggedImage(
+    releaseTags[name],
+    name !== 'postgres' && name !== 'seaweedfs',
+    dockerHubMirror(environment),
+  );
 }
 
 /**
